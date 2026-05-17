@@ -30024,20 +30024,6 @@ setTimeout(function(){
     if (typeof _MC !== 'undefined') _MC[idbKey] = data;
   }
 
-  // أعد رسم القسم المناسب وأرسل إشعاراً
-  function _smRenderAndNotify(key) {
-    var meta = _SM_KEY_MAP[key];
-    var labels = {
-      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-    };
-    if (meta) { try { meta.fn(); } catch(e) {} }
-    try { showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info'); } catch(e) {}
-  }
-
   function _applyEvent(evt, ackAfter) {
     return _hasSeen(evt.id).then(function(seen) {
       if (seen) { _log('Duplicate skipped:', evt.id); return; }
@@ -30103,23 +30089,15 @@ setTimeout(function(){
   }
 
   // ── Acknowledge ───────────────────────────────────────
+  // حذف الحدث من Firebase بعد 30 ثانية (وقت كافٍ لكل الأجهزة)
   function _acknowledgeEvent(evt) {
     if (!_fbDb || !_username || !evt.fbKey) return Promise.resolve();
-    var ackPath = FB_PATH_EVENTS(_username) + '/' + evt.fbKey + '/ack/' + _getDeviceId();
-    return _fbDb.ref(ackPath).set(Date.now()).then(function() {
-      return _fbDb.ref(FB_PATH_EVENTS(_username) + '/' + evt.fbKey).once('value');
-    }).then(function(snap) {
-      var evtData = snap.val();
-      if (!evtData) return;
-      var acks = Object.keys(evtData.ack || {});
-      return _getOtherDevices().then(function(allDevs) {
-        var needed = allDevs.filter(function(d) { return d !== evtData.originDevice; });
-        var allAcked = needed.every(function(d) { return acks.indexOf(d) >= 0; });
-        if (allAcked || needed.length === 0) {
-          return _fbDb.ref(FB_PATH_EVENTS(_username) + '/' + evt.fbKey).remove();
-        }
-      });
-    }).catch(function() {});
+    var path = FB_PATH_EVENTS(_username) + '/' + evt.fbKey;
+    // احذف بعد 30 ثانية
+    setTimeout(function() {
+      if (_fbDb) _fbDb.ref(path).remove().catch(function() {});
+    }, 30000);
+    return Promise.resolve();
   }
 
   // ── Push event to Firebase ────────────────────────────
@@ -30182,7 +30160,11 @@ setTimeout(function(){
       var val = snap.val();
       if (!val) { _log('Full sync: no remote events'); return; }
       var events = Object.values(val);
-      _log('Full sync: found', events.length, 'events');
+      // تجاهل الأحداث الصادرة من هذا الجهاز نفسه
+      events = events.filter(function(evt) {
+        return evt && evt.originDevice !== _getDeviceId();
+      });
+      _log('Full sync: found', events.length, 'applicable events');
       var chain = Promise.resolve();
       events.forEach(function(evt) {
         chain = chain.then(function() { return _applyEvent(evt, false); });
@@ -30197,15 +30179,18 @@ setTimeout(function(){
   function _startLive() {
     if (!_fbDb || !_username || !_enabled || _listening) return;
     _listening = true;
-    _evtRef    = _fbDb.ref(FB_PATH_EVENTS(_username));
-    _evtCb     = _evtRef.on('child_added', function(snap) {
+    // استمع للأحداث الجديدة فقط (بعد لحظة التشغيل)
+    var startTs = Date.now();
+    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username)).orderByChild('ts').startAt(startTs);
+    _evtCb  = _evtRef.on('child_added', function(snap) {
       var evt = snap.val();
       if (!evt || !evt.id) return;
       if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
       evt.fbKey = snap.key;
+      _log('Live: received event', evt.type, evt.key, 'from', evt.originDevice);
       _applyEvent(evt, true).catch(function(e) { _warn('Live apply error:', e); });
     });
-    _log('Live sync started');
+    _log('Live sync started — listening from ts:', startTs);
   }
 
   function _stopLive() {
@@ -30235,12 +30220,23 @@ setTimeout(function(){
 
   // ── Notify App ────────────────────────────────────────
   function _notifyApp(key) {
-    // أطلق الرسم الفوري مباشرة (البيانات جاهزة في window[var] بالفعل)
-    if (typeof _smRenderAndNotify === 'function') {
-      _smRenderAndNotify(key);
-    } else {
-      window.dispatchEvent(new CustomEvent('syncmanager:update', { detail: { key: key } }));
+    // البيانات جاهزة في window[var] من _smUpdateGlobal
+    // استدعِ دالة الرسم المناسبة مباشرة من _SM_KEY_MAP
+    var meta = _SM_KEY_MAP[key];
+    var labels = {
+      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
+      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
+      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
+      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
+      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
+    };
+    if (meta) {
+      try { meta.fn(); } catch(e) { _warn('render error:', e); }
     }
+    try {
+      if (typeof showNotif === 'function')
+        showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info');
+    } catch(e) {}
   }
 
   // ════════════════════════════════════════════════════════
@@ -30374,17 +30370,11 @@ async function initSyncManager() {
   try {
     await SyncManager.init(fbInstance, username, enabled);
 
-    // الرسم الفوري يتم مباشرة من داخل SyncManager عبر _smRenderAndNotify
-    // لا حاجة لقراءة IDB مرة ثانية — البيانات جاهزة في window[var]
-    SyncManager.onUpdate(function(key) {
-      // هذا لم يعد يُستخدم لأن _notifyApp يستدعي _smRenderAndNotify مباشرة
-      // لكن نتركه كـ fallback في حال احتجنا لاستماع خارجي
-    });
-
     // إضافة مؤشر المزامنة في الواجهة
     _renderSyncIndicator(enabled);
 
-    console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled);
+    console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled,
+      '| device:', SyncManager.getDeviceId());
   } catch(e) {
     console.warn('[SyncManager] Init failed:', e);
   }
@@ -30459,10 +30449,12 @@ function _hookSaveForSync() {
   if (window._smHooked) return;
   window._smHooked = true;
 
+  // تتبع آخر نسخة من كل مصفوفة لمعرفة ما تغيّر
+  var _smPrevState = {};
+
   window.save = function(k, v) {
     _origSaveForSync(k, v);
 
-    // أرسل للمزامنة فقط إذا كانت مفعّلة وهذا مفتاح مزامن
     if (!SyncManager.isEnabled()) return;
     var SM_KEYS = [
       'patients','requests','invoices','packages','inventory',
@@ -30470,15 +30462,38 @@ function _hookSaveForSync() {
       'uaRecords','stoolExamRecords','semenRecords','phoneBook'
     ];
     if (!SM_KEYS.includes(k)) return;
-    if (!Array.isArray(v) || !v.length) return;
+    if (!Array.isArray(v)) return;
 
-    // debounce — تجميع التعديلات المتزامنة
     clearTimeout(window._smSaveTimer);
     window._smSaveTimer = setTimeout(function() {
-      SyncManager.pushSetAll(k, v).catch(function(e) {
-        console.warn('[SyncMgr] pushSetAll error:', k, e);
+      var prev = _smPrevState[k] || [];
+      var prevIds = new Set(prev.map(function(x){ return x && x.id; }));
+      var currIds = new Set(v.map(function(x){ return x && x.id; }));
+
+      // أرسل UPSERT للعناصر الجديدة أو المعدّلة
+      v.forEach(function(record) {
+        if (!record || !record.id) return;
+        var old = prev.find(function(x){ return x && x.id === record.id; });
+        // جديد أو تغيّر timestamp
+        if (!old || (record._updatedAt && (!old._updatedAt || record._updatedAt > old._updatedAt))) {
+          SyncManager.pushUpsert(k, record).catch(function(e){
+            console.warn('[SyncMgr] pushUpsert error:', k, record.id, e);
+          });
+        }
       });
-    }, 800);
+
+      // أرسل DELETE للعناصر المحذوفة
+      prev.forEach(function(record) {
+        if (!record || !record.id) return;
+        if (!currIds.has(record.id)) {
+          SyncManager.pushDelete(k, record.id).catch(function(e){
+            console.warn('[SyncMgr] pushDelete error:', k, record.id, e);
+          });
+        }
+      });
+
+      _smPrevState[k] = v.slice(); // حفظ النسخة الحالية
+    }, 600);
   };
 }
 
