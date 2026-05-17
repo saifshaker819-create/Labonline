@@ -6450,6 +6450,14 @@ const DB={
     try{
       const pk=this._pfx()+k;
       _MC[pk]=v; // حفظ في الكاش فوراً (بدون تأخير)
+
+      // ── SyncManager hook ──────────────────────────────
+      // أرسل التغييرات للمزامنة مباشرة من DB.set
+      if(window._smDBHook && typeof window._smDBHook === 'function'){
+        try{ window._smDBHook(k, v); }catch(_){}
+      }
+      // ──────────────────────────────────────────────────
+
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
         localStorage.removeItem(pk);
@@ -29830,8 +29838,9 @@ setTimeout(function(){
   function _log()  { console.log('[SyncMgr]',  ...arguments); }
   function _warn() { console.warn('[SyncMgr]', ...arguments); }
 
-  // شاشة تشخيص مرئية
+  // شاشة تشخيص مرئية — تفوّض لـ _smDebugToBox الخارجية
   function _smDebugLog(msg) {
+    if (typeof _smDebugToBox === 'function') { _smDebugToBox(msg); return; }
     var box = document.getElementById('_sm_debug_box');
     if (!box) return;
     var t = new Date().toLocaleTimeString('ar');
@@ -29839,8 +29848,7 @@ setTimeout(function(){
     line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.08);color:#0f0';
     line.textContent = t + ' — ' + msg;
     box.insertBefore(line, box.firstChild);
-    // احتفظ بآخر 30 رسالة فقط
-    while (box.children.length > 30) box.removeChild(box.lastChild);
+    while (box.children.length > 40) box.removeChild(box.lastChild);
   }
 
   // ── SyncManager IDB ──────────────────────────────────
@@ -30590,56 +30598,81 @@ function _renderSyncIndicator(enabled) {
  * يُنفَّذ بعد تهيئة التطبيق بالكامل
  */
 function _hookSaveForSync() {
-  var _origSaveForSync = window.save;
   if (window._smHooked) return;
   window._smHooked = true;
 
-  // تتبع آخر نسخة من كل مصفوفة لمعرفة ما تغيّر
+  var SM_KEYS = [
+    'patients','requests','invoices','packages','inventory',
+    'doctors','billing','testGroups','qc','cultureRecords',
+    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
+  ];
+
+  // تتبع آخر حالة لكل مفتاح
   var _smPrevState = {};
 
-  window.save = function(k, v) {
-    _origSaveForSync(k, v);
-
+  // الـ hook يتصل به DB.set مباشرة
+  window._smDBHook = function(k, v) {
     if (!SyncManager.isEnabled()) return;
-    var SM_KEYS = [
-      'patients','requests','invoices','packages','inventory',
-      'doctors','billing','testGroups','qc','cultureRecords',
-      'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-    ];
     if (!SM_KEYS.includes(k)) return;
     if (!Array.isArray(v)) return;
 
     clearTimeout(window._smSaveTimer);
     window._smSaveTimer = setTimeout(function() {
       var prev = _smPrevState[k] || [];
-      var prevIds = new Set(prev.map(function(x){ return x && x.id; }));
       var currIds = new Set(v.map(function(x){ return x && x.id; }));
 
-      // أرسل UPSERT للعناصر الجديدة أو المعدّلة
+      // UPSERT: كل عنصر جديد أو تغيّر
       v.forEach(function(record) {
         if (!record || !record.id) return;
-        var old = prev.find(function(x){ return x && x.id === record.id; });
-        // جديد أو تغيّر timestamp
-        if (!old || (record._updatedAt && (!old._updatedAt || record._updatedAt > old._updatedAt))) {
-          SyncManager.pushUpsert(k, record).catch(function(e){
-            console.warn('[SyncMgr] pushUpsert error:', k, record.id, e);
+        var oldRec = prev.find(function(x){ return x && x.id === record.id; });
+        var isNew  = !oldRec;
+        var changed = oldRec && record._updatedAt && (!oldRec._updatedAt || record._updatedAt > oldRec._updatedAt);
+        if (isNew || changed) {
+          SyncManager.pushUpsert(k, record).then(function(){
+            _smDebugToBox('📤 أُرسل: ' + k + ' #' + (record.id||'').slice(-6));
+          }).catch(function(e){
+            _smDebugToBox('❌ فشل إرسال: ' + e.message);
           });
         }
       });
 
-      // أرسل DELETE للعناصر المحذوفة
+      // DELETE: عناصر محذوفة
       prev.forEach(function(record) {
         if (!record || !record.id) return;
         if (!currIds.has(record.id)) {
-          SyncManager.pushDelete(k, record.id).catch(function(e){
-            console.warn('[SyncMgr] pushDelete error:', k, record.id, e);
-          });
+          SyncManager.pushDelete(k, record.id).then(function(){
+            _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
+          }).catch(function(){});
         }
       });
 
-      _smPrevState[k] = v.slice(); // حفظ النسخة الحالية
-    }, 600);
+      _smPrevState[k] = v.slice();
+    }, 400);
   };
+
+  // ابنِ الحالة الأولية من البيانات الحالية
+  SM_KEYS.forEach(function(k) {
+    try {
+      var val = window[k];
+      if (Array.isArray(val) && val.length > 0) {
+        _smPrevState[k] = val.slice();
+      }
+    } catch(_) {}
+  });
+
+  _smDebugToBox('✅ DB hook مفعّل');
+}
+
+// دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
+function _smDebugToBox(msg) {
+  var box = document.getElementById('_sm_debug_box');
+  if (!box) return;
+  var t = new Date().toLocaleTimeString('ar');
+  var line = document.createElement('div');
+  line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
+  line.textContent = t + ' — ' + msg;
+  box.insertBefore(line, box.firstChild);
+  while (box.children.length > 40) box.removeChild(box.lastChild);
 }
 
 // ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
