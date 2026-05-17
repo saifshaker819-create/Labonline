@@ -30078,32 +30078,37 @@ setTimeout(function(){
   function _applyUpsert(evt) {
     if (!evt.key || !evt.record) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
+
+    // اقرأ من _MC أولاً (أسرع وأدق من IDB)
+    var current = null;
+    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length >= 0) {
+      current = _MC[idbKey].slice();
+    }
+    var readP = (current !== null) ? Promise.resolve(current) : _readAppIDB(idbKey);
+
     return readP.then(function(cur) {
       if (!Array.isArray(cur)) cur = [];
       var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
       if (idx >= 0) {
-        // دائماً استبدل بالنسخة الواردة (أحدث)
-        cur[idx] = evt.record;
+        cur[idx] = evt.record; // استبدل دائماً
       } else {
-        cur.push(evt.record);
+        cur.push(evt.record); // أضف جديد
       }
-      // احفظ في DB بدون إطلاق hook
+
+      // حدّث setter فوراً (قبل DB.set لضمان تحديث الواجهة)
+      _smUpdateGlobal(evt.key, idbKey, cur);
+
+      // احفظ في DB بدون hook
       SyncManager._applying = true;
       try {
         if (typeof DB !== 'undefined') DB.set(evt.key, cur);
       } finally {
         SyncManager._applying = false;
       }
-      // حدّث setter المحلي
-      _smUpdateGlobal(evt.key, idbKey, cur);
-      // حدّث prevState لمنع إعادة الإرسال
+
+      // حدّث prevState
       if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
-      if (window._smSaveTimers) {
-        // ألغِ أي timer معلّق لهذا المفتاح — البيانات جاءت من firebase
-        clearTimeout(window._smSaveTimers[evt.key]);
-      }
+      if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
       return Promise.resolve();
     });
   }
@@ -30246,13 +30251,13 @@ setTimeout(function(){
   var _connMonitorStarted = false;
 
   function _pollPendingEvents() {
-    // يجلب الأحداث الموجودة في Firebase ويطبقها
-    // هذا هو الـ trigger الذي يُنشّط الاتصال
     if (!_fbDb || !_username || !_enabled) return;
     _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
       var val = s.val();
       if (!val) return;
-      Object.keys(val).forEach(function(fbKey) {
+      var keys = Object.keys(val);
+      if (keys.length > 0) _smDebugLog('📡 poll: ' + keys.length + ' حدث');
+      keys.forEach(function(fbKey) {
         var evt = val[fbKey];
         if (!evt || !evt.id) return;
         if (evt.originDevice === _getDeviceId()) return;
@@ -30265,60 +30270,39 @@ setTimeout(function(){
   function _startLive() {
     if (!_fbDb || !_username || !_enabled || _listening) return;
     _listening = true;
-    var startTs = Date.now();
 
-    // ── keepSynced لمنع idle ──
     try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
 
-    // ── الـ listener الرئيسي ──
+    // ── listener رئيسي: يستلم الأحداث الجديدة ──
     _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
     _evtCb  = _evtRef.on('child_added', function(snap) {
       var evt = snap.val();
       if (!evt || !evt.id) return;
-      if (evt.ts && evt.ts < startTs) return;
-      if (evt.originDevice === _getDeviceId()) return;
+      if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
       evt.fbKey = snap.key;
-      _smDebugLog('📥 ' + evt.type + ' / ' + evt.key);
-      _applyEvent(evt, true).catch(function(e) { _warn('Live apply error:', e); });
+      _smDebugLog('📥 ' + evt.type + '/' + evt.key);
+      _applyEvent(evt, true).catch(function(e) { _warn('apply error:', e); });
     }, function(err) {
-      _warn('Firebase listener error:', err.message);
+      _warn('listener error:', err.message);
       _listening = false;
-      setTimeout(function() { _startLive(); }, 3000);
+      setTimeout(_startLive, 5000);
     });
 
-    // ── مراقبة الاتصال ──
+    // ── مراقبة الاتصال: poll عند إعادة الاتصال ──
     if (!_connMonitorStarted) {
       _connMonitorStarted = true;
       _fbDb.ref('.info/connected').on('value', function(snap) {
-        var connected = snap.val();
-        _smDebugLog(connected ? '🟢 متصل' : '🔴 منقطع');
-        if (connected) {
-          // عند إعادة الاتصال: اجلب الأحداث الفائتة فوراً
-          _pollPendingEvents();
-        }
+        _smDebugLog(snap.val() ? '🟢 متصل' : '🔴 منقطع');
+        if (snap.val()) _pollPendingEvents();
       });
     }
 
-    // ── keepalive: استدعاء once() كل 10 ثوانٍ لمنع sleep ──
+    // ── keepalive: poll كل 5 ثوانٍ لمنع Firebase sleep ──
     clearInterval(_keepaliveTimer);
-    _keepaliveTimer = setInterval(function() {
-      if (!_fbDb || !_username || !_enabled) return;
-      // ping بسيط يُبقي الاتصال حياً ويجلب أي أحداث فائتة
-      _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
-        var val = s.val();
-        if (!val) return;
-        Object.keys(val).forEach(function(fbKey) {
-          var evt = val[fbKey];
-          if (!evt || !evt.id) return;
-          if (evt.originDevice === _getDeviceId()) return;
-          evt.fbKey = fbKey;
-          _applyEvent(evt, true).catch(function(){});
-        });
-      }).catch(function(){});
-    }, 10000); // كل 10 ثوانٍ
+    _keepaliveTimer = setInterval(_pollPendingEvents, 5000);
 
-    _log('Live sync started with keepalive');
-    _smDebugLog('✅ listener + keepalive 10s');
+    _log('Live sync started');
+    _smDebugLog('✅ listener + poll/5s');
   }
 
   function _stopLive() {
@@ -30356,17 +30340,15 @@ setTimeout(function(){
       cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
       semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
     };
-    if (meta) {
-      try { meta.fn(); } catch(e) {}
-    }
-    // دائماً حدّث badges وdashboard بعد أي تحديث
-    setTimeout(function() {
-      try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
-      try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
-    }, 50);
+    // رسم فوري
+    if (meta) { try { meta.fn(); } catch(e) {} }
+    // badges + dashboard
+    try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
+    try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
+    // إشعار
     try {
       if (typeof showNotif === 'function')
-        showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info');
+        showNotif('🔄', (labels[key]||key), 'info');
     } catch(e) {}
   }
 
@@ -30535,13 +30517,9 @@ function _renderSyncDebugPanel() {
   toggleBtn.id = '_sm_toggle_btn';
   toggleBtn.style.cssText = 'position:fixed;bottom:10px;left:10px;z-index:100000;background:rgba(0,0,0,.7);border:1px solid rgba(0,212,255,.4);border-radius:20px;color:#00d4ff;font-size:9px;padding:3px 8px;cursor:pointer;font-family:monospace';
   toggleBtn.textContent = '🔧 Sync';
-  toggleBtn.onclick = function() {
-    var p = document.getElementById('_sm_debug_panel');
-    if (p) {
-      var vis = p.style.display !== 'none';
-      p.style.display = vis ? 'none' : 'flex';
-    }
-  };
+  // زر Sync مخفي كلياً - لا يُفتح
+  toggleBtn.style.display = 'none';
+  toggleBtn.onclick = function() { /* مقفول */ };
   document.body.appendChild(toggleBtn);
 
   // رأس الشاشة
@@ -30729,8 +30707,8 @@ function _hookSaveForSync() {
     if (!SM_KEYS.includes(k)) return;
     if (!Array.isArray(v)) return;
 
-    // debounce 50ms فقط — سرعة أكبر في الإرسال
-    clearTimeout(window._smSaveTimers = window._smSaveTimers || {});
+    // debounce 50ms per key
+    window._smSaveTimers = window._smSaveTimers || {};
     clearTimeout(window._smSaveTimers[k]);
     window._smSaveTimers[k] = setTimeout(function() {
       var prev    = _smPrevState[k] || [];
@@ -30797,8 +30775,8 @@ function _hookSaveForSync() {
     _smDebugToBox('✅ hook جاهز | ' + loaded.join(','));
   }
 
-  setTimeout(_rebuildPrevState, 1000);
-  setInterval(_rebuildPrevState, 30000);
+  setTimeout(_rebuildPrevState, 500);
+  setInterval(_rebuildPrevState, 15000);
 }
 
 // دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
