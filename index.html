@@ -29993,6 +29993,51 @@ setTimeout(function(){
   }
 
   // ── Apply Event to local IDB ──────────────────────────
+
+  // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
+  var _SM_KEY_MAP = {
+    patients:        { g:'patients',         fn:function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} } },
+    requests:        { g:'requests',         fn:function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} } },
+    invoices:        { g:'invoices',         fn:function(){ try{renderInvoices();}catch(e){} } },
+    packages:        { g:'packages',         fn:function(){ try{renderPackages();}catch(e){} } },
+    inventory:       { g:'inventory',        fn:function(){ try{renderInventory();}catch(e){} } },
+    doctors:         { g:'doctors',          fn:function(){ try{renderDoctors();}catch(e){} } },
+    billing:         { g:'billingRecords',   fn:function(){ try{renderAll();}catch(e){} } },
+    testGroups:      { g:'testGroups',       fn:function(){ try{renderTestsDB();}catch(e){} } },
+    qc:              { g:'qcRecords',        fn:function(){ try{renderQC();}catch(e){} } },
+    cultureRecords:  { g:'cultureRecords',   fn:function(){ try{renderAll();}catch(e){} } },
+    uaRecords:       { g:'uaRecords',        fn:function(){ try{renderAll();}catch(e){} } },
+    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ try{renderAll();}catch(e){} } },
+    semenRecords:    { g:'semenRecords',     fn:function(){ try{renderAll();}catch(e){} } },
+    phoneBook:       { g:'phoneBook',        fn:function(){ try{renderAll();}catch(e){} } }
+  };
+
+  // تحديث المتغير العالمي + كاش الذاكرة فوراً
+  function _smUpdateGlobal(key, idbKey, data) {
+    var meta = _SM_KEY_MAP[key];
+    if (!meta) return;
+    // حدّث المتغير العالمي في التطبيق مباشرة
+    if (typeof window[meta.g] !== 'undefined') {
+      window[meta.g] = data;
+    }
+    // حدّث كاش الذاكرة
+    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
+  }
+
+  // أعد رسم القسم المناسب وأرسل إشعاراً
+  function _smRenderAndNotify(key) {
+    var meta = _SM_KEY_MAP[key];
+    var labels = {
+      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
+      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
+      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
+      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
+      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
+    };
+    if (meta) { try { meta.fn(); } catch(e) {} }
+    try { showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info'); } catch(e) {}
+  }
+
   function _applyEvent(evt, ackAfter) {
     return _hasSeen(evt.id).then(function(seen) {
       if (seen) { _log('Duplicate skipped:', evt.id); return; }
@@ -30024,10 +30069,9 @@ setTimeout(function(){
       } else {
         current.push(evt.record);
       }
-      return _writeAppIDB(idbKey, current).then(function() {
-        // حدّث كاش الذاكرة
-        if (typeof _MC !== 'undefined') _MC[idbKey] = current;
-      });
+      // حدّث المتغير العالمي فوراً قبل كتابة IDB
+      _smUpdateGlobal(evt.key, idbKey, current);
+      return _writeAppIDB(idbKey, current);
     });
   }
 
@@ -30037,9 +30081,9 @@ setTimeout(function(){
     return _readAppIDB(idbKey).then(function(current) {
       if (!Array.isArray(current)) return;
       var filtered = current.filter(function(x) { return x && x.id !== evt.recordId; });
-      return _writeAppIDB(idbKey, filtered).then(function() {
-        if (typeof _MC !== 'undefined') _MC[idbKey] = filtered;
-      });
+      // حدّث المتغير العالمي فوراً
+      _smUpdateGlobal(evt.key, idbKey, filtered);
+      return _writeAppIDB(idbKey, filtered);
     });
   }
 
@@ -30052,9 +30096,9 @@ setTimeout(function(){
       evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
       var localOnly = current.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
       var merged    = Array.from(remoteMap.values()).concat(localOnly);
-      return _writeAppIDB(idbKey, merged).then(function() {
-        if (typeof _MC !== 'undefined') _MC[idbKey] = merged;
-      });
+      // حدّث المتغير العالمي فوراً
+      _smUpdateGlobal(evt.key, idbKey, merged);
+      return _writeAppIDB(idbKey, merged);
     });
   }
 
@@ -30191,7 +30235,12 @@ setTimeout(function(){
 
   // ── Notify App ────────────────────────────────────────
   function _notifyApp(key) {
-    window.dispatchEvent(new CustomEvent('syncmanager:update', { detail: { key: key } }));
+    // أطلق الرسم الفوري مباشرة (البيانات جاهزة في window[var] بالفعل)
+    if (typeof _smRenderAndNotify === 'function') {
+      _smRenderAndNotify(key);
+    } else {
+      window.dispatchEvent(new CustomEvent('syncmanager:update', { detail: { key: key } }));
+    }
   }
 
   // ════════════════════════════════════════════════════════
@@ -30325,57 +30374,11 @@ async function initSyncManager() {
   try {
     await SyncManager.init(fbInstance, username, enabled);
 
-    // استمع لتحديثات البيانات من الأجهزة الأخرى — تحديث فوري بدون refresh
+    // الرسم الفوري يتم مباشرة من داخل SyncManager عبر _smRenderAndNotify
+    // لا حاجة لقراءة IDB مرة ثانية — البيانات جاهزة في window[var]
     SyncManager.onUpdate(function(key) {
-      var idbKey = 'mlab2_' + username + '_' + key;
-      var keyMap = {
-        patients:        { g:'patients',         fn:function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} } },
-        requests:        { g:'requests',         fn:function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} } },
-        invoices:        { g:'invoices',         fn:function(){ try{renderInvoices();}catch(e){} } },
-        packages:        { g:'packages',         fn:function(){ try{renderPackages();}catch(e){} } },
-        inventory:       { g:'inventory',        fn:function(){ try{renderInventory();}catch(e){} } },
-        doctors:         { g:'doctors',          fn:function(){ try{renderDoctors();}catch(e){} } },
-        billing:         { g:'billingRecords',   fn:function(){ try{renderAll();}catch(e){} } },
-        testGroups:      { g:'testGroups',       fn:function(){ try{renderTestsDB();}catch(e){} } },
-        qc:              { g:'qcRecords',        fn:function(){ try{renderQC();}catch(e){} } },
-        cultureRecords:  { g:'cultureRecords',   fn:function(){ try{renderAll();}catch(e){} } },
-        uaRecords:       { g:'uaRecords',        fn:function(){ try{renderAll();}catch(e){} } },
-        stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ try{renderAll();}catch(e){} } },
-        semenRecords:    { g:'semenRecords',     fn:function(){ try{renderAll();}catch(e){} } },
-        phoneBook:       { g:'phoneBook',        fn:function(){ try{renderAll();}catch(e){} } }
-      };
-      var labels = {
-        patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-        packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-        billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-        cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-        semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-      };
-      var meta = keyMap[key];
-      if (!meta) return;
-      var req = indexedDB.open('medlab_idb', 1);
-      req.onsuccess = function(e) {
-        var db = e.target.result;
-        if (!db.objectStoreNames.contains('kv')) return;
-        var tx  = db.transaction('kv', 'readonly');
-        var get = tx.objectStore('kv').get(idbKey);
-        get.onsuccess = function() {
-          if (!get.result) return;
-          var data = get.result.v;
-          if (!Array.isArray(data)) return;
-          // 1. حدّث المتغير العالمي
-          if (typeof window[meta.g] !== 'undefined') {
-            window[meta.g] = data;
-            if (typeof _MC !== 'undefined') _MC[idbKey] = data;
-          }
-          // 2. أعد رسم القسم المناسب فقط
-          meta.fn();
-          // 3. إشعار خفيف
-          try { showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info'); } catch(e) {}
-        };
-        get.onerror = function() {};
-      };
-      req.onerror = function() {};
+      // هذا لم يعد يُستخدم لأن _notifyApp يستدعي _smRenderAndNotify مباشرة
+      // لكن نتركه كـ fallback في حال احتجنا لاستماع خارجي
     });
 
     // إضافة مؤشر المزامنة في الواجهة
