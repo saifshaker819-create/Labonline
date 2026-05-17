@@ -7244,26 +7244,25 @@ let inventory=[];
 let qcRecords=[];
 let settings={};
 
-// ── SyncManager Setter Registry ────────────────────────────
-// يُتيح لـ SyncManager تحديث المتغيرات المحلية من script blocks أخرى
+// SyncManager Setter Registry — يُتيح تحديث let variables من خارج script block
 window._smSetters = window._smSetters || {};
-window._smSetters['patients']        = function(v){ patients        = v; };
-window._smSetters['requests']        = function(v){ requests        = v; };
-window._smSetters['invoices']        = function(v){ invoices        = v; };
-window._smSetters['doctors']         = function(v){ doctors         = v; };
-window._smSetters['packages']        = function(v){ packages        = v; };
-window._smSetters['inventory']       = function(v){ inventory       = v; };
-window._smSetters['qc']              = function(v){ qcRecords       = v; };
-window._smSetters['testGroups']      = function(v){ testGroups      = v; };
-window._smSetters['uaRecords']       = function(v){ uaRecords       = v; };
-window._smSetters['stoolExamRecords']= function(v){ stoolExamRecords= v; };
-window._smSetters['semenRecords']    = function(v){ semenRecords    = v; };
-// ──────────────────────────────────────────────────────────
+window._smSetters['patients']        = function(v){ patients         = v; };
+window._smSetters['requests']        = function(v){ requests         = v; };
+window._smSetters['invoices']        = function(v){ invoices         = v; };
+window._smSetters['doctors']         = function(v){ doctors          = v; };
+window._smSetters['packages']        = function(v){ packages         = v; };
+window._smSetters['inventory']       = function(v){ inventory        = v; };
+window._smSetters['qc']              = function(v){ qcRecords        = v; };
 let tests=[];
 let testGroups=[];
 let uaRecords=[];
 let stoolExamRecords=[];
 let semenRecords=[];
+window._smSetters = window._smSetters || {};
+window._smSetters['testGroups']       = function(v){ testGroups       = v; };
+window._smSetters['uaRecords']        = function(v){ uaRecords        = v; };
+window._smSetters['stoolExamRecords'] = function(v){ stoolExamRecords = v; };
+window._smSetters['semenRecords']     = function(v){ semenRecords     = v; };
 let currentTestCat='All';
 let wizStep=1;
 let wizPatient={};
@@ -15075,7 +15074,6 @@ function updateBadges(){document.getElementById('nb-patients').textContent=patie
 // BILLING / ACCOUNTING
 // ============================================================
 let billingRecords=[];
-// SyncManager setter
 window._smSetters = window._smSetters || {};
 window._smSetters['billing'] = function(v){ billingRecords = v; };
 
@@ -30026,38 +30024,33 @@ setTimeout(function(){
 
   // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
   var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} }, 0); } },
-    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} }, 0); } },
-    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} }, 0); } },
-    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} }, 0); } },
-    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} }, 0); } },
-    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} }, 0); } },
-    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
-    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} }, 0); } },
-    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} }, 0); } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } }
+    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },0); } },
+    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },0); } },
+    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
+    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
+    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
+    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} },0); } },
+    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
+    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} },0); } },
+    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} },0); } },
+    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
+    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
+    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
+    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
+    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } }
   };
 
-  // تحديث المتغير المحلي عبر setter registry + كاش الذاكرة
+  // تحديث المتغير العالمي + كاش الذاكرة فوراً
   function _smUpdateGlobal(key, idbKey, data) {
     var meta = _SM_KEY_MAP[key];
     if (!meta || !Array.isArray(data)) return;
-
-    // استخدم setter registry لتحديث المتغير المحلي في script block الصحيح
+    // setter registry: يحدّث let variable في script block الصحيح
     if (window._smSetters && typeof window._smSetters[key] === 'function') {
       window._smSetters[key](data);
       _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
     } else {
-      // fallback: window[var] إذا لم يوجد setter
-      if (typeof window[meta.g] !== 'undefined') window[meta.g] = data;
-      _smDebugLog('⚠️ window.' + meta.g + ' = ' + data.length + ' (no setter)');
+      _smDebugLog('⚠️ no setter: ' + key);
     }
-
-    // حدّث _MC cache
     if (typeof _MC !== 'undefined') _MC[idbKey] = data;
   }
 
@@ -30660,20 +30653,22 @@ function _hookSaveForSync() {
 
     clearTimeout(window._smSaveTimer);
     window._smSaveTimer = setTimeout(function() {
-      var prev = _smPrevState[k] || [];
-      var currIds = new Set(v.map(function(x){ return x && x.id; }));
+      var prev    = _smPrevState[k] || [];
+      var prevMap = {};
+      prev.forEach(function(x){ if(x && x.id) prevMap[x.id] = x; });
+      var currIds = new Set();
+      v.forEach(function(x){ if(x && x.id) currIds.add(x.id); });
 
-      // UPSERT: كل عنصر جديد أو تغيّر
+      // UPSERT: مقارنة كاملة بـ JSON.stringify لضمان اكتشاف أي تغيير
       v.forEach(function(record) {
         if (!record || !record.id) return;
-        var oldRec = prev.find(function(x){ return x && x.id === record.id; });
-        var isNew  = !oldRec;
-        var changed = oldRec && record._updatedAt && (!oldRec._updatedAt || record._updatedAt > oldRec._updatedAt);
+        var oldRec  = prevMap[record.id];
+        var isNew   = !oldRec;
+        var changed = !!oldRec && (JSON.stringify(record) !== JSON.stringify(oldRec));
         if (isNew || changed) {
-          SyncManager.pushUpsert(k, record).then(function(){
-            _smDebugToBox('📤 أُرسل: ' + k + ' #' + (record.id||'').slice(-6));
-          }).catch(function(e){
-            _smDebugToBox('❌ فشل إرسال: ' + e.message);
+          _smDebugToBox('📤 ' + (isNew?'جديد':'معدّل') + ': ' + k + ' #' + (record.id||'').slice(-6));
+          SyncManager.pushUpsert(k, record).catch(function(e){
+            _smDebugToBox('❌ ' + e.message);
           });
         }
       });
@@ -30682,9 +30677,8 @@ function _hookSaveForSync() {
       prev.forEach(function(record) {
         if (!record || !record.id) return;
         if (!currIds.has(record.id)) {
-          SyncManager.pushDelete(k, record.id).then(function(){
-            _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
-          }).catch(function(){});
+          _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
+          SyncManager.pushDelete(k, record.id).catch(function(){});
         }
       });
 
@@ -30692,17 +30686,20 @@ function _hookSaveForSync() {
     }, 400);
   };
 
-  // ابنِ الحالة الأولية من البيانات الحالية
-  SM_KEYS.forEach(function(k) {
-    try {
-      var val = window[k];
-      if (Array.isArray(val) && val.length > 0) {
-        _smPrevState[k] = val.slice();
-      }
-    } catch(_) {}
-  });
-
-  _smDebugToBox('✅ DB hook مفعّل');
+  // ابنِ الحالة الأولية من _MC بعد 1 ثانية (لضمان تحميل البيانات)
+  setTimeout(function() {
+    SM_KEYS.forEach(function(k) {
+      try {
+        var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
+        var val = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey] : null;
+        if (!val) val = window[k];
+        if (Array.isArray(val) && val.length > 0) {
+          _smPrevState[k] = val.slice();
+        }
+      } catch(_) {}
+    });
+    _smDebugToBox('✅ DB hook جاهز | keys: ' + Object.keys(_smPrevState).length);
+  }, 1000);
 }
 
 // دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
