@@ -2621,11 +2621,13 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
       </div>
       <button class="hbtn" onclick="nav('settings')">⚙️</button>
       <button class="theme-toggle-btn" id="theme-btn" onclick="toggleTheme()" title="تبديل الوضع"></button>
-      <!-- مؤشر المزامنة -->
-      <button id="sync-indicator-btn" onclick="syncNow()" title="مزامنة Google Drive" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:5px;font-family:'Cairo',sans-serif;transition:all 0.2s">
-        <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#555;display:inline-block;flex-shrink:0"></span>
-        <span id="sync-label">غير مفعّل</span>
-      </button>
+
+      <!-- مؤشر حالة الاتصال -->
+      <div id="fb-conn-badge" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:14px;font-size:10px;font-weight:800;background:rgba(255,204,0,.10);border:1px solid rgba(255,204,0,.3);color:#ffcc00;transition:all .4s">
+        <span id="fb-conn-dot" style="width:7px;height:7px;border-radius:50%;background:#ffcc00;flex-shrink:0"></span>
+        <span id="fb-conn-lbl">جاري الاتصال</span>
+      </div>
+
       <div class="uavatar">👨‍⚕️</div>
     </div>
   </div>
@@ -4025,54 +4027,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
           </div>
         </div>
 
-        <!-- مزامنة Google Drive -->
-        <div class="st-card" id="stc-sync">
-          <div class="st-card-hdr" onclick="toggleStCard('stc-sync')">
-            <div style="display:flex;align-items:center;gap:12px">
-              <span style="font-size:22px">☁️</span>
-              <div><div class="st-card-title">مزامنة Google Drive</div><div class="st-card-sub" id="sync-card-sub">اربط حاسبتين على نفس الواي فاي أو الإنترنت</div></div>
-            </div>
-            <span class="st-card-arrow" id="arr-stc-sync">▼</span>
-          </div>
-          <div class="st-card-body" id="body-stc-sync" style="display:none">
-            <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8">
-              <div style="font-weight:800;color:var(--primary);margin-bottom:6px">📋 كيف تعمل؟</div>
-              ١. اختر مجلد Google Drive المزامن على هذه الحاسبة<br>
-              ٢. افعل نفس الشيء على الحاسبة الثانية بنفس المجلد<br>
-              ٣. البيانات تتزامن تلقائياً بين الحاسبتين كل 10 ثواني
-            </div>
-            <div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:var(--warning);display:flex;align-items:center;gap:8px">
-              <span style="font-size:16px">💻</span>
-              <span>تعمل فقط على <b>Chrome أو Edge</b> على الحاسبة المكتبية أو اللابتوب — غير مدعومة على الموبايل</span>
-            </div>
-
-            <div id="sync-status-box" style="display:none;background:rgba(0,232,122,0.08);border:1px solid rgba(0,232,122,0.25);border-radius:10px;padding:12px;margin-bottom:14px">
-              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-                <div>
-                  <div style="font-size:12px;font-weight:800;color:var(--success)">🟢 المزامنة مفعّلة</div>
-                  <div style="font-size:11px;color:var(--text2);margin-top:3px" id="sync-folder-display">—</div>
-                </div>
-                <div style="text-align:left">
-                  <div style="font-size:10px;color:var(--text2)">آخر مزامنة</div>
-                  <div style="font-size:11px;font-weight:700;color:var(--text)" id="sync-last-time">—</div>
-                </div>
-              </div>
-            </div>
-
-            <div id="sync-setup-box">
-              <div style="font-size:12px;color:var(--text2);margin-bottom:10px">اختر المجلد الذي تريد حفظ بيانات المزامنة فيه (يجب أن يكون داخل Google Drive)</div>
-              <button onclick="syncPickFolder()" class="btn btn-p btn-lg" style="width:100%">📁 اختيار مجلد Google Drive</button>
-            </div>
-
-            <div id="sync-active-box" style="display:none;margin-top:12px;display:none">
-              <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button onclick="syncNow()" class="btn btn-p" style="flex:1;min-width:120px">🔄 مزامنة الآن</button>
-                <button onclick="syncDisconnect()" class="btn btn-d" style="flex:1;min-width:120px">🔌 قطع الاتصال</button>
-              </div>
-              <div style="margin-top:10px;font-size:11px;color:var(--text2);text-align:center" id="sync-next-label">المزامنة التلقائية كل 10 ثواني</div>
-            </div>
-          </div>
-        </div>
 
         <!-- ٨ - الخطر: حذف / خروج -->
         <div class="st-card" id="stc-danger">
@@ -7568,16 +7522,16 @@ window.onload=()=>{
   // تحقق من رابط التحقق أولاً
   if(window.location.search.includes('verify=')){ checkVerifyURL(); return; }
   initTheme();
-  // تهيئة FSA:
-  // - إذا أول تشغيل: تظهر شاشة الإعداد وتوقف التدفق هنا
-  //   (checkAuth ستُستدعى من fsaChooseFolderFirstRun بعد اختيار المجلد)
-  // - إذا FSA جاهز: تكتمل مباشرة وتكمل لـ checkAuth
-  fsaInit().then(()=>{
+  // تهيئة FSA إن كانت متاحة، وإلا أكمل مباشرة
+  if(typeof fsaInit === 'function'){
+    fsaInit().then(()=>{
+      checkAuth();
+    }).catch(()=>{
+      checkAuth();
+    });
+  } else {
     checkAuth();
-  }).catch(()=>{
-    // إذا أعادت promise لا تكتمل (أول تشغيل) لن يصل هنا أبداً
-    checkAuth();
-  });
+  }
 };
 
 function startApp(){
@@ -7650,20 +7604,13 @@ function startApp(){
     }
   }, 300);
   setTimeout(()=>startInventoryMonitor(), 2000);
-  // تشغيل النسخ التلقائي لـ Google Drive إذا كان مفعلاً
-  setTimeout(()=>{
-    if(localStorage.getItem('gdrive_auto')==='1'){
-      const t=localStorage.getItem('gdrive_access_token');
-      const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
-      if(t&&Date.now()<exp){ _gdriveToken=t; _gdriveStartAutoTimer(); }
-    }
-  }, 3000);
+
   // تشغيل النسخ الاحتياطي التلقائي المحلي
   setTimeout(initAutoBackup, 4000);
   // تشغيل النقل التلقائي كل دقيقتين إلى IDB
   setTimeout(_startAutoMigration, 6000);
   // تهيئة نظام D:\MedLabPro (FSA)
-  setTimeout(fsaInit, 2500);
+  if(typeof fsaInit === 'function') setTimeout(fsaInit, 2500);
   // ── حفظ تلقائي للإعدادات عند أي تغيير ────────────────
   var secSettings = document.getElementById('sec-settings');
   if(secSettings){
@@ -7685,17 +7632,45 @@ function startApp(){
   }
   loadFirebase().then(ok=>{
     if(ok){
+      _updateConnBadge(true);
       initChat();
       startNotifPolling();
       startAdminListeners();
     } else {
+      _updateConnBadge(false);
       showNotif('تحذير','تعذر الاتصال بخادم المحادثات','warning');
       startNotifPolling();
     }
   }).catch(()=>{
+    _updateConnBadge(false);
     startNotifPolling();
   });
 }
+
+// ── مؤشر حالة الاتصال ─────────────────────────────────────────
+function _updateConnBadge(connected){
+  const badge = document.getElementById('fb-conn-badge');
+  const dot   = document.getElementById('fb-conn-dot');
+  const lbl   = document.getElementById('fb-conn-lbl');
+  if(!badge) return;
+  if(connected){
+    badge.style.background  = 'rgba(0,232,122,.10)';
+    badge.style.borderColor = 'rgba(0,232,122,.35)';
+    badge.style.color       = '#00e87a';
+    dot.style.background    = '#00e87a';
+    dot.style.animation     = 'pulse 2s infinite';
+    lbl.textContent         = 'متصل';
+  } else {
+    badge.style.background  = 'rgba(255,34,68,.10)';
+    badge.style.borderColor = 'rgba(255,34,68,.30)';
+    badge.style.color       = '#ff2244';
+    dot.style.background    = '#ff2244';
+    dot.style.animation     = '';
+    lbl.textContent         = 'غير متصل';
+  }
+}
+window.addEventListener('online',  ()=>{ if(typeof fbReady!=='undefined'&&fbReady) _updateConnBadge(true); else _updateConnBadge(false); });
+window.addEventListener('offline', ()=>_updateConnBadge(false));
 
 // ══════════════════════════════════════════════════════════════
 // مستمعات أوامر الأدمن — sys/
@@ -8121,7 +8096,7 @@ function nav(p){
   if(p==='reports'){renderReports();if(typeof phcInit==='function')phcInit();}
   if(p==='dashboard') updateDashboard();
   if(p==='billing'){renderBillingTests();loadBillingPtDropdown();renderBillingHistory();_syncCurrencySelectors();}
-  if(p==='database'){resetDbAuth();updateDbStats();setTimeout(_gdriveInitUI,100);setTimeout(loadAutoBackupUI,120);setTimeout(()=>_fsaUpdateIndicator(!!_fsaDirHandle),150);}
+  if(p==='database'){resetDbAuth();updateDbStats();setTimeout(loadAutoBackupUI,120);if(typeof _fsaUpdateIndicator==='function') setTimeout(()=>_fsaUpdateIndicator(!!_fsaDirHandle),150);}
   if(p==='culture') renderCultureList();
   if(p==='ua') renderUAList();
   if(p==='stool') renderStoolList();
@@ -15303,7 +15278,6 @@ function toggleStCard(id){
     if(id==='stc-groups') renderSettingsGroups();
     if(id==='stc-ua-stool') renderUAFieldsEditor();
     if(id==='stc-phones') renderPhoneBook();
-    if(id==='stc-sync') syncRenderCard();
   }
 }
 
@@ -18068,335 +18042,6 @@ async function selectAutoBackupFolder(){
     if(e.name!=='AbortError')
       showNotif('خطأ','لم يتم اختيار مجلد: '+e.message,'error');
   }
-}
-
-// ═══════════════════════════════════════════════════
-// Google Drive Backup System
-// ═══════════════════════════════════════════════════
-const GDRIVE_CLIENT_ID = ''; // يُعبأ من المستخدم
-const GDRIVE_SCOPE     = 'https://www.googleapis.com/auth/drive.file';
-let   _gdriveToken     = null;
-let   _gdriveAutoTimer = null;
-
-function _buildBackupJson(){
-  const data={};
-  getAllDbKeys().forEach(k=>{ data[k]=localStorage.getItem(k); });
-  return JSON.stringify({
-    _medlab_backup:true, _version:'2.1',
-    _exportDate:new Date().toISOString(),
-    _userPrefix:'mlab2_'+(DB._user?DB._user+'_':''),
-    _stats:{patients:patients.length,requests:requests.length,invoices:invoices.length},
-    data
-  },null,2);
-}
-
-function gdriveConnect(){
-  // تحقق من CLIENT_ID
-  const cid = localStorage.getItem('gdrive_client_id')||'';
-  if(!cid){
-    const id = prompt('أدخل Google OAuth Client ID الخاص بمشروعك:','');
-    if(!id){ showNotif('تنبيه','يلزم Client ID للربط مع Google Drive','warning'); return; }
-    localStorage.setItem('gdrive_client_id', id.trim());
-  }
-  const clientId = localStorage.getItem('gdrive_client_id');
-  const redirectUri = window.location.href.split('?')[0];
-  const url = 'https://accounts.google.com/o/oauth2/v2/auth?'+
-    'client_id='+encodeURIComponent(clientId)+
-    '&redirect_uri='+encodeURIComponent(redirectUri)+
-    '&response_type=token'+
-    '&scope='+encodeURIComponent(GDRIVE_SCOPE)+
-    '&prompt=consent';
-  // افتح نافذة Auth
-  const w = window.open(url,'gdrive_auth','width=500,height=600');
-  // استمع لإغلاق النافذة أو رجوع الـ token
-  const interval = setInterval(()=>{
-    try{
-      if(!w||w.closed){
-        clearInterval(interval);
-        // تحقق من الـ hash في URL الحالي (implicit flow)
-        _gdriveCheckToken();
-      }
-    }catch(e){ clearInterval(interval); }
-  },500);
-}
-
-function _gdriveCheckToken(){
-  // تحقق إذا كان الـ token في localStorage (من نافذة Redirect)
-  const t=localStorage.getItem('gdrive_access_token');
-  const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
-  if(t && Date.now()<exp){
-    _gdriveToken=t;
-    _gdriveUpdateUI(true);
-    showNotif('تم','✅ تم الربط مع Google Drive بنجاح','success');
-  }
-}
-
-// استقبال الـ token من URL hash (عند Redirect)
-(function _gdriveHandleRedirect(){
-  const hash=window.location.hash;
-  if(hash.includes('access_token')){
-    const params=new URLSearchParams(hash.slice(1));
-    const token=params.get('access_token');
-    const expiresIn=parseInt(params.get('expires_in')||'3600');
-    if(token){
-      localStorage.setItem('gdrive_access_token',token);
-      localStorage.setItem('gdrive_token_exp',String(Date.now()+expiresIn*1000-60000));
-      // امسح الـ hash
-      history.replaceState(null,'',window.location.pathname+window.location.search);
-    }
-  }
-  // استعادة token محفوظ
-  const saved=localStorage.getItem('gdrive_access_token');
-  const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
-  if(saved&&Date.now()<exp){ _gdriveToken=saved; }
-})();
-
-function _gdriveUpdateUI(connected){
-  const statusEl=document.getElementById('gdrive-status');
-  const connectBtn=document.getElementById('gdrive-connect-btn');
-  const backupBtn=document.getElementById('gdrive-backup-now-btn');
-  const autoTog=document.getElementById('gdrive-auto-tog');
-  const lastEl=document.getElementById('gdrive-last-backup');
-  if(!statusEl) return;
-  if(connected){
-    statusEl.innerHTML='<span style="color:var(--success)">🟢 مرتبط — حساب Google Drive متصل</span>';
-    statusEl.style.background='rgba(0,200,80,0.07)';
-    if(connectBtn){ connectBtn.textContent='🔄 تغيير الحساب'; }
-    if(backupBtn){ backupBtn.disabled=false; backupBtn.style.opacity='1'; }
-    if(autoTog){ autoTog.style.opacity='1'; autoTog.style.pointerEvents='auto'; }
-  } else {
-    statusEl.innerHTML='⚪ غير مرتبط — اضغط "ربط الحساب" للبدء';
-    if(backupBtn){ backupBtn.disabled=true; backupBtn.style.opacity='0.4'; }
-    if(autoTog){ autoTog.style.opacity='0.5'; autoTog.style.pointerEvents='none'; }
-  }
-  const last=localStorage.getItem('gdrive_last_backup');
-  if(last&&lastEl) lastEl.textContent='آخر نسخة: '+last;
-  // استعادة حالة التلقائي
-  const autoOn=localStorage.getItem('gdrive_auto')==='1';
-  if(autoTog){ autoTog.classList.toggle('on',autoOn); }
-  if(connected&&autoOn) _gdriveStartAutoTimer();
-}
-
-async function gdriveBackupNow(){
-  if(!_gdriveToken){
-    // حاول استعادة token محفوظ
-    const t=localStorage.getItem('gdrive_access_token');
-    const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
-    if(t&&Date.now()<exp){ _gdriveToken=t; }
-    else { showNotif('تنبيه','يرجى ربط حساب Google Drive أولاً','warning'); return; }
-  }
-  const btn=document.getElementById('gdrive-backup-now-btn');
-  if(btn){ btn.textContent='⏳ جاري الرفع...'; btn.disabled=true; }
-  try{
-    const json=_buildBackupJson();
-    const dateStr=new Date().toISOString().split('T')[0];
-    const fileName=`MedLab_Auto_${dateStr}.json`;
-    // ابحث عن ملف موجود بنفس الاسم لتحديثه
-    const searchRes=await fetch(
-      `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+trashed=false&fields=files(id)`,
-      {headers:{Authorization:'Bearer '+_gdriveToken}}
-    );
-    const searchData=await searchRes.json();
-    const existingId=searchData.files&&searchData.files[0]?searchData.files[0].id:null;
-    // رفع أو تحديث الملف
-    const metadata={name:fileName,mimeType:'application/json'};
-    if(!existingId){
-      // إنشاء مجلد MedLab Pro إذا لم يكن موجوداً
-      const folderRes=await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=name='MedLab Pro'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id)`,
-        {headers:{Authorization:'Bearer '+_gdriveToken}}
-      );
-      const folderData=await folderRes.json();
-      let folderId=folderData.files&&folderData.files[0]?folderData.files[0].id:null;
-      if(!folderId){
-        const createFolder=await fetch('https://www.googleapis.com/drive/v3/files',{
-          method:'POST',
-          headers:{Authorization:'Bearer '+_gdriveToken,'Content-Type':'application/json'},
-          body:JSON.stringify({name:'MedLab Pro',mimeType:'application/vnd.google-apps.folder'})
-        });
-        const fd=await createFolder.json();
-        folderId=fd.id;
-      }
-      if(folderId) metadata.parents=[folderId];
-    }
-    const form=new FormData();
-    form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));
-    form.append('file',new Blob([json],{type:'application/json'}));
-    const uploadUrl=existingId
-      ?`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
-      :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-    const res=await fetch(uploadUrl,{
-      method:existingId?'PATCH':'POST',
-      headers:{Authorization:'Bearer '+_gdriveToken},
-      body:form
-    });
-    if(res.ok){
-      const now=new Date().toLocaleString('ar');
-      localStorage.setItem('gdrive_last_backup',now);
-      const lastEl=document.getElementById('gdrive-last-backup');
-      if(lastEl) lastEl.textContent='آخر نسخة: '+now;
-      showNotif('تم الرفع','✅ تم رفع النسخة الاحتياطية إلى Google Drive','success');
-    } else {
-      const err=await res.json();
-      if(err.error&&err.error.code===401){
-        localStorage.removeItem('gdrive_access_token');
-        _gdriveToken=null;
-        _gdriveUpdateUI(false);
-        showNotif('خطأ','انتهت صلاحية الجلسة — يرجى ربط الحساب مجدداً','error');
-      } else {
-        showNotif('خطأ','فشل الرفع: '+(err.error&&err.error.message||'خطأ غير معروف'),'error');
-      }
-    }
-  }catch(e){
-    showNotif('خطأ','فشل الاتصال بـ Google Drive: '+e.message,'error');
-  }finally{
-    if(btn){ btn.textContent='☁️ نسخ احتياطي الآن'; btn.disabled=false; }
-  }
-}
-
-function gdriveToggleAuto(tog){
-  tog.classList.toggle('on');
-  const on=tog.classList.contains('on');
-  localStorage.setItem('gdrive_auto',on?'1':'0');
-  if(on){ _gdriveStartAutoTimer(); showNotif('تم','✅ النسخ التلقائي اليومي مفعّل','success'); }
-  else  { _gdriveStopAutoTimer();  showNotif('تم','⏹ تم إيقاف النسخ التلقائي','info'); }
-}
-
-function _gdriveStartAutoTimer(){
-  _gdriveStopAutoTimer();
-  // احسب الوقت حتى منتصف الليل
-  const now=new Date();
-  const midnight=new Date(now); midnight.setHours(2,0,0,0); // 2:00 صباحاً
-  if(midnight<=now) midnight.setDate(midnight.getDate()+1);
-  const msUntil=midnight.getTime()-now.getTime();
-  _gdriveAutoTimer=setTimeout(function(){
-    gdriveBackupNow();
-    _gdriveAutoTimer=setInterval(gdriveBackupNow, 24*60*60*1000);
-  }, msUntil);
-}
-
-function _gdriveStopAutoTimer(){
-  if(_gdriveAutoTimer){ clearTimeout(_gdriveAutoTimer); clearInterval(_gdriveAutoTimer); _gdriveAutoTimer=null; }
-}
-
-// تهيئة UI عند فتح صفحة قاعدة البيانات
-function _gdriveInitUI(){
-  const t=localStorage.getItem('gdrive_access_token');
-  const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
-  _gdriveUpdateUI(!!(t&&Date.now()<exp));
-  // عرض عنوان البرنامج الحالي في التعليمات
-  const originEl=document.getElementById('gdrive-origin-hint');
-  if(originEl) originEl.textContent=window.location.origin||window.location.href.split('/').slice(0,3).join('/');
-}
-
-function toggleGdriveInstructions(){
-  const el=document.getElementById('gdrive-instructions');
-  if(!el) return;
-  const isHidden=el.style.display==='none';
-  el.style.display=isHidden?'block':'none';
-}
-
-function importDatabase(input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    try {
-      const parsed = JSON.parse(e.target.result);
-      if(!parsed._medlab_backup || !parsed.data){
-        showNotif('خطأ','هذا الملف ليس نسخة احتياطية صالحة من MedLab Pro ❌','error');
-        input.value='';
-        return;
-      }
-      pendingImportData = parsed;
-      const stats = parsed._stats || {};
-      const keyCount = Object.keys(parsed.data).length;
-      const exportDate = parsed._exportDate ? new Date(parsed._exportDate).toLocaleString('ar') : 'غير محدد';
-      document.getElementById('db-import-details').innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
-          <div style="background:rgba(0,212,255,0.08);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:18px;font-weight:900;color:var(--primary)">${stats.patients||0}</div>
-            <div style="font-size:10px">مريض</div>
-          </div>
-          <div style="background:rgba(0,245,147,0.08);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:18px;font-weight:900;color:var(--success)">${stats.requests||0}</div>
-            <div style="font-size:10px">طلب</div>
-          </div>
-          <div style="background:rgba(123,47,255,0.08);border-radius:8px;padding:10px;text-align:center">
-            <div style="font-size:18px;font-weight:900;color:#a78bfa">${stats.invoices||0}</div>
-            <div style="font-size:10px">فاتورة</div>
-          </div>
-        </div>
-        <div>📅 تاريخ النسخة: <b style="color:var(--text)">${exportDate}</b></div>
-        <div>🔑 عدد العناصر: <b style="color:var(--text)">${keyCount}</b></div>
-        <div style="color:var(--danger);font-weight:700;margin-top:8px">⚠️ تنبيه: سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة!</div>
-      `;
-      document.getElementById('db-import-preview').style.display = 'block';
-    } catch(err){
-      showNotif('خطأ','فشل قراءة الملف: '+err.message,'error');
-    }
-    input.value='';
-  };
-  reader.readAsText(file);
-}
-
-async function confirmImport(_pinVerified){
-  // ── حماية بالرمز السري ──
-  if(!_pinVerified){
-    const _pin=localStorage.getItem(typeof _dbPinKey==='function'?_dbPinKey():('mlab2_'+(DB._user||'')+'_db_pin'));
-    if(_pin){
-      promptDbPinThen(function(){confirmImport(true);});
-      return;
-    }
-  }
-  if(!pendingImportData || !pendingImportData.data){
-    showNotif('خطأ','لا توجد بيانات للاستيراد','error');
-    return;
-  }
-  if(!confirm('⚠️ هل أنت متأكد؟\nسيتم استبدال جميع بيانات هذا الحساب بالبيانات المستوردة.\nهذا الإجراء لا يمكن التراجع عنه!')) return;
-  try {
-    const userPfx = 'mlab2_' + (DB._user ? DB._user + '_' : '');
-    const oldPfx  = pendingImportData._userPrefix || 'mlab2_';
-
-    // ── 1. استيراد localStorage ────────────────────────────
-    const existingKeys = getAllDbKeys();
-    existingKeys.forEach(k => localStorage.removeItem(k));
-    const data = pendingImportData.data;
-    Object.keys(data).forEach(k => {
-      const newKey = k.startsWith(oldPfx)
-        ? userPfx + k.slice(oldPfx.length)
-        : k;
-      localStorage.setItem(newKey, data[k]);
-    });
-
-    // ── 2. استيراد IDB (الأرشيف) إذا كان موجوداً في الملف
-    if(pendingImportData.idbData){
-      const idbData=pendingImportData.idbData;
-      for(const k of Object.keys(idbData)){
-        try{
-          const newKey=k.startsWith(oldPfx)?userPfx+k.slice(oldPfx.length):k;
-          const val=JSON.parse(idbData[k]);
-          await IDB.set(newKey,val);
-        }catch{}
-      }
-    }
-
-    // ── 3. إعادة ضبط مؤقت النقل الأسبوعي ─────────────────
-    localStorage.removeItem('idb_last_archive_'+(DB._user||'default'));
-
-    pendingImportData = null;
-    document.getElementById('db-import-preview').style.display = 'none';
-    showNotif('تم الاستيراد','تم استيراد البيانات كاملة ✅ (LS + IDB) — جاري إعادة التحميل...','success');
-    setTimeout(()=>{ location.reload(); }, 1500);
-  } catch(e){
-    showNotif('خطأ','فشل الاستيراد: '+e.message,'error');
-  }
-}
-
-function cancelImport(){
-  pendingImportData = null;
-  document.getElementById('db-import-preview').style.display = 'none';
-  showNotif('تم الإلغاء','تم إلغاء عملية الاستيراد','info');
 }
 
 // ============================================================
@@ -24943,470 +24588,6 @@ document.addEventListener('DOMContentLoaded', function(){
 </body>
 </html>
 
-<script>
-// ============================================================
-// 🔄 نظام المزامنة عبر Google Drive (File System Access API)
-// النسخة الذكية — version counter + merge + lock protection
-// ============================================================
-const SYNC_KEYS = ['patients','requests','invoices','packages','inventory','doctors','billing','testGroups','qc','cultureRecords','uaRecords','stoolExamRecords','semenRecords','phoneBook'];
-const SYNC_FILE     = 'medlab-sync.json';
-const SYNC_LOCK     = 'medlab-sync.lock';   // ملف القفل لمنع التضارب
-const SYNC_INTERVAL = 15000;                // كل 15 ثانية (أكثر أماناً من 10)
-const SYNC_DEVICE_ID = (()=>{
-  let id = localStorage.getItem('_sync_device_id');
-  if(!id){ id = 'dev_' + Math.random().toString(36).slice(2,9); localStorage.setItem('_sync_device_id',id); }
-  return id;
-})();
-
-let _syncDirHandle  = null;
-let _syncInterval   = null;
-let _syncLastVer    = 0;     // آخر version counter قرأناه أو كتبناه
-let _syncWriting    = false;
-let _syncBusy       = false; // منع تشغيل دورتين في نفس الوقت
-
-window.addEventListener('load', function(){ _syncRestoreHandle(); });
-
-async function _syncRestoreHandle(){
-  try{
-    const stored = localStorage.getItem('sync_dir_name');
-    if(!stored) return;
-    // لا نحاول الاستعادة على الموبايل
-    if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) return;
-    const h = await _idbGetHandle();
-    if(!h) return;
-    const perm = await h.requestPermission({mode:'readwrite'});
-    if(perm === 'granted'){
-      _syncDirHandle = h;
-      _syncStartPolling();
-      _syncUpdateIndicator('active');
-      syncRenderCard();
-    }
-  }catch(e){
-    // فشل الاستعادة — امسح الـ handle القديم
-    localStorage.removeItem('sync_dir_name');
-    _idbDelHandle();
-  }
-}
-
-async function syncPickFolder(){
-  // تحقق من دعم المتصفح والجهاز
-  const isDesktop = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-  const isSupported = 'showDirectoryPicker' in window;
-
-  if(!isSupported || !isDesktop){
-    showNotif('غير مدعوم',
-      '⚠️ هذه الميزة تعمل فقط على Chrome أو Edge على الحاسبة المكتبية أو اللابتوب — لا تعمل على الموبايل',
-      'error');
-    return;
-  }
-  try{
-    const h = await window.showDirectoryPicker({mode:'readwrite',startIn:'desktop'});
-    _syncDirHandle = h;
-    localStorage.setItem('sync_dir_name', h.name);
-    await _idbSetHandle(h);
-    await _syncWrite();
-    _syncStartPolling();
-    _syncUpdateIndicator('active');
-    syncRenderCard();
-    showNotif('مزامنة','✅ تم ربط المجلد وتفعيل المزامنة التلقائية','success');
-  }catch(e){
-    if(e.name==='AbortError') return; // المستخدم ألغى
-    if(e.name==='InvalidStateError'){
-      // الـ handle تغيّر — أعد الاختيار
-      _syncDirHandle = null;
-      localStorage.removeItem('sync_dir_name');
-      await _idbDelHandle();
-      showNotif('تنبيه','يرجى اختيار المجلد مجدداً','error');
-      syncRenderCard();
-    } else {
-      showNotif('خطأ','تعذّر اختيار المجلد: '+e.message,'error');
-    }
-  }
-}
-
-function syncDisconnect(){
-  if(!confirm('إيقاف المزامنة؟ لن تُحذف البيانات.')) return;
-  _syncStopPolling();
-  _syncDirHandle = null;
-  _syncLastVer   = 0;
-  _syncBusy      = false;
-  localStorage.removeItem('sync_dir_name');
-  _idbDelHandle();
-  _syncUpdateIndicator('off');
-  syncRenderCard();
-  showNotif('مزامنة','تم إيقاف المزامنة','info');
-}
-
-async function syncNow(){
-  if(!_syncDirHandle){ showNotif('تنبيه','يرجى اختيار مجلد أولاً','error'); return; }
-  _syncUpdateIndicator('syncing');
-  await _syncCycle();
-}
-
-async function _syncCycle(){
-  if(_syncBusy) return;
-  _syncBusy = true;
-  try{
-    // ① أول شيء: اقرأ فقط الـ version من الملف (خفيف جداً)
-    const remote = await _syncRead();
-
-    // ② إذا لا يوجد ملف → اكتب أول نسخة
-    if(!remote){
-      const localData = _syncCollect();
-      await _syncWrite(1, localData);
-      _syncLastVer = 1;
-      _syncSetLastTime();
-      _syncUpdateIndicator('active');
-      return;
-    }
-
-    const remoteVer = remote.ver || 0;
-
-    // ③ الملف أحدث → نحتاج merge (العمل الثقيل فقط عند الحاجة)
-    if(remoteVer > _syncLastVer){
-      const localData = _syncCollect();
-      const merged    = _syncMerge(remote.data || {}, localData, remote.deviceId);
-      const changed   = _syncApply(merged);
-      _syncLastVer    = remoteVer;
-      if(changed === 'local_newer'){
-        const newVer = remoteVer + 1;
-        await _syncWrite(newVer, _syncCollect());
-        _syncLastVer = newVer;
-      }
-      _syncSetLastTime();
-      _syncUpdateIndicator('active');
-      return;
-    }
-
-    // ④ نفس الـ version — تحقق فقط إذا عندنا تغييرات محلية جديدة
-    // بدل JSON.stringify للكل: نقارن _localTs فقط (خفيف جداً)
-    const localTs  = parseInt(localStorage.getItem('_sync_local_ts')||'0');
-    const remoteTs = remote.data ? (remote.data._localTs||0) : 0;
-    if(localTs > remoteTs){
-      // عندنا تغييرات جديدة → ارفع
-      const localData = _syncCollect();
-      const newVer    = _syncLastVer + 1;
-      await _syncWrite(newVer, localData);
-      _syncLastVer = newVer;
-    }
-    // إذا لا تغييرات → لا تفعل شيئاً (أسرع حالة ممكنة)
-    _syncSetLastTime();
-    _syncUpdateIndicator('active');
-
-  }catch(e){
-    if(e.name==='InvalidStateError'){
-      _syncStopPolling();
-      _syncDirHandle = null;
-      localStorage.removeItem('sync_dir_name');
-      _idbDelHandle();
-      _syncUpdateIndicator('error');
-      syncRenderCard();
-      showNotif('مزامنة','⚠️ انقطع الاتصال بالمجلد — يرجى إعادة الاختيار من الإعدادات','error');
-    } else {
-      _syncUpdateIndicator('error');
-    }
-  } finally {
-    _syncBusy = false;
-  }
-}
-
-function _syncCollect(){
-  const data = {};
-  const pfx  = DB._pfx();
-  SYNC_KEYS.forEach(k=>{
-    try{ data[k] = JSON.parse(localStorage.getItem(pfx+k)||'null'); }catch(e){}
-  });
-  // نحفظ timestamp آخر تعديل محلي بشكل منفصل
-  data._localTs = parseInt(localStorage.getItem('_sync_local_ts')||'0');
-  data._device  = SYNC_DEVICE_ID;
-  return data;
-}
-
-// يُستدعى عند أي تعديل محلي لتسجيل وقت التعديل
-function _syncMarkLocalChange(){
-  localStorage.setItem('_sync_local_ts', String(Date.now()));
-}
-
-// ═══════════════════════════════════════════════════════════
-// merge ذكي على مستوى كل record بشكل منفصل
-// القاعدة: الحقول "لا رجعة فيها" (مثل printed) لا تُعكس أبداً
-// ═══════════════════════════════════════════════════════════
-
-// حقول لا رجعة فيها: إذا صارت true في أي جهاز تبقى true للأبد
-const SYNC_IRREVERSIBLE = ['printed', 'cancelled', 'paid', 'settled'];
-
-function _syncMerge(remoteData, localData, remoteDevice){
-  // نفس الجهاز — لا داعي للدمج
-  if(remoteDevice === SYNC_DEVICE_ID) return localData;
-
-  const merged = {};
-
-  SYNC_KEYS.forEach(k=>{
-    const local  = localData[k];
-    const remote = remoteData[k];
-
-    // أحدهما غائب → خذ الموجود
-    if(!remote && !local){ merged[k] = local; return; }
-    if(!remote)           { merged[k] = local; return; }
-    if(!local)            { merged[k] = remote; return; }
-
-    // كلاهما مصفوفات (patients, requests, invoices...)
-    if(Array.isArray(local) && Array.isArray(remote)){
-      merged[k] = _syncMergeArray(local, remote);
-      return;
-    }
-
-    // كلاهما objects (إعدادات، billing...)
-    if(typeof local === 'object' && typeof remote === 'object'){
-      // دمج سطحي: الأحدث يفوز لكل مفتاح
-      merged[k] = Object.assign({}, remote, local);
-      return;
-    }
-
-    // قيمة بسيطة: Local يفوز (الجهاز الحالي أعلم بنفسه)
-    merged[k] = local;
-  });
-
-  merged._localTs = Math.max(localData._localTs||0, remoteData._localTs||0);
-  merged._device  = SYNC_DEVICE_ID;
-  return merged;
-}
-
-// دمج مصفوفتين من records على مستوى كل عنصر بشكل منفصل
-function _syncMergeArray(localArr, remoteArr){
-  // بناء map من remote بالـ id
-  const remoteMap = new Map();
-  remoteArr.forEach(item => {
-    if(!item) return;
-    const id = item.id || item._id || item.patientId || item.reqId;
-    if(id) remoteMap.set(id, item);
-  });
-
-  // ابدأ بـ local وادمج مع remote لكل عنصر
-  const result = localArr.map(localItem => {
-    if(!localItem) return localItem;
-    const id = localItem.id || localItem._id || localItem.patientId || localItem.reqId;
-    if(!id) return localItem;
-
-    const remoteItem = remoteMap.get(id);
-    if(!remoteItem) return localItem; // عنصر جديد محلياً فقط
-
-    // دمج الحقول: local يفوز إلا إذا remote أحدث في الحقول العادية
-    remoteMap.delete(id); // نزيله لنعرف ما تبقى في remote
-    return _syncMergeRecord(localItem, remoteItem);
-  });
-
-  // العناصر الموجودة في remote فقط (جديدة من الجهاز الآخر) → أضفها
-  remoteMap.forEach(remoteItem => {
-    result.push(remoteItem);
-  });
-
-  return result;
-}
-
-// دمج record واحد:
-// القاعدة: الأحدث _updatedAt يفوز بالكامل
-// استثناء وحيد: حقول IRREVERSIBLE (printed, paid...) — true يفوز دائماً
-function _syncMergeRecord(local, remote){
-  const localTs  = local._updatedAt  || 0;
-  const remoteTs = remote._updatedAt || 0;
-
-  // اختر الفائز بالكامل بناءً على الأحدث
-  const winner = remoteTs > localTs ? remote : local;
-  const loser  = remoteTs > localTs ? local  : remote;
-
-  const merged = Object.assign({}, winner);
-
-  // الاستثناء الوحيد: حقول لا رجعة فيها — true يفوز من أي جهاز
-  SYNC_IRREVERSIBLE.forEach(field => {
-    if(loser[field]) merged[field] = loser[field];
-  });
-
-  return merged;
-}
-
-function _syncApply(data){
-  const pfx = DB._pfx();
-  let changed = false;
-  SYNC_KEYS.forEach(k=>{
-    if(data[k] !== undefined && data[k] !== null){
-      const cur = localStorage.getItem(pfx+k);
-      const nxt = JSON.stringify(data[k]);
-      if(cur !== nxt){ localStorage.setItem(pfx+k, nxt); changed = true; }
-    }
-  });
-  if(changed){
-    loadData(); renderAll(); updateDashboard();
-    showNotif('مزامنة','📥 تم استلام تحديثات من الحاسبة الأخرى','info');
-  }
-  // أعد إشارة: هل البيانات المحلية كانت أحدث (تحتاج رفع)؟
-  const localTs  = parseInt(localStorage.getItem('_sync_local_ts')||'0');
-  const remoteTs = data._localTs || 0;
-  return localTs > remoteTs ? 'local_newer' : 'remote_newer';
-}
-
-async function _syncRead(){
-  try{
-    const fh   = await _syncDirHandle.getFileHandle(SYNC_FILE,{create:false});
-    const file = await fh.getFile();
-    return JSON.parse(await file.text());
-  }catch(e){ return null; }
-}
-
-// _syncWrite الجديد: يكتب مع version counter + deviceId
-async function _syncWrite(ver, data){
-  if(_syncWriting) return;
-  _syncWriting = true;
-  try{
-    const payload = JSON.stringify({
-      ver      : ver,
-      ts       : Date.now(),
-      deviceId : SYNC_DEVICE_ID,
-      data     : data
-    }, null, 0);
-    const fh = await _syncDirHandle.getFileHandle(SYNC_FILE,{create:true});
-    const w  = await fh.createWritable();
-    await w.write(payload);
-    await w.close();
-  }finally{
-    _syncWriting = false;
-  }
-}
-
-function _syncStartPolling(){
-  _syncStopPolling();
-  // تشغيل أول دورة فوراً لكن في وقت فراغ المتصفح
-  _syncSchedule();
-  _syncInterval = setInterval(_syncSchedule, SYNC_INTERVAL);
-}
-function _syncStopPolling(){
-  if(_syncInterval){ clearInterval(_syncInterval); _syncInterval=null; }
-}
-
-// تشغيل المزامنة فقط لما المتصفح فاضي — لا تأثير على الأداء
-function _syncSchedule(){
-  if(_syncBusy) return;
-  if(typeof requestIdleCallback !== 'undefined'){
-    // المتصفح يختار الوقت المناسب (لما المستخدم مو شاغل)
-    requestIdleCallback(()=> _syncCycle(), { timeout: 5000 });
-  } else {
-    // fallback للمتصفحات القديمة
-    setTimeout(_syncCycle, 0);
-  }
-}
-
-function _syncUpdateIndicator(state){
-  const dot   = document.getElementById('sync-dot');
-  const label = document.getElementById('sync-label');
-  if(!dot||!label) return;
-  const map = {
-    off:     {c:'#555',       t:'غير مفعّل'},
-    active:  {c:'#00e87a',    t:'مزامن ✓'},
-    syncing: {c:'#ffcc00',    t:'يزامن...'},
-    error:   {c:'#ff2244',    t:'خطأ !'}
-  };
-  const s = map[state]||map.off;
-  dot.style.background = s.c;
-  dot.style.boxShadow  = state==='active'?'0 0 6px #00e87a':state==='syncing'?'0 0 6px #ffcc00':'none';
-  label.textContent    = s.t;
-  label.style.color    = state==='active'?'#00e87a':state==='error'?'#ff2244':state==='syncing'?'#ffcc00':'';
-}
-
-function _syncSetLastTime(){
-  const el = document.getElementById('sync-last-time');
-  if(el) el.textContent = new Date().toLocaleTimeString('ar-EG');
-}
-
-function syncRenderCard(){
-  const active    = !!_syncDirHandle;
-  const setupBox  = document.getElementById('sync-setup-box');
-  const activeBox = document.getElementById('sync-active-box');
-  const statusBox = document.getElementById('sync-status-box');
-  const folderEl  = document.getElementById('sync-folder-display');
-  const subEl     = document.getElementById('sync-card-sub');
-  if(!setupBox) return;
-  setupBox.style.display  = active ? 'none'  : 'block';
-  activeBox.style.display = active ? 'flex'  : 'none';
-  statusBox.style.display = active ? 'block' : 'none';
-  if(active){
-    if(folderEl) folderEl.textContent = '📁 ' + (localStorage.getItem('sync_dir_name')||'مجلد محدد');
-    if(subEl)    subEl.textContent    = '🟢 المزامنة مفعّلة تلقائياً';
-  } else {
-    if(subEl)    subEl.textContent    = 'اربط حاسبتين على نفس الواي فاي أو الإنترنت';
-  }
-}
-
-// ربط save() بالمزامنة الفورية + تسجيل وقت التعديل المحلي
-const _origSave = window.save;
-window.save = function(k,v){
-  // أضف _updatedAt لكل عنصر في المصفوفات التي تُزامن
-  // هذا يُمكّن المزامنة الذكية من معرفة أحدث تعديل لكل record
-  if(Array.isArray(v) && SYNC_KEYS.includes(k)){
-    const now = Date.now();
-    v = v.map(item => {
-      if(!item || typeof item !== 'object') return item;
-      // أضف _updatedAt فقط إذا لم يكن موجوداً أو إذا تغيّر الـ record
-      // نستخدم flag مؤقت _dirty الذي يُضاف عند التعديل
-      if(item._dirty){
-        const {_dirty, ...rest} = item;
-        return {...rest, _updatedAt: now};
-      }
-      if(!item._updatedAt) return {...item, _updatedAt: now};
-      return item;
-    });
-  }
-  _origSave(k,v);
-  _syncMarkLocalChange(); // سجّل وقت التعديل دائماً
-  if(_syncDirHandle && !_syncWriting && !_syncBusy){
-    clearTimeout(window._syncDebounce);
-    window._syncDebounce = setTimeout(()=>{
-      const newVer = _syncLastVer + 1;
-      const data   = _syncCollect();
-      _syncWrite(newVer, data).then(()=>{ _syncLastVer = newVer; });
-    }, 1200); // debounce 1.2 ثانية لتجميع التعديلات المتزامنة
-  }
-};
-
-// IndexedDB لحفظ FileSystemDirectoryHandle بين الجلسات
-function _idbOpen(){
-  return new Promise((res,rej)=>{
-    const r = indexedDB.open('medlab_sync_v1',1);
-    r.onupgradeneeded = e => e.target.result.createObjectStore('handles');
-    r.onsuccess = e => res(e.target.result);
-    r.onerror   = e => rej(e);
-  });
-}
-async function _idbSetHandle(h){
-  const db=await _idbOpen();
-  return new Promise((res,rej)=>{
-    const tx=db.transaction('handles','readwrite');
-    tx.objectStore('handles').put(h,'dirHandle');
-    tx.oncomplete=res; tx.onerror=rej;
-  });
-}
-async function _idbGetHandle(){
-  const db=await _idbOpen();
-  return new Promise((res,rej)=>{
-    const tx=db.transaction('handles','readonly');
-    const r=tx.objectStore('handles').get('dirHandle');
-    r.onsuccess=e=>res(e.target.result||null);
-    r.onerror=rej;
-  });
-}
-async function _idbDelHandle(){
-  const db=await _idbOpen();
-  return new Promise((res,rej)=>{
-    const tx=db.transaction('handles','readwrite');
-    tx.objectStore('handles').delete('dirHandle');
-    tx.oncomplete=res; tx.onerror=rej;
-  });
-}
-
-function _hash(str){
-  let h=0;
-  for(let i=0;i<str.length;i++){ h=Math.imul(31,h)+str.charCodeAt(i)|0; }
-  return h;
-}
 
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║              LIS BRIDGE — ربط أجهزة المختبر                        ║
@@ -31143,60 +30324,57 @@ async function initSyncManager() {
   try {
     await SyncManager.init(fbInstance, username, enabled);
 
-    // استمع لتحديثات البيانات من الأجهزة الأخرى
+    // استمع لتحديثات البيانات من الأجهزة الأخرى — تحديث فوري بدون refresh
     SyncManager.onUpdate(function(key) {
-      // إعادة تحميل البيانات المحدّثة من IDB إلى الذاكرة
       var idbKey = 'mlab2_' + username + '_' + key;
-      var idbReq = indexedDB.open('medlab_idb', 1);
-      idbReq.onsuccess = function(e) {
-        var db  = e.target.result;
+      var keyMap = {
+        patients:        { g:'patients',         fn:function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} } },
+        requests:        { g:'requests',         fn:function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} } },
+        invoices:        { g:'invoices',         fn:function(){ try{renderInvoices();}catch(e){} } },
+        packages:        { g:'packages',         fn:function(){ try{renderPackages();}catch(e){} } },
+        inventory:       { g:'inventory',        fn:function(){ try{renderInventory();}catch(e){} } },
+        doctors:         { g:'doctors',          fn:function(){ try{renderDoctors();}catch(e){} } },
+        billing:         { g:'billingRecords',   fn:function(){ try{renderAll();}catch(e){} } },
+        testGroups:      { g:'testGroups',       fn:function(){ try{renderTestsDB();}catch(e){} } },
+        qc:              { g:'qcRecords',        fn:function(){ try{renderQC();}catch(e){} } },
+        cultureRecords:  { g:'cultureRecords',   fn:function(){ try{renderAll();}catch(e){} } },
+        uaRecords:       { g:'uaRecords',        fn:function(){ try{renderAll();}catch(e){} } },
+        stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ try{renderAll();}catch(e){} } },
+        semenRecords:    { g:'semenRecords',     fn:function(){ try{renderAll();}catch(e){} } },
+        phoneBook:       { g:'phoneBook',        fn:function(){ try{renderAll();}catch(e){} } }
+      };
+      var labels = {
+        patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
+        packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
+        billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
+        cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
+        semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
+      };
+      var meta = keyMap[key];
+      if (!meta) return;
+      var req = indexedDB.open('medlab_idb', 1);
+      req.onsuccess = function(e) {
+        var db = e.target.result;
         if (!db.objectStoreNames.contains('kv')) return;
         var tx  = db.transaction('kv', 'readonly');
         var get = tx.objectStore('kv').get(idbKey);
         get.onsuccess = function() {
           if (!get.result) return;
           var data = get.result.v;
-          // حدّث المتغيرات العالمية
-          var keyMap = {
-            patients:        'patients',
-            requests:        'requests',
-            invoices:        'invoices',
-            packages:        'packages',
-            inventory:       'inventory',
-            doctors:         'doctors',
-            billing:         'billingRecords',
-            testGroups:      'testGroups',
-            qc:              'qcRecords',
-            cultureRecords:  'cultureRecords',
-            uaRecords:       'uaRecords',
-            stoolExamRecords:'stoolExamRecords',
-            semenRecords:    'semenRecords',
-            phoneBook:       'phoneBook'
-          };
-          var globalVar = keyMap[key];
-          if (globalVar && typeof window[globalVar] !== 'undefined') {
-            window[globalVar] = Array.isArray(data) ? data : window[globalVar];
+          if (!Array.isArray(data)) return;
+          // 1. حدّث المتغير العالمي
+          if (typeof window[meta.g] !== 'undefined') {
+            window[meta.g] = data;
+            if (typeof _MC !== 'undefined') _MC[idbKey] = data;
           }
-          // أعد رسم الواجهة
-          if (typeof renderAll === 'function') {
-            try { renderAll(); } catch(e) {}
-          }
-          if (typeof updateBadges === 'function') {
-            try { updateBadges(); } catch(e) {}
-          }
-          // إشعار للمستخدم
-          if (typeof showNotif === 'function') {
-            var labels = {
-              patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-              packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-              billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-              cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-              semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-            };
-            showNotif('🔄 مزامنة', 'تم استلام تحديث: ' + (labels[key]||key), 'info');
-          }
+          // 2. أعد رسم القسم المناسب فقط
+          meta.fn();
+          // 3. إشعار خفيف
+          try { showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info'); } catch(e) {}
         };
+        get.onerror = function() {};
       };
+      req.onerror = function() {};
     });
 
     // إضافة مؤشر المزامنة في الواجهة
