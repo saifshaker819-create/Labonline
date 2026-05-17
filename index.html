@@ -30079,23 +30079,27 @@ setTimeout(function(){
     if (!evt.key || !evt.record) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
 
-    // اقرأ من _MC أولاً (أسرع وأدق من IDB)
+    // اقرأ من _MC فقط إذا كانت تحتوي بيانات فعلية (length > 0)
     var current = null;
-    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length >= 0) {
+    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) {
       current = _MC[idbKey].slice();
     }
+    // إذا _MC فارغة — اقرأ من IDB مباشرة لضمان عدم فقدان البيانات
     var readP = (current !== null) ? Promise.resolve(current) : _readAppIDB(idbKey);
 
     return readP.then(function(cur) {
       if (!Array.isArray(cur)) cur = [];
       var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
       if (idx >= 0) {
-        cur[idx] = evt.record; // استبدل دائماً
+        cur[idx] = evt.record;
       } else {
-        cur.push(evt.record); // أضف جديد
+        cur.push(evt.record);
       }
 
-      // حدّث setter فوراً (قبل DB.set لضمان تحديث الواجهة)
+      // حدّث _MC فوراً
+      if (typeof _MC !== 'undefined') _MC[idbKey] = cur;
+
+      // حدّث setter (patients/requests/...) فوراً
       _smUpdateGlobal(evt.key, idbKey, cur);
 
       // احفظ في DB بدون hook
@@ -30116,11 +30120,12 @@ setTimeout(function(){
   function _applyDelete(evt) {
     if (!evt.key || !evt.recordId) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
+    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
     var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
     return readP.then(function(cur) {
       if (!Array.isArray(cur)) return;
       var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
+      if (typeof _MC !== 'undefined') _MC[idbKey] = filtered;
       SyncManager._applying = true;
       try {
         if (typeof DB !== 'undefined') DB.set(evt.key, filtered);
@@ -30135,7 +30140,7 @@ setTimeout(function(){
   function _applySetAll(evt) {
     if (!evt.key || !Array.isArray(evt.data)) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
+    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
     var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
     return readP.then(function(cur) {
       if (!Array.isArray(cur)) cur = [];
@@ -30143,6 +30148,7 @@ setTimeout(function(){
       evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
       var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
       var merged = Array.from(remoteMap.values()).concat(localOnly);
+      if (typeof _MC !== 'undefined') _MC[idbKey] = merged;
       SyncManager._applying = true;
       try {
         if (typeof DB !== 'undefined') DB.set(evt.key, merged);
@@ -30243,6 +30249,18 @@ setTimeout(function(){
       return chain;
     }).then(function() {
       return _flushPending();
+    }).then(function() {
+      // إعادة رسم كاملة بعد استلام كل البيانات من Firebase
+      setTimeout(function() {
+        try {
+          if (typeof renderAll        === 'function') renderAll();
+          if (typeof updateDashboard  === 'function') updateDashboard();
+          if (typeof updateBadges     === 'function') updateBadges();
+          if (typeof loadResultsDropdown === 'function') loadResultsDropdown();
+          if (typeof loadPrintDropdown   === 'function') loadPrintDropdown();
+          _smDebugLog('✅ إعادة رسم بعد fullSync');
+        } catch(e) { _warn('Re-render after fullSync failed:', e); }
+      }, 300);
     }).catch(function(e) { _warn('Full sync error:', e); });
   }
 
@@ -30485,7 +30503,7 @@ async function initSyncManager() {
   try {
     await SyncManager.init(fbInstance, username, enabled);
 
-    // إضافة مؤشر المزامنة في الواجهة
+    // إضافة مؤشر المزامنة في الواجهة — دائماً
     _renderSyncIndicator(enabled);
     _renderSyncDebugPanel();
 
@@ -30493,6 +30511,7 @@ async function initSyncManager() {
       '| device:', SyncManager.getDeviceId());
   } catch(e) {
     console.warn('[SyncManager] Init failed:', e);
+    try { _renderSyncIndicator(false); } catch(_) {}
   }
 }
 
@@ -30749,6 +30768,18 @@ function _hookSaveForSync() {
         });
       });
 
+      // عند إضافة مريض جديد — أرسل طلباته فوراً معه
+      if(k === 'patients'){
+        toUpsert.forEach(function(pat){
+          if(!prevMap[pat.id]){
+            var patReqs = (window.requests||[]).filter(function(r){ return r && r.patientId === pat.id; });
+            patReqs.forEach(function(req){
+              SyncManager.pushUpsert('requests', req).catch(function(){});
+            });
+          }
+        });
+      }
+
       // DELETE: عناصر محذوفة
       prev.forEach(function(record) {
         if (!record || !record.id) return;
@@ -30801,21 +30832,35 @@ function _smDebugToBox(msg) {
 
 // ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
 window.addEventListener('load', function() {
-  // انتظر حتى يتم تسجيل الدخول (startApp تُستدعى بعد checkAuth)
   var _smInitDone = false;
+
+  function _tryInitSync() {
+    if (_smInitDone) return;
+    var session = typeof getSession === 'function' ? getSession() : null;
+    if (!session || !session.username) return;
+    _smInitDone = true;
+    initSyncManager().then(function() {
+      _hookSaveForSync();
+    });
+  }
+
+  // الطريقة 1: hook على startApp
   var _origStartApp = window.startApp;
   if (typeof _origStartApp === 'function') {
     window.startApp = function() {
       _origStartApp.apply(this, arguments);
-      if (!_smInitDone) {
-        _smInitDone = true;
-        setTimeout(function() {
-          initSyncManager().then(function() {
-            _hookSaveForSync();
-          });
-        }, 2000); // انتظر حتى تنتهي كل عمليات التهيئة
-      }
+      setTimeout(_tryInitSync, 2000);
     };
   }
+
+  // الطريقة 2: fallback — إذا كانت الجلسة موجودة مسبقاً (Refresh)
+  setTimeout(function() {
+    if (!_smInitDone) { _tryInitSync(); }
+  }, 2500);
+
+  // الطريقة 3: محاولة أخيرة
+  setTimeout(function() {
+    if (!_smInitDone) { _tryInitSync(); }
+  }, 5000);
 });
 </script>
