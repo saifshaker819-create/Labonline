@@ -6452,9 +6452,11 @@ const DB={
       _MC[pk]=v; // حفظ في الكاش فوراً (بدون تأخير)
 
       // ── SyncManager hook ──────────────────────────────
-      // أرسل التغييرات للمزامنة مباشرة من DB.set
+      // أرسل التغييرات للمزامنة — مع منع الحلقة أثناء تطبيق حدث وارد
       if(window._smDBHook && typeof window._smDBHook === 'function'){
-        try{ window._smDBHook(k, v); }catch(_){}
+        if(typeof SyncManager !== 'undefined' && !SyncManager._applying){
+          try{ window._smDBHook(k, v); }catch(_){}
+        }
       }
       // ──────────────────────────────────────────────────
 
@@ -29944,37 +29946,23 @@ setTimeout(function(){
   }
 
   // ── App IDB (medlab_idb) ─────────────────────────────
+  // يستخدم IDB.get/IDB.set مباشرة — تتعامل مع ضغط LZS تلقائياً
   function _readAppIDB(key) {
-    return new Promise(function(res) {
-      try {
-        var req = indexedDB.open('medlab_idb', 1);
-        req.onsuccess = function(e) {
-          var db = e.target.result;
-          if (!db.objectStoreNames.contains('kv')) { res(null); return; }
-          var tx  = db.transaction('kv', 'readonly');
-          var get = tx.objectStore('kv').get(key);
-          get.onsuccess = function() { res(get.result ? get.result.v : null); };
-          get.onerror   = function() { res(null); };
-        };
-        req.onerror = function() { res(null); };
-      } catch(e) { res(null); }
-    });
+    // IDB هو الـ singleton المعرّف في التطبيق ويدعم LZS
+    if (typeof IDB !== 'undefined' && typeof IDB.get === 'function') {
+      return IDB.get(key).then(function(v) {
+        return v; // IDB.get يرجع القيمة مفكوكة الضغط مباشرة
+      }).catch(function() { return null; });
+    }
+    return Promise.resolve(null);
   }
 
   function _writeAppIDB(key, value) {
-    return new Promise(function(res) {
-      try {
-        var req = indexedDB.open('medlab_idb', 1);
-        req.onsuccess = function(e) {
-          var db = e.target.result;
-          if (!db.objectStoreNames.contains('kv')) { res(); return; }
-          var tx = db.transaction('kv', 'readwrite');
-          tx.objectStore('kv').put({ k: key, v: value });
-          tx.oncomplete = res; tx.onerror = res;
-        };
-        req.onerror = function() { res(); };
-      } catch(e) { res(); }
-    });
+    // IDB.set يحفظ مع ضغط LZS ويحدّث _MC cache تلقائياً
+    if (typeof IDB !== 'undefined' && typeof IDB.set === 'function') {
+      return IDB.set(key, value).then(function() {}).catch(function() {});
+    }
+    return Promise.resolve();
   }
 
   // ── Device ID ─────────────────────────────────────────
@@ -30041,8 +30029,11 @@ setTimeout(function(){
     if (typeof window[meta.g] !== 'undefined') {
       window[meta.g] = data;
     }
-    // حدّث كاش الذاكرة
-    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
+    // حدّث كاش _MC (IDB.set سيحدّثه أيضاً لكن نفعله هنا للفورية)
+    if (typeof _MC !== 'undefined') {
+      _MC[idbKey] = data;
+    }
+    _smDebugLog('✅ window.' + meta.g + ' = ' + data.length + ' عنصر');
   }
 
   function _applyEvent(evt, ackAfter) {
@@ -30064,49 +30055,74 @@ setTimeout(function(){
     });
   }
 
+  // نستخدم SyncManager._applying كـ flag مشترك
+
   function _applyUpsert(evt) {
     if (!evt.key || !evt.record) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    return _readAppIDB(idbKey).then(function(current) {
-      if (!Array.isArray(current)) current = [];
-      var idx = current.findIndex(function(x) { return x && x.id === evt.record.id; });
+    // اقرأ البيانات الحالية من _MC أو IDB
+    var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
+    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
+    return readP.then(function(cur) {
+      if (!Array.isArray(cur)) cur = [];
+      var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
       if (idx >= 0) {
-        var loc = current[idx];
-        var rem = evt.record;
-        if (!loc._updatedAt || rem._updatedAt >= loc._updatedAt) current[idx] = rem;
+        var loc = cur[idx], rem = evt.record;
+        if (!loc._updatedAt || rem._updatedAt >= loc._updatedAt) cur[idx] = rem;
       } else {
-        current.push(evt.record);
+        cur.push(evt.record);
       }
-      // حدّث المتغير العالمي فوراً قبل كتابة IDB
-      _smUpdateGlobal(evt.key, idbKey, current);
-      return _writeAppIDB(idbKey, current);
+      // حدّث بدون إطلاق الـ hook (لمنع الحلقة)
+      SyncManager._applying = true;
+      try {
+        if (typeof DB !== 'undefined') DB.set(evt.key, cur);
+      } finally {
+        SyncManager._applying = false;
+      }
+      // حدّث المتغير العالمي في الواجهة
+      _smUpdateGlobal(evt.key, idbKey, cur);
+      return Promise.resolve();
     });
   }
 
   function _applyDelete(evt) {
     if (!evt.key || !evt.recordId) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    return _readAppIDB(idbKey).then(function(current) {
-      if (!Array.isArray(current)) return;
-      var filtered = current.filter(function(x) { return x && x.id !== evt.recordId; });
-      // حدّث المتغير العالمي فوراً
+    var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
+    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
+    return readP.then(function(cur) {
+      if (!Array.isArray(cur)) return;
+      var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
+      SyncManager._applying = true;
+      try {
+        if (typeof DB !== 'undefined') DB.set(evt.key, filtered);
+      } finally {
+        SyncManager._applying = false;
+      }
       _smUpdateGlobal(evt.key, idbKey, filtered);
-      return _writeAppIDB(idbKey, filtered);
+      return Promise.resolve();
     });
   }
 
   function _applySetAll(evt) {
     if (!evt.key || !Array.isArray(evt.data)) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    return _readAppIDB(idbKey).then(function(current) {
-      if (!Array.isArray(current)) current = [];
+    var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
+    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
+    return readP.then(function(cur) {
+      if (!Array.isArray(cur)) cur = [];
       var remoteMap = new Map();
       evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
-      var localOnly = current.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
-      var merged    = Array.from(remoteMap.values()).concat(localOnly);
-      // حدّث المتغير العالمي فوراً
+      var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
+      var merged = Array.from(remoteMap.values()).concat(localOnly);
+      SyncManager._applying = true;
+      try {
+        if (typeof DB !== 'undefined') DB.set(evt.key, merged);
+      } finally {
+        SyncManager._applying = false;
+      }
       _smUpdateGlobal(evt.key, idbKey, merged);
-      return _writeAppIDB(idbKey, merged);
+      return Promise.resolve();
     });
   }
 
@@ -30280,6 +30296,7 @@ setTimeout(function(){
   var SyncManager = {
 
     version: SM_VERSION,
+    _applying: false, // flag لمنع حلقة DB.set → hook → Firebase → DB.set
 
     init: function(fbDb, username, enabled) {
       _fbDb     = fbDb;
