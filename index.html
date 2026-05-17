@@ -29830,6 +29830,19 @@ setTimeout(function(){
   function _log()  { console.log('[SyncMgr]',  ...arguments); }
   function _warn() { console.warn('[SyncMgr]', ...arguments); }
 
+  // شاشة تشخيص مرئية
+  function _smDebugLog(msg) {
+    var box = document.getElementById('_sm_debug_box');
+    if (!box) return;
+    var t = new Date().toLocaleTimeString('ar');
+    var line = document.createElement('div');
+    line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.08);color:#0f0';
+    line.textContent = t + ' — ' + msg;
+    box.insertBefore(line, box.firstChild);
+    // احتفظ بآخر 30 رسالة فقط
+    while (box.children.length > 30) box.removeChild(box.lastChild);
+  }
+
   // ── SyncManager IDB ──────────────────────────────────
   function _openSMDB() {
     if (_smDb) return Promise.resolve(_smDb);
@@ -30026,8 +30039,9 @@ setTimeout(function(){
 
   function _applyEvent(evt, ackAfter) {
     return _hasSeen(evt.id).then(function(seen) {
-      if (seen) { _log('Duplicate skipped:', evt.id); return; }
+      if (seen) { _log('Duplicate skipped:', evt.id); _smDebugLog('مكرر تجاهل: ' + evt.id.slice(0,8)); return; }
       _log('Applying event:', evt.type, evt.key, evt.id);
+      _smDebugLog('تطبيق: ' + evt.type + ' / ' + evt.key);
       var p;
       if      (evt.type === 'UPSERT_RECORD') p = _applyUpsert(evt);
       else if (evt.type === 'DELETE_RECORD') p = _applyDelete(evt);
@@ -30107,8 +30121,13 @@ setTimeout(function(){
       evt.fbKey = ref.key;
       ref.set(Object.assign({}, evt, { ack: {} })).then(function() {
         _log('Pushed:', evt.id, evt.type, evt.key);
+        _smDebugLog('أُرسل: ' + evt.type + ' / ' + evt.key);
         res();
-      }).catch(function(e) { rej(e); });
+      }).catch(function(e) {
+        _warn('Push error:', e);
+        _smDebugLog('فشل الإرسال: ' + e.message);
+        rej(e);
+      });
     });
   }
 
@@ -30179,18 +30198,26 @@ setTimeout(function(){
   function _startLive() {
     if (!_fbDb || !_username || !_enabled || _listening) return;
     _listening = true;
-    // استمع للأحداث الجديدة فقط (بعد لحظة التشغيل)
-    var startTs = Date.now();
-    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username)).orderByChild('ts').startAt(startTs);
+    var startTs = Date.now(); // نتجاهل الأحداث القديمة بفلتر محلي
+
+    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
     _evtCb  = _evtRef.on('child_added', function(snap) {
       var evt = snap.val();
       if (!evt || !evt.id) return;
-      if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
+      // تجاهل الأحداث القديمة (قبل بدء الاستماع)
+      if (evt.ts && evt.ts < startTs) return;
+      // تجاهل أحداثنا نحن
+      if (evt.originDevice === _getDeviceId()) return;
       evt.fbKey = snap.key;
-      _log('Live: received event', evt.type, evt.key, 'from', evt.originDevice);
+      _log('LIVE RCV:', evt.type, evt.key, 'from device:', evt.originDevice);
+      _smDebugLog('استلام حدث: ' + evt.type + ' / ' + evt.key);
       _applyEvent(evt, true).catch(function(e) { _warn('Live apply error:', e); });
+    }, function(err) {
+      _warn('Firebase listener error:', err);
+      _smDebugLog('خطأ Firebase: ' + err.message);
     });
-    _log('Live sync started — listening from ts:', startTs);
+    _log('Live sync started, path:', FB_PATH_EVENTS(_username));
+    _smDebugLog('بدأ الاستماع: ' + FB_PATH_EVENTS(_username));
   }
 
   function _stopLive() {
@@ -30254,9 +30281,10 @@ setTimeout(function(){
       var self = this;
       return _openSMDB().then(function() {
         _log('Init: user=' + username + ', enabled=' + enabled + ', device=' + _getDeviceId());
+        _smDebugLog('init: ' + username + ' | enabled:' + enabled + ' | dev:' + _getDeviceId().slice(-6));
 
-        if (!_enabled) { _log('Sync disabled — IDB only mode'); return; }
-        if (!_fbDb)    { _warn('Firebase not available'); return; }
+        if (!_enabled) { _log('Sync disabled — IDB only mode'); _smDebugLog('مزامنة معطّلة'); return; }
+        if (!_fbDb)    { _warn('Firebase not available'); _smDebugLog('Firebase غير متاح!'); return; }
 
         _registerDevice();
 
@@ -30372,12 +30400,129 @@ async function initSyncManager() {
 
     // إضافة مؤشر المزامنة في الواجهة
     _renderSyncIndicator(enabled);
+    _renderSyncDebugPanel();
 
     console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled,
       '| device:', SyncManager.getDeviceId());
   } catch(e) {
     console.warn('[SyncManager] Init failed:', e);
   }
+}
+
+/** شاشة تشخيص المزامنة المرئية */
+function _renderSyncDebugPanel() {
+  // احذف القديمة إن وجدت
+  var old = document.getElementById('_sm_debug_panel');
+  if (old) old.remove();
+
+  var panel = document.createElement('div');
+  panel.id = '_sm_debug_panel';
+  panel.style.cssText = [
+    'position:fixed','bottom:60px','left:8px','right:8px',
+    'max-height:220px','background:rgba(0,0,0,.92)',
+    'border:1px solid rgba(0,212,255,.4)','border-radius:10px',
+    'z-index:99999','overflow:hidden','font-family:monospace',
+    'display:flex','flex-direction:column'
+  ].join(';');
+
+  // رأس الشاشة
+  var hdr = document.createElement('div');
+  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(0,212,255,.12);border-bottom:1px solid rgba(0,212,255,.3)';
+  hdr.innerHTML = '<span style="font-size:11px;font-weight:700;color:#00d4ff">🔧 تشخيص المزامنة</span>' +
+    '<span style="font-size:10px;color:rgba(255,255,255,.5)">جهاز: ' + (SyncManager.getDeviceId()||'').slice(-8) + '</span>' +
+    '<button onclick="document.getElementById(&quot;_sm_debug_panel&quot;).remove()" style="background:none;border:none;color:#ff2244;font-size:14px;cursor:pointer;padding:0 4px">✕</button>';
+  panel.appendChild(hdr);
+
+  // زر اختبار الإرسال
+  var testBtn = document.createElement('div');
+  testBtn.style.cssText = 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px';
+  testBtn.innerHTML = '<button onclick="_smTestSend()" style="flex:1;padding:5px;background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);border-radius:6px;color:#00d4ff;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">📤 اختبار إرسال</button>' +
+    '<button onclick="_smTestCheck()" style="flex:1;padding:5px;background:rgba(139,63,255,.15);border:1px solid rgba(139,63,255,.4);border-radius:6px;color:#a78bfa;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔍 فحص Firebase</button>';
+  panel.appendChild(testBtn);
+
+  // صندوق الرسائل
+  var box = document.createElement('div');
+  box.id = '_sm_debug_box';
+  box.style.cssText = 'flex:1;overflow-y:auto;padding:6px 10px;';
+  panel.appendChild(box);
+
+  document.body.appendChild(panel);
+}
+
+/** اختبار إرسال حدث تجريبي */
+function _smTestSend() {
+  if (typeof SyncManager === 'undefined' || !SyncManager.isEnabled()) {
+    var box = document.getElementById('_sm_debug_box');
+    if (box) {
+      var l = document.createElement('div');
+      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
+      l.textContent = '❌ المزامنة غير مفعّلة لهذا الحساب';
+      box.insertBefore(l, box.firstChild);
+    }
+    return;
+  }
+  var testRecord = { id: 'test_' + Date.now(), _test: true, _updatedAt: Date.now() };
+  SyncManager.pushUpsert('patients', testRecord).then(function() {
+    var box = document.getElementById('_sm_debug_box');
+    if (box) {
+      var l = document.createElement('div');
+      l.style.cssText = 'font-size:11px;color:#00e87a;padding:2px 0';
+      l.textContent = '✅ أُرسل حدث تجريبي — انتظر الجهاز الآخر';
+      box.insertBefore(l, box.firstChild);
+    }
+  }).catch(function(e) {
+    var box = document.getElementById('_sm_debug_box');
+    if (box) {
+      var l = document.createElement('div');
+      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
+      l.textContent = '❌ فشل: ' + e.message;
+      box.insertBefore(l, box.firstChild);
+    }
+  });
+}
+
+/** فحص Firebase مباشرة */
+function _smTestCheck() {
+  var box = document.getElementById('_sm_debug_box');
+  if (!box) return;
+
+  var session = typeof getSession === 'function' ? getSession() : null;
+  var username = session ? session.username : '?';
+  var path = 'sync_events/' + username;
+
+  var info = document.createElement('div');
+  info.style.cssText = 'font-size:10px;color:#ffcc00;padding:2px 0';
+  info.textContent = '🔍 فحص: ' + path;
+  box.insertBefore(info, box.firstChild);
+
+  if (typeof fbDb === 'undefined' || !fbDb) {
+    var l = document.createElement('div');
+    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
+    l.textContent = '❌ fbDb = null — Firebase غير مهيّأ';
+    box.insertBefore(l, box.firstChild);
+    return;
+  }
+
+  // فحص auth
+  var authLbl = document.createElement('div');
+  authLbl.style.cssText = 'font-size:10px;color:#a0a0a0;padding:2px 0';
+  var authUser = (typeof fbAuth !== 'undefined' && fbAuth && fbAuth.currentUser);
+  authLbl.textContent = 'Auth: ' + (authUser ? '✅ ' + authUser.uid.slice(0,8) : '❌ غير مسجّل');
+  box.insertBefore(authLbl, box.firstChild);
+
+  // اقرأ sync_events
+  fbDb.ref(path).once('value').then(function(snap) {
+    var val = snap.val();
+    var l = document.createElement('div');
+    l.style.cssText = 'font-size:10px;color:#00e87a;padding:2px 0';
+    l.textContent = '📦 sync_events: ' + (val ? Object.keys(val).length + ' حدث' : 'فارغ');
+    box.insertBefore(l, box.firstChild);
+  }).catch(function(e) {
+    var l = document.createElement('div');
+    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
+    l.textContent = '❌ قراءة Firebase: ' + e.message;
+    box.insertBefore(l, box.firstChild);
+  });
 }
 
 /** عرض مؤشر حالة المزامنة في الشريط العلوي */
