@@ -7243,6 +7243,22 @@ let packages=[];
 let inventory=[];
 let qcRecords=[];
 let settings={};
+
+// ── SyncManager Setter Registry ────────────────────────────
+// يُتيح لـ SyncManager تحديث المتغيرات المحلية من script blocks أخرى
+window._smSetters = window._smSetters || {};
+window._smSetters['patients']        = function(v){ patients        = v; };
+window._smSetters['requests']        = function(v){ requests        = v; };
+window._smSetters['invoices']        = function(v){ invoices        = v; };
+window._smSetters['doctors']         = function(v){ doctors         = v; };
+window._smSetters['packages']        = function(v){ packages        = v; };
+window._smSetters['inventory']       = function(v){ inventory       = v; };
+window._smSetters['qc']              = function(v){ qcRecords       = v; };
+window._smSetters['testGroups']      = function(v){ testGroups      = v; };
+window._smSetters['uaRecords']       = function(v){ uaRecords       = v; };
+window._smSetters['stoolExamRecords']= function(v){ stoolExamRecords= v; };
+window._smSetters['semenRecords']    = function(v){ semenRecords    = v; };
+// ──────────────────────────────────────────────────────────
 let tests=[];
 let testGroups=[];
 let uaRecords=[];
@@ -15059,6 +15075,9 @@ function updateBadges(){document.getElementById('nb-patients').textContent=patie
 // BILLING / ACCOUNTING
 // ============================================================
 let billingRecords=[];
+// SyncManager setter
+window._smSetters = window._smSetters || {};
+window._smSetters['billing'] = function(v){ billingRecords = v; };
 
 function renderBillingTests(){
   const srch=(document.getElementById('billing-test-srch')||{}).value||'';
@@ -19656,6 +19675,8 @@ const ORGANISMS_DB = {
 
 // ── حالة الزرع ──────────────────────────────────────────────
 let cultureRecords = [];
+window._smSetters = window._smSetters || {};
+window._smSetters['cultureRecords'] = function(v){ cultureRecords = v; };
 
 function loadCultureRecords(){
   cultureRecords = load('cultureRecords', []);
@@ -30005,35 +30026,39 @@ setTimeout(function(){
 
   // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
   var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} } },
-    requests:        { g:'requests',         fn:function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} } },
-    invoices:        { g:'invoices',         fn:function(){ try{renderInvoices();}catch(e){} } },
-    packages:        { g:'packages',         fn:function(){ try{renderPackages();}catch(e){} } },
-    inventory:       { g:'inventory',        fn:function(){ try{renderInventory();}catch(e){} } },
-    doctors:         { g:'doctors',          fn:function(){ try{renderDoctors();}catch(e){} } },
-    billing:         { g:'billingRecords',   fn:function(){ try{renderAll();}catch(e){} } },
-    testGroups:      { g:'testGroups',       fn:function(){ try{renderTestsDB();}catch(e){} } },
-    qc:              { g:'qcRecords',        fn:function(){ try{renderQC();}catch(e){} } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ try{renderAll();}catch(e){} } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ try{renderAll();}catch(e){} } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ try{renderAll();}catch(e){} } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ try{renderAll();}catch(e){} } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ try{renderAll();}catch(e){} } }
+    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} }, 0); } },
+    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} }, 0); } },
+    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} }, 0); } },
+    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} }, 0); } },
+    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} }, 0); } },
+    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} }, 0); } },
+    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
+    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} }, 0); } },
+    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} }, 0); } },
+    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
+    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
+    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
+    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } },
+    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} }, 0); } }
   };
 
-  // تحديث المتغير العالمي + كاش الذاكرة فوراً
+  // تحديث المتغير المحلي عبر setter registry + كاش الذاكرة
   function _smUpdateGlobal(key, idbKey, data) {
     var meta = _SM_KEY_MAP[key];
-    if (!meta) return;
-    // حدّث المتغير العالمي في التطبيق مباشرة
-    if (typeof window[meta.g] !== 'undefined') {
-      window[meta.g] = data;
+    if (!meta || !Array.isArray(data)) return;
+
+    // استخدم setter registry لتحديث المتغير المحلي في script block الصحيح
+    if (window._smSetters && typeof window._smSetters[key] === 'function') {
+      window._smSetters[key](data);
+      _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
+    } else {
+      // fallback: window[var] إذا لم يوجد setter
+      if (typeof window[meta.g] !== 'undefined') window[meta.g] = data;
+      _smDebugLog('⚠️ window.' + meta.g + ' = ' + data.length + ' (no setter)');
     }
-    // حدّث كاش _MC (IDB.set سيحدّثه أيضاً لكن نفعله هنا للفورية)
-    if (typeof _MC !== 'undefined') {
-      _MC[idbKey] = data;
-    }
-    _smDebugLog('✅ window.' + meta.g + ' = ' + data.length + ' عنصر');
+
+    // حدّث _MC cache
+    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
   }
 
   function _applyEvent(evt, ackAfter) {
