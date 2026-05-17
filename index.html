@@ -30098,8 +30098,12 @@ setTimeout(function(){
       }
       // حدّث setter المحلي
       _smUpdateGlobal(evt.key, idbKey, cur);
-      // حدّث prevState لمنع إعادة إرسالها
+      // حدّث prevState لمنع إعادة الإرسال
       if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
+      if (window._smSaveTimers) {
+        // ألغِ أي timer معلّق لهذا المفتاح — البيانات جاءت من firebase
+        clearTimeout(window._smSaveTimers[evt.key]);
+      }
       return Promise.resolve();
     });
   }
@@ -30238,14 +30242,35 @@ setTimeout(function(){
   }
 
   // ── Live sync ─────────────────────────────────────────
+  var _keepaliveTimer = null;
+  var _connMonitorStarted = false;
+
+  function _pollPendingEvents() {
+    // يجلب الأحداث الموجودة في Firebase ويطبقها
+    // هذا هو الـ trigger الذي يُنشّط الاتصال
+    if (!_fbDb || !_username || !_enabled) return;
+    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
+      var val = s.val();
+      if (!val) return;
+      Object.keys(val).forEach(function(fbKey) {
+        var evt = val[fbKey];
+        if (!evt || !evt.id) return;
+        if (evt.originDevice === _getDeviceId()) return;
+        evt.fbKey = fbKey;
+        _applyEvent(evt, true).catch(function(){});
+      });
+    }).catch(function(){});
+  }
+
   function _startLive() {
     if (!_fbDb || !_username || !_enabled || _listening) return;
     _listening = true;
     var startTs = Date.now();
 
-    // keepSynced يُبقي الاتصال حياً ويمنع idle mode
+    // ── keepSynced لمنع idle ──
     try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
 
+    // ── الـ listener الرئيسي ──
     _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
     _evtCb  = _evtRef.on('child_added', function(snap) {
       var evt = snap.val();
@@ -30253,39 +30278,47 @@ setTimeout(function(){
       if (evt.ts && evt.ts < startTs) return;
       if (evt.originDevice === _getDeviceId()) return;
       evt.fbKey = snap.key;
-      _log('LIVE RCV:', evt.type, evt.key, 'from:', evt.originDevice);
       _smDebugLog('📥 ' + evt.type + ' / ' + evt.key);
       _applyEvent(evt, true).catch(function(e) { _warn('Live apply error:', e); });
     }, function(err) {
-      _warn('Firebase listener error:', err);
-      _smDebugLog('⚠️ خطأ listener: ' + err.message);
-      // إعادة المحاولة بعد 3 ثوانٍ
+      _warn('Firebase listener error:', err.message);
       _listening = false;
       setTimeout(function() { _startLive(); }, 3000);
     });
 
-    // مراقبة حالة الاتصال بـ Firebase
-    _fbDb.ref('.info/connected').on('value', function(snap) {
-      var connected = snap.val();
-      _smDebugLog(connected ? '🟢 Firebase متصل' : '🔴 Firebase منقطع');
-      if (connected) {
-        // عند إعادة الاتصال: افحص الأحداث الفائتة
-        _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
-          var val = s.val();
-          if (!val) return;
-          Object.keys(val).forEach(function(fbKey) {
-            var evt = val[fbKey];
-            if (!evt || !evt.id) return;
-            if (evt.originDevice === _getDeviceId()) return;
-            evt.fbKey = fbKey;
-            _applyEvent(evt, true).catch(function(){});
-          });
-        }).catch(function(){});
-      }
-    });
+    // ── مراقبة الاتصال ──
+    if (!_connMonitorStarted) {
+      _connMonitorStarted = true;
+      _fbDb.ref('.info/connected').on('value', function(snap) {
+        var connected = snap.val();
+        _smDebugLog(connected ? '🟢 متصل' : '🔴 منقطع');
+        if (connected) {
+          // عند إعادة الاتصال: اجلب الأحداث الفائتة فوراً
+          _pollPendingEvents();
+        }
+      });
+    }
 
-    _log('Live sync started');
-    _smDebugLog('✅ listener بدأ');
+    // ── keepalive: استدعاء once() كل 10 ثوانٍ لمنع sleep ──
+    clearInterval(_keepaliveTimer);
+    _keepaliveTimer = setInterval(function() {
+      if (!_fbDb || !_username || !_enabled) return;
+      // ping بسيط يُبقي الاتصال حياً ويجلب أي أحداث فائتة
+      _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
+        var val = s.val();
+        if (!val) return;
+        Object.keys(val).forEach(function(fbKey) {
+          var evt = val[fbKey];
+          if (!evt || !evt.id) return;
+          if (evt.originDevice === _getDeviceId()) return;
+          evt.fbKey = fbKey;
+          _applyEvent(evt, true).catch(function(){});
+        });
+      }).catch(function(){});
+    }, 10000); // كل 10 ثوانٍ
+
+    _log('Live sync started with keepalive');
+    _smDebugLog('✅ listener + keepalive 10s');
   }
 
   function _stopLive() {
@@ -30483,19 +30516,33 @@ async function initSyncManager() {
 
 /** شاشة تشخيص المزامنة المرئية */
 function _renderSyncDebugPanel() {
-  // احذف القديمة إن وجدت
   var old = document.getElementById('_sm_debug_panel');
   if (old) old.remove();
 
   var panel = document.createElement('div');
   panel.id = '_sm_debug_panel';
+  // البوكس مخفي افتراضياً — فقط div#_sm_debug_box موجود للكتابة
   panel.style.cssText = [
     'position:fixed','bottom:60px','left:8px','right:8px',
     'max-height:220px','background:rgba(0,0,0,.92)',
     'border:1px solid rgba(0,212,255,.4)','border-radius:10px',
     'z-index:99999','overflow:hidden','font-family:monospace',
-    'display:flex','flex-direction:column'
+    'display:none','flex-direction:column'  // مخفي افتراضياً
   ].join(';');
+
+  // زر إظهار/إخفاء البوكس في الشريط العلوي
+  var toggleBtn = document.createElement('button');
+  toggleBtn.id = '_sm_toggle_btn';
+  toggleBtn.style.cssText = 'position:fixed;bottom:10px;left:10px;z-index:100000;background:rgba(0,0,0,.7);border:1px solid rgba(0,212,255,.4);border-radius:20px;color:#00d4ff;font-size:9px;padding:3px 8px;cursor:pointer;font-family:monospace';
+  toggleBtn.textContent = '🔧 Sync';
+  toggleBtn.onclick = function() {
+    var p = document.getElementById('_sm_debug_panel');
+    if (p) {
+      var vis = p.style.display !== 'none';
+      p.style.display = vis ? 'none' : 'flex';
+    }
+  };
+  document.body.appendChild(toggleBtn);
 
   // رأس الشاشة
   var hdr = document.createElement('div');
@@ -30518,6 +30565,7 @@ function _renderSyncDebugPanel() {
   box.style.cssText = 'flex:1;overflow-y:auto;padding:6px 10px;';
   panel.appendChild(box);
 
+  panel.style.display = 'none'; // مخفي افتراضياً
   document.body.appendChild(panel);
 }
 
@@ -30701,12 +30749,8 @@ function _hookSaveForSync() {
           toUpsert.push(record);
         } else {
           // مقارنة بسيطة وسريعة: id + timestamp + أهم الحقول
-          var sig = function(r) {
-            return (r._updatedAt||0) + '|' + (r.name||'') + '|' + (r.status||'') +
-                   '|' + (r.results ? JSON.stringify(r.results).length : 0) +
-                   '|' + (r.phone||'') + '|' + (r.labName||'');
-          };
-          if (sig(record) !== sig(oldRec)) {
+          // مقارنة كاملة بـ JSON
+          if (JSON.stringify(record) !== JSON.stringify(oldRec)) {
             toUpsert.push(record);
           }
         }
@@ -30759,6 +30803,7 @@ function _hookSaveForSync() {
 
 // دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
 function _smDebugToBox(msg) {
+  // يعمل حتى لو البانل مخفي — فقط يحتاج div#_sm_debug_box موجود
   var box = document.getElementById('_sm_debug_box');
   if (!box) return;
   var t = new Date().toLocaleTimeString('ar');
@@ -30766,7 +30811,7 @@ function _smDebugToBox(msg) {
   line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
   line.textContent = t + ' — ' + msg;
   box.insertBefore(line, box.firstChild);
-  while (box.children.length > 40) box.removeChild(box.lastChild);
+  while (box.children.length > 50) box.removeChild(box.lastChild);
 }
 
 // ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
