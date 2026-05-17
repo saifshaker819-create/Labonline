@@ -30078,27 +30078,28 @@ setTimeout(function(){
   function _applyUpsert(evt) {
     if (!evt.key || !evt.record) return Promise.resolve();
     var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    // اقرأ البيانات الحالية من _MC أو IDB
     var current = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey].slice() : null;
     var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
     return readP.then(function(cur) {
       if (!Array.isArray(cur)) cur = [];
       var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
       if (idx >= 0) {
-        var loc = cur[idx], rem = evt.record;
-        if (!loc._updatedAt || rem._updatedAt >= loc._updatedAt) cur[idx] = rem;
+        // دائماً استبدل بالنسخة الواردة (أحدث)
+        cur[idx] = evt.record;
       } else {
         cur.push(evt.record);
       }
-      // حدّث بدون إطلاق الـ hook (لمنع الحلقة)
+      // احفظ في DB بدون إطلاق hook
       SyncManager._applying = true;
       try {
         if (typeof DB !== 'undefined') DB.set(evt.key, cur);
       } finally {
         SyncManager._applying = false;
       }
-      // حدّث المتغير العالمي في الواجهة
+      // حدّث setter المحلي
       _smUpdateGlobal(evt.key, idbKey, cur);
+      // حدّث prevState لمنع إعادة إرسالها
+      if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
       return Promise.resolve();
     });
   }
@@ -30240,26 +30241,51 @@ setTimeout(function(){
   function _startLive() {
     if (!_fbDb || !_username || !_enabled || _listening) return;
     _listening = true;
-    var startTs = Date.now(); // نتجاهل الأحداث القديمة بفلتر محلي
+    var startTs = Date.now();
+
+    // keepSynced يُبقي الاتصال حياً ويمنع idle mode
+    try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
 
     _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
     _evtCb  = _evtRef.on('child_added', function(snap) {
       var evt = snap.val();
       if (!evt || !evt.id) return;
-      // تجاهل الأحداث القديمة (قبل بدء الاستماع)
       if (evt.ts && evt.ts < startTs) return;
-      // تجاهل أحداثنا نحن
       if (evt.originDevice === _getDeviceId()) return;
       evt.fbKey = snap.key;
-      _log('LIVE RCV:', evt.type, evt.key, 'from device:', evt.originDevice);
-      _smDebugLog('استلام حدث: ' + evt.type + ' / ' + evt.key);
+      _log('LIVE RCV:', evt.type, evt.key, 'from:', evt.originDevice);
+      _smDebugLog('📥 ' + evt.type + ' / ' + evt.key);
       _applyEvent(evt, true).catch(function(e) { _warn('Live apply error:', e); });
     }, function(err) {
       _warn('Firebase listener error:', err);
-      _smDebugLog('خطأ Firebase: ' + err.message);
+      _smDebugLog('⚠️ خطأ listener: ' + err.message);
+      // إعادة المحاولة بعد 3 ثوانٍ
+      _listening = false;
+      setTimeout(function() { _startLive(); }, 3000);
     });
-    _log('Live sync started, path:', FB_PATH_EVENTS(_username));
-    _smDebugLog('بدأ الاستماع: ' + FB_PATH_EVENTS(_username));
+
+    // مراقبة حالة الاتصال بـ Firebase
+    _fbDb.ref('.info/connected').on('value', function(snap) {
+      var connected = snap.val();
+      _smDebugLog(connected ? '🟢 Firebase متصل' : '🔴 Firebase منقطع');
+      if (connected) {
+        // عند إعادة الاتصال: افحص الأحداث الفائتة
+        _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
+          var val = s.val();
+          if (!val) return;
+          Object.keys(val).forEach(function(fbKey) {
+            var evt = val[fbKey];
+            if (!evt || !evt.id) return;
+            if (evt.originDevice === _getDeviceId()) return;
+            evt.fbKey = fbKey;
+            _applyEvent(evt, true).catch(function(){});
+          });
+        }).catch(function(){});
+      }
+    });
+
+    _log('Live sync started');
+    _smDebugLog('✅ listener بدأ');
   }
 
   function _stopLive() {
@@ -30289,8 +30315,6 @@ setTimeout(function(){
 
   // ── Notify App ────────────────────────────────────────
   function _notifyApp(key) {
-    // البيانات جاهزة في window[var] من _smUpdateGlobal
-    // استدعِ دالة الرسم المناسبة مباشرة من _SM_KEY_MAP
     var meta = _SM_KEY_MAP[key];
     var labels = {
       patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
@@ -30300,8 +30324,13 @@ setTimeout(function(){
       semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
     };
     if (meta) {
-      try { meta.fn(); } catch(e) { _warn('render error:', e); }
+      try { meta.fn(); } catch(e) {}
     }
+    // دائماً حدّث badges وdashboard بعد أي تحديث
+    setTimeout(function() {
+      try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
+      try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
+    }, 50);
     try {
       if (typeof showNotif === 'function')
         showNotif('🔄 تحديث', (labels[key]||key) + ' — تم الاستلام', 'info');
@@ -30644,6 +30673,7 @@ function _hookSaveForSync() {
 
   // تتبع آخر حالة لكل مفتاح
   var _smPrevState = {};
+  window._smPrevState = _smPrevState; // اجعله متاحاً للـ _applyUpsert
 
   // الـ hook يتصل به DB.set مباشرة
   window._smDBHook = function(k, v) {
@@ -30651,26 +30681,43 @@ function _hookSaveForSync() {
     if (!SM_KEYS.includes(k)) return;
     if (!Array.isArray(v)) return;
 
-    clearTimeout(window._smSaveTimer);
-    window._smSaveTimer = setTimeout(function() {
+    // debounce 50ms فقط — سرعة أكبر في الإرسال
+    clearTimeout(window._smSaveTimers = window._smSaveTimers || {});
+    clearTimeout(window._smSaveTimers[k]);
+    window._smSaveTimers[k] = setTimeout(function() {
       var prev    = _smPrevState[k] || [];
       var prevMap = {};
       prev.forEach(function(x){ if(x && x.id) prevMap[x.id] = x; });
       var currIds = new Set();
       v.forEach(function(x){ if(x && x.id) currIds.add(x.id); });
 
-      // UPSERT: مقارنة كاملة بـ JSON.stringify لضمان اكتشاف أي تغيير
+      var toUpsert = [];
+
       v.forEach(function(record) {
         if (!record || !record.id) return;
-        var oldRec  = prevMap[record.id];
-        var isNew   = !oldRec;
-        var changed = !!oldRec && (JSON.stringify(record) !== JSON.stringify(oldRec));
-        if (isNew || changed) {
-          _smDebugToBox('📤 ' + (isNew?'جديد':'معدّل') + ': ' + k + ' #' + (record.id||'').slice(-6));
-          SyncManager.pushUpsert(k, record).catch(function(e){
-            _smDebugToBox('❌ ' + e.message);
-          });
+        var oldRec = prevMap[record.id];
+        if (!oldRec) {
+          // جديد — أرسل فوراً
+          toUpsert.push(record);
+        } else {
+          // مقارنة بسيطة وسريعة: id + timestamp + أهم الحقول
+          var sig = function(r) {
+            return (r._updatedAt||0) + '|' + (r.name||'') + '|' + (r.status||'') +
+                   '|' + (r.results ? JSON.stringify(r.results).length : 0) +
+                   '|' + (r.phone||'') + '|' + (r.labName||'');
+          };
+          if (sig(record) !== sig(oldRec)) {
+            toUpsert.push(record);
+          }
         }
+      });
+
+      // أرسل كل ما تغيّر
+      toUpsert.forEach(function(record) {
+        _smDebugToBox('📤 ' + k + ' #' + (record.id||'').slice(-6));
+        SyncManager.pushUpsert(k, record).catch(function(e){
+          _smDebugToBox('❌ ' + e.message);
+        });
       });
 
       // DELETE: عناصر محذوفة
@@ -30683,23 +30730,31 @@ function _hookSaveForSync() {
       });
 
       _smPrevState[k] = v.slice();
-    }, 400);
+    }, 50);
   };
 
-  // ابنِ الحالة الأولية من _MC بعد 1 ثانية (لضمان تحميل البيانات)
-  setTimeout(function() {
+  // ابنِ الحالة الأولية + أعد بناءها دورياً
+  var _gMap = {patients:'patients', requests:'requests', invoices:'invoices',
+    doctors:'doctors', packages:'packages', inventory:'inventory',
+    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
+    stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
+    billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'};
+
+  function _rebuildPrevState() {
     SM_KEYS.forEach(function(k) {
       try {
         var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
         var val = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey] : null;
-        if (!val) val = window[k];
-        if (Array.isArray(val) && val.length > 0) {
-          _smPrevState[k] = val.slice();
-        }
+        if (!val) val = window[_gMap[k]||k];
+        if (Array.isArray(val)) _smPrevState[k] = val.slice();
       } catch(_) {}
     });
-    _smDebugToBox('✅ DB hook جاهز | keys: ' + Object.keys(_smPrevState).length);
-  }, 1000);
+    var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; });
+    _smDebugToBox('✅ hook جاهز | ' + loaded.join(','));
+  }
+
+  setTimeout(_rebuildPrevState, 1000);
+  setInterval(_rebuildPrevState, 30000);
 }
 
 // دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
