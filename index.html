@@ -30515,11 +30515,10 @@ function _renderSyncDebugPanel() {
   // زر إظهار/إخفاء البوكس في الشريط العلوي
   var toggleBtn = document.createElement('button');
   toggleBtn.id = '_sm_toggle_btn';
-  toggleBtn.style.cssText = 'position:fixed;bottom:10px;left:10px;z-index:100000;background:rgba(0,0,0,.7);border:1px solid rgba(0,212,255,.4);border-radius:20px;color:#00d4ff;font-size:9px;padding:3px 8px;cursor:pointer;font-family:monospace';
-  toggleBtn.textContent = '🔧 Sync';
-  // زر Sync مخفي كلياً - لا يُفتح
-  toggleBtn.style.display = 'none';
-  toggleBtn.onclick = function() { /* مقفول */ };
+  // الزر ظاهر بشكل خافت — غير قابل للضغط — يُبقي Firebase نشطاً
+  toggleBtn.style.cssText = 'position:fixed;bottom:6px;left:6px;z-index:100000;background:rgba(0,0,0,.3);border:1px solid rgba(0,212,255,.15);border-radius:20px;color:rgba(0,212,255,.35);font-size:7px;padding:1px 5px;cursor:default;font-family:monospace;pointer-events:none;user-select:none;';
+  toggleBtn.textContent = '⚡';
+  toggleBtn.onclick = function(e){ e.preventDefault(); e.stopPropagation(); return false; };
   document.body.appendChild(toggleBtn);
 
   // رأس الشاشة
@@ -30545,6 +30544,14 @@ function _renderSyncDebugPanel() {
 
   panel.style.display = 'none'; // مخفي افتراضياً
   document.body.appendChild(panel);
+
+  // ضمان وجود _sm_debug_box في DOM حتى تعمل _smDebugLog
+  if (!document.getElementById('_sm_debug_box')) {
+    var hiddenBox = document.createElement('div');
+    hiddenBox.id = '_sm_debug_box';
+    hiddenBox.style.display = 'none';
+    document.body.appendChild(hiddenBox);
+  }
 }
 
 /** اختبار إرسال حدث تجريبي */
