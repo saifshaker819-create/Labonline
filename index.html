@@ -8190,6 +8190,8 @@ document.querySelectorAll('.moverlay').forEach(m=>{m.addEventListener('click',e=
 // ============================================================
 function openPatientQuickPanel(pid){
   const p=patients.find(x=>x.id===pid);if(!p)return;
+  if(typeof window.currentPatientId !== 'undefined') window.currentPatientId = pid;
+  const _doOpen = function(){
   const ptReqs=requests.filter(r=>r.patientId===pid).reverse();
   const doneReqs=ptReqs.filter(r=>r.status==='done');
   // Show last 4 results only
@@ -8250,6 +8252,23 @@ function openPatientQuickPanel(pid){
     </div>
   </div>`;
   document.body.appendChild(modal);
+  }; // end _doOpen
+
+  const _existing = requests.filter(r=>r.patientId===pid);
+  if(_existing.length === 0 && typeof IDB !== 'undefined'){
+    const _idbKey = typeof DB !== 'undefined' ? DB._pfx()+'requests' : 'mlab2__requests';
+    IDB.get(_idbKey).then(function(idbReqs){
+      if(Array.isArray(idbReqs) && idbReqs.length > 0){
+        const existingIds = new Set(requests.map(r=>r.id));
+        idbReqs.forEach(function(r){ if(r&&r.id&&!existingIds.has(r.id)) requests.push(r); });
+        if(window._smSetters && window._smSetters['requests']) window._smSetters['requests'](requests);
+        if(window._smPrevState) window._smPrevState['requests'] = requests.slice();
+      }
+      _doOpen();
+    }).catch(function(){ _doOpen(); });
+  } else {
+    _doOpen();
+  }
 }
 
 function deleteReqFromPanel(reqId, pid){
@@ -30044,7 +30063,6 @@ setTimeout(function(){
   function _smUpdateGlobal(key, idbKey, data) {
     var meta = _SM_KEY_MAP[key];
     if (!meta || !Array.isArray(data)) return;
-    // setter registry: يحدّث let variable في script block الصحيح
     if (window._smSetters && typeof window._smSetters[key] === 'function') {
       window._smSetters[key](data);
       _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
@@ -30052,6 +30070,12 @@ setTimeout(function(){
       _smDebugLog('⚠️ no setter: ' + key);
     }
     if (typeof _MC !== 'undefined') _MC[idbKey] = data;
+    // حدّث prevState فوراً بعد استلام البيانات
+    if (window._smPrevState) {
+      window._smPrevState[key] = data.map(function(x){
+        try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
+      });
+    }
   }
 
   function _applyEvent(evt, ackAfter) {
@@ -30360,13 +30384,23 @@ setTimeout(function(){
     };
     // رسم فوري
     if (meta) { try { meta.fn(); } catch(e) {} }
+    // عند استلام requests — حدّث dropdowns
+    if (key === 'requests') {
+      try { if(typeof loadResultsDropdown==='function') loadResultsDropdown(); } catch(e){}
+      try { if(typeof loadPrintDropdown==='function')   loadPrintDropdown();   } catch(e){}
+      try { if(typeof renderRequests==='function')      renderRequests();      } catch(e){}
+    }
+    // عند استلام patients — حدّث قائمة المرضى
+    if (key === 'patients') {
+      try { if(typeof renderPatients==='function') renderPatients(); } catch(e){}
+    }
     // badges + dashboard
     try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
     try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
     // إشعار
     try {
       if (typeof showNotif === 'function')
-        showNotif('🔄', (labels[key]||key), 'info');
+        showNotif('🔄 مزامنة', (labels[key]||key), 'info');
     } catch(e) {}
   }
 
@@ -30789,7 +30823,9 @@ function _hookSaveForSync() {
         }
       });
 
-      _smPrevState[k] = v.slice();
+      _smPrevState[k] = v.map(function(x){
+        try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
+      });
     }, 50);
   };
 
@@ -30803,10 +30839,13 @@ function _hookSaveForSync() {
   function _rebuildPrevState() {
     SM_KEYS.forEach(function(k) {
       try {
-        var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
-        var val = (typeof _MC !== 'undefined' && _MC[idbKey]) ? _MC[idbKey] : null;
-        if (!val) val = window[_gMap[k]||k];
-        if (Array.isArray(val)) _smPrevState[k] = val.slice();
+        // الأولوية: window global (الأحدث دائماً) ثم _MC
+        var val = window[_gMap[k]||k];
+        if (!Array.isArray(val) || val.length === 0) {
+          var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
+          val = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey] : null;
+        }
+        if (Array.isArray(val)) _smPrevState[k] = val.map(function(x){ return JSON.parse(JSON.stringify(x)); });
       } catch(_) {}
     });
     var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; });
