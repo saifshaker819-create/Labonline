@@ -547,6 +547,8 @@ body.light-mode #req-float-btn { box-shadow: 0 4px 20px rgba(0,95,153,0.35), 0 2
   cursor: pointer;
   font-family: 'Cairo', sans-serif;
   background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
   position: relative;
@@ -601,6 +603,8 @@ body.light-mode #req-float-btn { box-shadow: 0 4px 20px rgba(0,95,153,0.35), 0 2
   background: rgba(255,255,255,0.05);
   border: 1.5px solid var(--primary);
   border-radius: 21px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
   transition: box-shadow 0.18s, border-color 0.18s, background 0.18s;
   min-width: 140px;
@@ -1350,7 +1354,7 @@ textarea.fc{resize:vertical;}
 .bdg-d{background:rgba(255,77,109,0.13);color:var(--danger);border:1px solid rgba(255,77,109,0.28);}
 .bdg-p{background:rgba(0,212,255,0.13);color:var(--primary);border:1px solid rgba(0,212,255,0.28);}
 .bdg-s{background:rgba(123,47,255,0.13);color:#a78bfa;border:1px solid rgba(123,47,255,0.28);}
-.moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;}
+.moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;}
 .moverlay.open{display:flex;animation:fi 0.12s ease;}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 .modal{background:#070d1c;border:1px solid var(--border);border-radius:18px;width:100%;max-width:680px;max-height:92vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.7);animation:su 0.15s ease;display:flex;flex-direction:column;}
@@ -2510,91 +2514,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
 .moverlay.open{animation:fi 0.1s ease!important}
 .pt-suggest,#notif-panel,#cal-panel{animation:none!important;transition:none!important}
 </style>
-
-<!-- ══════════════════════════════════════════════════════════
-     Electron Bridge — يعمل فقط داخل تطبيق سطح المكتب
-     في المتصفح العادي: كل شيء يعمل كما هو بدون تغيير
-══════════════════════════════════════════════════════════ -->
-<script>
-(function(){
-  'use strict';
-
-  const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
-  window.IS_ELECTRON = IS_ELECTRON;
-  if(!IS_ELECTRON) return;
-
-  function esep(){ return window.electronAPI.platform === 'win32' ? '\\' : '/'; }
-
-  // ── 1. بديل showDirectoryPicker ──────────────────────────
-  window.showDirectoryPicker = async function(opts){
-    const dirPath = await window.electronAPI.openDirectory({
-      title: (opts && opts.title) ? opts.title : 'اختر مجلداً'
-    });
-    if(!dirPath) throw new DOMException('User cancelled', 'AbortError');
-    const sep = esep();
-    return {
-      kind: 'directory',
-      name: dirPath.split(/[\\/]/).pop(),
-      _path: dirPath,
-      async entries(){
-        const res = await window.electronAPI.readDir(dirPath);
-        if(!res.ok) return [];
-        return res.files.filter(f=>f.isFile).map(f=>[
-          f.name,
-          {
-            kind:'file', name:f.name, _path:f.path,
-            async getFile(){
-              const r = await window.electronAPI.readFile(f.path,'utf8');
-              return new File([r.data||''], f.name);
-            }
-          }
-        ]);
-      },
-      async getFileHandle(name, opts2){
-        const fp = dirPath + sep + name;
-        return {
-          kind:'file', name, _path:fp,
-          async createWritable(){
-            return {
-              async write(data){ await window.electronAPI.writeFile(fp, typeof data==='string'?data:JSON.stringify(data)); },
-              async close(){}
-            };
-          },
-          async getFile(){
-            const r = await window.electronAPI.readFile(fp,'utf8');
-            return new File([r.ok ? r.data : ''], name);
-          }
-        };
-      }
-    };
-  };
-
-  // ── 2. بديل showOpenFilePicker ───────────────────────────
-  window.showOpenFilePicker = async function(opts){
-    const filePath = await window.electronAPI.openFile({
-      title: (opts && opts.title) ? opts.title : 'اختر ملفاً'
-    });
-    if(!filePath) throw new DOMException('User cancelled', 'AbortError');
-    const name = filePath.split(/[\\/]/).pop();
-    return [{
-      kind:'file', name, _path:filePath,
-      async getFile(){
-        const r = await window.electronAPI.readFile(filePath,'utf8');
-        return new File([r.data||''], name);
-      }
-    }];
-  };
-
-  // ── 3. Serial callbacks ──────────────────────────────────
-  window._electronSerialCB = { data:null, error:null, closed:null };
-  window.electronAPI.onSerialData(  d => { if(window._electronSerialCB.data)   window._electronSerialCB.data(d);   });
-  window.electronAPI.onSerialError( e => { if(window._electronSerialCB.error)  window._electronSerialCB.error(e);  });
-  window.electronAPI.onSerialClosed(()=> { if(window._electronSerialCB.closed) window._electronSerialCB.closed();  });
-
-  console.log('[MedLab Pro Desktop] Electron APIs ready ✅');
-})();
-</script>
-
 </head>
 <body>
 <div class="layout">
@@ -2702,13 +2621,11 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
       </div>
       <button class="hbtn" onclick="nav('settings')">⚙️</button>
       <button class="theme-toggle-btn" id="theme-btn" onclick="toggleTheme()" title="تبديل الوضع"></button>
-
-      <!-- مؤشر حالة الاتصال -->
-      <div id="fb-conn-badge" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:14px;font-size:10px;font-weight:800;background:rgba(255,204,0,.10);border:1px solid rgba(255,204,0,.3);color:#ffcc00;transition:all .4s">
-        <span id="fb-conn-dot" style="width:7px;height:7px;border-radius:50%;background:#ffcc00;flex-shrink:0"></span>
-        <span id="fb-conn-lbl">جاري الاتصال</span>
-      </div>
-
+      <!-- مؤشر المزامنة -->
+      <button id="sync-indicator-btn" onclick="syncNow()" title="مزامنة Google Drive" style="background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text2);display:flex;align-items:center;gap:5px;font-family:'Cairo',sans-serif;transition:all 0.2s">
+        <span id="sync-dot" style="width:8px;height:8px;border-radius:50%;background:#555;display:inline-block;flex-shrink:0"></span>
+        <span id="sync-label">غير مفعّل</span>
+      </button>
       <div class="uavatar">👨‍⚕️</div>
     </div>
   </div>
@@ -2835,7 +2752,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
               <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
                 <div class="fg" style="margin-bottom:0;flex:1;min-width:160px"><label class="fl">تاريخ الفحص</label><input class="fc" type="date" id="res-date"></div>
                 <button class="btn btn-s" style="white-space:nowrap;padding:9px 14px;font-size:13px;font-weight:800" onclick="printCBCBlank()" title="طباعة ورقة CBC فارغة">🖨️ طباعة CBC</button>
-                <button class="btn btn-s" style="white-space:nowrap;padding:9px 14px;font-size:13px;font-weight:800;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="printCBCFromDevice(document.getElementById('res-req-sel').value)" title="طباعة CBC من الجهاز">🔬 CBC من الجهاز</button>
               </div>
               <input type="hidden" id="res-tech">
             </div>
@@ -2945,7 +2861,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                 <button class="btn btn-p btn-lg" style="width:100%" onclick="doPrint()">🖨️ طباعة مباشرة</button>
                 <button class="btn btn-p btn-lg" style="width:100%" onclick="openGroupingModalFromPrint()">📑 تجميع</button>
                 <button class="btn btn-s" style="width:100%;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.4);color:var(--success)" onclick="printCBCFromPrintSection()">🖨️ طباعة CBC فارغة</button>
-                <button class="btn btn-s" style="width:100%;background:rgba(0,180,100,0.25);border-color:rgba(0,180,100,0.6);color:#00c46a;font-weight:800" onclick="printCBCFromDevice(document.getElementById('print-req-sel')?.value||currentReqId)">🔬 CBC من الجهاز</button>
                 <button class="btn btn-s" style="width:100%" onclick="openPrintModal()">👁️ معاينة التقرير</button>
                 <button class="btn btn-ok" style="width:100%" onclick="downloadPDF()">📄 تحميل PDF</button>
                 <button class="btn btn-w" style="width:100%" onclick="shareWhatsApp()">📱 إرسال واتساب</button>
@@ -3399,6 +3314,9 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
               <button class="btn btn-s" style="width:100%;justify-content:center;color:#a78bfa;border-color:rgba(167,139,250,0.4)" onclick="lisConnectFileWatch()">
                 📂 مراقبة مجلد
               </button>
+              <button class="btn btn-s" style="width:100%;justify-content:center" onclick="lisOpenTcpGuide()">
+                🌐 إعداد TCP/IP
+              </button>
             </div>
           </div>
 
@@ -3521,8 +3439,8 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                   <div class="fg" style="margin-bottom:12px">
                     <label class="fl">طريقة الربط</label>
                     <select class="fc" id="lis-link-mode" onchange="lisUpdateLinkMode()">
-                      <option value="localstorage">مباشر — داخل التطبيق (الافتراضي)</option>
-                      <option value="file">مزامنة ملف (مجلد مشترك)</option>
+                      <option value="localstorage">LocalStorage (نفس المتصفح — الأسهل)</option>
+                      <option value="file">مزامنة ملف (File System API)</option>
                     </select>
                   </div>
                   <div id="lis-file-mode-info" style="display:none;background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text2);margin-bottom:12px">
@@ -3560,6 +3478,40 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                       <option value="5">5 ثواني</option>
                       <option value="10">10 ثواني</option>
                     </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- TCP Guide -->
+              <div class="gc" style="grid-column:1/-1">
+                <div class="gc-hdr"><div class="gc-title">🌐 دليل إعداد TCP/IP (أجهزة الشبكة)</div></div>
+                <div class="gc-body">
+                  <div style="background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.25);border-radius:10px;padding:14px;margin-bottom:14px">
+                    <div style="font-size:12px;font-weight:800;color:var(--warning);margin-bottom:8px">⚠️ المتصفح لا يستطيع فتح اتصال TCP مباشرة</div>
+                    <div style="font-size:11px;color:var(--text2);line-height:2">
+                      لأجهزة الشبكة (LAN/WiFi) تحتاج برنامج وسيط صغير على نفس الكمبيوتر يحوّل TCP إلى WebSocket.
+                    </div>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:14px">
+                      <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">🟢 الطريقة الأسهل — Node.js</div>
+                      <div style="font-size:11px;color:var(--text2);line-height:2;margin-bottom:10px">
+                        ١. حمّل وثبّت <b style="color:var(--text)">Node.js</b> من nodejs.org<br>
+                        ٢. افتح CMD واكتب:<br>
+                        <code style="display:block;background:#010409;padding:6px 10px;border-radius:6px;margin:6px 0;color:var(--success)">npm install -g ws net</code>
+                        ٣. احفظ الملف أدناه كـ <b style="color:var(--text)">lis-bridge.js</b><br>
+                        ٤. شغّله:<br>
+                        <code style="display:block;background:#010409;padding:6px 10px;border-radius:6px;margin:6px 0;color:var(--success)">node lis-bridge.js</code>
+                      </div>
+                      <button class="btn btn-p btn-sm" style="width:100%" onclick="lisDownloadBridgeScript()">⬇️ تحميل lis-bridge.js</button>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:14px">
+                      <div style="font-size:12px;font-weight:800;color:var(--success);margin-bottom:10px">🔌 إعداد اتصال TCP جهاز</div>
+                      <div class="fg"><label class="fl">IP الجهاز</label><input class="fc" id="lis-tcp-ip" placeholder="192.168.1.100" style="margin-bottom:8px"></div>
+                      <div class="fg"><label class="fl">Port الجهاز</label><input class="fc" id="lis-tcp-port" value="3001" style="margin-bottom:8px"></div>
+                      <div class="fg"><label class="fl">WebSocket Bridge Port</label><input class="fc" id="lis-ws-port" value="8765" style="margin-bottom:8px"></div>
+                      <button class="btn btn-ok btn-sm" style="width:100%" onclick="lisConnectWS()">🔗 اتصال WebSocket</button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -4073,6 +4025,54 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
           </div>
         </div>
 
+        <!-- مزامنة Google Drive -->
+        <div class="st-card" id="stc-sync">
+          <div class="st-card-hdr" onclick="toggleStCard('stc-sync')">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:22px">☁️</span>
+              <div><div class="st-card-title">مزامنة Google Drive</div><div class="st-card-sub" id="sync-card-sub">اربط حاسبتين على نفس الواي فاي أو الإنترنت</div></div>
+            </div>
+            <span class="st-card-arrow" id="arr-stc-sync">▼</span>
+          </div>
+          <div class="st-card-body" id="body-stc-sync" style="display:none">
+            <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:14px;margin-bottom:14px;font-size:12px;color:var(--text2);line-height:1.8">
+              <div style="font-weight:800;color:var(--primary);margin-bottom:6px">📋 كيف تعمل؟</div>
+              ١. اختر مجلد Google Drive المزامن على هذه الحاسبة<br>
+              ٢. افعل نفس الشيء على الحاسبة الثانية بنفس المجلد<br>
+              ٣. البيانات تتزامن تلقائياً بين الحاسبتين كل 10 ثواني
+            </div>
+            <div style="background:rgba(255,204,0,0.08);border:1px solid rgba(255,204,0,0.25);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:var(--warning);display:flex;align-items:center;gap:8px">
+              <span style="font-size:16px">💻</span>
+              <span>تعمل فقط على <b>Chrome أو Edge</b> على الحاسبة المكتبية أو اللابتوب — غير مدعومة على الموبايل</span>
+            </div>
+
+            <div id="sync-status-box" style="display:none;background:rgba(0,232,122,0.08);border:1px solid rgba(0,232,122,0.25);border-radius:10px;padding:12px;margin-bottom:14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <div>
+                  <div style="font-size:12px;font-weight:800;color:var(--success)">🟢 المزامنة مفعّلة</div>
+                  <div style="font-size:11px;color:var(--text2);margin-top:3px" id="sync-folder-display">—</div>
+                </div>
+                <div style="text-align:left">
+                  <div style="font-size:10px;color:var(--text2)">آخر مزامنة</div>
+                  <div style="font-size:11px;font-weight:700;color:var(--text)" id="sync-last-time">—</div>
+                </div>
+              </div>
+            </div>
+
+            <div id="sync-setup-box">
+              <div style="font-size:12px;color:var(--text2);margin-bottom:10px">اختر المجلد الذي تريد حفظ بيانات المزامنة فيه (يجب أن يكون داخل Google Drive)</div>
+              <button onclick="syncPickFolder()" class="btn btn-p btn-lg" style="width:100%">📁 اختيار مجلد Google Drive</button>
+            </div>
+
+            <div id="sync-active-box" style="display:none;margin-top:12px;display:none">
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button onclick="syncNow()" class="btn btn-p" style="flex:1;min-width:120px">🔄 مزامنة الآن</button>
+                <button onclick="syncDisconnect()" class="btn btn-d" style="flex:1;min-width:120px">🔌 قطع الاتصال</button>
+              </div>
+              <div style="margin-top:10px;font-size:11px;color:var(--text2);text-align:center" id="sync-next-label">المزامنة التلقائية كل 10 ثواني</div>
+            </div>
+          </div>
+        </div>
 
         <!-- ٨ - الخطر: حذف / خروج -->
         <div class="st-card" id="stc-danger">
@@ -4671,36 +4671,30 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
       <div class="fg">
         <label class="fl">طريقة الاتصال</label>
         <select class="fc" id="lis-dev-conn" onchange="lisShowConnFields()">
-          <option value="serial">🔌 Serial / USB (كابل مباشر)</option>
-          <option value="network">🌐 شبكة LAN / WiFi</option>
+          <option value="serial">🔌 Serial / USB (كابل — Chrome مطلوب)</option>
           <option value="file">📂 File Watch (مجلد نتائج)</option>
+          <option value="websocket">🌐 WebSocket Bridge (TCP/IP عبر وسيط)</option>
         </select>
       </div>
-      <!-- Serial fields -->
       <div id="lis-conn-serial-fields">
         <div style="background:rgba(0,212,255,0.06);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text2)">
           بعد الحفظ اضغط <b style="color:var(--primary)">اتصال</b> في قائمة الأجهزة — سيطلب منك اختيار المنفذ (COM Port) تلقائياً.
         </div>
       </div>
-      <!-- Network fields -->
-      <div id="lis-conn-network-fields" style="display:none">
-        <div style="background:rgba(0,232,122,0.06);border:1px solid rgba(0,232,122,0.2);border-radius:8px;padding:10px;font-size:11px;color:var(--text2);margin-bottom:10px">
-          💡 <b style="color:var(--text)">Mindray BC-5000:</b> IP الجهاز في Menu → Setup → System Setup → Communication
-        </div>
-        <div class="fr2">
-          <div class="fg">
-            <label class="fl">IP الجهاز *</label>
-            <input class="fc" id="lis-dev-ip" placeholder="مثال: 10.0.0.2" style="direction:ltr;text-align:left">
-          </div>
-          <div class="fg">
-            <label class="fl">Port</label>
-            <input class="fc" id="lis-dev-port" placeholder="3001" value="3001" style="direction:ltr;text-align:left">
-          </div>
-        </div>
-      </div>
-      <!-- File Watch fields -->
       <div id="lis-conn-file-fields" style="display:none">
         <div class="fg"><label class="fl">مسار مجلد النتائج (للتوثيق)</label><input class="fc" id="lis-dev-file-path" placeholder="C:\LIS\Results"></div>
+        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.3);border-radius:8px;padding:10px;font-size:11px;color:var(--text2)">
+          بعد الحفظ اضغط <b style="color:#a78bfa">اتصال</b> وسيطلب منك اختيار المجلد من المتصفح مباشرة.
+        </div>
+      </div>
+      <div id="lis-conn-ws-fields" style="display:none">
+        <div class="fr2">
+          <div class="fg"><label class="fl">IP الجهاز</label><input class="fc" id="lis-dev-ip" placeholder="192.168.1.100"></div>
+          <div class="fg"><label class="fl">Port</label><input class="fc" id="lis-dev-port" type="number" value="3001"></div>
+        </div>
+        <div style="background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.25);border-radius:8px;padding:10px;font-size:11px;color:var(--text2)">
+          تحتاج تشغيل <b style="color:var(--warning)">lis-bridge.js</b> — راجع قسم إعدادات TCP/IP.
+        </div>
       </div>
       <div class="fr2" style="margin-top:10px">
         <div class="fg">
@@ -4711,7 +4705,7 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             <option value="csv">CSV</option>
           </select>
         </div>
-        <div class="fg" id="lis-baud-row">
+        <div class="fg">
           <label class="fl">Baud Rate (Serial)</label>
           <select class="fc" id="lis-dev-baud">
             <option value="9600" selected>9600</option>
@@ -4818,7 +4812,21 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                 <div id="wiz-conn-serial-check" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
               </div>
               <div style="margin-top:10px;padding:8px;background:rgba(0,212,255,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
-                ✅ اتصال مباشر عبر كابل Serial/USB
+                ✅ يعمل على Chrome وEdge فقط · لا يحتاج برامج إضافية
+              </div>
+            </div>
+
+            <div class="wiz-conn-card" onclick="lisWizSelectConn('network')" id="wiz-conn-network">
+              <div style="display:flex;align-items:center;gap:14px">
+                <div style="font-size:28px">🌐</div>
+                <div style="flex:1">
+                  <div style="font-weight:800;font-size:13px">شبكة (LAN/WiFi)</div>
+                  <div style="font-size:11px;color:var(--text2);margin-top:3px">الجهاز متصل بالشبكة وعنده IP خاص به</div>
+                </div>
+                <div id="wiz-conn-network-check" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
+              </div>
+              <div style="margin-top:10px;padding:8px;background:rgba(255,204,0,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
+                ⚠️ يحتاج تثبيت Node.js ومشغّل وسيط صغير مرة وحدة
               </div>
             </div>
 
@@ -4833,20 +4841,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
               </div>
               <div style="margin-top:10px;padding:8px;background:rgba(167,139,250,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
                 ✅ يعمل على أي متصفح · الأكثر توافقاً مع الأجهزة القديمة
-              </div>
-            </div>
-
-            <div class="wiz-conn-card" onclick="lisWizSelectConn('network')" id="wiz-conn-network">
-              <div style="display:flex;align-items:center;gap:14px">
-                <div style="font-size:28px">🌐</div>
-                <div style="flex:1">
-                  <div style="font-weight:800;font-size:13px">شبكة LAN / WiFi</div>
-                  <div style="font-size:11px;color:var(--text2);margin-top:3px">الجهاز متوصل بالشبكة عبر كابل إنترنت أو WiFi</div>
-                </div>
-                <div id="wiz-conn-network-check" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
-              </div>
-              <div style="margin-top:10px;padding:8px;background:rgba(0,232,122,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
-                ✅ للأجهزة الحديثة (مثل Mindray BC-5000) · يدعم HL7 و ASTM عبر الشبكة
               </div>
             </div>
 
@@ -4875,7 +4869,7 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                 لا تحتاج إعدادات معقدة — فقط:<br>
                 <b style="color:var(--text)">1.</b> تأكد الكابل موصول بالحاسوب<br>
                 <b style="color:var(--text)">2.</b> اضغط "وصّل" في الخطوة التالية<br>
-                <b style="color:var(--text)">3.</b> سيتصل بالجهاز تلقائياً ✅
+                <b style="color:var(--text)">3.</b> سيظهر اختيار المنفذ تلقائياً
               </div>
             </div>
             <div class="fg">
@@ -4893,6 +4887,32 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             </div>
           </div>
 
+          <!-- Network settings -->
+          <div id="wiz-s3-network" style="display:none">
+            <div style="background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.25);border-radius:10px;padding:14px;margin-bottom:16px">
+              <div style="font-size:12px;font-weight:800;color:var(--warning);margin-bottom:8px">⚠️ يحتاج برنامج وسيط مرة وحدة</div>
+              <div style="font-size:11px;color:var(--text2);line-height:2">
+                المتصفح لا يقدر يتصل بالشبكة مباشرة — نحتاج برنامج صغير على نفس الحاسوب.<br>
+                <b style="color:var(--text)">الخطوات:</b><br>
+                1. حمّل <a href="https://nodejs.org" target="_blank" style="color:var(--primary)">Node.js</a> وثبّته<br>
+                2. بعد الإعداد اضغط زر "تحميل المشغّل" أدناه<br>
+                3. افتح CMD واكتب: <code style="background:#010409;padding:2px 6px;border-radius:4px;color:var(--success)">node lis-bridge.js</code>
+              </div>
+              <button class="btn btn-s btn-sm" style="margin-top:10px" onclick="lisDownloadBridgeScript()">⬇️ تحميل lis-bridge.js</button>
+            </div>
+            <div class="fr2">
+              <div class="fg">
+                <label class="fl">IP الجهاز *</label>
+                <input class="fc" id="wiz-ip" placeholder="192.168.1.100">
+                <div style="font-size:10px;color:var(--text2);margin-top:4px">ابحث في إعدادات الجهاز عن Network/IP</div>
+              </div>
+              <div class="fg">
+                <label class="fl">Port الجهاز</label>
+                <input class="fc" id="wiz-port" type="number" value="3001">
+              </div>
+            </div>
+          </div>
+
           <!-- File settings -->
           <div id="wiz-s3-file" style="display:none">
             <div style="background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:14px;margin-bottom:16px">
@@ -4906,41 +4926,18 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             <div class="fg">
               <label class="fl">مسار المجلد (للتوثيق)</label>
               <input class="fc" id="wiz-filepath" placeholder="مثال: C:\LIS\Results أو D:\Analyzer\Output">
+              <div style="font-size:10px;color:var(--text2);margin-top:4px">سيطلب منك اختيار المجلد من المتصفح عند الاتصال</div>
             </div>
           </div>
 
           <!-- Manual settings -->
-          <!-- Network / LAN settings -->
-          <div id="wiz-s3-network" style="display:none">
-            <div style="background:rgba(0,232,122,0.07);border:1px solid rgba(0,232,122,0.2);border-radius:10px;padding:14px;margin-bottom:16px">
-              <div style="font-size:13px;font-weight:800;color:var(--success);margin-bottom:8px">🌐 إعداد اتصال الشبكة (LAN)</div>
-              <div style="font-size:11px;color:var(--text2);line-height:2">
-                <b style="color:var(--text)">1.</b> وصّل كابل LAN بين الجهاز والحاسوب<br>
-                <b style="color:var(--text)">2.</b> أدخل IP الجهاز (موجود في إعدادات الجهاز)<br>
-                <b style="color:var(--text)">3.</b> تأكد أن الحاسوب على نفس الشبكة (نفس الـ Subnet)
-              </div>
-            </div>
-            <div class="fg">
-              <label class="fl">IP الجهاز *</label>
-              <input class="fc" id="wiz-ip" placeholder="مثال: 10.0.0.2" style="direction:ltr;text-align:left">
-            </div>
-            <div class="fg" style="margin-top:10px">
-              <label class="fl">Port</label>
-              <input class="fc" id="wiz-port" placeholder="3001" value="3001" style="direction:ltr;text-align:left">
-            </div>
-            <div style="margin-top:12px;background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.2);border-radius:8px;padding:10px;font-size:11px;color:var(--text2)">
-              💡 <b style="color:var(--text)">Mindray BC-5000:</b> IP الجهاز موجود في<br>
-              <span style="color:var(--primary)">Menu → Setup → System Setup → Communication</span><br>
-              البروتوكول: HL7 · Port الافتراضي: 3001
-            </div>
-          </div>
-
           <div id="wiz-s3-manual" style="display:none">
             <div style="background:rgba(0,232,122,0.06);border:1px solid rgba(0,232,122,0.2);border-radius:10px;padding:16px">
               <div style="font-size:13px;font-weight:800;color:var(--success);margin-bottom:8px">✍️ الإدخال اليدوي</div>
               <div style="font-size:11px;color:var(--text2);line-height:2">
                 سيتم إنشاء الجهاز بدون اتصال تلقائي.<br>
-                ستقدر تضيف النتائج يدوياً من قسم "النتائج الواردة".
+                ستقدر تضيف النتائج يدوياً من قسم "النتائج الواردة"<br>
+                أو تستخدم ميزة "محاكاة ASTM" للاختبار.
               </div>
             </div>
           </div>
@@ -4956,6 +4953,9 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
           </div>
           <div id="wiz-summary" style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px">
             <!-- filled by JS -->
+          </div>
+          <div id="wiz-browser-warning" style="display:none;margin-top:12px;background:rgba(255,204,0,0.07);border:1px solid rgba(255,204,0,0.25);border-radius:8px;padding:10px;font-size:11px;color:var(--warning)">
+            ⚠️ تأكد من استخدام <b>Chrome أو Edge</b> للاتصال بالكابل
           </div>
         </div>
 
@@ -4998,6 +4998,31 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
 </div>
 
 <!-- ═══ LIS: Modal دليل TCP ═══ -->
+<div class="moverlay" id="lis-m-tcp-guide">
+  <div class="modal" style="max-width:600px">
+    <div class="mhdr"><div class="mtitle">🌐 دليل إعداد TCP/IP للأجهزة الشبكية</div><button class="mclose" onclick="closeModal('lis-m-tcp-guide')">✕</button></div>
+    <div class="mbody">
+      <div style="background:rgba(255,204,0,0.07);border:1px solid rgba(255,204,0,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:800;color:var(--warning);margin-bottom:6px">⚠️ لماذا نحتاج وسيط؟</div>
+        <div style="font-size:11px;color:var(--text2);line-height:2">المتصفح لا يستطيع فتح اتصال TCP مباشرة لأسباب أمنية. الحل هو برنامج وسيط صغير (Bridge) يشتغل على نفس الكمبيوتر ويحوّل TCP ← WebSocket.</div>
+      </div>
+      <div style="background:rgba(0,212,255,0.06);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+        <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">📋 خطوات الإعداد (مرة واحدة فقط)</div>
+        <div style="font-size:11px;color:var(--text2);line-height:2.2">
+          <b style="color:var(--text)">١.</b> حمّل Node.js من <b style="color:var(--primary)">nodejs.org</b> وثبّته<br>
+          <b style="color:var(--text)">٢.</b> اضغط <b style="color:var(--success)">"تحميل lis-bridge.js"</b> أدناه واحفظ الملف<br>
+          <b style="color:var(--text)">٣.</b> افتح CMD في نفس المجلد واكتب:<br>
+          <code style="display:block;background:#010409;padding:8px 12px;border-radius:6px;margin:6px 0;color:var(--success);font-family:monospace">node lis-bridge.js --device-ip=192.168.1.X --device-port=3001</code>
+          <b style="color:var(--text)">٤.</b> في MedLab Pro، اضغط <b style="color:var(--primary)">"اتصال WebSocket"</b> وحدد المنفذ 8765<br>
+          <b style="color:var(--text)">٥.</b> ✅ جاهز — النتائج تصل تلقائياً
+        </div>
+      </div>
+      <button class="btn btn-p" style="width:100%" onclick="lisDownloadBridgeScript();closeModal('lis-m-tcp-guide')">⬇️ تحميل lis-bridge.js الآن</button>
+    </div>
+    <div class="mftr"><button class="btn btn-s" onclick="closeModal('lis-m-tcp-guide')">إغلاق</button></div>
+  </div>
+</div>
+
 <div class="moverlay" id="m-ua">
   <div class="modal" style="max-width:860px;max-height:92vh;overflow-y:auto">
     <div class="mhdr"><div class="mtitle" id="ua-modal-title">💧 Urine Examination</div><button class="mclose" onclick="closeModal('m-ua')">✕</button></div>
@@ -6471,16 +6496,6 @@ const DB={
     try{
       const pk=this._pfx()+k;
       _MC[pk]=v; // حفظ في الكاش فوراً (بدون تأخير)
-
-      // ── SyncManager hook ──────────────────────────────
-      // أرسل التغييرات للمزامنة — مع منع الحلقة أثناء تطبيق حدث وارد
-      if(window._smDBHook && typeof window._smDBHook === 'function'){
-        if(typeof SyncManager !== 'undefined' && !SyncManager._applying){
-          try{ window._smDBHook(k, v); }catch(_){}
-        }
-      }
-      // ──────────────────────────────────────────────────
-
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
         localStorage.removeItem(pk);
@@ -7264,26 +7279,11 @@ let packages=[];
 let inventory=[];
 let qcRecords=[];
 let settings={};
-
-// SyncManager Setter Registry — يُتيح تحديث let variables من خارج script block
-window._smSetters = window._smSetters || {};
-window._smSetters['patients']        = function(v){ patients         = v; };
-window._smSetters['requests']        = function(v){ requests         = v; };
-window._smSetters['invoices']        = function(v){ invoices         = v; };
-window._smSetters['doctors']         = function(v){ doctors          = v; };
-window._smSetters['packages']        = function(v){ packages         = v; };
-window._smSetters['inventory']       = function(v){ inventory        = v; };
-window._smSetters['qc']              = function(v){ qcRecords        = v; };
 let tests=[];
 let testGroups=[];
 let uaRecords=[];
 let stoolExamRecords=[];
 let semenRecords=[];
-window._smSetters = window._smSetters || {};
-window._smSetters['testGroups']       = function(v){ testGroups       = v; };
-window._smSetters['uaRecords']        = function(v){ uaRecords        = v; };
-window._smSetters['stoolExamRecords'] = function(v){ stoolExamRecords = v; };
-window._smSetters['semenRecords']     = function(v){ semenRecords     = v; };
 let currentTestCat='All';
 let wizStep=1;
 let wizPatient={};
@@ -7568,16 +7568,16 @@ window.onload=()=>{
   // تحقق من رابط التحقق أولاً
   if(window.location.search.includes('verify=')){ checkVerifyURL(); return; }
   initTheme();
-  // تهيئة FSA إن كانت متاحة، وإلا أكمل مباشرة
-  if(typeof fsaInit === 'function'){
-    fsaInit().then(()=>{
-      checkAuth();
-    }).catch(()=>{
-      checkAuth();
-    });
-  } else {
+  // تهيئة FSA:
+  // - إذا أول تشغيل: تظهر شاشة الإعداد وتوقف التدفق هنا
+  //   (checkAuth ستُستدعى من fsaChooseFolderFirstRun بعد اختيار المجلد)
+  // - إذا FSA جاهز: تكتمل مباشرة وتكمل لـ checkAuth
+  fsaInit().then(()=>{
     checkAuth();
-  }
+  }).catch(()=>{
+    // إذا أعادت promise لا تكتمل (أول تشغيل) لن يصل هنا أبداً
+    checkAuth();
+  });
 };
 
 function startApp(){
@@ -7650,13 +7650,20 @@ function startApp(){
     }
   }, 300);
   setTimeout(()=>startInventoryMonitor(), 2000);
-
+  // تشغيل النسخ التلقائي لـ Google Drive إذا كان مفعلاً
+  setTimeout(()=>{
+    if(localStorage.getItem('gdrive_auto')==='1'){
+      const t=localStorage.getItem('gdrive_access_token');
+      const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
+      if(t&&Date.now()<exp){ _gdriveToken=t; _gdriveStartAutoTimer(); }
+    }
+  }, 3000);
   // تشغيل النسخ الاحتياطي التلقائي المحلي
   setTimeout(initAutoBackup, 4000);
   // تشغيل النقل التلقائي كل دقيقتين إلى IDB
   setTimeout(_startAutoMigration, 6000);
   // تهيئة نظام D:\MedLabPro (FSA)
-  if(typeof fsaInit === 'function') setTimeout(fsaInit, 2500);
+  setTimeout(fsaInit, 2500);
   // ── حفظ تلقائي للإعدادات عند أي تغيير ────────────────
   var secSettings = document.getElementById('sec-settings');
   if(secSettings){
@@ -7678,45 +7685,17 @@ function startApp(){
   }
   loadFirebase().then(ok=>{
     if(ok){
-      _updateConnBadge(true);
       initChat();
       startNotifPolling();
       startAdminListeners();
     } else {
-      _updateConnBadge(false);
       showNotif('تحذير','تعذر الاتصال بخادم المحادثات','warning');
       startNotifPolling();
     }
   }).catch(()=>{
-    _updateConnBadge(false);
     startNotifPolling();
   });
 }
-
-// ── مؤشر حالة الاتصال ─────────────────────────────────────────
-function _updateConnBadge(connected){
-  const badge = document.getElementById('fb-conn-badge');
-  const dot   = document.getElementById('fb-conn-dot');
-  const lbl   = document.getElementById('fb-conn-lbl');
-  if(!badge) return;
-  if(connected){
-    badge.style.background  = 'rgba(0,232,122,.10)';
-    badge.style.borderColor = 'rgba(0,232,122,.35)';
-    badge.style.color       = '#00e87a';
-    dot.style.background    = '#00e87a';
-    dot.style.animation     = 'pulse 2s infinite';
-    lbl.textContent         = 'متصل';
-  } else {
-    badge.style.background  = 'rgba(255,34,68,.10)';
-    badge.style.borderColor = 'rgba(255,34,68,.30)';
-    badge.style.color       = '#ff2244';
-    dot.style.background    = '#ff2244';
-    dot.style.animation     = '';
-    lbl.textContent         = 'غير متصل';
-  }
-}
-window.addEventListener('online',  ()=>{ if(typeof fbReady!=='undefined'&&fbReady) _updateConnBadge(true); else _updateConnBadge(false); });
-window.addEventListener('offline', ()=>_updateConnBadge(false));
 
 // ══════════════════════════════════════════════════════════════
 // مستمعات أوامر الأدمن — sys/
@@ -7955,41 +7934,6 @@ function startAdminListeners(){
   });
 
   console.log('[MedLab Pro] ✅ Admin listeners started for:', myUsername);
-
-  // ══════════════════════════════════════════════════════
-  // ⑩ مراقبة تغيير حالة المزامنة من Admin
-  // ══════════════════════════════════════════════════════
-  fbDb.ref('sync_config/' + myUsername + '/enabled').on('value', snap => {
-    try {
-      const val = snap.val();
-      if (val === null || val === undefined) return;
-      const enabled = !!val;
-
-      // تحديث حالة SyncManager
-      if (typeof SyncManager !== 'undefined') {
-        SyncManager.setEnabled(enabled);
-      }
-
-      // تحديث في localStorage (لتظل فعّالة بعد إعادة التحميل)
-      try {
-        const users = JSON.parse(localStorage.getItem('medlab_admin_users') || '[]');
-        const u = users.find(x => x.username === myUsername);
-        if (u && u.firebaseSync !== enabled) {
-          u.firebaseSync = enabled;
-          localStorage.setItem('medlab_admin_users', JSON.stringify(users));
-        }
-      } catch(e) {}
-
-      // إشعار الواجهة بتغيير الحالة
-      window.dispatchEvent(new CustomEvent('syncmanager:statuschange', { detail: { enabled } }));
-
-      if (enabled) {
-        showNotif('☁️ مزامنة', 'تم تفعيل المزامنة السحابية من الإدارة', 'success');
-      } else {
-        showNotif('💾 محلي', 'تم إيقاف المزامنة السحابية من الإدارة', 'warning');
-      }
-    } catch(e) { console.warn('[sync_config listener]', e); }
-  });
 }
 // ── نهاية مستمعات الأدمن ──────────────────────────────────
 
@@ -8142,7 +8086,7 @@ function nav(p){
   if(p==='reports'){renderReports();if(typeof phcInit==='function')phcInit();}
   if(p==='dashboard') updateDashboard();
   if(p==='billing'){renderBillingTests();loadBillingPtDropdown();renderBillingHistory();_syncCurrencySelectors();}
-  if(p==='database'){resetDbAuth();updateDbStats();setTimeout(loadAutoBackupUI,120);if(typeof _fsaUpdateIndicator==='function') setTimeout(()=>_fsaUpdateIndicator(!!_fsaDirHandle),150);}
+  if(p==='database'){resetDbAuth();updateDbStats();setTimeout(_gdriveInitUI,100);setTimeout(loadAutoBackupUI,120);setTimeout(()=>_fsaUpdateIndicator(!!_fsaDirHandle),150);}
   if(p==='culture') renderCultureList();
   if(p==='ua') renderUAList();
   if(p==='stool') renderStoolList();
@@ -8211,10 +8155,7 @@ document.querySelectorAll('.moverlay').forEach(m=>{m.addEventListener('click',e=
 // ============================================================
 function openPatientQuickPanel(pid){
   const p=patients.find(x=>x.id===pid);if(!p)return;
-
-  // تأكد من تحميل requests الحديثة من IDB أولاً (مهم عند المزامنة)
-  const _doOpen = function(){
-    const ptReqs=requests.filter(r=>r.patientId===pid).reverse();
+  const ptReqs=requests.filter(r=>r.patientId===pid).reverse();
   const doneReqs=ptReqs.filter(r=>r.status==='done');
   // Show last 4 results only
   const last4=doneReqs.slice(0,4);
@@ -8274,23 +8215,6 @@ function openPatientQuickPanel(pid){
     </div>
   </div>`;
   document.body.appendChild(modal);
-  }; // end _doOpen
-
-  // إذا لم يكن هناك طلبات للمريض → حاول إعادة تحميل من IDB أولاً
-  const existing = requests.filter(r=>r.patientId===pid);
-  if(existing.length === 0 && typeof IDB !== 'undefined'){
-    IDB.get('mlab2_'+(typeof DB!=='undefined'&&DB._pfx?DB._pfx().replace(/^mlab2_/,'').replace(/_$/,''):'')+('_'+'requests').replace(/^_/,'')).then(function(idbReqs){
-      if(Array.isArray(idbReqs) && idbReqs.length > 0){
-        // دمج مع الموجود
-        const existingIds = new Set(requests.map(r=>r.id));
-        idbReqs.forEach(function(r){ if(r && r.id && !existingIds.has(r.id)) requests.push(r); });
-        if(typeof window._smSetters === 'object' && window._smSetters['requests']) window._smSetters['requests'](requests);
-      }
-      _doOpen();
-    }).catch(function(){ _doOpen(); });
-  } else {
-    _doOpen();
-  }
 }
 
 function deleteReqFromPanel(reqId, pid){
@@ -9128,7 +9052,7 @@ function wizFinish(){
       counter++;
       localStorage.setItem(counterKey, String(counter));
       // تحقق أن الرقم غير مستخدم مسبقاً
-      let candidate=String(100000+counter);
+      let candidate='MR-'+String(counter).padStart(5,'0');
       while(patients.find(p=>p.id===candidate)){
         counter++;
         localStorage.setItem(counterKey, String(counter));
@@ -9137,7 +9061,7 @@ function wizFinish(){
       return candidate;
     }
     const pid=_genUniquePid();
-    const barcode=pid; // أرقام فقط
+    const barcode=pid.replace(/[^A-Z0-9]/gi,'').toUpperCase();
     pt={...wizPatient,id:pid,barcode,registered:today,visits:0,status:'active'};
     patients.push(pt);
   } else {
@@ -9207,19 +9131,6 @@ function wizFinish(){
     status:payStatus, date:today
   });
   save('invoices',invoices);
-
-  // ✅ ضمان وصول الطلب مع المريض لجميع الأجهزة:
-  // إذا كانت المزامنة مفعّلة، أرسل الطلب والفاتورة صراحةً بعد 200ms
-  // (بعد أن تكون debounce timers للـ patients قد أطلقت، لضمان ترتيب الوصول)
-  if(typeof SyncManager !== 'undefined' && SyncManager.isEnabled()){
-    setTimeout(function(){
-      try{
-        SyncManager.pushUpsert('requests', req).catch(function(){});
-        var inv = invoices.find(function(i){ return i.reqId===rqid; });
-        if(inv) SyncManager.pushUpsert('invoices', inv).catch(function(){});
-      }catch(_){}
-    }, 200);
-  }
 
   closeModal('m-wizard');
   showNotif('تم الإنشاء',`${rqid} — ${pt.name} | ${total} ${settings.currency||''} — ${payStatus} ✅`,'success');
@@ -9470,7 +9381,7 @@ function printTubeLabel(reqId){
   const r=requests.find(x=>x.id===reqId);
   if(!r){showNotif('خطأ','الطلب غير موجود','error');return;}
   const pt=patients.find(p=>p.id===r.patientId)||{};
-  const barcodeId=String(pt.barcode||pt.id||r.id||'000000');
+  const barcodeId=(pt.barcode||r.id).replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,16)||r.id;
   const barcodeSvg=genTubeBarcode(barcodeId);
 
   // نوع الأنبوبة حسب التحاليل
@@ -9521,7 +9432,7 @@ function printTubeLabel(reqId){
       </div>
       <div class="barcode-row">
         ${barcodeSvg}
-        <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;letter-spacing:3px;color:#000;background:#fff;border:1.5px solid #bbb;border-radius:3px;padding:1px 8px;margin-top:2px;text-align:center">${barcodeId}</div>
+        <div class="barcode-num">${barcodeId}</div>
       </div>
       <div class="tests-row">🧪 ${tests||'—'}</div>
       ${tubeColors.length?`<div class="tubes-row">${tubeColors.map(t=>`<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div class="tube" style="background:${t.color}"></div><span class="tube-lbl">${t.label}</span></div>`).join('')}</div>`:''}
@@ -12146,14 +12057,13 @@ function buildPrintHTML(req, opts){
     codes.forEach(c=>{ C128.widths[c].forEach((w,i)=>bars.push({w,dark:i%2===0})); });
     STOP.forEach((w,i)=>bars.push({w,dark:i%2===0}));
     bars.push({w:2,dark:false});
-    const BAR_W=3.2,h=55,PAD=8,totalW=bars.reduce((s,b)=>s+b.w*BAR_W,0)+PAD*2;
-    let x=PAD,rects='';
-    bars.forEach(b=>{if(b.dark)rects+='<rect x="'+x+'" y="4" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>';x+=b.w*BAR_W;});
-    const numY=h+18,totalH=h+28;
-    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'<text x="'+(totalW/2)+'" y="'+numY+'" text-anchor="middle" font-family="Courier New,monospace" font-size="13" font-weight="bold" fill="#000" letter-spacing="3">'+text+'</text></svg>';
+    const h=32, totalW=bars.reduce((s,b)=>s+b.w*2,0);  // ⭐ ارتفاع مُقلَّص قليلاً
+    let x=0, rects='';
+    bars.forEach(b=>{ if(b.dark) rects+=`<rect x="${x}" y="0" width="${b.w*2}" height="${h}" fill="#000"/>`; x+=b.w*2; });
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${h}" viewBox="0 0 ${totalW} ${h}" style="display:block">${rects}</svg>`;
   }
 
-  const barcodeId = String(pt.barcode||pt.id||req.id||'000000');
+  const barcodeId = pt.barcode || (pt.id||req.id).replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,12)||'00000000';
   const barcodeSvg = genBarcode128(barcodeId);
 
   // ─── حقل المريض ───────────────────────────────────────
@@ -12217,15 +12127,12 @@ function buildPrintHTML(req, opts){
         <!-- الباركود (display:block ليأخذ عرضه الطبيعي ويلتصق باليمين) -->
         <div style="text-align:right;margin-bottom:3px">
           ${barcodeSvg}
+          <div style="font-size:8px;font-weight:900;color:#000;letter-spacing:2px;font-family:'Courier New',monospace;text-align:center;line-height:1">${barcodeId}</div>
         </div>
-        <!-- Input+ID في سطر واحد، Print في سطر ثاني -->
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
-            <span style="${LBL_R}">Input</span>
-            <span style="border:1.5px solid #bbb;border-radius:3px;background:#fff;padding:1px 6px;font-size:13px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto">${inputTime}</span>
-            <span style="font-size:8px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;margin-left:6px">ID</span>
-            <span style="border:1.5px solid #bbb;border-radius:3px;background:#fff;padding:1px 6px;font-size:13px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${pt.id||'—'}</span>
-          </div>
+        <!-- مستطيلات ID/Input/Print بنفس عرض الباركود تماماً -->
+        <div style="display:flex;flex-direction:column">
+          ${rowR('ID', pt.id||'—')}
+          ${rowR('Input', inputTime)}
           ${rowR('Print', printTime)}
         </div>
       </div>
@@ -14383,8 +14290,6 @@ function deletePkg(id){if(confirm('حذف؟')){packages=packages.filter(p=>p.id!
 // ============================================================
 // دفتر أرقام الهاتف
 // ============================================================
-window._smSetters = window._smSetters || {};
-window._smSetters['phoneBook'] = function(v){ /* phoneBook يُدار عبر getPhoneBook/savePhoneBook */ };
 function getPhoneBook(){return load('phoneBook',[]);}
 function savePhoneBook(pb){save('phoneBook',pb);}
 
@@ -15134,8 +15039,6 @@ function updateBadges(){document.getElementById('nb-patients').textContent=patie
 // BILLING / ACCOUNTING
 // ============================================================
 let billingRecords=[];
-window._smSetters = window._smSetters || {};
-window._smSetters['billing'] = function(v){ billingRecords = v; };
 
 function renderBillingTests(){
   const srch=(document.getElementById('billing-test-srch')||{}).value||'';
@@ -15365,6 +15268,7 @@ function toggleStCard(id){
     if(id==='stc-groups') renderSettingsGroups();
     if(id==='stc-ua-stool') renderUAFieldsEditor();
     if(id==='stc-phones') renderPhoneBook();
+    if(id==='stc-sync') syncRenderCard();
   }
 }
 
@@ -16918,26 +16822,9 @@ function listenUsersChanges(){
   });
 }
 
-function getSession(){ 
-  try{ 
-    var s=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null'); 
-    // عند Refresh في Electron يُمسح sessionStorage — استعد من localStorage
-    if(!s && window.IS_ELECTRON){
-      s=JSON.parse(localStorage.getItem(SESSION_KEY+'_bk')||'null');
-      if(s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s));
-    }
-    return s;
-  }catch(e){ return null; } 
-}
-function setSession(data){ 
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(data)); 
-  // نسخة احتياطية في localStorage لـ Electron Refresh
-  if(window.IS_ELECTRON) localStorage.setItem(SESSION_KEY+'_bk', JSON.stringify(data));
-}
-function clearSession(){ 
-  sessionStorage.removeItem(SESSION_KEY); 
-  localStorage.removeItem(SESSION_KEY+'_bk');
-}
+function getSession(){ try{ return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null'); }catch(e){ return null; } }
+function setSession(data){ sessionStorage.setItem(SESSION_KEY, JSON.stringify(data)); }
+function clearSession(){ sessionStorage.removeItem(SESSION_KEY); }
 
 function checkAuth(){
   // فتح لوحة الأدمن عبر URL
@@ -18133,7 +18020,7 @@ function initAutoBackup(){
 // ── اختيار مجلد التنزيل التلقائي ───────────────────────────
 async function selectAutoBackupFolder(){
   if(!('showDirectoryPicker' in window)){
-    showNotif('تنبيه','تعذّر اختيار المجلد','warning');
+    showNotif('غير مدعوم','متصفحك لا يدعم اختيار مجلد — سيتم التنزيل في Downloads','warning');
     return;
   }
   try{
@@ -18146,6 +18033,335 @@ async function selectAutoBackupFolder(){
     if(e.name!=='AbortError')
       showNotif('خطأ','لم يتم اختيار مجلد: '+e.message,'error');
   }
+}
+
+// ═══════════════════════════════════════════════════
+// Google Drive Backup System
+// ═══════════════════════════════════════════════════
+const GDRIVE_CLIENT_ID = ''; // يُعبأ من المستخدم
+const GDRIVE_SCOPE     = 'https://www.googleapis.com/auth/drive.file';
+let   _gdriveToken     = null;
+let   _gdriveAutoTimer = null;
+
+function _buildBackupJson(){
+  const data={};
+  getAllDbKeys().forEach(k=>{ data[k]=localStorage.getItem(k); });
+  return JSON.stringify({
+    _medlab_backup:true, _version:'2.1',
+    _exportDate:new Date().toISOString(),
+    _userPrefix:'mlab2_'+(DB._user?DB._user+'_':''),
+    _stats:{patients:patients.length,requests:requests.length,invoices:invoices.length},
+    data
+  },null,2);
+}
+
+function gdriveConnect(){
+  // تحقق من CLIENT_ID
+  const cid = localStorage.getItem('gdrive_client_id')||'';
+  if(!cid){
+    const id = prompt('أدخل Google OAuth Client ID الخاص بمشروعك:','');
+    if(!id){ showNotif('تنبيه','يلزم Client ID للربط مع Google Drive','warning'); return; }
+    localStorage.setItem('gdrive_client_id', id.trim());
+  }
+  const clientId = localStorage.getItem('gdrive_client_id');
+  const redirectUri = window.location.href.split('?')[0];
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth?'+
+    'client_id='+encodeURIComponent(clientId)+
+    '&redirect_uri='+encodeURIComponent(redirectUri)+
+    '&response_type=token'+
+    '&scope='+encodeURIComponent(GDRIVE_SCOPE)+
+    '&prompt=consent';
+  // افتح نافذة Auth
+  const w = window.open(url,'gdrive_auth','width=500,height=600');
+  // استمع لإغلاق النافذة أو رجوع الـ token
+  const interval = setInterval(()=>{
+    try{
+      if(!w||w.closed){
+        clearInterval(interval);
+        // تحقق من الـ hash في URL الحالي (implicit flow)
+        _gdriveCheckToken();
+      }
+    }catch(e){ clearInterval(interval); }
+  },500);
+}
+
+function _gdriveCheckToken(){
+  // تحقق إذا كان الـ token في localStorage (من نافذة Redirect)
+  const t=localStorage.getItem('gdrive_access_token');
+  const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
+  if(t && Date.now()<exp){
+    _gdriveToken=t;
+    _gdriveUpdateUI(true);
+    showNotif('تم','✅ تم الربط مع Google Drive بنجاح','success');
+  }
+}
+
+// استقبال الـ token من URL hash (عند Redirect)
+(function _gdriveHandleRedirect(){
+  const hash=window.location.hash;
+  if(hash.includes('access_token')){
+    const params=new URLSearchParams(hash.slice(1));
+    const token=params.get('access_token');
+    const expiresIn=parseInt(params.get('expires_in')||'3600');
+    if(token){
+      localStorage.setItem('gdrive_access_token',token);
+      localStorage.setItem('gdrive_token_exp',String(Date.now()+expiresIn*1000-60000));
+      // امسح الـ hash
+      history.replaceState(null,'',window.location.pathname+window.location.search);
+    }
+  }
+  // استعادة token محفوظ
+  const saved=localStorage.getItem('gdrive_access_token');
+  const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
+  if(saved&&Date.now()<exp){ _gdriveToken=saved; }
+})();
+
+function _gdriveUpdateUI(connected){
+  const statusEl=document.getElementById('gdrive-status');
+  const connectBtn=document.getElementById('gdrive-connect-btn');
+  const backupBtn=document.getElementById('gdrive-backup-now-btn');
+  const autoTog=document.getElementById('gdrive-auto-tog');
+  const lastEl=document.getElementById('gdrive-last-backup');
+  if(!statusEl) return;
+  if(connected){
+    statusEl.innerHTML='<span style="color:var(--success)">🟢 مرتبط — حساب Google Drive متصل</span>';
+    statusEl.style.background='rgba(0,200,80,0.07)';
+    if(connectBtn){ connectBtn.textContent='🔄 تغيير الحساب'; }
+    if(backupBtn){ backupBtn.disabled=false; backupBtn.style.opacity='1'; }
+    if(autoTog){ autoTog.style.opacity='1'; autoTog.style.pointerEvents='auto'; }
+  } else {
+    statusEl.innerHTML='⚪ غير مرتبط — اضغط "ربط الحساب" للبدء';
+    if(backupBtn){ backupBtn.disabled=true; backupBtn.style.opacity='0.4'; }
+    if(autoTog){ autoTog.style.opacity='0.5'; autoTog.style.pointerEvents='none'; }
+  }
+  const last=localStorage.getItem('gdrive_last_backup');
+  if(last&&lastEl) lastEl.textContent='آخر نسخة: '+last;
+  // استعادة حالة التلقائي
+  const autoOn=localStorage.getItem('gdrive_auto')==='1';
+  if(autoTog){ autoTog.classList.toggle('on',autoOn); }
+  if(connected&&autoOn) _gdriveStartAutoTimer();
+}
+
+async function gdriveBackupNow(){
+  if(!_gdriveToken){
+    // حاول استعادة token محفوظ
+    const t=localStorage.getItem('gdrive_access_token');
+    const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
+    if(t&&Date.now()<exp){ _gdriveToken=t; }
+    else { showNotif('تنبيه','يرجى ربط حساب Google Drive أولاً','warning'); return; }
+  }
+  const btn=document.getElementById('gdrive-backup-now-btn');
+  if(btn){ btn.textContent='⏳ جاري الرفع...'; btn.disabled=true; }
+  try{
+    const json=_buildBackupJson();
+    const dateStr=new Date().toISOString().split('T')[0];
+    const fileName=`MedLab_Auto_${dateStr}.json`;
+    // ابحث عن ملف موجود بنفس الاسم لتحديثه
+    const searchRes=await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${fileName}'+and+trashed=false&fields=files(id)`,
+      {headers:{Authorization:'Bearer '+_gdriveToken}}
+    );
+    const searchData=await searchRes.json();
+    const existingId=searchData.files&&searchData.files[0]?searchData.files[0].id:null;
+    // رفع أو تحديث الملف
+    const metadata={name:fileName,mimeType:'application/json'};
+    if(!existingId){
+      // إنشاء مجلد MedLab Pro إذا لم يكن موجوداً
+      const folderRes=await fetch(
+        `https://www.googleapis.com/drive/v3/files?q=name='MedLab Pro'+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id)`,
+        {headers:{Authorization:'Bearer '+_gdriveToken}}
+      );
+      const folderData=await folderRes.json();
+      let folderId=folderData.files&&folderData.files[0]?folderData.files[0].id:null;
+      if(!folderId){
+        const createFolder=await fetch('https://www.googleapis.com/drive/v3/files',{
+          method:'POST',
+          headers:{Authorization:'Bearer '+_gdriveToken,'Content-Type':'application/json'},
+          body:JSON.stringify({name:'MedLab Pro',mimeType:'application/vnd.google-apps.folder'})
+        });
+        const fd=await createFolder.json();
+        folderId=fd.id;
+      }
+      if(folderId) metadata.parents=[folderId];
+    }
+    const form=new FormData();
+    form.append('metadata',new Blob([JSON.stringify(metadata)],{type:'application/json'}));
+    form.append('file',new Blob([json],{type:'application/json'}));
+    const uploadUrl=existingId
+      ?`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart`
+      :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    const res=await fetch(uploadUrl,{
+      method:existingId?'PATCH':'POST',
+      headers:{Authorization:'Bearer '+_gdriveToken},
+      body:form
+    });
+    if(res.ok){
+      const now=new Date().toLocaleString('ar');
+      localStorage.setItem('gdrive_last_backup',now);
+      const lastEl=document.getElementById('gdrive-last-backup');
+      if(lastEl) lastEl.textContent='آخر نسخة: '+now;
+      showNotif('تم الرفع','✅ تم رفع النسخة الاحتياطية إلى Google Drive','success');
+    } else {
+      const err=await res.json();
+      if(err.error&&err.error.code===401){
+        localStorage.removeItem('gdrive_access_token');
+        _gdriveToken=null;
+        _gdriveUpdateUI(false);
+        showNotif('خطأ','انتهت صلاحية الجلسة — يرجى ربط الحساب مجدداً','error');
+      } else {
+        showNotif('خطأ','فشل الرفع: '+(err.error&&err.error.message||'خطأ غير معروف'),'error');
+      }
+    }
+  }catch(e){
+    showNotif('خطأ','فشل الاتصال بـ Google Drive: '+e.message,'error');
+  }finally{
+    if(btn){ btn.textContent='☁️ نسخ احتياطي الآن'; btn.disabled=false; }
+  }
+}
+
+function gdriveToggleAuto(tog){
+  tog.classList.toggle('on');
+  const on=tog.classList.contains('on');
+  localStorage.setItem('gdrive_auto',on?'1':'0');
+  if(on){ _gdriveStartAutoTimer(); showNotif('تم','✅ النسخ التلقائي اليومي مفعّل','success'); }
+  else  { _gdriveStopAutoTimer();  showNotif('تم','⏹ تم إيقاف النسخ التلقائي','info'); }
+}
+
+function _gdriveStartAutoTimer(){
+  _gdriveStopAutoTimer();
+  // احسب الوقت حتى منتصف الليل
+  const now=new Date();
+  const midnight=new Date(now); midnight.setHours(2,0,0,0); // 2:00 صباحاً
+  if(midnight<=now) midnight.setDate(midnight.getDate()+1);
+  const msUntil=midnight.getTime()-now.getTime();
+  _gdriveAutoTimer=setTimeout(function(){
+    gdriveBackupNow();
+    _gdriveAutoTimer=setInterval(gdriveBackupNow, 24*60*60*1000);
+  }, msUntil);
+}
+
+function _gdriveStopAutoTimer(){
+  if(_gdriveAutoTimer){ clearTimeout(_gdriveAutoTimer); clearInterval(_gdriveAutoTimer); _gdriveAutoTimer=null; }
+}
+
+// تهيئة UI عند فتح صفحة قاعدة البيانات
+function _gdriveInitUI(){
+  const t=localStorage.getItem('gdrive_access_token');
+  const exp=parseInt(localStorage.getItem('gdrive_token_exp')||'0');
+  _gdriveUpdateUI(!!(t&&Date.now()<exp));
+  // عرض عنوان البرنامج الحالي في التعليمات
+  const originEl=document.getElementById('gdrive-origin-hint');
+  if(originEl) originEl.textContent=window.location.origin||window.location.href.split('/').slice(0,3).join('/');
+}
+
+function toggleGdriveInstructions(){
+  const el=document.getElementById('gdrive-instructions');
+  if(!el) return;
+  const isHidden=el.style.display==='none';
+  el.style.display=isHidden?'block':'none';
+}
+
+function importDatabase(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try {
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed._medlab_backup || !parsed.data){
+        showNotif('خطأ','هذا الملف ليس نسخة احتياطية صالحة من MedLab Pro ❌','error');
+        input.value='';
+        return;
+      }
+      pendingImportData = parsed;
+      const stats = parsed._stats || {};
+      const keyCount = Object.keys(parsed.data).length;
+      const exportDate = parsed._exportDate ? new Date(parsed._exportDate).toLocaleString('ar') : 'غير محدد';
+      document.getElementById('db-import-details').innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">
+          <div style="background:rgba(0,212,255,0.08);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:900;color:var(--primary)">${stats.patients||0}</div>
+            <div style="font-size:10px">مريض</div>
+          </div>
+          <div style="background:rgba(0,245,147,0.08);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:900;color:var(--success)">${stats.requests||0}</div>
+            <div style="font-size:10px">طلب</div>
+          </div>
+          <div style="background:rgba(123,47,255,0.08);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:18px;font-weight:900;color:#a78bfa">${stats.invoices||0}</div>
+            <div style="font-size:10px">فاتورة</div>
+          </div>
+        </div>
+        <div>📅 تاريخ النسخة: <b style="color:var(--text)">${exportDate}</b></div>
+        <div>🔑 عدد العناصر: <b style="color:var(--text)">${keyCount}</b></div>
+        <div style="color:var(--danger);font-weight:700;margin-top:8px">⚠️ تنبيه: سيتم استبدال جميع البيانات الحالية بالبيانات المستوردة!</div>
+      `;
+      document.getElementById('db-import-preview').style.display = 'block';
+    } catch(err){
+      showNotif('خطأ','فشل قراءة الملف: '+err.message,'error');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+async function confirmImport(_pinVerified){
+  // ── حماية بالرمز السري ──
+  if(!_pinVerified){
+    const _pin=localStorage.getItem(typeof _dbPinKey==='function'?_dbPinKey():('mlab2_'+(DB._user||'')+'_db_pin'));
+    if(_pin){
+      promptDbPinThen(function(){confirmImport(true);});
+      return;
+    }
+  }
+  if(!pendingImportData || !pendingImportData.data){
+    showNotif('خطأ','لا توجد بيانات للاستيراد','error');
+    return;
+  }
+  if(!confirm('⚠️ هل أنت متأكد؟\nسيتم استبدال جميع بيانات هذا الحساب بالبيانات المستوردة.\nهذا الإجراء لا يمكن التراجع عنه!')) return;
+  try {
+    const userPfx = 'mlab2_' + (DB._user ? DB._user + '_' : '');
+    const oldPfx  = pendingImportData._userPrefix || 'mlab2_';
+
+    // ── 1. استيراد localStorage ────────────────────────────
+    const existingKeys = getAllDbKeys();
+    existingKeys.forEach(k => localStorage.removeItem(k));
+    const data = pendingImportData.data;
+    Object.keys(data).forEach(k => {
+      const newKey = k.startsWith(oldPfx)
+        ? userPfx + k.slice(oldPfx.length)
+        : k;
+      localStorage.setItem(newKey, data[k]);
+    });
+
+    // ── 2. استيراد IDB (الأرشيف) إذا كان موجوداً في الملف
+    if(pendingImportData.idbData){
+      const idbData=pendingImportData.idbData;
+      for(const k of Object.keys(idbData)){
+        try{
+          const newKey=k.startsWith(oldPfx)?userPfx+k.slice(oldPfx.length):k;
+          const val=JSON.parse(idbData[k]);
+          await IDB.set(newKey,val);
+        }catch{}
+      }
+    }
+
+    // ── 3. إعادة ضبط مؤقت النقل الأسبوعي ─────────────────
+    localStorage.removeItem('idb_last_archive_'+(DB._user||'default'));
+
+    pendingImportData = null;
+    document.getElementById('db-import-preview').style.display = 'none';
+    showNotif('تم الاستيراد','تم استيراد البيانات كاملة ✅ (LS + IDB) — جاري إعادة التحميل...','success');
+    setTimeout(()=>{ location.reload(); }, 1500);
+  } catch(e){
+    showNotif('خطأ','فشل الاستيراد: '+e.message,'error');
+  }
+}
+
+function cancelImport(){
+  pendingImportData = null;
+  document.getElementById('db-import-preview').style.display = 'none';
+  showNotif('تم الإلغاء','تم إلغاء عملية الاستيراد','info');
 }
 
 // ============================================================
@@ -19750,8 +19966,6 @@ const ORGANISMS_DB = {
 
 // ── حالة الزرع ──────────────────────────────────────────────
 let cultureRecords = [];
-window._smSetters = window._smSetters || {};
-window._smSetters['cultureRecords'] = function(v){ cultureRecords = v; };
 
 function loadCultureRecords(){
   cultureRecords = load('cultureRecords', []);
@@ -20502,7 +20716,7 @@ async function saveCultureEntry(){
 
   // إذا لم يكن المريض مسجلاً (إدخال يدوي)، أنشئ رقم ملف تلقائياً
   if(!ptId){
-    ptId=String(100000+parseInt(Date.now().toString().slice(-5)));
+    ptId='MR-'+(Date.now().toString().slice(-6));
     const existPt=patients.find(p=>p.name===ptName);
     if(existPt){
       ptId=existPt.id;
@@ -20652,10 +20866,8 @@ function _buildCultureHTML(cid){
           <div style="font-size:13px;font-weight:900;color:${color};margin-top:1px;font-family:Arial,sans-serif">${ct.en}</div>
         </div>
         <div style="display:flex;flex-direction:column">
-          <div style="display:flex;gap:4px">
-            ${_cuRR('Input', c.date)}
-            ${_cuRR('ID', pt.id||'—')}
-          </div>
+          ${_cuRR('ID', pt.id||'—')}
+          ${_cuRR('Date', c.date)}
           ${_cuRR('Specimen', c.specimenDetail||ct.en)}
         </div>
       </div>
@@ -21216,7 +21428,7 @@ function _buildUAPrintHTML(r){
   const genderTxt   = (pt.gender||r.patientGender)==='female'?'Female':'Male';
   const ageTxt      = (pt.ageDisplay||r.patientAge||'—').replace(/سنة/g,'Year').replace(/شهر/g,'Month').replace(/يوم/g,'Day').replace(/ساعة/g,'Hour');
   const printTime   = new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const barcodeId   = String(pt.barcode||pt.id||r.patientId||'000000');
+  const barcodeId   = (pt.barcode||(pt.id||r.patientId||'').replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,12))||'00000000';
   function _uaBarcode128(text){
     const C128={chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,4,1,1],[2,1,4,2,1,1],[4,1,2,2,1,1],[4,1,1,1,4,1],[1,1,4,2,2,1],[2,1,1,1,4,2],[2,1,1,4,1,2],[2,4,1,2,1,1],[4,1,1,2,1,2],[1,2,4,1,1,2],[1,4,1,4,1,1],[2,2,1,4,1,1],[4,4,1,1,1,1],[1,1,2,3,2,2],[1,2,2,3,2,1],[2,2,2,3,1,1],[1,1,3,2,3,1],[2,1,1,4,2,1],[1,4,2,1,2,1],[2,1,4,1,1,3],[1,3,2,3,1,1],[2,1,1,1,1,5],[2,1,1,5,1,1],[5,1,1,2,1,1],[2,1,5,1,1,2],[2,1,3,1,3,1],[2,3,1,1,3,1],[1,3,1,3,2,1],[1,4,2,2,1,1],[1,2,2,4,1,1],[1,2,4,1,2,1],[1,4,1,2,2,1],[2,1,4,4,1,1],[3,1,2,1,1,3],[3,1,1,1,2,3],[3,3,1,1,2,1],[3,1,2,3,1,1],[2,1,1,3,3,1],[1,1,2,2,1,4],[1,2,1,1,4,2],[1,2,1,4,1,2],[1,4,1,1,2,2],[3,1,1,2,4,1],[1,3,2,1,4,1],[2,3,1,2,3,1],[1,4,2,1,1,3],[4,1,4,1,1,2],[2,1,1,1,3,4],[3,1,4,1,2,1],[1,1,4,2,1,3],[1,4,4,1,1,2],[3,3,1,2,1,2],[3,1,1,4,2,1],[2,1,2,2,4,1],[2,1,4,2,2,1],[4,2,1,2,1,2],[2,4,2,2,1,1],[1,3,4,1,1,2],[2,3,4,1,1,1],[1,2,4,2,2,1],[3,2,4,1,1,1],[4,2,4,1,1,1],[2,2,1,1,1,5],[2,1,1,2,1,5],[3,2,1,1,1,4],[2,2,1,2,3,2],[2,2,3,2,1,2],[2,2,1,1,4,2],[2,2,3,1,2,2],[2,1,4,1,3,1],[4,2,1,1,3,1],[1,1,2,4,2,2],[1,2,2,4,2,1],[1,2,4,4,1,1],[1,4,4,2,1,1],[4,2,2,1,1,2],[4,2,2,2,1,1],[4,1,2,1,2,2],[1,2,4,1,3,1],[4,1,2,2,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]};
     const START_B=104,STOP=[2,3,3,1,1,1,2];let codes=[START_B];let check=START_B;
@@ -21263,12 +21475,11 @@ function _buildUAPrintHTML(r){
     <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:stretch">
       <div style="text-align:right;margin-bottom:3px">
         ${barcodeSvg}
+        <div style="font-size:8px;font-weight:900;color:#000;letter-spacing:2px;font-family:'Courier New',monospace;text-align:center;line-height:1">${barcodeId}</div>
       </div>
       <div style="display:flex;flex-direction:column">
-        <div style="display:flex;gap:4px">
-          ${_uaRR('Input',r.date||'—')}
-          ${_uaRR('ID',pt.id||r.patientId||'—')}
-        </div>
+        ${_uaRR('ID',pt.id||r.patientId||'—')}
+        ${_uaRR('Date',r.date||'—')}
         ${_uaRR('Print',printTime)}
       </div>
     </div>
@@ -21779,12 +21990,11 @@ function _buildStoolPrintHTML(r){
     <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:stretch">
       <div style="text-align:right;margin-bottom:3px">
         ${_sBarcodeSvg}
+        <div style="font-size:8px;font-weight:900;color:#000;letter-spacing:2px;font-family:'Courier New',monospace;text-align:center;line-height:1">${_sBarcodeId}</div>
       </div>
       <div style="display:flex;flex-direction:column">
-        <div style="display:flex;gap:4px">
-          ${_sRR('Input',r.date||'—')}
-          ${_sRR('ID',pt.id||r.patientId||'—')}
-        </div>
+        ${_sRR('ID',pt.id||r.patientId||'—')}
+        ${_sRR('Date',r.date||'—')}
         ${_sRR('Print',_sPrintTime)}
       </div>
     </div>
@@ -22407,50 +22617,6 @@ function addSemenField(){
 // ============================================================
 // CBC BLANK PRINT - طباعة ورقة CBC فارغة
 // ============================================================
-
-function printCBCFromDevice(reqId){
-  const req=requests.find(function(r){return r.id===reqId;});
-  if(!req){showNotif('خطأ','الطلب غير موجود','error');return;}
-  const cbcParams=req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams);
-  if(!cbcParams||!Object.keys(cbcParams).length){showNotif('تنبيه','لا توجد بيانات CBC من الجهاز','warning');return;}
-  const pt=patients.find(function(p){return p.id===req.patientId;})||{name:req.patientName,id:req.patientId,barcode:req.patientId};
-  const barcodeId=String(pt.barcode||pt.id||req.patientId||'000000');
-  const settings=(typeof loadSettings==='function'?loadSettings():{})||{};
-  const labName=settings.labName||'المختبر الطبي';
-  const labPhone=settings.labPhone||'';
-  const today=new Date().toLocaleString('ar-IQ');
-  const ptName=pt.name||req.patientName||'---';
-  const gender=pt.gender==='female'?'Female':'Male';
-  const age=pt.ageDisplay||pt.age||'---';
-  const PARAMS_ORDER=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
-  const PARAM_LABELS={'WBC':'WBC','NEU#':'NEU#','LYM#':'LYM#','MON#':'MON#','EOS#':'EOS#','BAS#':'BAS#','NEU%':'NEU%','LYM%':'LYM%','MON%':'MON%','EOS%':'EOS%','BAS%':'BAS%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT'};
-  let rows='',rowNum=1;
-  PARAMS_ORDER.forEach(function(key){
-    const p=cbcParams[key];if(!p) return;
-    const val=parseFloat(p.value);
-    const ref=p.refRange||(CBC_PARAMS_MAP[key]?CBC_PARAMS_MAP[key].refM:'');
-    let flag=p.flag||'',flagColor='#000';
-    if(!flag&&ref&&!isNaN(val)){
-      const parts=ref.replace(/[^0-9. ]/g,' ').trim().split(/\s+/);
-      if(parts.length>=2){const lo=parseFloat(parts[0]),hi=parseFloat(parts[parts.length-1]);if(!isNaN(lo)&&!isNaN(hi)){if(val<lo){flag='L';flagColor='#0055cc';}else if(val>hi){flag='H';flagColor='#cc0000';}}}
-    }
-    if(flag==='L') flagColor='#0055cc';
-    if(flag==='H') flagColor='#cc0000';
-    const bg=rowNum%2===0?'#f9f9f9':'#fff';
-    rows+='<tr style="background:'+bg+'"><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px;text-align:center">'+rowNum+'</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px">'+(PARAM_LABELS[key]||key)+'</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:13px;font-weight:800;text-align:center;color:'+flagColor+'">'+(p.value||'---')+'</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:12px;text-align:center;color:'+flagColor+';font-weight:700">'+flag+'</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center">'+(p.unit||(CBC_PARAMS_MAP[key]?CBC_PARAMS_MAP[key].unit:''))+'</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#555">'+ref+'</td></tr>';
-    rowNum++;
-  });
-  const html='<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;background:#fff;color:#000;padding:10px}@media print{body{padding:0}@page{margin:8mm}}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #003366;padding-bottom:8px;margin-bottom:10px}.lab-name{font-size:20px;font-weight:900;color:#003366}.report-title{font-size:15px;font-weight:800;color:#003366;text-align:center;margin-bottom:8px;border:2px solid #003366;padding:4px 16px;border-radius:6px}.pt-info{display:flex;justify-content:space-between;background:#f0f4ff;border:1px solid #c0d0f0;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px}table{width:100%;border-collapse:collapse;margin-bottom:10px}th{background:#003366;color:#fff;padding:6px 8px;font-size:12px;border:1px solid #002244}.footer{border-top:2px solid #003366;padding-top:6px;display:flex;justify-content:space-between;font-size:11px;color:#555;margin-top:8px}</style></head><body>'
-    +'<div class="header"><div><div class="lab-name">'+labName+'</div><div style="font-size:11px;color:#555">'+labPhone+'</div></div><div style="font-size:11px;text-align:center"><div style="font-weight:700">Sample ID: '+barcodeId+'</div></div></div>'
-    +'<div class="report-title">Hematology Analysis Report - CBC</div>'
-    +'<div class="pt-info"><div><span style="font-weight:700">المريض:</span> '+ptName+'</div><div><span style="font-weight:700">الجنس:</span> '+gender+'</div><div><span style="font-weight:700">العمر:</span> '+age+'</div><div><span style="font-weight:700">تاريخ:</span> '+today+'</div><div><span style="font-weight:700">Mode:</span> WB-CBC+DIFF</div></div>'
-    +'<table><thead><tr><th>#</th><th>Parameter</th><th>Result</th><th>Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<div class="footer"><span>Operator: '+(settings.labDoctor||'Administrator')+'</span><span>Time of Printing: '+today+'</span><span>Validated By: _______________</span></div>'
-    +'</body></html>';
-  const w=window.open('','_blank','width=900,height=700');
-  if(w){w.document.write(html);w.document.close();setTimeout(function(){w.print();},600);}
-}
-
 function printCBCBlank(){
   const id=document.getElementById('res-req-sel').value;
   if(!id){ showNotif('تنبيه','اختر طلباً أولاً','warning'); return; }
@@ -22858,7 +23024,7 @@ function saveSemenEntry(){
 
   // إذا لم يكن المريض مسجلاً (إدخال يدوي)، أنشئ رقم ملف تلقائياً
   if(!ptId){
-    ptId=String(100000+parseInt(Date.now().toString().slice(-5)));
+    ptId='MR-'+(Date.now().toString().slice(-6));
     const existPt=patients.find(p=>p.name===ptName);
     if(existPt){
       ptId=existPt.id;
@@ -23018,10 +23184,8 @@ function _buildSemenPrintHTML(r){
         <div style="font-size:7px;font-weight:900;color:#000;letter-spacing:2px;font-family:'Courier New',monospace;text-align:center;line-height:1">${_smBarcodeId}</div>
       </div>
       <div style="display:flex;flex-direction:column">
-        <div style="display:flex;gap:4px">
-          ${_smRR('Input',r.date||'—')}
-          ${_smRR('ID',pt.id||r.patientId||'—')}
-        </div>
+        ${_smRR('ID',pt.id||r.patientId||'—')}
+        ${_smRR('Date',r.date||'—')}
         ${_smRR('Print',_smPrintTime)}
       </div>
     </div>
@@ -24744,8 +24908,471 @@ document.addEventListener('DOMContentLoaded', function(){
 </body>
 </html>
 
-
 <script>
+// ============================================================
+// 🔄 نظام المزامنة عبر Google Drive (File System Access API)
+// النسخة الذكية — version counter + merge + lock protection
+// ============================================================
+const SYNC_KEYS = ['patients','requests','invoices','packages','inventory','doctors','billing','testGroups','qc','cultureRecords','uaRecords','stoolExamRecords','semenRecords','phoneBook'];
+const SYNC_FILE     = 'medlab-sync.json';
+const SYNC_LOCK     = 'medlab-sync.lock';   // ملف القفل لمنع التضارب
+const SYNC_INTERVAL = 15000;                // كل 15 ثانية (أكثر أماناً من 10)
+const SYNC_DEVICE_ID = (()=>{
+  let id = localStorage.getItem('_sync_device_id');
+  if(!id){ id = 'dev_' + Math.random().toString(36).slice(2,9); localStorage.setItem('_sync_device_id',id); }
+  return id;
+})();
+
+let _syncDirHandle  = null;
+let _syncInterval   = null;
+let _syncLastVer    = 0;     // آخر version counter قرأناه أو كتبناه
+let _syncWriting    = false;
+let _syncBusy       = false; // منع تشغيل دورتين في نفس الوقت
+
+window.addEventListener('load', function(){ _syncRestoreHandle(); });
+
+async function _syncRestoreHandle(){
+  try{
+    const stored = localStorage.getItem('sync_dir_name');
+    if(!stored) return;
+    // لا نحاول الاستعادة على الموبايل
+    if(/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) return;
+    const h = await _idbGetHandle();
+    if(!h) return;
+    const perm = await h.requestPermission({mode:'readwrite'});
+    if(perm === 'granted'){
+      _syncDirHandle = h;
+      _syncStartPolling();
+      _syncUpdateIndicator('active');
+      syncRenderCard();
+    }
+  }catch(e){
+    // فشل الاستعادة — امسح الـ handle القديم
+    localStorage.removeItem('sync_dir_name');
+    _idbDelHandle();
+  }
+}
+
+async function syncPickFolder(){
+  // تحقق من دعم المتصفح والجهاز
+  const isDesktop = !/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const isSupported = 'showDirectoryPicker' in window;
+
+  if(!isSupported || !isDesktop){
+    showNotif('غير مدعوم',
+      '⚠️ هذه الميزة تعمل فقط على Chrome أو Edge على الحاسبة المكتبية أو اللابتوب — لا تعمل على الموبايل',
+      'error');
+    return;
+  }
+  try{
+    const h = await window.showDirectoryPicker({mode:'readwrite',startIn:'desktop'});
+    _syncDirHandle = h;
+    localStorage.setItem('sync_dir_name', h.name);
+    await _idbSetHandle(h);
+    await _syncWrite();
+    _syncStartPolling();
+    _syncUpdateIndicator('active');
+    syncRenderCard();
+    showNotif('مزامنة','✅ تم ربط المجلد وتفعيل المزامنة التلقائية','success');
+  }catch(e){
+    if(e.name==='AbortError') return; // المستخدم ألغى
+    if(e.name==='InvalidStateError'){
+      // الـ handle تغيّر — أعد الاختيار
+      _syncDirHandle = null;
+      localStorage.removeItem('sync_dir_name');
+      await _idbDelHandle();
+      showNotif('تنبيه','يرجى اختيار المجلد مجدداً','error');
+      syncRenderCard();
+    } else {
+      showNotif('خطأ','تعذّر اختيار المجلد: '+e.message,'error');
+    }
+  }
+}
+
+function syncDisconnect(){
+  if(!confirm('إيقاف المزامنة؟ لن تُحذف البيانات.')) return;
+  _syncStopPolling();
+  _syncDirHandle = null;
+  _syncLastVer   = 0;
+  _syncBusy      = false;
+  localStorage.removeItem('sync_dir_name');
+  _idbDelHandle();
+  _syncUpdateIndicator('off');
+  syncRenderCard();
+  showNotif('مزامنة','تم إيقاف المزامنة','info');
+}
+
+async function syncNow(){
+  if(!_syncDirHandle){ showNotif('تنبيه','يرجى اختيار مجلد أولاً','error'); return; }
+  _syncUpdateIndicator('syncing');
+  await _syncCycle();
+}
+
+async function _syncCycle(){
+  if(_syncBusy) return;
+  _syncBusy = true;
+  try{
+    // ① أول شيء: اقرأ فقط الـ version من الملف (خفيف جداً)
+    const remote = await _syncRead();
+
+    // ② إذا لا يوجد ملف → اكتب أول نسخة
+    if(!remote){
+      const localData = _syncCollect();
+      await _syncWrite(1, localData);
+      _syncLastVer = 1;
+      _syncSetLastTime();
+      _syncUpdateIndicator('active');
+      return;
+    }
+
+    const remoteVer = remote.ver || 0;
+
+    // ③ الملف أحدث → نحتاج merge (العمل الثقيل فقط عند الحاجة)
+    if(remoteVer > _syncLastVer){
+      const localData = _syncCollect();
+      const merged    = _syncMerge(remote.data || {}, localData, remote.deviceId);
+      const changed   = _syncApply(merged);
+      _syncLastVer    = remoteVer;
+      if(changed === 'local_newer'){
+        const newVer = remoteVer + 1;
+        await _syncWrite(newVer, _syncCollect());
+        _syncLastVer = newVer;
+      }
+      _syncSetLastTime();
+      _syncUpdateIndicator('active');
+      return;
+    }
+
+    // ④ نفس الـ version — تحقق فقط إذا عندنا تغييرات محلية جديدة
+    // بدل JSON.stringify للكل: نقارن _localTs فقط (خفيف جداً)
+    const localTs  = parseInt(localStorage.getItem('_sync_local_ts')||'0');
+    const remoteTs = remote.data ? (remote.data._localTs||0) : 0;
+    if(localTs > remoteTs){
+      // عندنا تغييرات جديدة → ارفع
+      const localData = _syncCollect();
+      const newVer    = _syncLastVer + 1;
+      await _syncWrite(newVer, localData);
+      _syncLastVer = newVer;
+    }
+    // إذا لا تغييرات → لا تفعل شيئاً (أسرع حالة ممكنة)
+    _syncSetLastTime();
+    _syncUpdateIndicator('active');
+
+  }catch(e){
+    if(e.name==='InvalidStateError'){
+      _syncStopPolling();
+      _syncDirHandle = null;
+      localStorage.removeItem('sync_dir_name');
+      _idbDelHandle();
+      _syncUpdateIndicator('error');
+      syncRenderCard();
+      showNotif('مزامنة','⚠️ انقطع الاتصال بالمجلد — يرجى إعادة الاختيار من الإعدادات','error');
+    } else {
+      _syncUpdateIndicator('error');
+    }
+  } finally {
+    _syncBusy = false;
+  }
+}
+
+function _syncCollect(){
+  const data = {};
+  const pfx  = DB._pfx();
+  SYNC_KEYS.forEach(k=>{
+    try{ data[k] = JSON.parse(localStorage.getItem(pfx+k)||'null'); }catch(e){}
+  });
+  // نحفظ timestamp آخر تعديل محلي بشكل منفصل
+  data._localTs = parseInt(localStorage.getItem('_sync_local_ts')||'0');
+  data._device  = SYNC_DEVICE_ID;
+  return data;
+}
+
+// يُستدعى عند أي تعديل محلي لتسجيل وقت التعديل
+function _syncMarkLocalChange(){
+  localStorage.setItem('_sync_local_ts', String(Date.now()));
+}
+
+// ═══════════════════════════════════════════════════════════
+// merge ذكي على مستوى كل record بشكل منفصل
+// القاعدة: الحقول "لا رجعة فيها" (مثل printed) لا تُعكس أبداً
+// ═══════════════════════════════════════════════════════════
+
+// حقول لا رجعة فيها: إذا صارت true في أي جهاز تبقى true للأبد
+const SYNC_IRREVERSIBLE = ['printed', 'cancelled', 'paid', 'settled'];
+
+function _syncMerge(remoteData, localData, remoteDevice){
+  // نفس الجهاز — لا داعي للدمج
+  if(remoteDevice === SYNC_DEVICE_ID) return localData;
+
+  const merged = {};
+
+  SYNC_KEYS.forEach(k=>{
+    const local  = localData[k];
+    const remote = remoteData[k];
+
+    // أحدهما غائب → خذ الموجود
+    if(!remote && !local){ merged[k] = local; return; }
+    if(!remote)           { merged[k] = local; return; }
+    if(!local)            { merged[k] = remote; return; }
+
+    // كلاهما مصفوفات (patients, requests, invoices...)
+    if(Array.isArray(local) && Array.isArray(remote)){
+      merged[k] = _syncMergeArray(local, remote);
+      return;
+    }
+
+    // كلاهما objects (إعدادات، billing...)
+    if(typeof local === 'object' && typeof remote === 'object'){
+      // دمج سطحي: الأحدث يفوز لكل مفتاح
+      merged[k] = Object.assign({}, remote, local);
+      return;
+    }
+
+    // قيمة بسيطة: Local يفوز (الجهاز الحالي أعلم بنفسه)
+    merged[k] = local;
+  });
+
+  merged._localTs = Math.max(localData._localTs||0, remoteData._localTs||0);
+  merged._device  = SYNC_DEVICE_ID;
+  return merged;
+}
+
+// دمج مصفوفتين من records على مستوى كل عنصر بشكل منفصل
+function _syncMergeArray(localArr, remoteArr){
+  // بناء map من remote بالـ id
+  const remoteMap = new Map();
+  remoteArr.forEach(item => {
+    if(!item) return;
+    const id = item.id || item._id || item.patientId || item.reqId;
+    if(id) remoteMap.set(id, item);
+  });
+
+  // ابدأ بـ local وادمج مع remote لكل عنصر
+  const result = localArr.map(localItem => {
+    if(!localItem) return localItem;
+    const id = localItem.id || localItem._id || localItem.patientId || localItem.reqId;
+    if(!id) return localItem;
+
+    const remoteItem = remoteMap.get(id);
+    if(!remoteItem) return localItem; // عنصر جديد محلياً فقط
+
+    // دمج الحقول: local يفوز إلا إذا remote أحدث في الحقول العادية
+    remoteMap.delete(id); // نزيله لنعرف ما تبقى في remote
+    return _syncMergeRecord(localItem, remoteItem);
+  });
+
+  // العناصر الموجودة في remote فقط (جديدة من الجهاز الآخر) → أضفها
+  remoteMap.forEach(remoteItem => {
+    result.push(remoteItem);
+  });
+
+  return result;
+}
+
+// دمج record واحد:
+// القاعدة: الأحدث _updatedAt يفوز بالكامل
+// استثناء وحيد: حقول IRREVERSIBLE (printed, paid...) — true يفوز دائماً
+function _syncMergeRecord(local, remote){
+  const localTs  = local._updatedAt  || 0;
+  const remoteTs = remote._updatedAt || 0;
+
+  // اختر الفائز بالكامل بناءً على الأحدث
+  const winner = remoteTs > localTs ? remote : local;
+  const loser  = remoteTs > localTs ? local  : remote;
+
+  const merged = Object.assign({}, winner);
+
+  // الاستثناء الوحيد: حقول لا رجعة فيها — true يفوز من أي جهاز
+  SYNC_IRREVERSIBLE.forEach(field => {
+    if(loser[field]) merged[field] = loser[field];
+  });
+
+  return merged;
+}
+
+function _syncApply(data){
+  const pfx = DB._pfx();
+  let changed = false;
+  SYNC_KEYS.forEach(k=>{
+    if(data[k] !== undefined && data[k] !== null){
+      const cur = localStorage.getItem(pfx+k);
+      const nxt = JSON.stringify(data[k]);
+      if(cur !== nxt){ localStorage.setItem(pfx+k, nxt); changed = true; }
+    }
+  });
+  if(changed){
+    loadData(); renderAll(); updateDashboard();
+    showNotif('مزامنة','📥 تم استلام تحديثات من الحاسبة الأخرى','info');
+  }
+  // أعد إشارة: هل البيانات المحلية كانت أحدث (تحتاج رفع)؟
+  const localTs  = parseInt(localStorage.getItem('_sync_local_ts')||'0');
+  const remoteTs = data._localTs || 0;
+  return localTs > remoteTs ? 'local_newer' : 'remote_newer';
+}
+
+async function _syncRead(){
+  try{
+    const fh   = await _syncDirHandle.getFileHandle(SYNC_FILE,{create:false});
+    const file = await fh.getFile();
+    return JSON.parse(await file.text());
+  }catch(e){ return null; }
+}
+
+// _syncWrite الجديد: يكتب مع version counter + deviceId
+async function _syncWrite(ver, data){
+  if(_syncWriting) return;
+  _syncWriting = true;
+  try{
+    const payload = JSON.stringify({
+      ver      : ver,
+      ts       : Date.now(),
+      deviceId : SYNC_DEVICE_ID,
+      data     : data
+    }, null, 0);
+    const fh = await _syncDirHandle.getFileHandle(SYNC_FILE,{create:true});
+    const w  = await fh.createWritable();
+    await w.write(payload);
+    await w.close();
+  }finally{
+    _syncWriting = false;
+  }
+}
+
+function _syncStartPolling(){
+  _syncStopPolling();
+  // تشغيل أول دورة فوراً لكن في وقت فراغ المتصفح
+  _syncSchedule();
+  _syncInterval = setInterval(_syncSchedule, SYNC_INTERVAL);
+}
+function _syncStopPolling(){
+  if(_syncInterval){ clearInterval(_syncInterval); _syncInterval=null; }
+}
+
+// تشغيل المزامنة فقط لما المتصفح فاضي — لا تأثير على الأداء
+function _syncSchedule(){
+  if(_syncBusy) return;
+  if(typeof requestIdleCallback !== 'undefined'){
+    // المتصفح يختار الوقت المناسب (لما المستخدم مو شاغل)
+    requestIdleCallback(()=> _syncCycle(), { timeout: 5000 });
+  } else {
+    // fallback للمتصفحات القديمة
+    setTimeout(_syncCycle, 0);
+  }
+}
+
+function _syncUpdateIndicator(state){
+  const dot   = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  if(!dot||!label) return;
+  const map = {
+    off:     {c:'#555',       t:'غير مفعّل'},
+    active:  {c:'#00e87a',    t:'مزامن ✓'},
+    syncing: {c:'#ffcc00',    t:'يزامن...'},
+    error:   {c:'#ff2244',    t:'خطأ !'}
+  };
+  const s = map[state]||map.off;
+  dot.style.background = s.c;
+  dot.style.boxShadow  = state==='active'?'0 0 6px #00e87a':state==='syncing'?'0 0 6px #ffcc00':'none';
+  label.textContent    = s.t;
+  label.style.color    = state==='active'?'#00e87a':state==='error'?'#ff2244':state==='syncing'?'#ffcc00':'';
+}
+
+function _syncSetLastTime(){
+  const el = document.getElementById('sync-last-time');
+  if(el) el.textContent = new Date().toLocaleTimeString('ar-EG');
+}
+
+function syncRenderCard(){
+  const active    = !!_syncDirHandle;
+  const setupBox  = document.getElementById('sync-setup-box');
+  const activeBox = document.getElementById('sync-active-box');
+  const statusBox = document.getElementById('sync-status-box');
+  const folderEl  = document.getElementById('sync-folder-display');
+  const subEl     = document.getElementById('sync-card-sub');
+  if(!setupBox) return;
+  setupBox.style.display  = active ? 'none'  : 'block';
+  activeBox.style.display = active ? 'flex'  : 'none';
+  statusBox.style.display = active ? 'block' : 'none';
+  if(active){
+    if(folderEl) folderEl.textContent = '📁 ' + (localStorage.getItem('sync_dir_name')||'مجلد محدد');
+    if(subEl)    subEl.textContent    = '🟢 المزامنة مفعّلة تلقائياً';
+  } else {
+    if(subEl)    subEl.textContent    = 'اربط حاسبتين على نفس الواي فاي أو الإنترنت';
+  }
+}
+
+// ربط save() بالمزامنة الفورية + تسجيل وقت التعديل المحلي
+const _origSave = window.save;
+window.save = function(k,v){
+  // أضف _updatedAt لكل عنصر في المصفوفات التي تُزامن
+  // هذا يُمكّن المزامنة الذكية من معرفة أحدث تعديل لكل record
+  if(Array.isArray(v) && SYNC_KEYS.includes(k)){
+    const now = Date.now();
+    v = v.map(item => {
+      if(!item || typeof item !== 'object') return item;
+      // أضف _updatedAt فقط إذا لم يكن موجوداً أو إذا تغيّر الـ record
+      // نستخدم flag مؤقت _dirty الذي يُضاف عند التعديل
+      if(item._dirty){
+        const {_dirty, ...rest} = item;
+        return {...rest, _updatedAt: now};
+      }
+      if(!item._updatedAt) return {...item, _updatedAt: now};
+      return item;
+    });
+  }
+  _origSave(k,v);
+  _syncMarkLocalChange(); // سجّل وقت التعديل دائماً
+  if(_syncDirHandle && !_syncWriting && !_syncBusy){
+    clearTimeout(window._syncDebounce);
+    window._syncDebounce = setTimeout(()=>{
+      const newVer = _syncLastVer + 1;
+      const data   = _syncCollect();
+      _syncWrite(newVer, data).then(()=>{ _syncLastVer = newVer; });
+    }, 1200); // debounce 1.2 ثانية لتجميع التعديلات المتزامنة
+  }
+};
+
+// IndexedDB لحفظ FileSystemDirectoryHandle بين الجلسات
+function _idbOpen(){
+  return new Promise((res,rej)=>{
+    const r = indexedDB.open('medlab_sync_v1',1);
+    r.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    r.onsuccess = e => res(e.target.result);
+    r.onerror   = e => rej(e);
+  });
+}
+async function _idbSetHandle(h){
+  const db=await _idbOpen();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('handles','readwrite');
+    tx.objectStore('handles').put(h,'dirHandle');
+    tx.oncomplete=res; tx.onerror=rej;
+  });
+}
+async function _idbGetHandle(){
+  const db=await _idbOpen();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('handles','readonly');
+    const r=tx.objectStore('handles').get('dirHandle');
+    r.onsuccess=e=>res(e.target.result||null);
+    r.onerror=rej;
+  });
+}
+async function _idbDelHandle(){
+  const db=await _idbOpen();
+  return new Promise((res,rej)=>{
+    const tx=db.transaction('handles','readwrite');
+    tx.objectStore('handles').delete('dirHandle');
+    tx.oncomplete=res; tx.onerror=rej;
+  });
+}
+
+function _hash(str){
+  let h=0;
+  for(let i=0;i<str.length;i++){ h=Math.imul(31,h)+str.charCodeAt(i)|0; }
+  return h;
+}
+
 // ╔══════════════════════════════════════════════════════════════════════╗
 // ║              LIS BRIDGE — ربط أجهزة المختبر                        ║
 // ║  Serial (Web Serial API) + File Watch + WebSocket TCP Bridge        ║
@@ -25103,7 +25730,7 @@ async function lisWizFinish(){
     return;
   }
   if(_wizConn==='network'){
-    showNotif('تذكير','الجهاز جاهز — اضغط وصّل لبدء الاتصال','info');
+    showNotif('تذكير','شغّل lis-bridge.js على هذا الحاسوب ثم اضغط "وصّل"','warning');
     return;
   }
   // Try auto-connect for serial and file
@@ -25112,7 +25739,6 @@ async function lisWizFinish(){
     if(!fresh) return;
     if(_wizConn==='serial') await lisConnectSerialDevice(fresh);
     else if(_wizConn==='file') await lisConnectFileDevice(fresh);
-    else if(_wizConn==='network') await lisConnectTCPDevice(fresh);
     lisRenderDevices();
     lisUpdateStats();
   },300);
@@ -25208,7 +25834,7 @@ function lisRenderDevices(){
         <span style="font-size:16px">${lisDeviceIcon(d.type)}</span>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:800;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.name}</div>
-          <div style="font-size:10px;color:var(--text2)">${d.vendor||''} · ${d.conn==='serial'?'USB/Serial':d.conn==='network'?'LAN '+( d.ip||''):d.conn==='file'?'File Watch':'WebSocket'} · ${d.protocol||'ASTM'}</div>
+          <div style="font-size:10px;color:var(--text2)">${d.vendor||''} · ${d.conn==='serial'?'USB/Serial':d.conn==='file'?'File Watch':'WebSocket'} · ${d.protocol||'ASTM'}</div>
         </div>
         <div style="width:7px;height:7px;border-radius:50%;background:${d.connected?'var(--success)':'#444'};${d.connected?'box-shadow:0 0 5px var(--success)':''}"></div>
       </div>
@@ -25231,51 +25857,37 @@ function lisOpenAddDevice(){
 }
 function lisShowConnFields(){
   const v=document.getElementById('lis-dev-conn').value;
-  const sf=document.getElementById('lis-conn-serial-fields');
-  const nf=document.getElementById('lis-conn-network-fields');
-  const ff=document.getElementById('lis-conn-file-fields');
-  const br=document.getElementById('lis-baud-row');
-  if(sf) sf.style.display=v==='serial'?'block':'none';
-  if(nf) nf.style.display=v==='network'?'block':'none';
-  if(ff) ff.style.display=v==='file'?'block':'none';
-  if(br) br.style.display=v==='serial'?'block':'none';
-  if(v==='network'){const proto=document.getElementById('lis-dev-protocol');if(proto&&proto.value==='astm')proto.value='hl7';}
+  document.getElementById('lis-conn-serial-fields').style.display=v==='serial'?'block':'none';
+  document.getElementById('lis-conn-file-fields').style.display=v==='file'?'block':'none';
+  document.getElementById('lis-conn-ws-fields').style.display=v==='websocket'?'block':'none';
 }
 function lisAutoFillDevice(){
   const v=document.getElementById('lis-dev-vendor').value;
   const nameEl=document.getElementById('lis-dev-name');
   const protoEl=document.getElementById('lis-dev-protocol');
-  const connEl=document.getElementById('lis-dev-conn');
   const map={roche:{name:'Roche Cobas',proto:'astm'},abbott:{name:'Abbott Architect',proto:'astm'},
     beckman:{name:'Beckman Coulter',proto:'astm'},siemens:{name:'Siemens Atellica',proto:'astm'},
-    sysmex:{name:'Sysmex XN',proto:'astm'},mindray:{name:'Mindray',proto:'hl7',conn:'network'},
+    sysmex:{name:'Sysmex XN',proto:'astm'},mindray:{name:'Mindray',proto:'astm'},
     biobase:{name:'Biobase',proto:'astm'},rayto:{name:'Rayto',proto:'astm'}};
   const m=map[v];
   if(m&&nameEl&&!nameEl.value) nameEl.value=m.name;
   if(m&&protoEl) protoEl.value=m.proto;
-  if(m&&m.conn&&connEl){ connEl.value=m.conn; lisShowConnFields(); }
-  // إذا Mindray: ضع IP الافتراضي
-  if(v==='mindray'){
-    const ipEl=document.getElementById('lis-dev-ip');
-    if(ipEl&&!ipEl.value) ipEl.value='10.0.0.2';
-  }
 }
 function lisSaveDevice(){
   const name=document.getElementById('lis-dev-name').value.trim();
   if(!name){showNotif('تنبيه','أدخل اسم الجهاز','warning');return;}
   const conn=document.getElementById('lis-dev-conn').value;
-  const _val=function(id){ const el=document.getElementById(id); return el?el.value:''; };
   const dev={
     id:'ld'+Date.now(),
     name,
-    vendor:   _val('lis-dev-vendor'),
-    type:     _val('lis-dev-type'),
+    vendor:   document.getElementById('lis-dev-vendor').value,
+    type:     document.getElementById('lis-dev-type').value,
     conn,
-    protocol: _val('lis-dev-protocol'),
-    baud:     _val('lis-dev-baud'),
-    ip:       _val('lis-dev-ip'),
-    port:     _val('lis-dev-port'),
-    filePath: _val('lis-dev-file-path'),
+    protocol: document.getElementById('lis-dev-protocol').value,
+    baud:     document.getElementById('lis-dev-baud').value,
+    ip:       document.getElementById('lis-dev-ip').value,
+    port:     document.getElementById('lis-dev-port').value,
+    filePath: document.getElementById('lis-dev-file-path').value,
     connected:false,
     rxCount:  0,
   };
@@ -25302,10 +25914,9 @@ async function lisToggleDevice(id,btn){
   if(dev.connected){
     lisDisconnectDevice(id);
   } else {
-    if(dev.conn==='serial')                           await lisConnectSerialDevice(dev);
-    else if(dev.conn==='file')                        await lisConnectFileDevice(dev);
-    else if(dev.conn==='network')                     await lisConnectTCPDevice(dev);
-    else if(dev.conn==='websocket')                   lisConnectWSDevice(dev);
+    if(dev.conn==='serial')     await lisConnectSerialDevice(dev);
+    else if(dev.conn==='file')  await lisConnectFileDevice(dev);
+    else if(dev.conn==='websocket') lisConnectWSDevice(dev);
   }
   lisRenderDevices();
   lisUpdateStats();
@@ -25351,60 +25962,15 @@ async function lisConnectSerial(){
   }
 }
 async function lisConnectSerialDevice(dev){
-  const baud=parseInt(dev.baud||'9600');
-
-  // ── Electron: استخدم Node.js SerialPort مباشرة ──────────
-  if(window.IS_ELECTRON && window.electronAPI){
-    try{
-      lisAddLog('info','[Electron] جاري استعراض منافذ Serial...');
-      const res = await window.electronAPI.serialList();
-      if(!res.ok || !res.ports.length){
-        showNotif('تنبيه','لم يُعثر على منافذ Serial — تأكد من توصيل الكابل','warning');
-        lisAddLog('warn','لا توجد منافذ Serial متاحة');
-        return;
-      }
-      // اختر المنفذ تلقائياً (أول منفذ) أو المنفذ المحفوظ
-      const portPath = dev._serialPath || res.ports[0].path;
-      lisAddLog('info','[Electron] فتح '+portPath+' @ '+baud+' baud');
-      const openRes = await window.electronAPI.serialOpen({ path:portPath, baudRate:baud });
-      if(!openRes.ok){
-        lisAddLog('err','[Electron] فشل فتح Serial: '+openRes.error);
-        showNotif('خطأ','فشل الاتصال: '+openRes.error,'error');
-        return;
-      }
-      dev.connected=true;
-      dev._serialPath=portPath;
-      lisSaveState();
-      lisRenderDevices();
-      lisUpdateStats();
-      lisAddLog('ok','[Electron] Serial متصل: '+dev.name+' على '+portPath+' @ '+baud+' baud');
-      showNotif('متصل ✓',dev.name+' — '+portPath+' @ '+baud+' baud','success');
-      // استقبال البيانات عبر IPC
-      window._electronSerialCB.data = (chunk)=>{
-        _lisSerialBuffer += chunk;
-        const msgs = lisExtractMessages(_lisSerialBuffer);
-        msgs.messages.forEach(msg=>{ lisRawMessages.unshift(msg); lisParseByProtocol(msg,dev); });
-        _lisSerialBuffer = msgs.remainder;
-        dev.rxCount=(dev.rxCount||0)+chunk.length;
-      };
-      window._electronSerialCB.error  = (e)=>{ lisAddLog('err','[Electron] Serial خطأ: '+e); };
-      window._electronSerialCB.closed = ()=>{ dev.connected=false; lisSaveState(); lisRenderDevices(); lisAddLog('warn','[Electron] Serial انقطع'); };
-    }catch(e){
-      lisAddLog('err','[Electron] Serial استثناء: '+e.message);
-      showNotif('خطأ',e.message,'error');
-    }
-    return;
-  }
-
-  // ── متصفح: Web Serial API ────────────────────────────────
   if(!navigator.serial){
-    showNotif('خطأ','فشل الاتصال — تأكد من توصيل الكابل','error');
-    lisAddLog('err','فشل الاتصال Serial');
+    showNotif('خطأ','Web Serial غير مدعوم — استخدم Chrome 89+ أو Edge','error');
+    lisAddLog('err','Web Serial API غير مدعوم في هذا المتصفح');
     return;
   }
   try{
     lisAddLog('info','طلب اختيار منفذ Serial...');
     const port=await navigator.serial.requestPort();
+    const baud=parseInt(dev.baud||'9600');
     await port.open({baudRate:baud,dataBits:8,stopBits:1,parity:'none'});
     _lisSerialPort=port;
     dev.connected=true;
@@ -25496,7 +26062,7 @@ async function lisConnectFileWatch(){
 }
 async function lisConnectFileDevice(dev){
   if(!window.showDirectoryPicker){
-    showNotif('خطأ','تعذّر الوصول للمجلد','error');
+    showNotif('خطأ','File System API غير مدعوم — استخدم Chrome 86+','error');
     return;
   }
   try{
@@ -25543,50 +26109,8 @@ function lisConnectWS(){
   lisConnectWSBridge('ws://localhost:'+port);
 }
 function lisConnectWSDevice(dev){
-  // websocket/localhost: بوابة محلية فقط
-  const wsPort=dev.wsPort||dev.port||'8765';
+  const wsPort=dev.wsPort||'8765';
   lisConnectWSBridge('ws://localhost:'+wsPort,dev);
-}
-// ── TCP Server (Electron) — يستقبل BC-5000 و أجهزة LAN ──────────
-let _cbcServerRunning=false;
-async function lisConnectTCPDevice(dev){
-  if(!window.electronAPI||!window.electronAPI.cbcStartServer){
-    lisAddLog('err','TCP Server غير متاح — تأكد من تشغيل البرنامج كتطبيق سطح مكتب');
-    showNotif('خطأ','TCP Server غير متاح','error');
-    return;
-  }
-  const port=parseInt(dev.port)||3001;
-  lisAddLog('info','تشغيل TCP Server على بورت '+port+' — انتظار اتصال الجهاز...');
-  const res=await window.electronAPI.cbcStartServer(port);
-  if(!res||!res.ok){
-    lisAddLog('err','فشل تشغيل TCP Server: '+(res&&res.error||'خطأ مجهول'));
-    showNotif('خطأ TCP','فشل تشغيل السيرفر: '+(res&&res.error||''),'error');
-    return;
-  }
-  _cbcServerRunning=true;
-  lisAddLog('ok','TCP Server يستمع على بورت '+port+' — وجّه الجهاز لـ IP الكمبيوتر');
-  showNotif('TCP Server ✓','السيرفر يستمع — وجّه BC-5000 للاتصال بهذا الكمبيوتر','success');
-  dev.connected=true;
-  lisSaveState();lisRenderDevices();lisUpdateStats();
-  // استقبال البيانات من الجهاز
-  window.electronAPI.onCbcData(text=>{
-    lisAddLog('data','TCP بيانات: '+text.length+' حرف');
-    lisRawMessages.unshift(text);
-    lisParseByProtocol(text,dev);
-    lisRenderRaw();
-  });
-  window.electronAPI.onCbcConnected(info=>{
-    lisAddLog('ok','جهاز متصل: '+info.address);
-    showNotif('جهاز متصل ✓',info.address,'success');
-    dev.connected=true;lisSaveState();lisRenderDevices();lisUpdateStats();
-  });
-  window.electronAPI.onCbcDisconnected(info=>{
-    lisAddLog('warn','جهاز قطع الاتصال: '+info.address);
-  });
-  window.electronAPI.onCbcError(e=>{
-    lisAddLog('err','TCP خطأ: '+e);
-    showNotif('خطأ TCP',e,'error');
-  });
 }
 function lisConnectWSBridge(url,dev){
   if(_lisWS){try{_lisWS.close();}catch(e){}}
@@ -25595,7 +26119,7 @@ function lisConnectWSBridge(url,dev){
     _lisWS=new WebSocket(url);
     _lisWS.onopen=()=>{
       lisAddLog('ok','WebSocket متصل: '+url);
-      showNotif('متصل ✓','تم الاتصال بالجهاز','success');
+      showNotif('متصل ✓','WebSocket Bridge متصل','success');
       if(dev){dev.connected=true;lisSaveState();lisRenderDevices();lisUpdateStats();}
       if(_lisWsReconnTimer){clearTimeout(_lisWsReconnTimer);_lisWsReconnTimer=null;}
     };
@@ -25607,8 +26131,8 @@ function lisConnectWSBridge(url,dev){
       lisParseByProtocol(text,targetDev);
     };
     _lisWS.onerror=(e)=>{
-      lisAddLog('err','WebSocket خطأ — تأكد من الاتصال');
-      showNotif('خطأ WebSocket','فشل الاتصال — تأكد من إعدادات الشبكة','error');
+      lisAddLog('err','WebSocket خطأ — تأكد من تشغيل lis-bridge.js');
+      showNotif('خطأ WebSocket','تأكد من تشغيل lis-bridge.js على هذا الكمبيوتر','error');
     };
     _lisWS.onclose=()=>{
       lisAddLog('warn','WebSocket انقطع — محاولة إعادة الاتصال خلال 10 ثواني...');
@@ -25714,111 +26238,37 @@ function lisParseASTMDate(raw){
 }
 
 // --- HL7 v2.x Parser ---
-
-// ═══════════════════════════════════════════════════════════
-// CBC AGGREGATOR
-// ═══════════════════════════════════════════════════════════
-const _cbcBuffer = {};
-const CBC_PARAMS_MAP = {
-  'WBC':    {ar:'WBC خلايا الدم البيضاء',    unit:'10^9/L',  refM:'4.0-10.0'},
-  'NEU#':   {ar:'NEU# العدلات',               unit:'10^9/L',  refM:'2.0-7.0'},
-  'LYM#':   {ar:'LYM# اللمفاويات',            unit:'10^9/L',  refM:'0.8-4.0'},
-  'MON#':   {ar:'MON# الوحيدات',              unit:'10^9/L',  refM:'0.12-1.20'},
-  'EOS#':   {ar:'EOS# الحمضات',               unit:'10^9/L',  refM:'0.02-0.50'},
-  'BAS#':   {ar:'BAS# القعيدات',              unit:'10^9/L',  refM:'0.00-0.10'},
-  'NEU%':   {ar:'NEU% العدلات',               unit:'%',       refM:'50-70'},
-  'LYM%':   {ar:'LYM% اللمفاويات',            unit:'%',       refM:'20-40'},
-  'MON%':   {ar:'MON% الوحيدات',              unit:'%',       refM:'3-12'},
-  'EOS%':   {ar:'EOS% الحمضات',               unit:'%',       refM:'0.5-5.0'},
-  'BAS%':   {ar:'BAS% القعيدات',              unit:'%',       refM:'0-1'},
-  'RBC':    {ar:'RBC خلايا الدم الحمراء',     unit:'10^12/L', refM:'4.0-5.5'},
-  'HGB':    {ar:'HGB الهيموغلوبين',           unit:'g/dL',    refM:'13.0-17.5'},
-  'HCT':    {ar:'HCT الهيماتوكريت',           unit:'%',       refM:'37-54'},
-  'MCV':    {ar:'MCV متوسط حجم الكريات',      unit:'fL',      refM:'80-100'},
-  'MCH':    {ar:'MCH متوسط هيموغلوبين',       unit:'pg',      refM:'27-34'},
-  'MCHC':   {ar:'MCHC تركيز هيموغلوبين',     unit:'g/L',     refM:'320-360'},
-  'RDW-CV': {ar:'RDW-CV توزيع الكريات',       unit:'',        refM:'0.110-0.160'},
-  'RDW-SD': {ar:'RDW-SD انحراف الكريات',      unit:'fL',      refM:'35-56'},
-  'PLT':    {ar:'PLT الصفائح الدموية',         unit:'10^9/L',  refM:'150-400'},
-  'MPV':    {ar:'MPV متوسط حجم الصفيحة',      unit:'fL',      refM:'7-11'},
-  'PDW':    {ar:'PDW توزيع الصفائح',          unit:'',        refM:'9-17'},
-  'PCT':    {ar:'PCT كمية الصفائح',           unit:'mL/L',    refM:'1.08-2.82'},
-};
-const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
-function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
-function cbcNormalizeCode(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.find(k=>c===k||c.startsWith(k))||c;}
-function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
-  if(!sampleId) return;
-  if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
-  const buf=_cbcBuffer[sampleId];
-  buf.params[cbcNormalizeCode(code)]={value,unit,refRange,flag};
-  if(patName) buf.name=patName;
-  if(buf.timer) clearTimeout(buf.timer);
-  buf.timer=setTimeout(function(){cbcFlush(sampleId);},600);
-}
-function cbcFlush(sampleId){
-  const buf=_cbcBuffer[sampleId];
-  if(!buf||!Object.keys(buf.params).length) return;
-  delete _cbcBuffer[sampleId];
-  lisAddLog('ok','CBC مكتمل SID:'+sampleId+' '+Object.keys(buf.params).length+' باراميتر');
-  const sid=String(sampleId).trim();
-  let targetPatient=null,targetReq=null;
-  if(typeof patients!=='undefined'){
-    targetPatient=patients.find(function(p){return String(p.barcode||p.id).trim()===sid||String(p.id).trim()===sid;});
-  }
-  if(typeof requests!=='undefined'&&targetPatient){
-    targetReq=requests.find(function(r){
-      return r.patientId===targetPatient.id&&r.status!=='done'&&(r.tests||[]).some(function(t){return t==='CBC'||t==='h001';});
-    });
-    if(!targetReq){
-      targetReq={id:'LIS-CBC-'+sid+'-'+Date.now(),patientId:targetPatient.id,patientName:targetPatient.name||buf.name,tests:['CBC'],results:{},resultDetails:{},cbcData:null,status:'pending',date:new Date().toISOString().split('T')[0],fromDevice:true};
-      requests.push(targetReq);
-    }
-  }
-  if(targetReq){
-    targetReq.cbcData=buf.params;
-    targetReq.results['CBC']='done';
-    targetReq.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:buf.params,fromDevice:'BC-5000',datetime:new Date().toISOString()};
-    targetReq.status='done';
-    if(typeof save==='function') save('requests',requests);
-    lisAddLog('ok','CBC نُقل للمريض: '+(targetPatient?targetPatient.name:sid));
-    showNotif('CBC مكتمل','تم إدخال نتائج CBC للمريض: '+(targetPatient?targetPatient.name:sid),'success');
-    if(typeof renderRequestTable==='function') renderRequestTable();
-  } else {
-    const cbcResult={id:'cbc'+Date.now(),sampleId:sid,patName:buf.name,deviceCode:'CBC',medlabCode:'CBC',value:'CBC('+Object.keys(buf.params).length+' param)',unit:'',cbcParams:buf.params,refRange:'',flags:'',status:'final',device:'BC-5000',protocol:'HL7',datetime:new Date().toISOString(),transferred:false};
-    lisResults.unshift(cbcResult);
-    lisSaveState();lisUpdateStats();lisRenderResults();
-    lisAddLog('warn','مريض غير موجود SID:'+sid);
-    showNotif('CBC - مريض غير موجود','SID: '+sid,'warning');
-  }
-}
-
 function lisParseHL7(raw,deviceName){
   lisAddLog('astm','تحليل HL7 من: '+deviceName);
-  const segs=raw.split(/\r\n|\r|\n/).filter(function(s){return s.trim();});
-  let pid={id:'',name:''},isCBC=false;
-  segs.forEach(function(seg){
+  const segs=raw.split(/\r\n|\r|\n/).filter(s=>s.trim());
+  let pid={};
+  segs.forEach(seg=>{
     const f=seg.split('|');
     if(f[0]==='PID'){
-      pid.id=(f[3]||f[4]||'').split('^')[0].replace(/[^0-9]/g,'').trim()||((f[3]||'').split('^')[0].trim());
       pid.name=(f[5]||'').replace(/\^/g,' ').trim();
-    } else if(f[0]==='OBR'){
-      const obrid=(f[4]||'').toUpperCase();
-      if(obrid.includes('CBC')||obrid.includes('WBC')||obrid.includes('HGB')||obrid.includes('DIFF')) isCBC=true;
+      pid.id=(f[3]||'').split('^')[0].trim();
     } else if(f[0]==='OBX'){
-      const codeRaw=(f[3]||'').split('^');
-      const code=(codeRaw[1]||codeRaw[0]||'').trim().toUpperCase().replace(/\s/g,'');
+      const code=(f[3]||'').split('^')[0].trim().toUpperCase();
       const value=(f[5]||'').trim();
       const unit=(f[6]||'').split('^')[0].trim();
       const range=(f[7]||'').trim();
       const flag=(f[8]||'').trim();
       lisAddLog('astm','HL7 OBX: '+code+'='+value+' '+unit);
-      if(cbcIsParam(code)||isCBC){
-        isCBC=true;
-        cbcAddParam(pid.id||'HL7',code,value,unit,range,flag,pid.name);
-      } else {
-        lisIngestResult({id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),sampleId:pid.id||'HL7',patName:pid.name||'',deviceCode:code,medlabCode:lisResolveCode(code),value:value,unit:unit,refRange:range,flags:flag,status:'final',device:deviceName,protocol:'HL7',datetime:new Date().toISOString(),transferred:false});
-      }
+      lisIngestResult({
+        id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
+        sampleId:  pid.id||'HL7',
+        patName:   pid.name||'',
+        deviceCode:code,
+        medlabCode:lisResolveCode(code),
+        value, unit,
+        refRange:  range,
+        flags:     flag,
+        status:    'final',
+        device:    deviceName,
+        protocol:  'HL7',
+        datetime:  new Date().toISOString(),
+        transferred:false,
+      });
     }
   });
 }
@@ -26065,10 +26515,10 @@ function lisCheckMedlabConn(){
     if(k&&(k.includes('mlab2')||k.includes('_requests'))){found=true;break;}
   }
   if(found){
-    showNotif('اتصال ✓','MedLab Pro متصل ✓','success');
+    showNotif('اتصال ✓','MedLab Pro موجود في نفس المتصفح ✓','success');
     lisAddLog('ok','MedLab Pro: موجود في localStorage ✓');
   } else {
-    showNotif('تنبيه','لم يُعثر على MedLab Pro — تأكد من تشغيل البرنامج','warning');
+    showNotif('تنبيه','لم يُعثر على MedLab Pro — افتح index.html في نفس المتصفح','warning');
     lisAddLog('warn','MedLab Pro: غير موجود — افتح ملف index.html في نفس التبويب أو المتصفح');
   }
 }
@@ -26228,7 +26678,7 @@ function lisSaveSettings(){
   lisSaveState();
 }
 async function lisSelectSyncFolder(){
-  
+  if(!window.showDirectoryPicker){showNotif('خطأ','غير مدعوم','error');return;}
   try{
     const dir=await window.showDirectoryPicker({mode:'readwrite'});
     _lisSyncFolder=dir;
@@ -26370,8 +26820,8 @@ server.listen(WS_PORT, () => {
 });
 `;
   lisDownload('lis-bridge.js',script);
-  showNotif('تم','تم تصدير إعدادات الاتصال','success');
-  lisAddLog('info','تم تصدير إعدادات الاتصال');
+  showNotif('تم','تم تحميل lis-bridge.js','success');
+  lisAddLog('info','تم تحميل Node.js Bridge Script');
 }
 
 // ═══════════════════════════════════════════════
@@ -26432,7 +26882,7 @@ async function fsaVerifyHandle(handle){
 async function fsaChooseFolderFirstRun(){
   if(!fsaSupported()){
     document.getElementById('firstrun-status').textContent =
-      '⚠️ تعذّر تنفيذ العملية';
+      '⚠️ متصفحك لا يدعم هذه الميزة — استخدم Chrome أو Edge';
     return;
   }
   const btn = document.getElementById('firstrun-btn');
@@ -26622,7 +27072,7 @@ async function _fsaSavePDFToD(doc, fileName, afterSave){
 // ── النقل الفوري إلى D: (زر يدوي) ───────────────────────
 async function fsaArchiveToD(){
   if(!fsaSupported()){
-    showNotif('خطأ','تعذّر تنفيذ العملية','error');
+    showNotif('غير مدعوم','متصفحك لا يدعم هذه الميزة','error');
     return;
   }
   // إذا لا يوجد handle نشط، اطلب اختيار المجلد
@@ -28496,6 +28946,7 @@ if (typeof pages !== 'undefined' && !pages['esr']) {
 #portal-modal-overlay{
   position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);
   display:none;align-items:center;justify-content:center;padding:16px;
+  backdrop-filter:blur(4px);
 }
 #portal-modal-overlay.open{display:flex}
 .pm-box{
@@ -30113,1110 +30564,4 @@ setTimeout(function(){
 
 })();
 
-</script>
-
-<script>
-// ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║        MedLab Pro — Firebase IDB SyncManager v1.0                          ║
-// ║  نظام المزامنة عبر Firebase كوسيط مؤقت + IDB كقاعدة بيانات محلية دائمة   ║
-// ╚══════════════════════════════════════════════════════════════════════════════╝
-(function(global) {
-  'use strict';
-
-  const SM_VERSION         = '1.0.0';
-  const SM_IDB_NAME        = 'medlab_syncmgr';
-  const SM_IDB_VER         = 1;
-  const SM_STORE_PENDING   = 'pending_events';
-  const SM_STORE_SEEN      = 'seen_events';
-  const SM_STORE_DEVICES   = 'known_devices';
-
-  const SM_SYNC_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  const FB_PATH_EVENTS  = (u) => 'sync_events/'  + u;
-  const FB_PATH_DEVICES = (u) => 'sync_devices/' + u;
-
-  // ── State ────────────────────────────────────────────
-  let _smDb       = null;
-  let _fbDb       = null;
-  let _username   = '';
-  let _deviceId   = '';
-  let _enabled    = false;
-  let _online     = navigator.onLine;
-  let _listening  = false;
-  let _evtRef     = null;
-  let _evtCb      = null;
-  let _heartTimer = null;
-
-  // ── UUID ─────────────────────────────────────────────
-  function _uuid() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
-    });
-  }
-
-  function _log()  { console.log('[SyncMgr]',  ...arguments); }
-  function _warn() { console.warn('[SyncMgr]', ...arguments); }
-
-  // شاشة تشخيص مرئية — تفوّض لـ _smDebugToBox الخارجية
-  function _smDebugLog(msg) {
-    if (typeof _smDebugToBox === 'function') { _smDebugToBox(msg); return; }
-    var box = document.getElementById('_sm_debug_box');
-    if (!box) return;
-    var t = new Date().toLocaleTimeString('ar');
-    var line = document.createElement('div');
-    line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.08);color:#0f0';
-    line.textContent = t + ' — ' + msg;
-    box.insertBefore(line, box.firstChild);
-    while (box.children.length > 40) box.removeChild(box.lastChild);
-  }
-
-  // ── SyncManager IDB ──────────────────────────────────
-  function _openSMDB() {
-    if (_smDb) return Promise.resolve(_smDb);
-    return new Promise(function(res, rej) {
-      var req = indexedDB.open(SM_IDB_NAME, SM_IDB_VER);
-      req.onupgradeneeded = function(e) {
-        var db = e.target.result;
-        if (!db.objectStoreNames.contains(SM_STORE_PENDING)) {
-          var ps = db.createObjectStore(SM_STORE_PENDING, { keyPath: 'id' });
-          ps.createIndex('by_ts', 'ts');
-        }
-        if (!db.objectStoreNames.contains(SM_STORE_SEEN)) {
-          db.createObjectStore(SM_STORE_SEEN, { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains(SM_STORE_DEVICES)) {
-          db.createObjectStore(SM_STORE_DEVICES, { keyPath: 'id' });
-        }
-      };
-      req.onsuccess = function(e) { _smDb = e.target.result; res(_smDb); };
-      req.onerror   = function(e) { rej(e); };
-    });
-  }
-
-  function _getPending() {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_PENDING, 'readonly');
-        var req = tx.objectStore(SM_STORE_PENDING).index('by_ts').getAll();
-        req.onsuccess = function() { res(req.result || []); };
-        req.onerror   = function() { res([]); };
-      });
-    });
-  }
-
-  function _removePending(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).delete(id);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _addPending(evt) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).put(evt);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _hasSeen(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_SEEN, 'readonly');
-        var req = tx.objectStore(SM_STORE_SEEN).get(id);
-        req.onsuccess = function() { res(!!req.result); };
-        req.onerror   = function() { res(false); };
-      });
-    });
-  }
-
-  function _markSeen(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_SEEN, 'readwrite');
-        tx.objectStore(SM_STORE_SEEN).put({ id: id, ts: Date.now() });
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _cleanOldSeen() {
-    var cutoff = Date.now() - 48 * 3600 * 1000;
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx    = db.transaction(SM_STORE_SEEN, 'readwrite');
-        var store = tx.objectStore(SM_STORE_SEEN);
-        var req   = store.getAll();
-        req.onsuccess = function() {
-          (req.result || []).forEach(function(item) {
-            if (item.ts < cutoff) store.delete(item.id);
-          });
-          tx.oncomplete = res; tx.onerror = res;
-        };
-      });
-    });
-  }
-
-  // ── App IDB (medlab_idb) ─────────────────────────────
-  // يستخدم IDB.get/IDB.set مباشرة — تتعامل مع ضغط LZS تلقائياً
-  function _readAppIDB(key) {
-    // IDB هو الـ singleton المعرّف في التطبيق ويدعم LZS
-    if (typeof IDB !== 'undefined' && typeof IDB.get === 'function') {
-      return IDB.get(key).then(function(v) {
-        return v; // IDB.get يرجع القيمة مفكوكة الضغط مباشرة
-      }).catch(function() { return null; });
-    }
-    return Promise.resolve(null);
-  }
-
-  function _writeAppIDB(key, value) {
-    // IDB.set يحفظ مع ضغط LZS ويحدّث _MC cache تلقائياً
-    if (typeof IDB !== 'undefined' && typeof IDB.set === 'function') {
-      return IDB.set(key, value).then(function() {}).catch(function() {});
-    }
-    return Promise.resolve();
-  }
-
-  // ── Device ID ─────────────────────────────────────────
-  function _getDeviceId() {
-    if (_deviceId) return _deviceId;
-    var id = localStorage.getItem('_sm_device_id');
-    if (!id) {
-      id = 'dev_' + _uuid().slice(0,8) + '_' + Date.now().toString(36);
-      localStorage.setItem('_sm_device_id', id);
-    }
-    _deviceId = id;
-    return id;
-  }
-
-  function _registerDevice() {
-    if (!_fbDb || !_username) return;
-    var path = FB_PATH_DEVICES(_username) + '/' + _getDeviceId();
-    _fbDb.ref(path).set({ id: _getDeviceId(), ts: Date.now(), online: true })
-      .catch(function(){});
-    _fbDb.ref(path + '/online').onDisconnect().set(false);
-    clearInterval(_heartTimer);
-    _heartTimer = setInterval(function() {
-      if (_fbDb && _username && _enabled)
-        _fbDb.ref(path + '/ts').set(Date.now()).catch(function(){});
-    }, 60000);
-  }
-
-  function _getOtherDevices() {
-    if (!_fbDb || !_username) return Promise.resolve([]);
-    return _fbDb.ref(FB_PATH_DEVICES(_username)).once('value').then(function(snap) {
-      var val    = snap.val() || {};
-      var cutoff = Date.now() - 5 * 60 * 1000;
-      return Object.keys(val).filter(function(id) {
-        return id !== _getDeviceId() && val[id] && val[id].ts > cutoff;
-      });
-    }).catch(function() { return []; });
-  }
-
-  // ── Apply Event to local IDB ──────────────────────────
-
-  // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
-  var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },0); } },
-    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },0); } },
-    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
-    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
-    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
-    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} },0); } },
-    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} },0); } },
-    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} },0); } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } }
-  };
-
-  // تحديث المتغير العالمي + كاش الذاكرة فوراً
-  function _smUpdateGlobal(key, idbKey, data) {
-    var meta = _SM_KEY_MAP[key];
-    if (!meta || !Array.isArray(data)) return;
-    // setter registry: يحدّث let variable في script block الصحيح
-    if (window._smSetters && typeof window._smSetters[key] === 'function') {
-      window._smSetters[key](data);
-      _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
-    } else {
-      _smDebugLog('⚠️ no setter: ' + key);
-    }
-    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // Firebase يحوّل المصفوفات المتداخلة إلى Objects عند الاسترجاع
-  // مثال: ['h001','h002'] → {0:'h001', 1:'h002'}
-  // هذه الدالة تُعيد تحويلها لمصفوفات حقيقية بشكل متكرر
-  // ══════════════════════════════════════════════════════════════
-  function _fixFirebaseArrays(obj) {
-    if (obj === null || obj === undefined) return obj;
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) {
-      return obj.map(_fixFirebaseArrays);
-    }
-    // اكتشاف: هل هذا Object بمفاتيح أرقام متتالية تبدأ من 0؟ → مصفوفة
-    var keys = Object.keys(obj);
-    if (keys.length > 0) {
-      var isArr = keys.every(function(k) { return /^\d+$/.test(k); });
-      if (isArr) {
-        var maxIdx = Math.max.apply(null, keys.map(Number));
-        // تحقق إضافي: المؤشرات متسلسلة (0,1,2,...,n) وليس فجوات كبيرة
-        if (maxIdx === keys.length - 1) {
-          var arr = new Array(keys.length);
-          keys.forEach(function(k) { arr[Number(k)] = _fixFirebaseArrays(obj[k]); });
-          return arr;
-        }
-      }
-    }
-    // Object عادي — نُصلح القيم الداخلية فقط
-    var result = {};
-    keys.forEach(function(k) { result[k] = _fixFirebaseArrays(obj[k]); });
-    return result;
-  }
-
-  function _applyEvent(evt, ackAfter) {
-    return _hasSeen(evt.id).then(function(seen) {
-      if (seen) { _log('Duplicate skipped:', evt.id); _smDebugLog('مكرر تجاهل: ' + evt.id.slice(0,8)); return; }
-      _log('Applying event:', evt.type, evt.key, evt.id);
-      _smDebugLog('تطبيق: ' + evt.type + ' / ' + evt.key);
-
-      // ✅ إصلاح: Firebase يحوّل arrays إلى objects — نُعيدها لمصفوفات حقيقية
-      if (evt.record)  evt.record = _fixFirebaseArrays(evt.record);
-      if (evt.data)    evt.data   = _fixFirebaseArrays(evt.data);
-
-      var p;
-      if      (evt.type === 'UPSERT_RECORD') p = _applyUpsert(evt);
-      else if (evt.type === 'DELETE_RECORD') p = _applyDelete(evt);
-      else if (evt.type === 'SET_ALL')       p = _applySetAll(evt);
-      else return;
-      return p.then(function() {
-        return _markSeen(evt.id);
-      }).then(function() {
-        _notifyApp(evt.key);
-        if (ackAfter) return _acknowledgeEvent(evt);
-      }).catch(function(e) { _warn('Apply error:', e); });
-    });
-  }
-
-  // نستخدم SyncManager._applying كـ flag مشترك
-
-  function _applyUpsert(evt) {
-    if (!evt.key || !evt.record) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-
-    // اقرأ من _MC إذا كانت تحتوي بيانات فعلية
-    var current = null;
-    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) {
-      current = _MC[idbKey].slice();
-    }
-    var readP = (current !== null) ? Promise.resolve(current) : _readAppIDB(idbKey);
-
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
-      if (idx >= 0) {
-        cur[idx] = evt.record;
-      } else {
-        cur.push(evt.record);
-      }
-
-      // حدّث _MC فوراً
-      if (typeof _MC !== 'undefined') _MC[idbKey] = cur;
-
-      // حدّث setter (patients/requests/...) فوراً
-      _smUpdateGlobal(evt.key, idbKey, cur);
-
-      // احفظ في IDB + DB بدون إطلاق hook (SyncManager._applying = true يمنعه)
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, cur);
-      } finally {
-        SyncManager._applying = false;
-      }
-
-      // ✅ حدّث prevState للمفتاح هذا فقط إذا لم يكن هناك timer معلّق
-      // (timer معلّق = المستخدم لديه تعديل محلي لم يُرسَل بعد — لا نُلغيه)
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer) {
-        if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
-      }
-      // لا نستدعي clearTimeout هنا أبداً — لا نُلغي تعديلات المستخدم المحلية
-
-      return Promise.resolve();
-    });
-  }
-
-  function _applyDelete(evt) {
-    if (!evt.key || !evt.recordId) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) return;
-      var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
-      if (typeof _MC !== 'undefined') _MC[idbKey] = filtered;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, filtered);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, filtered);
-      // حدّث prevState فقط إذا لا يوجد timer محلي معلّق
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer && window._smPrevState) window._smPrevState[evt.key] = filtered.slice();
-      return Promise.resolve();
-    });
-  }
-
-  function _applySetAll(evt) {
-    if (!evt.key || !Array.isArray(evt.data)) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var remoteMap = new Map();
-      evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
-      var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
-      var merged = Array.from(remoteMap.values()).concat(localOnly);
-      if (typeof _MC !== 'undefined') _MC[idbKey] = merged;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, merged);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, merged);
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer && window._smPrevState) window._smPrevState[evt.key] = merged.slice();
-      return Promise.resolve();
-    });
-  }
-
-  // ── Acknowledge ───────────────────────────────────────
-  // حذف الحدث من Firebase بعد 30 ثانية (وقت كافٍ لكل الأجهزة)
-  function _acknowledgeEvent(evt) {
-    if (!_fbDb || !_username || !evt.fbKey) return Promise.resolve();
-    var path = FB_PATH_EVENTS(_username) + '/' + evt.fbKey;
-    // احذف بعد 30 ثانية
-    setTimeout(function() {
-      if (_fbDb) _fbDb.ref(path).remove().catch(function() {});
-    }, 30000);
-    return Promise.resolve();
-  }
-
-  // ── Push event to Firebase ────────────────────────────
-  function _pushToFB(evt) {
-    return new Promise(function(res, rej) {
-      var ref = _fbDb.ref(FB_PATH_EVENTS(_username)).push();
-      evt.fbKey = ref.key;
-      ref.set(Object.assign({}, evt, { ack: {} })).then(function() {
-        _log('Pushed:', evt.id, evt.type, evt.key);
-        _smDebugLog('أُرسل: ' + evt.type + ' / ' + evt.key);
-        res();
-      }).catch(function(e) {
-        _warn('Push error:', e);
-        _smDebugLog('فشل الإرسال: ' + e.message);
-        rej(e);
-      });
-    });
-  }
-
-  function _pushEvent(evt) {
-    evt.id           = evt.id || _uuid();
-    evt.originDevice = _getDeviceId();
-    evt.ts           = Date.now();
-    evt.username     = _username;
-
-    return _markSeen(evt.id).then(function() {
-      if (!_online || !_fbDb || !_enabled) {
-        return _addPending(evt).then(function() {
-          _log('Queued offline:', evt.id);
-        });
-      }
-      return _pushToFB(evt).catch(function(e) {
-        _warn('Push failed, queuing:', e);
-        return _addPending(evt);
-      });
-    });
-  }
-
-  // ── Flush pending ─────────────────────────────────────
-  function _flushPending() {
-    if (!_online || !_fbDb || !_enabled) return Promise.resolve();
-    return _getPending().then(function(pending) {
-      if (!pending.length) return;
-      _log('Flushing', pending.length, 'pending events');
-      var chain = Promise.resolve();
-      pending.forEach(function(evt) {
-        chain = chain.then(function() {
-          return _pushToFB(evt).then(function() {
-            return _removePending(evt.id);
-          }).catch(function(e) {
-            _warn('Flush failed for:', evt.id, e);
-            return Promise.reject(e); // stop chain on error
-          });
-        });
-      });
-      return chain.catch(function() {});
-    });
-  }
-
-  // ── Full sync ─────────────────────────────────────────
-  function _fullSync() {
-    if (!_fbDb || !_username || !_enabled) return Promise.resolve();
-    _log('Full sync start for:', _username);
-    return _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val();
-      if (!val) { _log('Full sync: no remote events'); return; }
-      var events = Object.values(val);
-      // تجاهل الأحداث الصادرة من هذا الجهاز نفسه
-      events = events.filter(function(evt) {
-        return evt && evt.originDevice !== _getDeviceId();
-      });
-      _log('Full sync: found', events.length, 'applicable events');
-      var chain = Promise.resolve();
-      events.forEach(function(evt) {
-        chain = chain.then(function() { return _applyEvent(evt, false); });
-      });
-      return chain;
-    }).then(function() {
-      return _flushPending();
-    }).then(function() {
-      // ── إعادة رسم كاملة بعد استلام كل البيانات من Firebase ──
-      // هذا يحل مشكلة قائمة المرضى الفارغة عند الجهاز الثاني
-      setTimeout(function() {
-        try {
-          if (typeof renderAll        === 'function') renderAll();
-          if (typeof updateDashboard  === 'function') updateDashboard();
-          if (typeof updateBadges     === 'function') updateBadges();
-          if (typeof loadResultsDropdown === 'function') loadResultsDropdown();
-          if (typeof loadPrintDropdown   === 'function') loadPrintDropdown();
-          _smDebugLog('✅ إعادة رسم بعد fullSync');
-        } catch(e) { _warn('Re-render after fullSync failed:', e); }
-      }, 300);
-    }).catch(function(e) { _warn('Full sync error:', e); });
-  }
-
-  // ── Live sync ─────────────────────────────────────────
-  var _keepaliveTimer = null;
-  var _connMonitorStarted = false;
-
-  function _pollPendingEvents() {
-    if (!_fbDb || !_username || !_enabled) return;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
-      var val = s.val();
-      if (!val) return;
-      var keys = Object.keys(val);
-      if (keys.length > 0) _smDebugLog('📡 poll: ' + keys.length + ' حدث');
-      keys.forEach(function(fbKey) {
-        var evt = val[fbKey];
-        if (!evt || !evt.id) return;
-        if (evt.originDevice === _getDeviceId()) return;
-        evt.fbKey = fbKey;
-        _applyEvent(evt, true).catch(function(){});
-      });
-    }).catch(function(){});
-  }
-
-  function _startLive() {
-    if (!_fbDb || !_username || !_enabled || _listening) return;
-    _listening = true;
-
-    try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
-
-    // ── listener رئيسي: يستلم الأحداث الجديدة ──
-    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
-    _evtCb  = _evtRef.on('child_added', function(snap) {
-      var evt = snap.val();
-      if (!evt || !evt.id) return;
-      if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
-      evt.fbKey = snap.key;
-      _smDebugLog('📥 ' + evt.type + '/' + evt.key);
-      _applyEvent(evt, true).catch(function(e) { _warn('apply error:', e); });
-    }, function(err) {
-      _warn('listener error:', err.message);
-      _listening = false;
-      setTimeout(_startLive, 5000);
-    });
-
-    // ── مراقبة الاتصال: poll عند إعادة الاتصال ──
-    if (!_connMonitorStarted) {
-      _connMonitorStarted = true;
-      _fbDb.ref('.info/connected').on('value', function(snap) {
-        _smDebugLog(snap.val() ? '🟢 متصل' : '🔴 منقطع');
-        if (snap.val()) _pollPendingEvents();
-      });
-    }
-
-    // ── keepalive: poll كل 5 ثوانٍ لمنع Firebase sleep ──
-    clearInterval(_keepaliveTimer);
-    _keepaliveTimer = setInterval(_pollPendingEvents, 5000);
-
-    _log('Live sync started');
-    _smDebugLog('✅ listener + poll/5s');
-  }
-
-  function _stopLive() {
-    if (_evtRef && _evtCb) { _evtRef.off('child_added', _evtCb); }
-    _evtRef = null; _evtCb = null; _listening = false;
-    _log('Live sync stopped');
-  }
-
-  // ── Auto cleanup Firebase ─────────────────────────────
-  function _autoClean() {
-    if (!_fbDb || !_username || !_enabled || !_online) return;
-    var cutoff = Date.now() - 3600 * 1000;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val() || {};
-      var removes = Object.keys(val).filter(function(k) {
-        return val[k].ts && val[k].ts < cutoff;
-      }).map(function(k) {
-        return _fbDb.ref(FB_PATH_EVENTS(_username) + '/' + k).remove();
-      });
-      if (removes.length) {
-        Promise.all(removes).then(function() {
-          _log('Cleaned', removes.length, 'old Firebase events');
-        });
-      }
-    }).catch(function() {});
-  }
-
-  // ── Notify App ────────────────────────────────────────
-  function _notifyApp(key) {
-    var meta = _SM_KEY_MAP[key];
-    var labels = {
-      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-    };
-    // رسم فوري
-    if (meta) { try { meta.fn(); } catch(e) {} }
-    // ✅ عند وصول requests أو patients: أعد تحميل قائمة النتائج وقائمة الطباعة دائماً
-    if (key === 'requests' || key === 'patients') {
-      setTimeout(function() {
-        try { if(typeof loadResultsDropdown==='function') loadResultsDropdown(); } catch(e){}
-        try { if(typeof loadPrintDropdown==='function') loadPrintDropdown(); } catch(e){}
-        // إذا صفحة إدخال النتائج مفتوحة، أعد تحميل النتيجة الحالية
-        try {
-          var sel = document.getElementById('res-req-sel');
-          if (sel && sel.value && typeof loadResultEntry === 'function') loadResultEntry();
-        } catch(e){}
-      }, 150);
-    }
-    // badges + dashboard
-    try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
-    try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
-    // إشعار
-    try {
-      if (typeof showNotif === 'function')
-        showNotif('🔄', (labels[key]||key), 'info');
-    } catch(e) {}
-  }
-
-  // ════════════════════════════════════════════════════════
-  // PUBLIC API
-  // ════════════════════════════════════════════════════════
-  var SyncManager = {
-
-    version: SM_VERSION,
-    _applying: false, // flag لمنع حلقة DB.set → hook → Firebase → DB.set
-
-    init: function(fbDb, username, enabled) {
-      _fbDb     = fbDb;
-      _username = username;
-      _enabled  = !!enabled;
-
-      var self = this;
-      return _openSMDB().then(function() {
-        _log('Init: user=' + username + ', enabled=' + enabled + ', device=' + _getDeviceId());
-        _smDebugLog('init: ' + username + ' | enabled:' + enabled + ' | dev:' + _getDeviceId().slice(-6));
-
-        if (!_enabled) { _log('Sync disabled — IDB only mode'); _smDebugLog('مزامنة معطّلة'); return; }
-        if (!_fbDb)    { _warn('Firebase not available'); _smDebugLog('Firebase غير متاح!'); return; }
-
-        _registerDevice();
-
-        return _cleanOldSeen().then(function() {
-          _autoClean();
-          return _fullSync();
-        }).then(function() {
-          _startLive();
-        });
-      }).then(function() {
-        window.addEventListener('online',  function() { _online = true;  self._onOnline(); });
-        window.addEventListener('offline', function() { _online = false; _log('Offline — queuing events'); });
-        setInterval(_autoClean, 30 * 60 * 1000);
-        _log('SyncManager ready');
-      });
-    },
-
-    _onOnline: function() {
-      _log('Online — flushing pending');
-      _flushPending().then(function() {
-        if (!_listening) _startLive();
-        _registerDevice();
-      });
-    },
-
-    setEnabled: function(val) {
-      _enabled = !!val;
-      if (_enabled) {
-        _registerDevice();
-        _flushPending();
-        _startLive();
-      } else {
-        _stopLive();
-        clearInterval(_heartTimer);
-      }
-      _log('Sync enabled:', _enabled);
-    },
-
-    isEnabled:  function() { return _enabled; },
-    isOnline:   function() { return _online; },
-    getDeviceId: function() { return _getDeviceId(); },
-
-    /** إرسال حدث UPSERT (إضافة أو تعديل record) */
-    pushUpsert: function(key, record) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'UPSERT_RECORD', key: key, record: record });
-    },
-
-    /** إرسال حدث DELETE (حذف record) */
-    pushDelete: function(key, recordId) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'DELETE_RECORD', key: key, recordId: recordId });
-    },
-
-    /** إرسال مصفوفة كاملة (SET_ALL) */
-    pushSetAll: function(key, data) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      if (!Array.isArray(data) || !data.length) return Promise.resolve();
-      return _pushEvent({ type: 'SET_ALL', key: key, data: data });
-    },
-
-    /** الاستماع لأحداث التحديث */
-    onUpdate: function(cb) {
-      window.addEventListener('syncmanager:update', function(e) { cb(e.detail.key); });
-    },
-
-    /** عدد الأحداث المعلّقة */
-    pendingCount: function() {
-      return _getPending().then(function(p) { return p.length; });
-    },
-
-    destroy: function() {
-      _stopLive();
-      clearInterval(_heartTimer);
-    }
-  };
-
-  global.SyncManager = SyncManager;
-
-})(window);
-
-// ════════════════════════════════════════════════════════════════
-// دمج SyncManager مع تدفق التطبيق
-// ════════════════════════════════════════════════════════════════
-
-/** تحقق هل المزامنة مفعّلة لهذا المستخدم */
-function _isSyncEnabled(username) {
-  try {
-    var users = typeof getAdminUsers === 'function'
-      ? getAdminUsers()
-      : JSON.parse(localStorage.getItem('medlab_admin_users') || '[]');
-    var u = users.find(function(x) { return x.username === username; });
-    return u ? !!u.firebaseSync : false;
-  } catch(e) { return false; }
-}
-
-/** تهيئة SyncManager بعد تسجيل الدخول */
-async function initSyncManager() {
-  var session = typeof getSession === 'function' ? getSession() : null;
-  if (!session || !session.username) return;
-
-  var username = session.username;
-  var enabled  = _isSyncEnabled(username);
-
-  // انتظر Firebase أن يكون جاهزاً
-  var ok = false;
-  try { ok = await (typeof loadFirebase === 'function' ? loadFirebase() : Promise.resolve(false)); } catch(e) {}
-
-  var fbInstance = (ok && typeof fbDb !== 'undefined') ? fbDb : null;
-
-  try {
-    await SyncManager.init(fbInstance, username, enabled);
-
-    // إضافة مؤشر المزامنة في الواجهة — دائماً حتى بعد Refresh
-    _renderSyncIndicator(enabled);
-    _renderSyncDebugPanel();
-
-    console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled,
-      '| device:', SyncManager.getDeviceId());
-  } catch(e) {
-    console.warn('[SyncManager] Init failed:', e);
-    // حتى لو فشل Firebase — أظهر المؤشر كـ محلي
-    try { _renderSyncIndicator(false); } catch(_) {}
-  }
-}
-
-/** شاشة تشخيص المزامنة المرئية */
-function _renderSyncDebugPanel() {
-  var old = document.getElementById('_sm_debug_panel');
-  if (old) old.remove();
-
-  var panel = document.createElement('div');
-  panel.id = '_sm_debug_panel';
-  // البوكس مخفي افتراضياً — فقط div#_sm_debug_box موجود للكتابة
-  panel.style.cssText = [
-    'position:fixed','bottom:60px','left:8px','right:8px',
-    'max-height:220px','background:rgba(0,0,0,.92)',
-    'border:1px solid rgba(0,212,255,.4)','border-radius:10px',
-    'z-index:99999','overflow:hidden','font-family:monospace',
-    'display:none','flex-direction:column'  // مخفي افتراضياً
-  ].join(';');
-
-  // زر إظهار/إخفاء البوكس في الشريط العلوي
-  var toggleBtn = document.createElement('button');
-  toggleBtn.id = '_sm_toggle_btn';
-  // الزر ظاهر بشكل خافت — غير قابل للضغط — يُبقي Firebase نشطاً
-  toggleBtn.style.cssText = 'position:fixed;bottom:6px;left:6px;z-index:100000;background:rgba(0,0,0,.3);border:1px solid rgba(0,212,255,.15);border-radius:20px;color:rgba(0,212,255,.35);font-size:7px;padding:1px 5px;cursor:default;font-family:monospace;pointer-events:none;user-select:none;';
-  toggleBtn.textContent = '⚡';
-  toggleBtn.onclick = function(e){ e.preventDefault(); e.stopPropagation(); return false; };
-  document.body.appendChild(toggleBtn);
-
-  // رأس الشاشة
-  var hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(0,212,255,.12);border-bottom:1px solid rgba(0,212,255,.3)';
-  hdr.innerHTML = '<span style="font-size:11px;font-weight:700;color:#00d4ff">🔧 تشخيص المزامنة</span>' +
-    '<span style="font-size:10px;color:rgba(255,255,255,.5)">جهاز: ' + (SyncManager.getDeviceId()||'').slice(-8) + '</span>' +
-    '<button onclick="document.getElementById(&quot;_sm_debug_panel&quot;).remove()" style="background:none;border:none;color:#ff2244;font-size:14px;cursor:pointer;padding:0 4px">✕</button>';
-  panel.appendChild(hdr);
-
-  // زر اختبار الإرسال
-  var testBtn = document.createElement('div');
-  testBtn.style.cssText = 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px';
-  testBtn.innerHTML = '<button onclick="_smTestSend()" style="flex:1;padding:5px;background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);border-radius:6px;color:#00d4ff;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">📤 اختبار إرسال</button>' +
-    '<button onclick="_smTestCheck()" style="flex:1;padding:5px;background:rgba(139,63,255,.15);border:1px solid rgba(139,63,255,.4);border-radius:6px;color:#a78bfa;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔍 فحص Firebase</button>';
-  panel.appendChild(testBtn);
-
-  // صندوق الرسائل
-  var box = document.createElement('div');
-  box.id = '_sm_debug_box';
-  box.style.cssText = 'flex:1;overflow-y:auto;padding:6px 10px;';
-  panel.appendChild(box);
-
-  panel.style.display = 'none'; // مخفي افتراضياً
-  document.body.appendChild(panel);
-
-  // ضمان وجود _sm_debug_box في DOM حتى تعمل _smDebugLog
-  if (!document.getElementById('_sm_debug_box')) {
-    var hiddenBox = document.createElement('div');
-    hiddenBox.id = '_sm_debug_box';
-    hiddenBox.style.display = 'none';
-    document.body.appendChild(hiddenBox);
-  }
-}
-
-/** اختبار إرسال حدث تجريبي */
-function _smTestSend() {
-  if (typeof SyncManager === 'undefined' || !SyncManager.isEnabled()) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ المزامنة غير مفعّلة لهذا الحساب';
-      box.insertBefore(l, box.firstChild);
-    }
-    return;
-  }
-  var testRecord = { id: 'test_' + Date.now(), _test: true, _updatedAt: Date.now() };
-  SyncManager.pushUpsert('patients', testRecord).then(function() {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#00e87a;padding:2px 0';
-      l.textContent = '✅ أُرسل حدث تجريبي — انتظر الجهاز الآخر';
-      box.insertBefore(l, box.firstChild);
-    }
-  }).catch(function(e) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ فشل: ' + e.message;
-      box.insertBefore(l, box.firstChild);
-    }
-  });
-}
-
-/** فحص Firebase مباشرة */
-function _smTestCheck() {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-
-  var session = typeof getSession === 'function' ? getSession() : null;
-  var username = session ? session.username : '?';
-  var path = 'sync_events/' + username;
-
-  var info = document.createElement('div');
-  info.style.cssText = 'font-size:10px;color:#ffcc00;padding:2px 0';
-  info.textContent = '🔍 فحص: ' + path;
-  box.insertBefore(info, box.firstChild);
-
-  if (typeof fbDb === 'undefined' || !fbDb) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ fbDb = null — Firebase غير مهيّأ';
-    box.insertBefore(l, box.firstChild);
-    return;
-  }
-
-  // فحص auth
-  var authLbl = document.createElement('div');
-  authLbl.style.cssText = 'font-size:10px;color:#a0a0a0;padding:2px 0';
-  var authUser = (typeof fbAuth !== 'undefined' && fbAuth && fbAuth.currentUser);
-  authLbl.textContent = 'Auth: ' + (authUser ? '✅ ' + authUser.uid.slice(0,8) : '❌ غير مسجّل');
-  box.insertBefore(authLbl, box.firstChild);
-
-  // اقرأ sync_events
-  fbDb.ref(path).once('value').then(function(snap) {
-    var val = snap.val();
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:10px;color:#00e87a;padding:2px 0';
-    l.textContent = '📦 sync_events: ' + (val ? Object.keys(val).length + ' حدث' : 'فارغ');
-    box.insertBefore(l, box.firstChild);
-  }).catch(function(e) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ قراءة Firebase: ' + e.message;
-    box.insertBefore(l, box.firstChild);
-  });
-}
-
-/** عرض مؤشر حالة المزامنة في الشريط العلوي */
-function _renderSyncIndicator(enabled) {
-  var existing = document.getElementById('sm-status-badge');
-  if (existing) existing.remove();
-
-  var topbarActions = document.querySelector('.topbar-actions');
-  if (!topbarActions) return;
-
-  var badge = document.createElement('div');
-  badge.id = 'sm-status-badge';
-  badge.style.cssText = [
-    'display:flex','align-items:center','gap:5px',
-    'padding:5px 12px','border-radius:16px','font-size:10px',
-    'font-weight:700','cursor:default','transition:all .3s',
-    enabled
-      ? 'background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.35);color:#00e87a'
-      : 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.4)'
-  ].join(';');
-
-  var dot = document.createElement('span');
-  dot.id = 'sm-dot';
-  dot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:' +
-    (enabled ? '#00e87a' : 'rgba(255,255,255,.3)') +
-    ';' + (enabled ? 'animation:pulse 2s infinite' : '');
-
-  var lbl = document.createElement('span');
-  lbl.id = 'sm-lbl';
-  lbl.textContent = enabled ? '☁️ مزامنة' : '💾 محلي';
-
-  badge.appendChild(dot);
-  badge.appendChild(lbl);
-
-  // أدرج قبل أول زر
-  topbarActions.insertBefore(badge, topbarActions.firstChild);
-
-  // استمع لتغيير الحالة (عند تفعيل/تعطيل المزامنة من admin)
-  window.addEventListener('syncmanager:statuschange', function(e) {
-    var en = e.detail.enabled;
-    badge.style.background = en ? 'rgba(0,232,122,.12)' : 'rgba(255,255,255,.06)';
-    badge.style.borderColor = en ? 'rgba(0,232,122,.35)' : 'rgba(255,255,255,.12)';
-    badge.style.color = en ? '#00e87a' : 'rgba(255,255,255,.4)';
-    dot.style.background = en ? '#00e87a' : 'rgba(255,255,255,.3)';
-    dot.style.animation  = en ? 'pulse 2s infinite' : '';
-    lbl.textContent = en ? '☁️ مزامنة' : '💾 محلي';
-  });
-
-  // مؤشر offline
-  window.addEventListener('offline', function() {
-    dot.style.background = '#ffcc00';
-    lbl.textContent      = '⚡ بلا إنترنت';
-    badge.style.color    = '#ffcc00';
-  });
-  window.addEventListener('online', function() {
-    var isEn = SyncManager.isEnabled();
-    dot.style.background = isEn ? '#00e87a' : 'rgba(255,255,255,.3)';
-    lbl.textContent = isEn ? '☁️ مزامنة' : '💾 محلي';
-    badge.style.color = isEn ? '#00e87a' : 'rgba(255,255,255,.4)';
-  });
-}
-
-/**
- * hook على save() لإرسال الأحداث تلقائياً عند كل تعديل
- * يُنفَّذ بعد تهيئة التطبيق بالكامل
- */
-function _hookSaveForSync() {
-  if (window._smHooked) return;
-  window._smHooked = true;
-
-  var SM_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  // ── prevState: snapshot لكل مفتاح بعد آخر إرسال ────────────
-  var _smPrevState = {};
-  window._smPrevState = _smPrevState;
-
-  // ── الـ hook: يُستدعى من DB.set عند كل تعديل ───────────────
-  window._smDBHook = function(k, v) {
-    if (!SyncManager.isEnabled()) return;
-    if (!SM_KEYS.includes(k)) return;
-    if (!Array.isArray(v)) return;
-
-    // debounce 80ms per key — وقت كافٍ لجمع التغييرات المتزامنة
-    window._smSaveTimers = window._smSaveTimers || {};
-    // لا نلغي timer موجود إذا كان مصدره تعديل مستخدم محلي
-    // نستخدم snapshot فوري من v لتجنب تغيرها قبل انتهاء الـ debounce
-    var vSnapshot = v.slice();
-    clearTimeout(window._smSaveTimers[k]);
-    window._smSaveTimers[k] = setTimeout(function() {
-      // استخدم snapshot المأخوذ وقت الاستدعاء لا وقت التنفيذ
-      var current = vSnapshot;
-      var prev    = _smPrevState[k] || [];
-      var prevMap = {};
-      prev.forEach(function(x){ if(x && x.id) prevMap[x.id] = x; });
-      var currIds = new Set();
-      current.forEach(function(x){ if(x && x.id) currIds.add(x.id); });
-
-      var toUpsert = [];
-      current.forEach(function(record) {
-        if (!record || !record.id) return;
-        var oldRec = prevMap[record.id];
-        if (!oldRec) {
-          toUpsert.push(record);
-        } else if (JSON.stringify(record) !== JSON.stringify(oldRec)) {
-          toUpsert.push(record);
-        }
-      });
-
-      // أرسل كل ما تغيّر
-      toUpsert.forEach(function(record) {
-        _smDebugToBox('📤 ' + k + ' #' + (record.id||'').slice(-6));
-        SyncManager.pushUpsert(k, record).catch(function(e){
-          _smDebugToBox('❌ ' + e.message);
-        });
-      });
-
-      // DELETE: عناصر محذوفة من الطرف المحلي
-      prev.forEach(function(record) {
-        if (!record || !record.id) return;
-        if (!currIds.has(record.id)) {
-          _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
-          SyncManager.pushDelete(k, record.id).catch(function(){});
-        }
-      });
-
-      // ✅ حدّث prevState بعد الإرسال فقط
-      _smPrevState[k] = current.slice();
-    }, 80);
-  };
-
-  // ── بناء prevState الأولي ────────────────────────────────────
-  var _gMap = {
-    patients:'patients', requests:'requests', invoices:'invoices',
-    doctors:'doctors', packages:'packages', inventory:'inventory',
-    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
-    stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
-    billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'
-  };
-
-  function _rebuildPrevState(force) {
-    SM_KEYS.forEach(function(k) {
-      // لا تُعِد بناء مفتاح له timer معلّق — يعني هناك تعديل محلي لم يُرسَل بعد
-      if (!force && window._smSaveTimers && window._smSaveTimers[k]) return;
-      try {
-        var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
-        var val = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0)
-          ? _MC[idbKey]
-          : window[_gMap[k] || k];
-        if (Array.isArray(val) && val.length > 0) _smPrevState[k] = val.slice();
-      } catch(_) {}
-    });
-    var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; });
-    _smDebugToBox('✅ hook جاهز | ' + loaded.join(','));
-  }
-
-  // بناء أولي بعد 800ms (بعد اكتمال startApp + IDB)
-  setTimeout(function(){ _rebuildPrevState(true); }, 800);
-  // إعادة بناء دورية كل 30 ثانية — فقط للمفاتيح التي لا يوجد timer معلق عليها
-  setInterval(function(){ _rebuildPrevState(false); }, 30000);
-}
-
-// دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
-function _smDebugToBox(msg) {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-  var t = new Date().toLocaleTimeString('ar');
-  var line = document.createElement('div');
-  line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
-  line.textContent = t + ' — ' + msg;
-  box.insertBefore(line, box.firstChild);
-  while (box.children.length > 50) box.removeChild(box.lastChild);
-}
-
-// ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
-window.addEventListener('load', function() {
-  var _smInitDone = false;
-
-  function _tryInitSync() {
-    if (_smInitDone) return;
-    var session = typeof getSession === 'function' ? getSession() : null;
-    if (!session || !session.username) return;
-    _smInitDone = true;
-    initSyncManager().then(function() {
-      _hookSaveForSync();
-    });
-  }
-
-  // الطريقة 1: hook على startApp
-  var _origStartApp = window.startApp;
-  if (typeof _origStartApp === 'function') {
-    window.startApp = function() {
-      _origStartApp.apply(this, arguments);
-      setTimeout(_tryInitSync, 2000);
-    };
-  }
-
-  // الطريقة 2: fallback — إذا كانت الجلسة موجودة مسبقاً (Refresh)
-  setTimeout(function() {
-    if (!_smInitDone) _tryInitSync();
-  }, 2500);
-
-  // الطريقة 3: محاولة أخيرة بعد 5 ثواني
-  setTimeout(function() {
-    if (!_smInitDone) _tryInitSync();
-  }, 5000);
-});
 </script>
