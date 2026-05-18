@@ -547,8 +547,6 @@ body.light-mode #req-float-btn { box-shadow: 0 4px 20px rgba(0,95,153,0.35), 0 2
   cursor: pointer;
   font-family: 'Cairo', sans-serif;
   background: rgba(255,255,255,0.05);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
   transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
   position: relative;
@@ -603,8 +601,6 @@ body.light-mode #req-float-btn { box-shadow: 0 4px 20px rgba(0,95,153,0.35), 0 2
   background: rgba(255,255,255,0.05);
   border: 1.5px solid var(--primary);
   border-radius: 21px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
   box-shadow: 0 4px 14px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06);
   transition: box-shadow 0.18s, border-color 0.18s, background 0.18s;
   min-width: 140px;
@@ -1354,7 +1350,7 @@ textarea.fc{resize:vertical;}
 .bdg-d{background:rgba(255,77,109,0.13);color:var(--danger);border:1px solid rgba(255,77,109,0.28);}
 .bdg-p{background:rgba(0,212,255,0.13);color:var(--primary);border:1px solid rgba(0,212,255,0.28);}
 .bdg-s{background:rgba(123,47,255,0.13);color:#a78bfa;border:1px solid rgba(123,47,255,0.28);}
-.moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;}
+.moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;}
 .moverlay.open{display:flex;animation:fi 0.12s ease;}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 .modal{background:#070d1c;border:1px solid var(--border);border-radius:18px;width:100%;max-width:680px;max-height:92vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.7);animation:su 0.15s ease;display:flex;flex-direction:column;}
@@ -2514,6 +2510,91 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
 .moverlay.open{animation:fi 0.1s ease!important}
 .pt-suggest,#notif-panel,#cal-panel{animation:none!important;transition:none!important}
 </style>
+
+<!-- ══════════════════════════════════════════════════════════
+     Electron Bridge — يعمل فقط داخل تطبيق سطح المكتب
+     في المتصفح العادي: كل شيء يعمل كما هو بدون تغيير
+══════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  'use strict';
+
+  const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
+  window.IS_ELECTRON = IS_ELECTRON;
+  if(!IS_ELECTRON) return;
+
+  function esep(){ return window.electronAPI.platform === 'win32' ? '\\' : '/'; }
+
+  // ── 1. بديل showDirectoryPicker ──────────────────────────
+  window.showDirectoryPicker = async function(opts){
+    const dirPath = await window.electronAPI.openDirectory({
+      title: (opts && opts.title) ? opts.title : 'اختر مجلداً'
+    });
+    if(!dirPath) throw new DOMException('User cancelled', 'AbortError');
+    const sep = esep();
+    return {
+      kind: 'directory',
+      name: dirPath.split(/[\\/]/).pop(),
+      _path: dirPath,
+      async entries(){
+        const res = await window.electronAPI.readDir(dirPath);
+        if(!res.ok) return [];
+        return res.files.filter(f=>f.isFile).map(f=>[
+          f.name,
+          {
+            kind:'file', name:f.name, _path:f.path,
+            async getFile(){
+              const r = await window.electronAPI.readFile(f.path,'utf8');
+              return new File([r.data||''], f.name);
+            }
+          }
+        ]);
+      },
+      async getFileHandle(name, opts2){
+        const fp = dirPath + sep + name;
+        return {
+          kind:'file', name, _path:fp,
+          async createWritable(){
+            return {
+              async write(data){ await window.electronAPI.writeFile(fp, typeof data==='string'?data:JSON.stringify(data)); },
+              async close(){}
+            };
+          },
+          async getFile(){
+            const r = await window.electronAPI.readFile(fp,'utf8');
+            return new File([r.ok ? r.data : ''], name);
+          }
+        };
+      }
+    };
+  };
+
+  // ── 2. بديل showOpenFilePicker ───────────────────────────
+  window.showOpenFilePicker = async function(opts){
+    const filePath = await window.electronAPI.openFile({
+      title: (opts && opts.title) ? opts.title : 'اختر ملفاً'
+    });
+    if(!filePath) throw new DOMException('User cancelled', 'AbortError');
+    const name = filePath.split(/[\\/]/).pop();
+    return [{
+      kind:'file', name, _path:filePath,
+      async getFile(){
+        const r = await window.electronAPI.readFile(filePath,'utf8');
+        return new File([r.data||''], name);
+      }
+    }];
+  };
+
+  // ── 3. Serial callbacks ──────────────────────────────────
+  window._electronSerialCB = { data:null, error:null, closed:null };
+  window.electronAPI.onSerialData(  d => { if(window._electronSerialCB.data)   window._electronSerialCB.data(d);   });
+  window.electronAPI.onSerialError( e => { if(window._electronSerialCB.error)  window._electronSerialCB.error(e);  });
+  window.electronAPI.onSerialClosed(()=> { if(window._electronSerialCB.closed) window._electronSerialCB.closed();  });
+
+  console.log('[MedLab Pro Desktop] Electron APIs ready ✅');
+})();
+</script>
+
 </head>
 <body>
 <div class="layout">
@@ -3316,9 +3397,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
               <button class="btn btn-s" style="width:100%;justify-content:center;color:#a78bfa;border-color:rgba(167,139,250,0.4)" onclick="lisConnectFileWatch()">
                 📂 مراقبة مجلد
               </button>
-              <button class="btn btn-s" style="width:100%;justify-content:center" onclick="lisOpenTcpGuide()">
-                🌐 إعداد TCP/IP
-              </button>
             </div>
           </div>
 
@@ -3441,8 +3519,8 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                   <div class="fg" style="margin-bottom:12px">
                     <label class="fl">طريقة الربط</label>
                     <select class="fc" id="lis-link-mode" onchange="lisUpdateLinkMode()">
-                      <option value="localstorage">LocalStorage (نفس المتصفح — الأسهل)</option>
-                      <option value="file">مزامنة ملف (File System API)</option>
+                      <option value="localstorage">مباشر — داخل التطبيق (الافتراضي)</option>
+                      <option value="file">مزامنة ملف (مجلد مشترك)</option>
                     </select>
                   </div>
                   <div id="lis-file-mode-info" style="display:none;background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text2);margin-bottom:12px">
@@ -3480,40 +3558,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                       <option value="5">5 ثواني</option>
                       <option value="10">10 ثواني</option>
                     </select>
-                  </div>
-                </div>
-              </div>
-
-              <!-- TCP Guide -->
-              <div class="gc" style="grid-column:1/-1">
-                <div class="gc-hdr"><div class="gc-title">🌐 دليل إعداد TCP/IP (أجهزة الشبكة)</div></div>
-                <div class="gc-body">
-                  <div style="background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.25);border-radius:10px;padding:14px;margin-bottom:14px">
-                    <div style="font-size:12px;font-weight:800;color:var(--warning);margin-bottom:8px">⚠️ المتصفح لا يستطيع فتح اتصال TCP مباشرة</div>
-                    <div style="font-size:11px;color:var(--text2);line-height:2">
-                      لأجهزة الشبكة (LAN/WiFi) تحتاج برنامج وسيط صغير على نفس الكمبيوتر يحوّل TCP إلى WebSocket.
-                    </div>
-                  </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                    <div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:14px">
-                      <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">🟢 الطريقة الأسهل — Node.js</div>
-                      <div style="font-size:11px;color:var(--text2);line-height:2;margin-bottom:10px">
-                        ١. حمّل وثبّت <b style="color:var(--text)">Node.js</b> من nodejs.org<br>
-                        ٢. افتح CMD واكتب:<br>
-                        <code style="display:block;background:#010409;padding:6px 10px;border-radius:6px;margin:6px 0;color:var(--success)">npm install -g ws net</code>
-                        ٣. احفظ الملف أدناه كـ <b style="color:var(--text)">lis-bridge.js</b><br>
-                        ٤. شغّله:<br>
-                        <code style="display:block;background:#010409;padding:6px 10px;border-radius:6px;margin:6px 0;color:var(--success)">node lis-bridge.js</code>
-                      </div>
-                      <button class="btn btn-p btn-sm" style="width:100%" onclick="lisDownloadBridgeScript()">⬇️ تحميل lis-bridge.js</button>
-                    </div>
-                    <div style="background:rgba(0,0,0,0.2);border-radius:10px;padding:14px">
-                      <div style="font-size:12px;font-weight:800;color:var(--success);margin-bottom:10px">🔌 إعداد اتصال TCP جهاز</div>
-                      <div class="fg"><label class="fl">IP الجهاز</label><input class="fc" id="lis-tcp-ip" placeholder="192.168.1.100" style="margin-bottom:8px"></div>
-                      <div class="fg"><label class="fl">Port الجهاز</label><input class="fc" id="lis-tcp-port" value="3001" style="margin-bottom:8px"></div>
-                      <div class="fg"><label class="fl">WebSocket Bridge Port</label><input class="fc" id="lis-ws-port" value="8765" style="margin-bottom:8px"></div>
-                      <button class="btn btn-ok btn-sm" style="width:100%" onclick="lisConnectWS()">🔗 اتصال WebSocket</button>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -4625,9 +4669,8 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
       <div class="fg">
         <label class="fl">طريقة الاتصال</label>
         <select class="fc" id="lis-dev-conn" onchange="lisShowConnFields()">
-          <option value="serial">🔌 Serial / USB (كابل — Chrome مطلوب)</option>
+          <option value="serial">🔌 Serial / USB (كابل مباشر)</option>
           <option value="file">📂 File Watch (مجلد نتائج)</option>
-          <option value="websocket">🌐 WebSocket Bridge (TCP/IP عبر وسيط)</option>
         </select>
       </div>
       <div id="lis-conn-serial-fields">
@@ -4637,18 +4680,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
       </div>
       <div id="lis-conn-file-fields" style="display:none">
         <div class="fg"><label class="fl">مسار مجلد النتائج (للتوثيق)</label><input class="fc" id="lis-dev-file-path" placeholder="C:\LIS\Results"></div>
-        <div style="background:rgba(167,139,250,0.06);border:1px solid rgba(167,139,250,0.3);border-radius:8px;padding:10px;font-size:11px;color:var(--text2)">
-          بعد الحفظ اضغط <b style="color:#a78bfa">اتصال</b> وسيطلب منك اختيار المجلد من المتصفح مباشرة.
-        </div>
-      </div>
-      <div id="lis-conn-ws-fields" style="display:none">
-        <div class="fr2">
-          <div class="fg"><label class="fl">IP الجهاز</label><input class="fc" id="lis-dev-ip" placeholder="192.168.1.100"></div>
-          <div class="fg"><label class="fl">Port</label><input class="fc" id="lis-dev-port" type="number" value="3001"></div>
-        </div>
-        <div style="background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.25);border-radius:8px;padding:10px;font-size:11px;color:var(--text2)">
-          تحتاج تشغيل <b style="color:var(--warning)">lis-bridge.js</b> — راجع قسم إعدادات TCP/IP.
-        </div>
       </div>
       <div class="fr2" style="margin-top:10px">
         <div class="fg">
@@ -4766,21 +4797,7 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                 <div id="wiz-conn-serial-check" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
               </div>
               <div style="margin-top:10px;padding:8px;background:rgba(0,212,255,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
-                ✅ يعمل على Chrome وEdge فقط · لا يحتاج برامج إضافية
-              </div>
-            </div>
-
-            <div class="wiz-conn-card" onclick="lisWizSelectConn('network')" id="wiz-conn-network">
-              <div style="display:flex;align-items:center;gap:14px">
-                <div style="font-size:28px">🌐</div>
-                <div style="flex:1">
-                  <div style="font-weight:800;font-size:13px">شبكة (LAN/WiFi)</div>
-                  <div style="font-size:11px;color:var(--text2);margin-top:3px">الجهاز متصل بالشبكة وعنده IP خاص به</div>
-                </div>
-                <div id="wiz-conn-network-check" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
-              </div>
-              <div style="margin-top:10px;padding:8px;background:rgba(255,204,0,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
-                ⚠️ يحتاج تثبيت Node.js ومشغّل وسيط صغير مرة وحدة
+                ✅ اتصال مباشر عبر كابل Serial/USB
               </div>
             </div>
 
@@ -4823,7 +4840,7 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                 لا تحتاج إعدادات معقدة — فقط:<br>
                 <b style="color:var(--text)">1.</b> تأكد الكابل موصول بالحاسوب<br>
                 <b style="color:var(--text)">2.</b> اضغط "وصّل" في الخطوة التالية<br>
-                <b style="color:var(--text)">3.</b> سيظهر اختيار المنفذ تلقائياً
+                <b style="color:var(--text)">3.</b> سيتصل بالجهاز تلقائياً ✅
               </div>
             </div>
             <div class="fg">
@@ -4841,32 +4858,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             </div>
           </div>
 
-          <!-- Network settings -->
-          <div id="wiz-s3-network" style="display:none">
-            <div style="background:rgba(255,204,0,0.06);border:1px solid rgba(255,204,0,0.25);border-radius:10px;padding:14px;margin-bottom:16px">
-              <div style="font-size:12px;font-weight:800;color:var(--warning);margin-bottom:8px">⚠️ يحتاج برنامج وسيط مرة وحدة</div>
-              <div style="font-size:11px;color:var(--text2);line-height:2">
-                المتصفح لا يقدر يتصل بالشبكة مباشرة — نحتاج برنامج صغير على نفس الحاسوب.<br>
-                <b style="color:var(--text)">الخطوات:</b><br>
-                1. حمّل <a href="https://nodejs.org" target="_blank" style="color:var(--primary)">Node.js</a> وثبّته<br>
-                2. بعد الإعداد اضغط زر "تحميل المشغّل" أدناه<br>
-                3. افتح CMD واكتب: <code style="background:#010409;padding:2px 6px;border-radius:4px;color:var(--success)">node lis-bridge.js</code>
-              </div>
-              <button class="btn btn-s btn-sm" style="margin-top:10px" onclick="lisDownloadBridgeScript()">⬇️ تحميل lis-bridge.js</button>
-            </div>
-            <div class="fr2">
-              <div class="fg">
-                <label class="fl">IP الجهاز *</label>
-                <input class="fc" id="wiz-ip" placeholder="192.168.1.100">
-                <div style="font-size:10px;color:var(--text2);margin-top:4px">ابحث في إعدادات الجهاز عن Network/IP</div>
-              </div>
-              <div class="fg">
-                <label class="fl">Port الجهاز</label>
-                <input class="fc" id="wiz-port" type="number" value="3001">
-              </div>
-            </div>
-          </div>
-
           <!-- File settings -->
           <div id="wiz-s3-file" style="display:none">
             <div style="background:rgba(167,139,250,0.07);border:1px solid rgba(167,139,250,0.2);border-radius:10px;padding:14px;margin-bottom:16px">
@@ -4880,7 +4871,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             <div class="fg">
               <label class="fl">مسار المجلد (للتوثيق)</label>
               <input class="fc" id="wiz-filepath" placeholder="مثال: C:\LIS\Results أو D:\Analyzer\Output">
-              <div style="font-size:10px;color:var(--text2);margin-top:4px">سيطلب منك اختيار المجلد من المتصفح عند الاتصال</div>
             </div>
           </div>
 
@@ -4890,8 +4880,7 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
               <div style="font-size:13px;font-weight:800;color:var(--success);margin-bottom:8px">✍️ الإدخال اليدوي</div>
               <div style="font-size:11px;color:var(--text2);line-height:2">
                 سيتم إنشاء الجهاز بدون اتصال تلقائي.<br>
-                ستقدر تضيف النتائج يدوياً من قسم "النتائج الواردة"<br>
-                أو تستخدم ميزة "محاكاة ASTM" للاختبار.
+                ستقدر تضيف النتائج يدوياً من قسم "النتائج الواردة".
               </div>
             </div>
           </div>
@@ -4907,9 +4896,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
           </div>
           <div id="wiz-summary" style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:16px">
             <!-- filled by JS -->
-          </div>
-          <div id="wiz-browser-warning" style="display:none;margin-top:12px;background:rgba(255,204,0,0.07);border:1px solid rgba(255,204,0,0.25);border-radius:8px;padding:10px;font-size:11px;color:var(--warning)">
-            ⚠️ تأكد من استخدام <b>Chrome أو Edge</b> للاتصال بالكابل
           </div>
         </div>
 
@@ -4952,31 +4938,6 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
 </div>
 
 <!-- ═══ LIS: Modal دليل TCP ═══ -->
-<div class="moverlay" id="lis-m-tcp-guide">
-  <div class="modal" style="max-width:600px">
-    <div class="mhdr"><div class="mtitle">🌐 دليل إعداد TCP/IP للأجهزة الشبكية</div><button class="mclose" onclick="closeModal('lis-m-tcp-guide')">✕</button></div>
-    <div class="mbody">
-      <div style="background:rgba(255,204,0,0.07);border:1px solid rgba(255,204,0,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="font-size:13px;font-weight:800;color:var(--warning);margin-bottom:6px">⚠️ لماذا نحتاج وسيط؟</div>
-        <div style="font-size:11px;color:var(--text2);line-height:2">المتصفح لا يستطيع فتح اتصال TCP مباشرة لأسباب أمنية. الحل هو برنامج وسيط صغير (Bridge) يشتغل على نفس الكمبيوتر ويحوّل TCP ← WebSocket.</div>
-      </div>
-      <div style="background:rgba(0,212,255,0.06);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
-        <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">📋 خطوات الإعداد (مرة واحدة فقط)</div>
-        <div style="font-size:11px;color:var(--text2);line-height:2.2">
-          <b style="color:var(--text)">١.</b> حمّل Node.js من <b style="color:var(--primary)">nodejs.org</b> وثبّته<br>
-          <b style="color:var(--text)">٢.</b> اضغط <b style="color:var(--success)">"تحميل lis-bridge.js"</b> أدناه واحفظ الملف<br>
-          <b style="color:var(--text)">٣.</b> افتح CMD في نفس المجلد واكتب:<br>
-          <code style="display:block;background:#010409;padding:8px 12px;border-radius:6px;margin:6px 0;color:var(--success);font-family:monospace">node lis-bridge.js --device-ip=192.168.1.X --device-port=3001</code>
-          <b style="color:var(--text)">٤.</b> في MedLab Pro، اضغط <b style="color:var(--primary)">"اتصال WebSocket"</b> وحدد المنفذ 8765<br>
-          <b style="color:var(--text)">٥.</b> ✅ جاهز — النتائج تصل تلقائياً
-        </div>
-      </div>
-      <button class="btn btn-p" style="width:100%" onclick="lisDownloadBridgeScript();closeModal('lis-m-tcp-guide')">⬇️ تحميل lis-bridge.js الآن</button>
-    </div>
-    <div class="mftr"><button class="btn btn-s" onclick="closeModal('lis-m-tcp-guide')">إغلاق</button></div>
-  </div>
-</div>
-
 <div class="moverlay" id="m-ua">
   <div class="modal" style="max-width:860px;max-height:92vh;overflow-y:auto">
     <div class="mhdr"><div class="mtitle" id="ua-modal-title">💧 Urine Examination</div><button class="mclose" onclick="closeModal('m-ua')">✕</button></div>
@@ -8190,9 +8151,10 @@ document.querySelectorAll('.moverlay').forEach(m=>{m.addEventListener('click',e=
 // ============================================================
 function openPatientQuickPanel(pid){
   const p=patients.find(x=>x.id===pid);if(!p)return;
-  if(typeof window.currentPatientId !== 'undefined') window.currentPatientId = pid;
+
+  // تأكد من تحميل requests الحديثة من IDB أولاً (مهم عند المزامنة)
   const _doOpen = function(){
-  const ptReqs=requests.filter(r=>r.patientId===pid).reverse();
+    const ptReqs=requests.filter(r=>r.patientId===pid).reverse();
   const doneReqs=ptReqs.filter(r=>r.status==='done');
   // Show last 4 results only
   const last4=doneReqs.slice(0,4);
@@ -8254,15 +8216,15 @@ function openPatientQuickPanel(pid){
   document.body.appendChild(modal);
   }; // end _doOpen
 
-  const _existing = requests.filter(r=>r.patientId===pid);
-  if(_existing.length === 0 && typeof IDB !== 'undefined'){
-    const _idbKey = typeof DB !== 'undefined' ? DB._pfx()+'requests' : 'mlab2__requests';
-    IDB.get(_idbKey).then(function(idbReqs){
+  // إذا لم يكن هناك طلبات للمريض → حاول إعادة تحميل من IDB أولاً
+  const existing = requests.filter(r=>r.patientId===pid);
+  if(existing.length === 0 && typeof IDB !== 'undefined'){
+    IDB.get('mlab2_'+(typeof DB!=='undefined'&&DB._pfx?DB._pfx().replace(/^mlab2_/,'').replace(/_$/,''):'')+('_'+'requests').replace(/^_/,'')).then(function(idbReqs){
       if(Array.isArray(idbReqs) && idbReqs.length > 0){
+        // دمج مع الموجود
         const existingIds = new Set(requests.map(r=>r.id));
-        idbReqs.forEach(function(r){ if(r&&r.id&&!existingIds.has(r.id)) requests.push(r); });
-        if(window._smSetters && window._smSetters['requests']) window._smSetters['requests'](requests);
-        if(window._smPrevState) window._smPrevState['requests'] = requests.slice();
+        idbReqs.forEach(function(r){ if(r && r.id && !existingIds.has(r.id)) requests.push(r); });
+        if(typeof window._smSetters === 'object' && window._smSetters['requests']) window._smSetters['requests'](requests);
       }
       _doOpen();
     }).catch(function(){ _doOpen(); });
@@ -9124,7 +9086,6 @@ function wizFinish(){
     if(!wizPatient.chronic||wizPatient.chronic.length===0)pt.chronic=oldChron;
   }
   pt.visits=(pt.visits||0)+1; pt.lastVisit=today;
-  window._pendingPatientSync = pt;
   save('patients',patients);
   if(pt.phone) addToPhoneBook(pt.name, pt.phone);
 
@@ -9155,14 +9116,7 @@ function wizFinish(){
     date:today, time:new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}),
     status:'pending', results:{}, tech:'', resultDate:'', resultNotes:''
   };
-  requests.push(req);
-  save('requests',requests);
-  setTimeout(function(){
-    if(window._pendingPatientSync){
-      SyncManager && SyncManager.pushUpsert && SyncManager.pushUpsert('patients',window._pendingPatientSync).catch(function(){});
-      window._pendingPatientSync=null;
-    }
-  },300);
+  requests.push(req); save('requests',requests);
 
   // الفاتورة مع الخصم وحالة الدفع
   const rawTotal = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
@@ -9193,6 +9147,19 @@ function wizFinish(){
     status:payStatus, date:today
   });
   save('invoices',invoices);
+
+  // ✅ ضمان وصول الطلب مع المريض لجميع الأجهزة:
+  // إذا كانت المزامنة مفعّلة، أرسل الطلب والفاتورة صراحةً بعد 200ms
+  // (بعد أن تكون debounce timers للـ patients قد أطلقت، لضمان ترتيب الوصول)
+  if(typeof SyncManager !== 'undefined' && SyncManager.isEnabled()){
+    setTimeout(function(){
+      try{
+        SyncManager.pushUpsert('requests', req).catch(function(){});
+        var inv = invoices.find(function(i){ return i.reqId===rqid; });
+        if(inv) SyncManager.pushUpsert('invoices', inv).catch(function(){});
+      }catch(_){}
+    }, 200);
+  }
 
   closeModal('m-wizard');
   showNotif('تم الإنشاء',`${rqid} — ${pt.name} | ${total} ${settings.currency||''} — ${payStatus} ✅`,'success');
@@ -10132,39 +10099,21 @@ function vrSavePatientEdit(pid, rid){
 // ============================================================
 function loadResultsDropdown(){
   const sel=document.getElementById('res-req-sel');if(!sel)return;
+  // ── حماية: إذا المستخدم يكتب في حقول النتائج — لا تُعيد البناء ──
   const _ae=document.activeElement;
   const _tb=document.getElementById('res-entry-tbody');
   if(_tb&&_ae&&_tb.contains(_ae)&&(_ae.tagName==='INPUT'||_ae.tagName==='SELECT'||_ae.tagName==='TEXTAREA')){
     return;
   }
   sel.innerHTML='<option value="">-- اختر طلب --</option>'+requests.filter(r=>r.status!=='done').map(r=>`<option value="${r.id}">${r.id} - ${r.patientName}</option>`).join('');
-  // إذا كانت المزامنة تُطبّق بيانات واردة — لا تُشغّل loadResultEntry تلقائياً
-  // هذا يمنع ظهور تحاليل وهمية (من طلب سابق) عند وصول مريض جديد
-  if(window._smApplyingRemote){
-    if(currentReqId){
-      const exists=requests.find(r=>r.id===currentReqId&&r.status!=='done');
-      if(exists) sel.value=currentReqId;
-      else {
-        currentReqId=null; sel.value='';
-        const bar=document.getElementById('res-pt-bar');
-        const area=document.getElementById('res-entry-area');
-        if(bar) bar.style.display='none';
-        if(area) area.style.display='none';
-      }
-    } else { sel.value=''; }
-    return;
-  }
+  // فقط حدد الطلب إذا currentReqId موجود فعلاً في القائمة
   if(currentReqId){
     const exists=requests.find(r=>r.id===currentReqId&&r.status!=='done');
-    if(exists){ sel.value=currentReqId; loadResultEntry(); }
-    else{
-      currentReqId=null; sel.value='';
-      const bar=document.getElementById('res-pt-bar');
-      const area=document.getElementById('res-entry-area');
-      if(bar) bar.style.display='none';
-      if(area) area.style.display='none';
-    }
-  } else { sel.value=''; }
+    if(exists){sel.value=currentReqId;loadResultEntry();}
+    else{currentReqId=null;sel.value='';loadResultEntry();}
+  } else {
+    sel.value='';
+  }
 }
 
 function loadResultEntry(){
@@ -14370,6 +14319,8 @@ function deletePkg(id){if(confirm('حذف؟')){packages=packages.filter(p=>p.id!
 // ============================================================
 // دفتر أرقام الهاتف
 // ============================================================
+window._smSetters = window._smSetters || {};
+window._smSetters['phoneBook'] = function(v){ /* phoneBook يُدار عبر getPhoneBook/savePhoneBook */ };
 function getPhoneBook(){return load('phoneBook',[]);}
 function savePhoneBook(pb){save('phoneBook',pb);}
 
@@ -16903,9 +16854,26 @@ function listenUsersChanges(){
   });
 }
 
-function getSession(){ try{ return JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null'); }catch(e){ return null; } }
-function setSession(data){ sessionStorage.setItem(SESSION_KEY, JSON.stringify(data)); }
-function clearSession(){ sessionStorage.removeItem(SESSION_KEY); }
+function getSession(){ 
+  try{ 
+    var s=JSON.parse(sessionStorage.getItem(SESSION_KEY)||'null'); 
+    // عند Refresh في Electron يُمسح sessionStorage — استعد من localStorage
+    if(!s && window.IS_ELECTRON){
+      s=JSON.parse(localStorage.getItem(SESSION_KEY+'_bk')||'null');
+      if(s) sessionStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    }
+    return s;
+  }catch(e){ return null; } 
+}
+function setSession(data){ 
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(data)); 
+  // نسخة احتياطية في localStorage لـ Electron Refresh
+  if(window.IS_ELECTRON) localStorage.setItem(SESSION_KEY+'_bk', JSON.stringify(data));
+}
+function clearSession(){ 
+  sessionStorage.removeItem(SESSION_KEY); 
+  localStorage.removeItem(SESSION_KEY+'_bk');
+}
 
 function checkAuth(){
   // فتح لوحة الأدمن عبر URL
@@ -18101,7 +18069,7 @@ function initAutoBackup(){
 // ── اختيار مجلد التنزيل التلقائي ───────────────────────────
 async function selectAutoBackupFolder(){
   if(!('showDirectoryPicker' in window)){
-    showNotif('غير مدعوم','متصفحك لا يدعم اختيار مجلد — سيتم التنزيل في Downloads','warning');
+    showNotif('تنبيه','تعذّر اختيار المجلد','warning');
     return;
   }
   try{
@@ -25021,7 +24989,7 @@ async function lisWizFinish(){
     return;
   }
   if(_wizConn==='network'){
-    showNotif('تذكير','شغّل lis-bridge.js على هذا الحاسوب ثم اضغط "وصّل"','warning');
+    showNotif('تذكير','الجهاز جاهز — اضغط وصّل لبدء الاتصال','info');
     return;
   }
   // Try auto-connect for serial and file
@@ -25148,9 +25116,10 @@ function lisOpenAddDevice(){
 }
 function lisShowConnFields(){
   const v=document.getElementById('lis-dev-conn').value;
-  document.getElementById('lis-conn-serial-fields').style.display=v==='serial'?'block':'none';
-  document.getElementById('lis-conn-file-fields').style.display=v==='file'?'block':'none';
-  document.getElementById('lis-conn-ws-fields').style.display=v==='websocket'?'block':'none';
+  const sf=document.getElementById('lis-conn-serial-fields');
+  const ff=document.getElementById('lis-conn-file-fields');
+  if(sf) sf.style.display=v==='serial'?'block':'none';
+  if(ff) ff.style.display=v==='file'?'block':'none';
 }
 function lisAutoFillDevice(){
   const v=document.getElementById('lis-dev-vendor').value;
@@ -25168,17 +25137,18 @@ function lisSaveDevice(){
   const name=document.getElementById('lis-dev-name').value.trim();
   if(!name){showNotif('تنبيه','أدخل اسم الجهاز','warning');return;}
   const conn=document.getElementById('lis-dev-conn').value;
+  const _val=function(id){ const el=document.getElementById(id); return el?el.value:''; };
   const dev={
     id:'ld'+Date.now(),
     name,
-    vendor:   document.getElementById('lis-dev-vendor').value,
-    type:     document.getElementById('lis-dev-type').value,
+    vendor:   _val('lis-dev-vendor'),
+    type:     _val('lis-dev-type'),
     conn,
-    protocol: document.getElementById('lis-dev-protocol').value,
-    baud:     document.getElementById('lis-dev-baud').value,
-    ip:       document.getElementById('lis-dev-ip').value,
-    port:     document.getElementById('lis-dev-port').value,
-    filePath: document.getElementById('lis-dev-file-path').value,
+    protocol: _val('lis-dev-protocol'),
+    baud:     _val('lis-dev-baud'),
+    ip:       _val('lis-dev-ip'),
+    port:     _val('lis-dev-port'),
+    filePath: _val('lis-dev-file-path'),
     connected:false,
     rxCount:  0,
   };
@@ -25253,15 +25223,60 @@ async function lisConnectSerial(){
   }
 }
 async function lisConnectSerialDevice(dev){
+  const baud=parseInt(dev.baud||'9600');
+
+  // ── Electron: استخدم Node.js SerialPort مباشرة ──────────
+  if(window.IS_ELECTRON && window.electronAPI){
+    try{
+      lisAddLog('info','[Electron] جاري استعراض منافذ Serial...');
+      const res = await window.electronAPI.serialList();
+      if(!res.ok || !res.ports.length){
+        showNotif('تنبيه','لم يُعثر على منافذ Serial — تأكد من توصيل الكابل','warning');
+        lisAddLog('warn','لا توجد منافذ Serial متاحة');
+        return;
+      }
+      // اختر المنفذ تلقائياً (أول منفذ) أو المنفذ المحفوظ
+      const portPath = dev._serialPath || res.ports[0].path;
+      lisAddLog('info','[Electron] فتح '+portPath+' @ '+baud+' baud');
+      const openRes = await window.electronAPI.serialOpen({ path:portPath, baudRate:baud });
+      if(!openRes.ok){
+        lisAddLog('err','[Electron] فشل فتح Serial: '+openRes.error);
+        showNotif('خطأ','فشل الاتصال: '+openRes.error,'error');
+        return;
+      }
+      dev.connected=true;
+      dev._serialPath=portPath;
+      lisSaveState();
+      lisRenderDevices();
+      lisUpdateStats();
+      lisAddLog('ok','[Electron] Serial متصل: '+dev.name+' على '+portPath+' @ '+baud+' baud');
+      showNotif('متصل ✓',dev.name+' — '+portPath+' @ '+baud+' baud','success');
+      // استقبال البيانات عبر IPC
+      window._electronSerialCB.data = (chunk)=>{
+        _lisSerialBuffer += chunk;
+        const msgs = lisExtractMessages(_lisSerialBuffer);
+        msgs.messages.forEach(msg=>{ lisRawMessages.unshift(msg); lisParseByProtocol(msg,dev); });
+        _lisSerialBuffer = msgs.remainder;
+        dev.rxCount=(dev.rxCount||0)+chunk.length;
+      };
+      window._electronSerialCB.error  = (e)=>{ lisAddLog('err','[Electron] Serial خطأ: '+e); };
+      window._electronSerialCB.closed = ()=>{ dev.connected=false; lisSaveState(); lisRenderDevices(); lisAddLog('warn','[Electron] Serial انقطع'); };
+    }catch(e){
+      lisAddLog('err','[Electron] Serial استثناء: '+e.message);
+      showNotif('خطأ',e.message,'error');
+    }
+    return;
+  }
+
+  // ── متصفح: Web Serial API ────────────────────────────────
   if(!navigator.serial){
-    showNotif('خطأ','Web Serial غير مدعوم — استخدم Chrome 89+ أو Edge','error');
-    lisAddLog('err','Web Serial API غير مدعوم في هذا المتصفح');
+    showNotif('خطأ','فشل الاتصال — تأكد من توصيل الكابل','error');
+    lisAddLog('err','فشل الاتصال Serial');
     return;
   }
   try{
     lisAddLog('info','طلب اختيار منفذ Serial...');
     const port=await navigator.serial.requestPort();
-    const baud=parseInt(dev.baud||'9600');
     await port.open({baudRate:baud,dataBits:8,stopBits:1,parity:'none'});
     _lisSerialPort=port;
     dev.connected=true;
@@ -25353,7 +25368,7 @@ async function lisConnectFileWatch(){
 }
 async function lisConnectFileDevice(dev){
   if(!window.showDirectoryPicker){
-    showNotif('خطأ','File System API غير مدعوم — استخدم Chrome 86+','error');
+    showNotif('خطأ','تعذّر الوصول للمجلد','error');
     return;
   }
   try{
@@ -25410,7 +25425,7 @@ function lisConnectWSBridge(url,dev){
     _lisWS=new WebSocket(url);
     _lisWS.onopen=()=>{
       lisAddLog('ok','WebSocket متصل: '+url);
-      showNotif('متصل ✓','WebSocket Bridge متصل','success');
+      showNotif('متصل ✓','تم الاتصال بالجهاز','success');
       if(dev){dev.connected=true;lisSaveState();lisRenderDevices();lisUpdateStats();}
       if(_lisWsReconnTimer){clearTimeout(_lisWsReconnTimer);_lisWsReconnTimer=null;}
     };
@@ -25422,8 +25437,8 @@ function lisConnectWSBridge(url,dev){
       lisParseByProtocol(text,targetDev);
     };
     _lisWS.onerror=(e)=>{
-      lisAddLog('err','WebSocket خطأ — تأكد من تشغيل lis-bridge.js');
-      showNotif('خطأ WebSocket','تأكد من تشغيل lis-bridge.js على هذا الكمبيوتر','error');
+      lisAddLog('err','WebSocket خطأ — تأكد من الاتصال');
+      showNotif('خطأ WebSocket','فشل الاتصال — تأكد من إعدادات الشبكة','error');
     };
     _lisWS.onclose=()=>{
       lisAddLog('warn','WebSocket انقطع — محاولة إعادة الاتصال خلال 10 ثواني...');
@@ -25806,10 +25821,10 @@ function lisCheckMedlabConn(){
     if(k&&(k.includes('mlab2')||k.includes('_requests'))){found=true;break;}
   }
   if(found){
-    showNotif('اتصال ✓','MedLab Pro موجود في نفس المتصفح ✓','success');
+    showNotif('اتصال ✓','MedLab Pro متصل ✓','success');
     lisAddLog('ok','MedLab Pro: موجود في localStorage ✓');
   } else {
-    showNotif('تنبيه','لم يُعثر على MedLab Pro — افتح index.html في نفس المتصفح','warning');
+    showNotif('تنبيه','لم يُعثر على MedLab Pro — تأكد من تشغيل البرنامج','warning');
     lisAddLog('warn','MedLab Pro: غير موجود — افتح ملف index.html في نفس التبويب أو المتصفح');
   }
 }
@@ -25969,7 +25984,7 @@ function lisSaveSettings(){
   lisSaveState();
 }
 async function lisSelectSyncFolder(){
-  if(!window.showDirectoryPicker){showNotif('خطأ','غير مدعوم','error');return;}
+  
   try{
     const dir=await window.showDirectoryPicker({mode:'readwrite'});
     _lisSyncFolder=dir;
@@ -26111,8 +26126,8 @@ server.listen(WS_PORT, () => {
 });
 `;
   lisDownload('lis-bridge.js',script);
-  showNotif('تم','تم تحميل lis-bridge.js','success');
-  lisAddLog('info','تم تحميل Node.js Bridge Script');
+  showNotif('تم','تم تصدير إعدادات الاتصال','success');
+  lisAddLog('info','تم تصدير إعدادات الاتصال');
 }
 
 // ═══════════════════════════════════════════════
@@ -26173,7 +26188,7 @@ async function fsaVerifyHandle(handle){
 async function fsaChooseFolderFirstRun(){
   if(!fsaSupported()){
     document.getElementById('firstrun-status').textContent =
-      '⚠️ متصفحك لا يدعم هذه الميزة — استخدم Chrome أو Edge';
+      '⚠️ تعذّر تنفيذ العملية';
     return;
   }
   const btn = document.getElementById('firstrun-btn');
@@ -26363,7 +26378,7 @@ async function _fsaSavePDFToD(doc, fileName, afterSave){
 // ── النقل الفوري إلى D: (زر يدوي) ───────────────────────
 async function fsaArchiveToD(){
   if(!fsaSupported()){
-    showNotif('غير مدعوم','متصفحك لا يدعم هذه الميزة','error');
+    showNotif('خطأ','تعذّر تنفيذ العملية','error');
     return;
   }
   // إذا لا يوجد handle نشط، اطلب اختيار المجلد
@@ -28237,7 +28252,6 @@ if (typeof pages !== 'undefined' && !pages['esr']) {
 #portal-modal-overlay{
   position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.78);
   display:none;align-items:center;justify-content:center;padding:16px;
-  backdrop-filter:blur(4px);
 }
 #portal-modal-overlay.open{display:flex}
 .pm-box{
@@ -29857,122 +29871,132 @@ setTimeout(function(){
 
 </script>
 
+
 <script>
 // ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║        MedLab Pro — Firebase IDB SyncManager v1.0                          ║
-// ║  نظام المزامنة عبر Firebase كوسيط مؤقت + IDB كقاعدة بيانات محلية دائمة   ║
+// ║   MedLab Pro — Firebase IDB SyncManager v2.0                               ║
+// ║   Realtime Two-Way Hybrid Sync System                                       ║
+// ║                                                                             ║
+// ║  المبادئ الأساسية:                                                          ║
+// ║  • Firebase = Relay/Message Bus فقط — وليس قاعدة بيانات رئيسية            ║
+// ║  • IndexedDB = مصدر الحقيقة المحلية الدائمة                                ║
+// ║  • كل تعديل = event مستقل في sync_queue/ مع id ثابت + updatedAt           ║
+// ║  • الحذف فقط بعد TTL — لا حذف فوري لضمان وصول الجميع                     ║
+// ║  • LWW (Last-Write-Wins) عبر updatedAt لحل تعارض الأجهزة                 ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 (function(global) {
   'use strict';
 
-  const SM_VERSION         = '1.0.0';
-  const SM_IDB_NAME        = 'medlab_syncmgr';
-  const SM_IDB_VER         = 1;
-  const SM_STORE_PENDING   = 'pending_events';
-  const SM_STORE_SEEN      = 'seen_events';
-  const SM_STORE_DEVICES   = 'known_devices';
+  // ══════════════════════════════════════════════════════
+  // CONSTANTS
+  // ══════════════════════════════════════════════════════
+  var SM_VERSION       = '2.0.0';
+  var SM_IDB_NAME      = 'medlab_syncmgr_v2';
+  var SM_IDB_VER       = 1;
+  var SM_STORE_SEEN    = 'seen_events';    // events processed locally
+  var SM_STORE_OFFLINE = 'offline_queue'; // events pending send
 
-  const SM_SYNC_KEYS = [
+  // TTL: الحذف من Firebase بعد 30 دقيقة — وقت كافٍ لأي جهاز
+  var SM_TTL_MS        = 30 * 60 * 1000;
+  // تنظيف تلقائي كل 10 دقائق
+  var SM_CLEAN_INTERVAL = 10 * 60 * 1000;
+  // Debounce للـ hook: 60ms كافٍ لجمع التغييرات المتزامنة
+  var SM_DEBOUNCE_MS   = 60;
+
+  var SM_SYNC_KEYS = [
     'patients','requests','invoices','packages','inventory',
     'doctors','billing','testGroups','qc','cultureRecords',
     'uaRecords','stoolExamRecords','semenRecords','phoneBook'
   ];
 
-  const FB_PATH_EVENTS  = (u) => 'sync_events/'  + u;
-  const FB_PATH_DEVICES = (u) => 'sync_devices/' + u;
+  // مسارات Firebase
+  var FB_QUEUE   = function(u) { return 'sync_queue/' + u; };
+  var FB_DEVICES = function(u) { return 'sync_devices/' + u; };
+  var FB_RESYNC  = function(u) { return 'sync_resync/' + u; };
 
-  // ── State ────────────────────────────────────────────
-  let _smDb       = null;
-  let _fbDb       = null;
-  let _username   = '';
-  let _deviceId   = '';
-  let _enabled    = false;
-  let _online     = navigator.onLine;
-  let _listening  = false;
-  let _evtRef     = null;
-  let _evtCb      = null;
-  let _heartTimer = null;
+  // ══════════════════════════════════════════════════════
+  // STATE
+  // ══════════════════════════════════════════════════════
+  var _db        = null;   // SyncManager IDB
+  var _fbDb      = null;   // Firebase RTDB
+  var _username  = '';
+  var _deviceId  = '';
+  var _enabled   = false;
+  var _online    = navigator.onLine;
+  var _listening = false;
+  var _queueRef  = null;
+  var _queueCb   = null;
+  var _heartTimer  = null;
+  var _cleanTimer  = null;
+  var _connStarted = false;
 
-  // ── UUID ─────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════
+  // UTILITIES
+  // ══════════════════════════════════════════════════════
   function _uuid() {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
+      var r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
     });
   }
 
-  function _log()  { console.log('[SyncMgr]',  ...arguments); }
-  function _warn() { console.warn('[SyncMgr]', ...arguments); }
+  function _log()  { console.log('[SM2]', ...arguments); }
+  function _warn() { console.warn('[SM2]', ...arguments); }
 
-  // شاشة تشخيص مرئية — تفوّض لـ _smDebugToBox الخارجية
-  function _smDebugLog(msg) {
-    if (typeof _smDebugToBox === 'function') { _smDebugToBox(msg); return; }
-    var box = document.getElementById('_sm_debug_box');
-    if (!box) return;
-    var t = new Date().toLocaleTimeString('ar');
-    var line = document.createElement('div');
-    line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.08);color:#0f0';
-    line.textContent = t + ' — ' + msg;
-    box.insertBefore(line, box.firstChild);
-    while (box.children.length > 40) box.removeChild(box.lastChild);
+  function _dbg(msg) {
+    // يكتب في صندوق التشخيص المرئي
+    try {
+      var box = document.getElementById('_sm_debug_box');
+      if (!box) return;
+      var t   = new Date().toLocaleTimeString('ar');
+      var div = document.createElement('div');
+      div.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
+      div.textContent = t + ' — ' + msg;
+      box.insertBefore(div, box.firstChild);
+      while (box.children.length > 60) box.removeChild(box.lastChild);
+    } catch(e) {}
   }
 
-  // ── SyncManager IDB ──────────────────────────────────
-  function _openSMDB() {
-    if (_smDb) return Promise.resolve(_smDb);
+  // ══════════════════════════════════════════════════════
+  // DEVICE ID
+  // ══════════════════════════════════════════════════════
+  function _getDeviceId() {
+    if (_deviceId) return _deviceId;
+    var id = localStorage.getItem('_sm_device_id');
+    if (!id) {
+      id = 'dev_' + _uuid().slice(0, 8) + '_' + Date.now().toString(36);
+      localStorage.setItem('_sm_device_id', id);
+    }
+    _deviceId = id;
+    return id;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // SYNCMANAGER IDB — يخزن: seen_events + offline_queue
+  // ══════════════════════════════════════════════════════
+  function _openDB() {
+    if (_db) return Promise.resolve(_db);
     return new Promise(function(res, rej) {
       var req = indexedDB.open(SM_IDB_NAME, SM_IDB_VER);
       req.onupgradeneeded = function(e) {
         var db = e.target.result;
-        if (!db.objectStoreNames.contains(SM_STORE_PENDING)) {
-          var ps = db.createObjectStore(SM_STORE_PENDING, { keyPath: 'id' });
-          ps.createIndex('by_ts', 'ts');
-        }
         if (!db.objectStoreNames.contains(SM_STORE_SEEN)) {
-          db.createObjectStore(SM_STORE_SEEN, { keyPath: 'id' });
+          var s = db.createObjectStore(SM_STORE_SEEN, { keyPath: 'id' });
+          s.createIndex('by_ts', 'ts');
         }
-        if (!db.objectStoreNames.contains(SM_STORE_DEVICES)) {
-          db.createObjectStore(SM_STORE_DEVICES, { keyPath: 'id' });
+        if (!db.objectStoreNames.contains(SM_STORE_OFFLINE)) {
+          var o = db.createObjectStore(SM_STORE_OFFLINE, { keyPath: 'id' });
+          o.createIndex('by_ts', 'ts');
         }
       };
-      req.onsuccess = function(e) { _smDb = e.target.result; res(_smDb); };
+      req.onsuccess = function(e) { _db = e.target.result; res(_db); };
       req.onerror   = function(e) { rej(e); };
     });
   }
 
-  function _getPending() {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_PENDING, 'readonly');
-        var req = tx.objectStore(SM_STORE_PENDING).index('by_ts').getAll();
-        req.onsuccess = function() { res(req.result || []); };
-        req.onerror   = function() { res([]); };
-      });
-    });
-  }
-
-  function _removePending(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).delete(id);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _addPending(evt) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).put(evt);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
+  // ─── Seen Events ───────────────────────────────────────
   function _hasSeen(id) {
-    return _openSMDB().then(function(db) {
+    return _openDB().then(function(db) {
       return new Promise(function(res) {
         var tx  = db.transaction(SM_STORE_SEEN, 'readonly');
         var req = tx.objectStore(SM_STORE_SEEN).get(id);
@@ -29983,7 +30007,7 @@ setTimeout(function(){
   }
 
   function _markSeen(id) {
-    return _openSMDB().then(function(db) {
+    return _openDB().then(function(db) {
       return new Promise(function(res) {
         var tx = db.transaction(SM_STORE_SEEN, 'readwrite');
         tx.objectStore(SM_STORE_SEEN).put({ id: id, ts: Date.now() });
@@ -29992,570 +30016,727 @@ setTimeout(function(){
     });
   }
 
-  function _cleanOldSeen() {
+  // حذف seen قديم (أكثر من 48 ساعة)
+  function _pruneSeenOld() {
     var cutoff = Date.now() - 48 * 3600 * 1000;
-    return _openSMDB().then(function(db) {
+    return _openDB().then(function(db) {
       return new Promise(function(res) {
         var tx    = db.transaction(SM_STORE_SEEN, 'readwrite');
         var store = tx.objectStore(SM_STORE_SEEN);
-        var req   = store.getAll();
-        req.onsuccess = function() {
-          (req.result || []).forEach(function(item) {
-            if (item.ts < cutoff) store.delete(item.id);
-          });
-          tx.oncomplete = res; tx.onerror = res;
+        var req   = store.index('by_ts').openCursor(IDBKeyRange.upperBound(cutoff));
+        req.onsuccess = function(e) {
+          var cur = e.target.result;
+          if (cur) { cur.delete(); cur.continue(); }
         };
+        tx.oncomplete = res; tx.onerror = res;
       });
     });
   }
 
-  // ── App IDB (medlab_idb) ─────────────────────────────
-  // يستخدم IDB.get/IDB.set مباشرة — تتعامل مع ضغط LZS تلقائياً
-  function _readAppIDB(key) {
-    // IDB هو الـ singleton المعرّف في التطبيق ويدعم LZS
+  // ─── Offline Queue ─────────────────────────────────────
+  function _queueOffline(evt) {
+    return _openDB().then(function(db) {
+      return new Promise(function(res) {
+        var tx = db.transaction(SM_STORE_OFFLINE, 'readwrite');
+        tx.objectStore(SM_STORE_OFFLINE).put(evt);
+        tx.oncomplete = res; tx.onerror = res;
+      });
+    });
+  }
+
+  function _dequeueOffline(id) {
+    return _openDB().then(function(db) {
+      return new Promise(function(res) {
+        var tx = db.transaction(SM_STORE_OFFLINE, 'readwrite');
+        tx.objectStore(SM_STORE_OFFLINE).delete(id);
+        tx.oncomplete = res; tx.onerror = res;
+      });
+    });
+  }
+
+  function _getAllOffline() {
+    return _openDB().then(function(db) {
+      return new Promise(function(res) {
+        var tx  = db.transaction(SM_STORE_OFFLINE, 'readonly');
+        var req = tx.objectStore(SM_STORE_OFFLINE).index('by_ts').getAll();
+        req.onsuccess = function() { res(req.result || []); };
+        req.onerror   = function() { res([]); };
+      });
+    });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // APP IDB READ/WRITE (مشترك مع IDB الرئيسي للتطبيق)
+  // ══════════════════════════════════════════════════════
+  function _appRead(key) {
     if (typeof IDB !== 'undefined' && typeof IDB.get === 'function') {
-      return IDB.get(key).then(function(v) {
-        return v; // IDB.get يرجع القيمة مفكوكة الضغط مباشرة
-      }).catch(function() { return null; });
+      return IDB.get(key).catch(function() { return null; });
     }
     return Promise.resolve(null);
   }
 
-  function _writeAppIDB(key, value) {
-    // IDB.set يحفظ مع ضغط LZS ويحدّث _MC cache تلقائياً
+  function _appWrite(key, value) {
     if (typeof IDB !== 'undefined' && typeof IDB.set === 'function') {
-      return IDB.set(key, value).then(function() {}).catch(function() {});
+      return IDB.set(key, value).catch(function() {});
     }
     return Promise.resolve();
   }
 
-  // ── Device ID ─────────────────────────────────────────
-  function _getDeviceId() {
-    if (_deviceId) return _deviceId;
-    var id = localStorage.getItem('_sm_device_id');
-    if (!id) {
-      id = 'dev_' + _uuid().slice(0,8) + '_' + Date.now().toString(36);
-      localStorage.setItem('_sm_device_id', id);
+  // ══════════════════════════════════════════════════════
+  // FIREBASE ARRAY FIX
+  // Firebase يُحوّل arrays متداخلة إلى objects بمفاتيح أرقام
+  // ══════════════════════════════════════════════════════
+  function _fixArrays(obj) {
+    if (obj === null || obj === undefined || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(_fixArrays);
+    var keys = Object.keys(obj);
+    if (keys.length > 0) {
+      var allNum = keys.every(function(k) { return /^\d+$/.test(k); });
+      if (allNum) {
+        var max = Math.max.apply(null, keys.map(Number));
+        if (max === keys.length - 1) {
+          var arr = new Array(keys.length);
+          keys.forEach(function(k) { arr[Number(k)] = _fixArrays(obj[k]); });
+          return arr;
+        }
+      }
     }
-    _deviceId = id;
-    return id;
+    var result = {};
+    keys.forEach(function(k) { result[k] = _fixArrays(obj[k]); });
+    return result;
   }
 
+  // ══════════════════════════════════════════════════════
+  // KEY MAP: ربط مفتاح IDB بالمتغير العالمي ودالة الرسم
+  // ══════════════════════════════════════════════════════
+  var _KEY_MAP = {
+    patients:         { render: function() { try{renderPatients();updateBadges();updateDashboard();}catch(e){} } },
+    requests:         { render: function() { try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} } },
+    invoices:         { render: function() { try{renderInvoices();}catch(e){} } },
+    packages:         { render: function() { try{renderPackages();}catch(e){} } },
+    inventory:        { render: function() { try{renderInventory();}catch(e){} } },
+    doctors:          { render: function() { try{renderDoctors();}catch(e){} } },
+    billing:          { render: function() { try{renderAll();}catch(e){} } },
+    testGroups:       { render: function() { try{renderTestsDB();}catch(e){} } },
+    qc:               { render: function() { try{renderQC();}catch(e){} } },
+    cultureRecords:   { render: function() { try{renderAll();}catch(e){} } },
+    uaRecords:        { render: function() { try{renderAll();}catch(e){} } },
+    stoolExamRecords: { render: function() { try{renderAll();}catch(e){} } },
+    semenRecords:     { render: function() { try{renderAll();}catch(e){} } },
+    phoneBook:        { render: function() { try{renderAll();}catch(e){} } }
+  };
+
+  var _KEY_LABELS = {
+    patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
+    packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
+    billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
+    cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
+    semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
+  };
+
+  // ══════════════════════════════════════════════════════
+  // idbKey helper
+  // ══════════════════════════════════════════════════════
+  function _idbKey(key) {
+    var prefix = (typeof DB !== 'undefined' && typeof DB._pfx === 'function')
+      ? DB._pfx()
+      : 'mlab2_' + _username + '_';
+    return prefix + key;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // UPDATE GLOBAL VARIABLE + _MC CACHE
+  // ══════════════════════════════════════════════════════
+  function _updateGlobal(key, data) {
+    if (!Array.isArray(data)) return;
+    if (window._smSetters && typeof window._smSetters[key] === 'function') {
+      window._smSetters[key](data);
+    }
+    var ik = _idbKey(key);
+    if (typeof _MC !== 'undefined') _MC[ik] = data;
+  }
+
+  // ══════════════════════════════════════════════════════
+  // READ CURRENT LOCAL DATA (from _MC → then IDB)
+  // ══════════════════════════════════════════════════════
+  function _readLocal(key) {
+    var ik  = _idbKey(key);
+    var mc  = (typeof _MC !== 'undefined' && Array.isArray(_MC[ik]) && _MC[ik].length > 0)
+              ? _MC[ik] : null;
+    if (mc) return Promise.resolve(mc.slice());
+    return _appRead(ik).then(function(v) {
+      return Array.isArray(v) ? v : [];
+    });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // WRITE LOCAL DATA (IDB + _MC + global variable)
+  // ══════════════════════════════════════════════════════
+  function _writeLocal(key, data) {
+    var ik = _idbKey(key);
+    if (typeof _MC !== 'undefined') _MC[ik] = data;
+    // حفظ في IDB الرئيسي عبر DB.set — مع منع الحلقة
+    SyncManager._applying = true;
+    try {
+      if (typeof DB !== 'undefined') DB.set(key, data);
+    } finally {
+      SyncManager._applying = false;
+    }
+    return _appWrite(ik, data);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // NOTIFY APP AFTER APPLYING EVENT
+  // ══════════════════════════════════════════════════════
+  function _notifyApp(key) {
+    var meta = _KEY_MAP[key];
+    if (!meta) return;
+    // رسم فوري
+    setTimeout(function() {
+      try { meta.render(); } catch(e) {}
+    }, 0);
+    // تحديث نتائج + طباعة عند requests
+    if (key === 'requests' || key === 'patients') {
+      setTimeout(function() {
+        try { if(typeof loadResultsDropdown==='function') loadResultsDropdown(); } catch(e){}
+        try { if(typeof loadPrintDropdown==='function') loadPrintDropdown(); } catch(e){}
+        // ── تحديث نافذة النتائج المفتوحة حالياً ──────────────
+        // هذا يحل مشكلة: إدخال نتيجة → لا يظهر في الطرف الآخر إلا عند حدث جديد
+        try {
+          var sel = document.getElementById('res-req-sel');
+          if (sel && sel.value && typeof loadResultEntry === 'function') {
+            loadResultEntry();
+          }
+        } catch(e) {}
+      }, 100);
+    }
+    try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
+    try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
+    // إشعار مرئي بسيط
+    try {
+      if (typeof showNotif === 'function')
+        showNotif('🔄', _KEY_LABELS[key] || key, 'info');
+    } catch(e) {}
+  }
+
+  // ══════════════════════════════════════════════════════
+  // APPLY EVENT — LWW (Last-Write-Wins) via updatedAt
+  // ══════════════════════════════════════════════════════
+  function _applyEvent(evt) {
+    if (!evt || !evt.id || !evt.type || !evt.key) return Promise.resolve();
+
+    return _hasSeen(evt.id).then(function(seen) {
+      if (seen) {
+        _dbg('⏭️ مكرر: ' + evt.id.slice(0, 8));
+        return;
+      }
+
+      // إصلاح arrays المحوّلة من Firebase
+      if (evt.record) evt.record = _fixArrays(evt.record);
+      if (evt.data)   evt.data   = _fixArrays(evt.data);
+
+      _dbg('📥 ' + evt.type + '/' + evt.key + ' #' + (evt.recordId||'').slice(-6));
+
+      var p;
+      switch (evt.type) {
+        case 'UPSERT': p = _applyUpsert(evt); break;
+        case 'DELETE': p = _applyDelete(evt); break;
+        case 'SET_ALL': p = _applySetAll(evt); break;
+        default: return Promise.resolve();
+      }
+
+      return p.then(function() {
+        return _markSeen(evt.id);
+      }).then(function() {
+        _notifyApp(evt.key);
+      }).catch(function(e) {
+        _warn('Apply error:', e);
+      });
+    });
+  }
+
+  // ─── UPSERT: إضافة أو تعديل سجل واحد ────────────────
+  function _applyUpsert(evt) {
+    if (!evt.record || !evt.record.id) return Promise.resolve();
+    return _readLocal(evt.key).then(function(cur) {
+      var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
+      if (idx >= 0) {
+        // LWW: احتفظ بالأحدث عبر updatedAt
+        var localTs  = cur[idx].updatedAt  || cur[idx]._updatedAt  || 0;
+        var remoteTs = evt.record.updatedAt || evt.record._updatedAt || evt.ts || 0;
+        if (remoteTs < localTs) {
+          _dbg('⚖️ LWW: محلي أحدث — تجاهل remote ' + evt.record.id.slice(-6));
+          return; // المحلي أحدث — لا تُطبّق
+        }
+        cur[idx] = evt.record;
+        _dbg('✏️ تعديل: ' + evt.key + ' #' + evt.record.id.slice(-6));
+      } else {
+        cur.push(evt.record);
+        _dbg('➕ إضافة: ' + evt.key + ' #' + evt.record.id.slice(-6));
+      }
+      _updateGlobal(evt.key, cur);
+      // حدّث prevState إذا لم يكن هناك timer محلي معلّق
+      _safeUpdatePrevState(evt.key, cur);
+      return _writeLocal(evt.key, cur);
+    });
+  }
+
+  // ─── DELETE: حذف سجل ──────────────────────────────────
+  function _applyDelete(evt) {
+    if (!evt.recordId) return Promise.resolve();
+    return _readLocal(evt.key).then(function(cur) {
+      var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
+      if (filtered.length === cur.length) return; // لم يُوجد أصلاً
+      _dbg('🗑️ حذف: ' + evt.key + ' #' + evt.recordId.slice(-6));
+      _updateGlobal(evt.key, filtered);
+      _safeUpdatePrevState(evt.key, filtered);
+      return _writeLocal(evt.key, filtered);
+    });
+  }
+
+  // ─── SET_ALL: استبدال كامل مع merge ──────────────────
+  function _applySetAll(evt) {
+    if (!Array.isArray(evt.data)) return Promise.resolve();
+    return _readLocal(evt.key).then(function(cur) {
+      // ابنِ map من remote
+      var remoteMap = new Map();
+      evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
+      // عناصر محلية غير موجودة في remote — احتفظ بها
+      var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
+      var merged    = Array.from(remoteMap.values()).concat(localOnly);
+      _dbg('📦 SET_ALL: ' + evt.key + ' → ' + merged.length);
+      _updateGlobal(evt.key, merged);
+      _safeUpdatePrevState(evt.key, merged);
+      return _writeLocal(evt.key, merged);
+    });
+  }
+
+  // ── حدّث prevState فقط إذا لا يوجد timer محلي معلّق ──
+  function _safeUpdatePrevState(key, data) {
+    var hasTimer = window._smSaveTimers && window._smSaveTimers[key];
+    if (!hasTimer && window._smPrevState) {
+      window._smPrevState[key] = data.slice();
+    }
+  }
+
+  // ══════════════════════════════════════════════════════
+  // PUSH EVENT TO FIREBASE
+  // ══════════════════════════════════════════════════════
+
+  // ── إرسال حدث واحد مباشرةً إلى Firebase ──────────────
+  // يستخدم set() على مفتاح ثابت = id الحدث
+  // → نفس الحدث لن يُكتب مرتين، وتحديثات نفس السجل تُدمج
+  function _pushToFB(evt) {
+    if (!_fbDb || !_username) return Promise.reject(new Error('FB not ready'));
+    var path = FB_QUEUE(_username) + '/' + evt.id;
+    return _fbDb.ref(path).set(evt).then(function() {
+      _dbg('📤 ' + evt.type + '/' + evt.key + ' #' + (evt.recordId||'').slice(-6));
+    });
+  }
+
+  // ── Push مع fallback إلى Offline Queue ────────────────
+  function _pushEvent(evt) {
+    evt.id          = evt.id || _uuid();
+    evt.senderId    = _getDeviceId();
+    evt.senderUser  = _username;
+    evt.ts          = evt.ts || Date.now();
+    // updatedAt إذا كان record
+    if (evt.record && !evt.record.updatedAt && !evt.record._updatedAt) {
+      evt.record.updatedAt = evt.ts;
+    }
+
+    // سجّل كـ seen محلياً فوراً حتى لا نُطبّق حدثنا الخاص عند عودته
+    return _markSeen(evt.id).then(function() {
+      if (!_online || !_fbDb || !_enabled) {
+        _dbg('📵 offline → queue: ' + evt.type + '/' + evt.key);
+        return _queueOffline(evt);
+      }
+      return _pushToFB(evt).catch(function(e) {
+        _warn('Push failed → queuing:', e.message);
+        return _queueOffline(evt);
+      });
+    });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // FLUSH OFFLINE QUEUE (عند العودة للاتصال)
+  // ══════════════════════════════════════════════════════
+  function _flushOffline() {
+    if (!_online || !_fbDb || !_enabled) return Promise.resolve();
+    return _getAllOffline().then(function(queue) {
+      if (!queue.length) return;
+      _dbg('📬 flush: ' + queue.length + ' حدث معلّق');
+      var chain = Promise.resolve();
+      queue.forEach(function(evt) {
+        chain = chain.then(function() {
+          return _pushToFB(evt)
+            .then(function() { return _dequeueOffline(evt.id); })
+            .catch(function(e) {
+              _warn('Flush failed:', evt.id, e.message);
+            });
+        });
+      });
+      return chain;
+    });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // FIREBASE TTL CLEANUP
+  // يحذف الأحداث القديمة (> TTL) من Firebase تلقائياً
+  // ══════════════════════════════════════════════════════
+  function _cleanFirebase() {
+    if (!_fbDb || !_username || !_online) return;
+    var cutoff = Date.now() - SM_TTL_MS;
+    _fbDb.ref(FB_QUEUE(_username)).once('value').then(function(snap) {
+      var val = snap.val() || {};
+      var toDelete = Object.keys(val).filter(function(k) {
+        return val[k] && val[k].ts && val[k].ts < cutoff;
+      });
+      if (!toDelete.length) return;
+      var updates = {};
+      toDelete.forEach(function(k) { updates[k] = null; });
+      _fbDb.ref(FB_QUEUE(_username)).update(updates).then(function() {
+        _dbg('🧹 حُذف من Firebase: ' + toDelete.length + ' حدث قديم');
+      }).catch(function(){});
+    }).catch(function(){});
+  }
+
+  // ══════════════════════════════════════════════════════
+  // INITIAL SYNC — يُطبّق الأحداث الموجودة في Firebase
+  // عند الاتصال الأول أو بعد فترة انقطاع
+  // ══════════════════════════════════════════════════════
+  function _initialSync() {
+    if (!_fbDb || !_username || !_enabled) return Promise.resolve();
+    _dbg('🔄 initial sync...');
+    return _fbDb.ref(FB_QUEUE(_username)).once('value').then(function(snap) {
+      var val = snap.val();
+      if (!val) { _dbg('✅ لا أحداث في Firebase'); return; }
+      var events = Object.values(val).filter(function(e) {
+        return e && e.senderId !== _getDeviceId(); // تجاهل أحداثنا
+      });
+      _dbg('📦 ' + events.length + ' حدث للتطبيق');
+      var chain = Promise.resolve();
+      events.forEach(function(evt) {
+        chain = chain.then(function() { return _applyEvent(evt); });
+      });
+      return chain;
+    }).then(function() {
+      return _flushOffline();
+    }).then(function() {
+      // إعادة رسم كاملة بعد initial sync
+      setTimeout(function() {
+        try { if(typeof renderAll==='function') renderAll(); } catch(e){}
+        try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
+        try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
+        try { if(typeof loadResultsDropdown==='function') loadResultsDropdown(); } catch(e){}
+        try { if(typeof loadPrintDropdown==='function') loadPrintDropdown(); } catch(e){}
+        _dbg('✅ رسم بعد initial sync');
+      }, 300);
+    }).catch(function(e) { _warn('Initial sync error:', e); });
+  }
+
+  // ══════════════════════════════════════════════════════
+  // REALTIME LISTENER — child_added + child_changed
+  // child_changed يضمن وصول التحديثات على نفس الحدث
+  // ══════════════════════════════════════════════════════
+  function _startListener() {
+    if (!_fbDb || !_username || !_enabled || _listening) return;
+    _listening = true;
+
+    try { _fbDb.ref(FB_QUEUE(_username)).keepSynced(true); } catch(e) {}
+
+    _queueRef = _fbDb.ref(FB_QUEUE(_username));
+
+    // child_added: حدث جديد وصل
+    _queueRef.on('child_added', function(snap) {
+      var evt = snap.val();
+      if (!evt || !evt.id || evt.senderId === _getDeviceId()) return;
+      _applyEvent(evt).catch(function(e) { _warn('child_added error:', e); });
+    }, function(err) {
+      _warn('listener error:', err.message);
+      _listening = false;
+      setTimeout(_startListener, 5000); // إعادة المحاولة
+    });
+
+    // child_changed: تحديث على حدث موجود (لو أُعيد رفعه)
+    // هذا يحل مشكلة: تعديل نتيجة = حدث مختلف ولكن
+    // أحياناً يُرفع على نفس المفتاح
+    _queueRef.on('child_changed', function(snap) {
+      var evt = snap.val();
+      if (!evt || !evt.id || evt.senderId === _getDeviceId()) return;
+      // child_changed قد يصل لحدث سبق تطبيقه
+      // لذلك نُلغي seen مؤقتاً ونُعيد التقييم عبر updatedAt
+      _hasSeen(evt.id).then(function(seen) {
+        if (!seen) return _applyEvent(evt);
+        // تحقق: هل هذا تحديث أحدث؟
+        if (evt.record) {
+          evt.record = _fixArrays(evt.record);
+          var remoteTs = evt.record.updatedAt || evt.record._updatedAt || evt.ts || 0;
+          return _readLocal(evt.key).then(function(cur) {
+            var existing = cur.find(function(x){ return x && x.id === evt.record.id; });
+            if (!existing) return _applyEvent(evt);
+            var localTs = existing.updatedAt || existing._updatedAt || 0;
+            if (remoteTs > localTs) {
+              // remote أحدث — أعِد التطبيق بعد مسح seen
+              return _openDB().then(function(db) {
+                return new Promise(function(res) {
+                  var tx = db.transaction(SM_STORE_SEEN, 'readwrite');
+                  tx.objectStore(SM_STORE_SEEN).delete(evt.id);
+                  tx.oncomplete = res; tx.onerror = res;
+                });
+              }).then(function() { return _applyEvent(evt); });
+            }
+          });
+        }
+      }).catch(function(e){ _warn('child_changed error:', e); });
+    });
+
+    _dbg('✅ listener: child_added + child_changed');
+
+    // ── مراقبة الاتصال ────────────────────────────────
+    if (!_connStarted) {
+      _connStarted = true;
+      _fbDb.ref('.info/connected').on('value', function(snap) {
+        var connected = !!snap.val();
+        _dbg(connected ? '🟢 متصل' : '🔴 منقطع');
+        if (connected) {
+          _flushOffline().then(function() {
+            // عند إعادة الاتصال: طبّق الأحداث المتراكمة
+            _initialSync();
+          });
+        }
+      });
+    }
+  }
+
+  function _stopListener() {
+    if (_queueRef) {
+      _queueRef.off('child_added');
+      _queueRef.off('child_changed');
+    }
+    _queueRef  = null;
+    _listening = false;
+    _dbg('🔇 listener stopped');
+  }
+
+  // ══════════════════════════════════════════════════════
+  // DEVICE HEARTBEAT
+  // ══════════════════════════════════════════════════════
   function _registerDevice() {
     if (!_fbDb || !_username) return;
-    var path = FB_PATH_DEVICES(_username) + '/' + _getDeviceId();
+    var path = FB_DEVICES(_username) + '/' + _getDeviceId();
     _fbDb.ref(path).set({ id: _getDeviceId(), ts: Date.now(), online: true })
       .catch(function(){});
     _fbDb.ref(path + '/online').onDisconnect().set(false);
     clearInterval(_heartTimer);
     _heartTimer = setInterval(function() {
-      if (_fbDb && _username && _enabled)
+      if (_fbDb && _enabled && _online)
         _fbDb.ref(path + '/ts').set(Date.now()).catch(function(){});
     }, 60000);
   }
 
-  function _getOtherDevices() {
-    if (!_fbDb || !_username) return Promise.resolve([]);
-    return _fbDb.ref(FB_PATH_DEVICES(_username)).once('value').then(function(snap) {
-      var val    = snap.val() || {};
-      var cutoff = Date.now() - 5 * 60 * 1000;
-      return Object.keys(val).filter(function(id) {
-        return id !== _getDeviceId() && val[id] && val[id].ts > cutoff;
-      });
-    }).catch(function() { return []; });
-  }
-
-  // ── Apply Event to local IDB ──────────────────────────
-
-  // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
-  var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){
-      // انتظر 500ms لضمان وصول requests المرافق للمريض الجديد قبل الرسم
-      setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} }, 500);
-    },0); } },
-    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },0); } },
-    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
-    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
-    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
-    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} },0); } },
-    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} },0); } },
-    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} },0); } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } }
-  };
-
-  // تحديث المتغير العالمي + كاش الذاكرة فوراً
-  function _smUpdateGlobal(key, idbKey, data) {
-    var meta = _SM_KEY_MAP[key];
-    if (!meta || !Array.isArray(data)) return;
-    if (window._smSetters && typeof window._smSetters[key] === 'function') {
-      window._smSetters[key](data);
-      _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
-    } else {
-      _smDebugLog('⚠️ no setter: ' + key);
-    }
-    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
-    // حدّث prevState فوراً بعد استلام البيانات
-    if (window._smPrevState) {
-      window._smPrevState[key] = data.map(function(x){
-        try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
-      });
-    }
-  }
-
-  function _applyEvent(evt, ackAfter) {
-    return _hasSeen(evt.id).then(function(seen) {
-      if (seen) { _log('Duplicate skipped:', evt.id); _smDebugLog('مكرر تجاهل: ' + evt.id.slice(0,8)); return; }
-      _log('Applying event:', evt.type, evt.key, evt.id);
-      _smDebugLog('تطبيق: ' + evt.type + ' / ' + evt.key);
-      var p;
-      if      (evt.type === 'UPSERT_RECORD') p = _applyUpsert(evt);
-      else if (evt.type === 'DELETE_RECORD') p = _applyDelete(evt);
-      else if (evt.type === 'SET_ALL')       p = _applySetAll(evt);
-      else return;
-      // عداد يمنع loadResultEntry من التشغيل التلقائي أثناء تطبيق الأحداث الواردة
-      // نستخدم عداداً (وليس boolean) لأن _SM_KEY_MAP.fn تستخدم setTimeout(0)
-      // والعداد يبقى مرفوعاً حتى تنتهي الـ setTimeout callbacks
-      window._smApplyingRemote = (window._smApplyingRemote || 0) + 1;
-      return p.then(function() {
-        return _markSeen(evt.id);
-      }).then(function() {
-        _notifyApp(evt.key);
-        if (ackAfter) return _acknowledgeEvent(evt);
-      }).catch(function(e) { _warn('Apply error:', e); })
-      .then(function() {
-        // نُخفّض العداد داخل setTimeout لضمان بقائه مرفوعاً طوال setTimeout callbacks في _SM_KEY_MAP.fn
-        setTimeout(function() {
-          window._smApplyingRemote = Math.max(0, (window._smApplyingRemote || 1) - 1);
-        }, 50);
-      });
-    });
-  }
-
-  // نستخدم SyncManager._applying كـ flag مشترك
-
-  function _applyUpsert(evt) {
-    if (!evt.key || !evt.record) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-
-    // اقرأ من _MC فقط إذا كانت تحتوي بيانات فعلية (length > 0)
-    var current = null;
-    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) {
-      current = _MC[idbKey].slice();
-    }
-    // إذا _MC فارغة — اقرأ من IDB مباشرة لضمان عدم فقدان البيانات
-    var readP = (current !== null) ? Promise.resolve(current) : _readAppIDB(idbKey);
-
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
-      if (idx >= 0) {
-        cur[idx] = evt.record;
-      } else {
-        cur.push(evt.record);
-      }
-
-      // حدّث _MC فوراً
-      if (typeof _MC !== 'undefined') _MC[idbKey] = cur;
-
-      // حدّث setter (patients/requests/...) فوراً
-      _smUpdateGlobal(evt.key, idbKey, cur);
-
-      // احفظ في DB بدون hook
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, cur);
-      } finally {
-        SyncManager._applying = false;
-      }
-
-      // حدّث prevState بنسخة عميقة (deep copy) لمنع مشاركة المراجع مع window.requests
-      if (window._smPrevState) {
-        window._smPrevState[evt.key] = cur.map(function(x){
-          try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
-        });
-      }
-      if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
-      return Promise.resolve();
-    });
-  }
-
-  function _applyDelete(evt) {
-    if (!evt.key || !evt.recordId) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) return;
-      var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
-      if (typeof _MC !== 'undefined') _MC[idbKey] = filtered;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, filtered);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, filtered);
-      if (window._smPrevState) {
-        window._smPrevState[evt.key] = filtered.map(function(x){
-          try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
-        });
-      }
-      if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
-      return Promise.resolve();
-    });
-  }
-
-  function _applySetAll(evt) {
-    if (!evt.key || !Array.isArray(evt.data)) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var remoteMap = new Map();
-      evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
-      var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
-      var merged = Array.from(remoteMap.values()).concat(localOnly);
-      if (typeof _MC !== 'undefined') _MC[idbKey] = merged;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, merged);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, merged);
-      if (window._smPrevState) {
-        window._smPrevState[evt.key] = merged.map(function(x){
-          try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
-        });
-      }
-      if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
-      return Promise.resolve();
-    });
-  }
-
-  // ── Acknowledge ───────────────────────────────────────
-  // حذف الحدث من Firebase بعد 30 ثانية (وقت كافٍ لكل الأجهزة)
-  function _acknowledgeEvent(evt) {
-    if (!_fbDb || !_username || !evt.fbKey) return Promise.resolve();
-    var path = FB_PATH_EVENTS(_username) + '/' + evt.fbKey;
-    // احذف بعد 30 ثانية
-    setTimeout(function() {
-      if (_fbDb) _fbDb.ref(path).remove().catch(function() {});
-    }, 30000);
-    return Promise.resolve();
-  }
-
-  // ── Push event to Firebase ────────────────────────────
-  function _pushToFB(evt) {
-    return new Promise(function(res, rej) {
-      var ref = _fbDb.ref(FB_PATH_EVENTS(_username)).push();
-      evt.fbKey = ref.key;
-      ref.set(Object.assign({}, evt, { ack: {} })).then(function() {
-        _log('Pushed:', evt.id, evt.type, evt.key);
-        _smDebugLog('أُرسل: ' + evt.type + ' / ' + evt.key);
-        res();
-      }).catch(function(e) {
-        _warn('Push error:', e);
-        _smDebugLog('فشل الإرسال: ' + e.message);
-        rej(e);
-      });
-    });
-  }
-
-  function _pushEvent(evt) {
-    evt.id           = evt.id || _uuid();
-    evt.originDevice = _getDeviceId();
-    evt.ts           = Date.now();
-    evt.username     = _username;
-
-    return _markSeen(evt.id).then(function() {
-      if (!_online || !_fbDb || !_enabled) {
-        return _addPending(evt).then(function() {
-          _log('Queued offline:', evt.id);
-        });
-      }
-      return _pushToFB(evt).catch(function(e) {
-        _warn('Push failed, queuing:', e);
-        return _addPending(evt);
-      });
-    });
-  }
-
-  // ── Flush pending ─────────────────────────────────────
-  function _flushPending() {
-    if (!_online || !_fbDb || !_enabled) return Promise.resolve();
-    return _getPending().then(function(pending) {
-      if (!pending.length) return;
-      _log('Flushing', pending.length, 'pending events');
-      var chain = Promise.resolve();
-      pending.forEach(function(evt) {
-        chain = chain.then(function() {
-          return _pushToFB(evt).then(function() {
-            return _removePending(evt.id);
-          }).catch(function(e) {
-            _warn('Flush failed for:', evt.id, e);
-            return Promise.reject(e); // stop chain on error
-          });
-        });
-      });
-      return chain.catch(function() {});
-    });
-  }
-
-  // ── Full sync ─────────────────────────────────────────
-  function _fullSync() {
-    if (!_fbDb || !_username || !_enabled) return Promise.resolve();
-    _log('Full sync start for:', _username);
-    return _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val();
-      if (!val) { _log('Full sync: no remote events'); return; }
-      var events = Object.values(val);
-      // تجاهل الأحداث الصادرة من هذا الجهاز نفسه
-      events = events.filter(function(evt) {
-        return evt && evt.originDevice !== _getDeviceId();
-      });
-      _log('Full sync: found', events.length, 'applicable events');
-      var chain = Promise.resolve();
-      events.forEach(function(evt) {
-        chain = chain.then(function() { return _applyEvent(evt, false); });
-      });
-      return chain;
-    }).then(function() {
-      return _flushPending();
-    }).then(function() {
-      // إعادة رسم كاملة بعد استلام كل البيانات من Firebase
-      setTimeout(function() {
-        try {
-          if (typeof renderAll        === 'function') renderAll();
-          if (typeof updateDashboard  === 'function') updateDashboard();
-          if (typeof updateBadges     === 'function') updateBadges();
-          if (typeof loadResultsDropdown === 'function') loadResultsDropdown();
-          if (typeof loadPrintDropdown   === 'function') loadPrintDropdown();
-          _smDebugLog('✅ إعادة رسم بعد fullSync');
-        } catch(e) { _warn('Re-render after fullSync failed:', e); }
-      }, 300);
-    }).catch(function(e) { _warn('Full sync error:', e); });
-  }
-
-  // ── Live sync ─────────────────────────────────────────
-  var _keepaliveTimer = null;
-  var _connMonitorStarted = false;
-
-  function _pollPendingEvents() {
-    if (!_fbDb || !_username || !_enabled) return;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
-      var val = s.val();
-      if (!val) return;
-      var keys = Object.keys(val);
-      if (keys.length > 0) _smDebugLog('📡 poll: ' + keys.length + ' حدث');
-      keys.forEach(function(fbKey) {
-        var evt = val[fbKey];
-        if (!evt || !evt.id) return;
-        if (evt.originDevice === _getDeviceId()) return;
-        evt.fbKey = fbKey;
-        _applyEvent(evt, true).catch(function(){});
-      });
+  // ══════════════════════════════════════════════════════
+  // FULL RESYNC REQUEST
+  // يُطلبها جهاز كان Offline فترة طويلة
+  // ══════════════════════════════════════════════════════
+  function _requestFullResync() {
+    _dbg('📡 طلب Full Resync...');
+    // أرسل طلب resync عبر Firebase — الطرف الآخر يُجيب بـ SET_ALL لكل مفتاح
+    if (!_fbDb || !_username) return;
+    var reqId = _uuid();
+    _fbDb.ref(FB_RESYNC(_username) + '/requests/' + reqId).set({
+      fromDevice: _getDeviceId(),
+      ts: Date.now()
     }).catch(function(){});
-  }
 
-  function _startLive() {
-    if (!_fbDb || !_username || !_enabled || _listening) return;
-    _listening = true;
-
-    try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
-
-    // ── listener رئيسي: يستلم الأحداث الجديدة ──
-    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
-    _evtCb  = _evtRef.on('child_added', function(snap) {
-      var evt = snap.val();
-      if (!evt || !evt.id) return;
-      if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
-      evt.fbKey = snap.key;
-      _smDebugLog('📥 ' + evt.type + '/' + evt.key);
-      _applyEvent(evt, true).catch(function(e) { _warn('apply error:', e); });
-    }, function(err) {
-      _warn('listener error:', err.message);
-      _listening = false;
-      setTimeout(_startLive, 5000);
-    });
-
-    // ── مراقبة الاتصال: poll عند إعادة الاتصال ──
-    if (!_connMonitorStarted) {
-      _connMonitorStarted = true;
-      _fbDb.ref('.info/connected').on('value', function(snap) {
-        _smDebugLog(snap.val() ? '🟢 متصل' : '🔴 منقطع');
-        if (snap.val()) _pollPendingEvents();
-      });
-    }
-
-    // ── keepalive: poll كل 5 ثوانٍ لمنع Firebase sleep ──
-    clearInterval(_keepaliveTimer);
-    _keepaliveTimer = setInterval(_pollPendingEvents, 5000);
-
-    _log('Live sync started');
-    _smDebugLog('✅ listener + poll/5s');
-  }
-
-  function _stopLive() {
-    if (_evtRef && _evtCb) { _evtRef.off('child_added', _evtCb); }
-    _evtRef = null; _evtCb = null; _listening = false;
-    _log('Live sync stopped');
-  }
-
-  // ── Auto cleanup Firebase ─────────────────────────────
-  function _autoClean() {
-    if (!_fbDb || !_username || !_enabled || !_online) return;
-    var cutoff = Date.now() - 3600 * 1000;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val() || {};
-      var removes = Object.keys(val).filter(function(k) {
-        return val[k].ts && val[k].ts < cutoff;
-      }).map(function(k) {
-        return _fbDb.ref(FB_PATH_EVENTS(_username) + '/' + k).remove();
-      });
-      if (removes.length) {
-        Promise.all(removes).then(function() {
-          _log('Cleaned', removes.length, 'old Firebase events');
+    // استمع لرد resync
+    _fbDb.ref(FB_RESYNC(_username) + '/responses/' + _getDeviceId()).once('value')
+      .then(function(snap) {
+        var val = snap.val();
+        if (!val) return;
+        _dbg('📦 resync response received');
+        // قم بتطبيق كل مفتاح
+        Object.keys(val).forEach(function(key) {
+          if (SM_SYNC_KEYS.includes(key) && Array.isArray(val[key])) {
+            _applyEvent({
+              id: 'resync_' + key + '_' + Date.now(),
+              type: 'SET_ALL',
+              key: key,
+              data: val[key],
+              senderId: 'resync',
+              ts: Date.now()
+            });
+          }
         });
-      }
-    }).catch(function() {});
+        // امسح الرد بعد القراءة
+        _fbDb.ref(FB_RESYNC(_username) + '/responses/' + _getDeviceId()).remove().catch(function(){});
+      }).catch(function(){});
   }
 
-  // ── Notify App ────────────────────────────────────────
-  function _notifyApp(key) {
-    var meta = _SM_KEY_MAP[key];
-    var labels = {
-      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-    };
-    // عند استلام patients — انتظر 400ms لوصول requests أولاً
-    if (key === 'patients') {
-      clearTimeout(window._notifyPatientsTimer);
-      window._notifyPatientsTimer = setTimeout(function(){
-        try { if(meta) meta.fn(); } catch(e){}
-        try { if(typeof renderPatients==='function') renderPatients(); } catch(e){}
-        try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
-        try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
-      }, 400);
-      try { if(typeof showNotif==='function') showNotif('🔄 مزامنة',labels[key]||key,'info'); } catch(e){}
-      return;
-    }
-    // _SM_KEY_MAP.fn تتولى renderRequests/loadResultsDropdown/loadPrintDropdown
-    // وهي تعمل بأمان لأن _smApplyingRemote=true يمنع loadResultEntry من التشغيل التلقائي
-    if (meta) { try { meta.fn(); } catch(e) {} }
-    // badges + dashboard
-    try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
-    try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
-    // إشعار
-    try {
-      if (typeof showNotif === 'function')
-        showNotif('🔄 مزامنة', (labels[key]||key), 'info');
-    } catch(e) {}
+  // استمع لطلبات resync من أجهزة أخرى وأجِب عليها
+  function _listenResyncRequests() {
+    if (!_fbDb || !_username) return;
+    _fbDb.ref(FB_RESYNC(_username) + '/requests').on('child_added', function(snap) {
+      var req = snap.val();
+      if (!req || req.fromDevice === _getDeviceId()) return;
+      _dbg('📨 طلب resync من: ' + req.fromDevice.slice(-6));
+      // جهّز الرد: كل مفاتيح المزامنة
+      var response = {};
+      var promises = SM_SYNC_KEYS.map(function(key) {
+        return _readLocal(key).then(function(data) {
+          if (data.length > 0) response[key] = data;
+        });
+      });
+      Promise.all(promises).then(function() {
+        _fbDb.ref(FB_RESYNC(_username) + '/responses/' + req.fromDevice)
+          .set(response).catch(function(){});
+        // امسح الطلب
+        snap.ref.remove().catch(function(){});
+        _dbg('✅ resync response sent to: ' + req.fromDevice.slice(-6));
+      });
+    });
   }
 
-  // ════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   // PUBLIC API
-  // ════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════
   var SyncManager = {
 
     version: SM_VERSION,
-    _applying: false, // flag لمنع حلقة DB.set → hook → Firebase → DB.set
+    _applying: false, // flag لمنع حلقة DB.set → hook → Firebase
 
+    /**
+     * تهيئة SyncManager
+     * @param {object} fbDb - Firebase Database instance
+     * @param {string} username
+     * @param {boolean} enabled
+     */
     init: function(fbDb, username, enabled) {
       _fbDb     = fbDb;
       _username = username;
       _enabled  = !!enabled;
 
       var self = this;
-      return _openSMDB().then(function() {
-        _log('Init: user=' + username + ', enabled=' + enabled + ', device=' + _getDeviceId());
-        _smDebugLog('init: ' + username + ' | enabled:' + enabled + ' | dev:' + _getDeviceId().slice(-6));
+      return _openDB().then(function() {
+        _log('Init v2: user=' + username + ' | enabled=' + enabled + ' | device=' + _getDeviceId());
+        _dbg('init v2 | ' + username + ' | enabled:' + enabled + ' | dev:' + _getDeviceId().slice(-6));
 
-        if (!_enabled) { _log('Sync disabled — IDB only mode'); _smDebugLog('مزامنة معطّلة'); return; }
-        if (!_fbDb)    { _warn('Firebase not available'); _smDebugLog('Firebase غير متاح!'); return; }
+        if (!_enabled) { _dbg('⚠️ مزامنة معطّلة'); return; }
+        if (!_fbDb)    { _warn('Firebase not available'); _dbg('❌ Firebase غير متاح'); return; }
 
         _registerDevice();
+        _listenResyncRequests();
 
-        return _cleanOldSeen().then(function() {
-          _autoClean();
-          return _fullSync();
+        return _pruneSeenOld().then(function() {
+          return _initialSync();
         }).then(function() {
-          _startLive();
+          _startListener();
+          // تنظيف تلقائي دوري
+          clearInterval(_cleanTimer);
+          _cleanTimer = setInterval(_cleanFirebase, SM_CLEAN_INTERVAL);
+          _cleanFirebase(); // تنظيف فوري
         });
       }).then(function() {
-        window.addEventListener('online',  function() { _online = true;  self._onOnline(); });
-        window.addEventListener('offline', function() { _online = false; _log('Offline — queuing events'); });
-        setInterval(_autoClean, 30 * 60 * 1000);
-        _log('SyncManager ready');
+        window.addEventListener('online', function() {
+          _online = true;
+          _dbg('🌐 online');
+          _flushOffline().then(function() {
+            if (!_listening) _startListener();
+            _registerDevice();
+            _initialSync();
+          });
+        });
+        window.addEventListener('offline', function() {
+          _online = false;
+          _dbg('📵 offline');
+        });
+        _log('SyncManager v2 ready');
+        _dbg('✅ SyncManager v2 جاهز');
       });
     },
 
-    _onOnline: function() {
-      _log('Online — flushing pending');
-      _flushPending().then(function() {
-        if (!_listening) _startLive();
-        _registerDevice();
-      });
-    },
-
+    /** تفعيل/تعطيل المزامنة */
     setEnabled: function(val) {
       _enabled = !!val;
       if (_enabled) {
         _registerDevice();
-        _flushPending();
-        _startLive();
+        _flushOffline();
+        _startListener();
+        _dbg('✅ مزامنة مفعّلة');
       } else {
-        _stopLive();
+        _stopListener();
         clearInterval(_heartTimer);
+        clearInterval(_cleanTimer);
+        _dbg('⛔ مزامنة معطّلة');
       }
-      _log('Sync enabled:', _enabled);
     },
 
-    isEnabled:  function() { return _enabled; },
-    isOnline:   function() { return _online; },
+    isEnabled:   function() { return _enabled; },
+    isOnline:    function() { return _online; },
     getDeviceId: function() { return _getDeviceId(); },
 
-    /** إرسال حدث UPSERT (إضافة أو تعديل record) */
+    /**
+     * إرسال UPSERT — إضافة أو تعديل سجل واحد
+     * يُستدعى من: إضافة مريض، إضافة تحليل، تعديل نتيجة، تغيير حالة طباعة
+     */
     pushUpsert: function(key, record) {
       if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'UPSERT_RECORD', key: key, record: record });
+      if (!record || !record.id) return Promise.resolve();
+      // ضمان وجود updatedAt
+      if (!record.updatedAt && !record._updatedAt) {
+        record.updatedAt = Date.now();
+      }
+      return _pushEvent({
+        type:     'UPSERT',
+        key:      key,
+        recordId: record.id,
+        record:   Object.assign({}, record) // نسخة من الـ record
+      });
     },
 
-    /** إرسال حدث DELETE (حذف record) */
+    /**
+     * إرسال DELETE — حذف سجل بـ id
+     */
     pushDelete: function(key, recordId) {
       if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'DELETE_RECORD', key: key, recordId: recordId });
+      return _pushEvent({
+        type:     'DELETE',
+        key:      key,
+        recordId: recordId
+      });
     },
 
-    /** إرسال مصفوفة كاملة (SET_ALL) */
+    /**
+     * إرسال SET_ALL — مصفوفة كاملة (للاستخدام في resync)
+     */
     pushSetAll: function(key, data) {
       if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
       if (!Array.isArray(data) || !data.length) return Promise.resolve();
       return _pushEvent({ type: 'SET_ALL', key: key, data: data });
     },
 
-    /** الاستماع لأحداث التحديث */
+    /**
+     * طلب Full Resync من الأجهزة الأخرى
+     * يُستدعى عند اكتشاف جهاز كان offline فترة طويلة
+     */
+    requestResync: function() {
+      _requestFullResync();
+    },
+
+    /** عدد الأحداث المعلّقة في الـ offline queue */
+    pendingCount: function() {
+      return _getAllOffline().then(function(q) { return q.length; });
+    },
+
+    /** الاستماع لتحديثات المزامنة */
     onUpdate: function(cb) {
       window.addEventListener('syncmanager:update', function(e) { cb(e.detail.key); });
     },
 
-    /** عدد الأحداث المعلّقة */
-    pendingCount: function() {
-      return _getPending().then(function(p) { return p.length; });
-    },
-
     destroy: function() {
-      _stopLive();
+      _stopListener();
       clearInterval(_heartTimer);
+      clearInterval(_cleanTimer);
     }
   };
 
@@ -30564,7 +30745,7 @@ setTimeout(function(){
 })(window);
 
 // ════════════════════════════════════════════════════════════════
-// دمج SyncManager مع تدفق التطبيق
+// دمج SyncManager v2 مع تدفق التطبيق
 // ════════════════════════════════════════════════════════════════
 
 /** تحقق هل المزامنة مفعّلة لهذا المستخدم */
@@ -30586,7 +30767,6 @@ async function initSyncManager() {
   var username = session.username;
   var enabled  = _isSyncEnabled(username);
 
-  // انتظر Firebase أن يكون جاهزاً
   var ok = false;
   try { ok = await (typeof loadFirebase === 'function' ? loadFirebase() : Promise.resolve(false)); } catch(e) {}
 
@@ -30594,69 +30774,170 @@ async function initSyncManager() {
 
   try {
     await SyncManager.init(fbInstance, username, enabled);
-
-    // إضافة مؤشر المزامنة في الواجهة — دائماً
     _renderSyncIndicator(enabled);
     _renderSyncDebugPanel();
-
-    console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled,
-      '| device:', SyncManager.getDeviceId());
+    console.log('[SyncManager v2] Ready | user:', username, '| enabled:', enabled, '| device:', SyncManager.getDeviceId());
   } catch(e) {
-    console.warn('[SyncManager] Init failed:', e);
+    console.warn('[SyncManager v2] Init failed:', e);
     try { _renderSyncIndicator(false); } catch(_) {}
   }
 }
 
-/** شاشة تشخيص المزامنة المرئية */
+// ════════════════════════════════════════════════════════════════
+// HOOK على save() — يرسل UPSERT تلقائياً عند كل تعديل
+// ════════════════════════════════════════════════════════════════
+function _hookSaveForSync() {
+  if (window._smHooked) return;
+  window._smHooked = true;
+
+  var SM_KEYS = [
+    'patients','requests','invoices','packages','inventory',
+    'doctors','billing','testGroups','qc','cultureRecords',
+    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
+  ];
+
+  // prevState: snapshot لكل مفتاح لاكتشاف التغييرات
+  var _smPrevState = {};
+  window._smPrevState = _smPrevState;
+
+  // ── hook يُستدعى من DB.set ────────────────────────────
+  window._smDBHook = function(k, v) {
+    if (!SyncManager.isEnabled())    return;
+    if (!SM_KEYS.includes(k))        return;
+    if (!Array.isArray(v))           return;
+    if (SyncManager._applying)       return; // منع الحلقة
+
+    // debounce 60ms لجمع التغييرات المتزامنة
+    window._smSaveTimers = window._smSaveTimers || {};
+    var snapshot = v.slice(); // snapshot فوري لتجنب التغيّر
+    clearTimeout(window._smSaveTimers[k]);
+    window._smSaveTimers[k] = setTimeout(function() {
+      delete window._smSaveTimers[k];
+
+      var current = snapshot;
+      var prev    = _smPrevState[k] || [];
+
+      // بناء خريطة prev لمقارنة سريعة
+      var prevMap = new Map();
+      prev.forEach(function(x) { if (x && x.id) prevMap.set(x.id, x); });
+
+      var currSet = new Set();
+      current.forEach(function(x) { if (x && x.id) currSet.add(x.id); });
+
+      // اكتشاف: تعديلات + إضافات
+      var changed = [];
+      current.forEach(function(record) {
+        if (!record || !record.id) return;
+        var old = prevMap.get(record.id);
+        if (!old) {
+          // إضافة جديدة
+          changed.push(record);
+        } else if (JSON.stringify(record) !== JSON.stringify(old)) {
+          // تعديل — أضف updatedAt إذا لم يكن موجوداً
+          if (!record.updatedAt && !record._updatedAt) {
+            record.updatedAt = Date.now();
+          }
+          changed.push(record);
+        }
+      });
+
+      // اكتشاف: حذف
+      prev.forEach(function(record) {
+        if (!record || !record.id) return;
+        if (!currSet.has(record.id)) {
+          _smDebugToBox('🗑️ حذف: ' + k + ' #' + record.id.slice(-6));
+          SyncManager.pushDelete(k, record.id).catch(function(){});
+        }
+      });
+
+      // إرسال التعديلات
+      changed.forEach(function(record) {
+        _smDebugToBox('📤 ' + k + ' #' + record.id.slice(-6));
+        SyncManager.pushUpsert(k, record).catch(function(e) {
+          _smDebugToBox('❌ ' + e.message);
+        });
+      });
+
+      // حدّث prevState بعد الإرسال
+      _smPrevState[k] = current.slice();
+    }, 60); // 60ms debounce
+  };
+
+  // ── بناء prevState الأولي ────────────────────────────
+  var _gMap = {
+    patients:'patients', requests:'requests', invoices:'invoices',
+    doctors:'doctors', packages:'packages', inventory:'inventory',
+    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
+    stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
+    billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'
+  };
+
+  function _rebuildPrevState(force) {
+    SM_KEYS.forEach(function(k) {
+      if (!force && window._smSaveTimers && window._smSaveTimers[k]) return;
+      try {
+        var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
+        var val = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0)
+          ? _MC[idbKey]
+          : window[_gMap[k] || k];
+        if (Array.isArray(val) && val.length > 0) _smPrevState[k] = val.slice();
+      } catch(_) {}
+    });
+    var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; }).length;
+    _smDebugToBox('✅ hook v2 جاهز | ' + loaded + ' مفتاح');
+  }
+
+  setTimeout(function(){ _rebuildPrevState(true); }, 800);
+  setInterval(function(){ _rebuildPrevState(false); }, 30000);
+}
+
+// ════════════════════════════════════════════════════════════════
+// DEBUG PANEL
+// ════════════════════════════════════════════════════════════════
 function _renderSyncDebugPanel() {
   var old = document.getElementById('_sm_debug_panel');
   if (old) old.remove();
 
   var panel = document.createElement('div');
   panel.id = '_sm_debug_panel';
-  // البوكس مخفي افتراضياً — فقط div#_sm_debug_box موجود للكتابة
   panel.style.cssText = [
     'position:fixed','bottom:60px','left:8px','right:8px',
     'max-height:220px','background:rgba(0,0,0,.92)',
     'border:1px solid rgba(0,212,255,.4)','border-radius:10px',
     'z-index:99999','overflow:hidden','font-family:monospace',
-    'display:none','flex-direction:column'  // مخفي افتراضياً
+    'display:none','flex-direction:column'
   ].join(';');
 
-  // زر إظهار/إخفاء البوكس في الشريط العلوي
   var toggleBtn = document.createElement('button');
   toggleBtn.id = '_sm_toggle_btn';
-  // الزر ظاهر بشكل خافت — غير قابل للضغط — يُبقي Firebase نشطاً
   toggleBtn.style.cssText = 'position:fixed;bottom:6px;left:6px;z-index:100000;background:rgba(0,0,0,.3);border:1px solid rgba(0,212,255,.15);border-radius:20px;color:rgba(0,212,255,.35);font-size:7px;padding:1px 5px;cursor:default;font-family:monospace;pointer-events:none;user-select:none;';
-  toggleBtn.textContent = '⚡';
+  toggleBtn.textContent = '⚡v2';
   toggleBtn.onclick = function(e){ e.preventDefault(); e.stopPropagation(); return false; };
   document.body.appendChild(toggleBtn);
 
-  // رأس الشاشة
   var hdr = document.createElement('div');
   hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(0,212,255,.12);border-bottom:1px solid rgba(0,212,255,.3)';
-  hdr.innerHTML = '<span style="font-size:11px;font-weight:700;color:#00d4ff">🔧 تشخيص المزامنة</span>' +
+  hdr.innerHTML = '<span style="font-size:11px;font-weight:700;color:#00d4ff">🔧 Sync v2</span>' +
     '<span style="font-size:10px;color:rgba(255,255,255,.5)">جهاز: ' + (SyncManager.getDeviceId()||'').slice(-8) + '</span>' +
-    '<button onclick="document.getElementById(&quot;_sm_debug_panel&quot;).remove()" style="background:none;border:none;color:#ff2244;font-size:14px;cursor:pointer;padding:0 4px">✕</button>';
+    '<button onclick="document.getElementById(\'_sm_debug_panel\').remove()" style="background:none;border:none;color:#ff2244;font-size:14px;cursor:pointer;padding:0 4px">✕</button>';
   panel.appendChild(hdr);
 
-  // زر اختبار الإرسال
   var testBtn = document.createElement('div');
-  testBtn.style.cssText = 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px';
-  testBtn.innerHTML = '<button onclick="_smTestSend()" style="flex:1;padding:5px;background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);border-radius:6px;color:#00d4ff;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">📤 اختبار إرسال</button>' +
-    '<button onclick="_smTestCheck()" style="flex:1;padding:5px;background:rgba(139,63,255,.15);border:1px solid rgba(139,63,255,.4);border-radius:6px;color:#a78bfa;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔍 فحص Firebase</button>';
+  testBtn.style.cssText = 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:6px';
+  testBtn.innerHTML =
+    '<button onclick="_smTestSend()" style="flex:1;padding:4px;background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);border-radius:6px;color:#00d4ff;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">📤 اختبار</button>' +
+    '<button onclick="_smTestCheck()" style="flex:1;padding:4px;background:rgba(139,63,255,.15);border:1px solid rgba(139,63,255,.4);border-radius:6px;color:#a78bfa;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔍 Firebase</button>' +
+    '<button onclick="SyncManager.requestResync()" style="flex:1;padding:4px;background:rgba(255,200,0,.1);border:1px solid rgba(255,200,0,.3);border-radius:6px;color:#ffd000;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔄 Resync</button>';
   panel.appendChild(testBtn);
 
-  // صندوق الرسائل
   var box = document.createElement('div');
   box.id = '_sm_debug_box';
   box.style.cssText = 'flex:1;overflow-y:auto;padding:6px 10px;';
   panel.appendChild(box);
 
-  panel.style.display = 'none'; // مخفي افتراضياً
+  panel.style.display = 'none';
   document.body.appendChild(panel);
 
-  // ضمان وجود _sm_debug_box في DOM حتى تعمل _smDebugLog
   if (!document.getElementById('_sm_debug_box')) {
     var hiddenBox = document.createElement('div');
     hiddenBox.id = '_sm_debug_box';
@@ -30665,83 +30946,38 @@ function _renderSyncDebugPanel() {
   }
 }
 
-/** اختبار إرسال حدث تجريبي */
 function _smTestSend() {
-  if (typeof SyncManager === 'undefined' || !SyncManager.isEnabled()) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ المزامنة غير مفعّلة لهذا الحساب';
-      box.insertBefore(l, box.firstChild);
-    }
+  if (!SyncManager.isEnabled()) {
+    _smDebugToBox('❌ المزامنة غير مفعّلة');
     return;
   }
-  var testRecord = { id: 'test_' + Date.now(), _test: true, _updatedAt: Date.now() };
-  SyncManager.pushUpsert('patients', testRecord).then(function() {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#00e87a;padding:2px 0';
-      l.textContent = '✅ أُرسل حدث تجريبي — انتظر الجهاز الآخر';
-      box.insertBefore(l, box.firstChild);
-    }
-  }).catch(function(e) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ فشل: ' + e.message;
-      box.insertBefore(l, box.firstChild);
-    }
-  });
+  var testRecord = { id: 'test_' + Date.now(), _test: true, updatedAt: Date.now() };
+  SyncManager.pushUpsert('patients', testRecord)
+    .then(function() { _smDebugToBox('✅ أُرسل حدث تجريبي'); })
+    .catch(function(e) { _smDebugToBox('❌ فشل: ' + e.message); });
 }
 
-/** فحص Firebase مباشرة */
 function _smTestCheck() {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-
-  var session = typeof getSession === 'function' ? getSession() : null;
+  var session  = typeof getSession === 'function' ? getSession() : null;
   var username = session ? session.username : '?';
-  var path = 'sync_events/' + username;
-
-  var info = document.createElement('div');
-  info.style.cssText = 'font-size:10px;color:#ffcc00;padding:2px 0';
-  info.textContent = '🔍 فحص: ' + path;
-  box.insertBefore(info, box.firstChild);
-
+  _smDebugToBox('🔍 فحص sync_queue/' + username);
   if (typeof fbDb === 'undefined' || !fbDb) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ fbDb = null — Firebase غير مهيّأ';
-    box.insertBefore(l, box.firstChild);
-    return;
+    _smDebugToBox('❌ fbDb = null'); return;
   }
-
-  // فحص auth
-  var authLbl = document.createElement('div');
-  authLbl.style.cssText = 'font-size:10px;color:#a0a0a0;padding:2px 0';
   var authUser = (typeof fbAuth !== 'undefined' && fbAuth && fbAuth.currentUser);
-  authLbl.textContent = 'Auth: ' + (authUser ? '✅ ' + authUser.uid.slice(0,8) : '❌ غير مسجّل');
-  box.insertBefore(authLbl, box.firstChild);
-
-  // اقرأ sync_events
-  fbDb.ref(path).once('value').then(function(snap) {
+  _smDebugToBox('Auth: ' + (authUser ? '✅ ' + authUser.uid.slice(0,8) : '❌ غير مسجّل'));
+  fbDb.ref('sync_queue/' + username).once('value').then(function(snap) {
     var val = snap.val();
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:10px;color:#00e87a;padding:2px 0';
-    l.textContent = '📦 sync_events: ' + (val ? Object.keys(val).length + ' حدث' : 'فارغ');
-    box.insertBefore(l, box.firstChild);
-  }).catch(function(e) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ قراءة Firebase: ' + e.message;
-    box.insertBefore(l, box.firstChild);
-  });
+    _smDebugToBox('📦 queue: ' + (val ? Object.keys(val).length + ' حدث' : 'فارغ'));
+    SyncManager.pendingCount().then(function(n) {
+      _smDebugToBox('📵 offline queue: ' + n + ' حدث');
+    });
+  }).catch(function(e) { _smDebugToBox('❌ ' + e.message); });
 }
 
-/** عرض مؤشر حالة المزامنة في الشريط العلوي */
+// ════════════════════════════════════════════════════════════════
+// SYNC STATUS INDICATOR
+// ════════════════════════════════════════════════════════════════
 function _renderSyncIndicator(enabled) {
   var existing = document.getElementById('sm-status-badge');
   if (existing) existing.remove();
@@ -30772,26 +31008,20 @@ function _renderSyncIndicator(enabled) {
 
   badge.appendChild(dot);
   badge.appendChild(lbl);
-
-  // أدرج قبل أول زر
   topbarActions.insertBefore(badge, topbarActions.firstChild);
 
-  // استمع لتغيير الحالة (عند تفعيل/تعطيل المزامنة من admin)
   window.addEventListener('syncmanager:statuschange', function(e) {
     var en = e.detail.enabled;
-    badge.style.background = en ? 'rgba(0,232,122,.12)' : 'rgba(255,255,255,.06)';
-    badge.style.borderColor = en ? 'rgba(0,232,122,.35)' : 'rgba(255,255,255,.12)';
-    badge.style.color = en ? '#00e87a' : 'rgba(255,255,255,.4)';
-    dot.style.background = en ? '#00e87a' : 'rgba(255,255,255,.3)';
-    dot.style.animation  = en ? 'pulse 2s infinite' : '';
-    lbl.textContent = en ? '☁️ مزامنة' : '💾 محلي';
+    badge.style.background   = en ? 'rgba(0,232,122,.12)' : 'rgba(255,255,255,.06)';
+    badge.style.borderColor  = en ? 'rgba(0,232,122,.35)' : 'rgba(255,255,255,.12)';
+    badge.style.color        = en ? '#00e87a' : 'rgba(255,255,255,.4)';
+    dot.style.background     = en ? '#00e87a' : 'rgba(255,255,255,.3)';
+    dot.style.animation      = en ? 'pulse 2s infinite' : '';
+    lbl.textContent          = en ? '☁️ مزامنة' : '💾 محلي';
   });
 
-  // مؤشر offline
   window.addEventListener('offline', function() {
-    dot.style.background = '#ffcc00';
-    lbl.textContent      = '⚡ بلا إنترنت';
-    badge.style.color    = '#ffcc00';
+    dot.style.background = '#ffcc00'; lbl.textContent = '⚡ بلا إنترنت'; badge.style.color = '#ffcc00';
   });
   window.addEventListener('online', function() {
     var isEn = SyncManager.isEnabled();
@@ -30801,128 +31031,21 @@ function _renderSyncIndicator(enabled) {
   });
 }
 
-/**
- * hook على save() لإرسال الأحداث تلقائياً عند كل تعديل
- * يُنفَّذ بعد تهيئة التطبيق بالكامل
- */
-function _hookSaveForSync() {
-  if (window._smHooked) return;
-  window._smHooked = true;
-
-  var SM_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  // تتبع آخر حالة لكل مفتاح
-  var _smPrevState = {};
-  window._smPrevState = _smPrevState; // اجعله متاحاً للـ _applyUpsert
-
-  // الـ hook يتصل به DB.set مباشرة
-  window._smDBHook = function(k, v) {
-    if (!SyncManager.isEnabled()) return;
-    if (!SM_KEYS.includes(k)) return;
-    if (!Array.isArray(v)) return;
-
-    // debounce 50ms per key
-    window._smSaveTimers = window._smSaveTimers || {};
-    clearTimeout(window._smSaveTimers[k]);
-    window._smSaveTimers[k] = setTimeout(function() {
-      var prev    = _smPrevState[k] || [];
-      var prevMap = {};
-      prev.forEach(function(x){ if(x && x.id) prevMap[x.id] = x; });
-      var currIds = new Set();
-      v.forEach(function(x){ if(x && x.id) currIds.add(x.id); });
-
-      var toUpsert = [];
-
-      v.forEach(function(record) {
-        if (!record || !record.id) return;
-        var oldRec = prevMap[record.id];
-        if (!oldRec) {
-          // جديد — أرسل فوراً
-          toUpsert.push(record);
-        } else {
-          // مقارنة بسيطة وسريعة: id + timestamp + أهم الحقول
-          // مقارنة كاملة بـ JSON
-          if (JSON.stringify(record) !== JSON.stringify(oldRec)) {
-            toUpsert.push(record);
-          }
-        }
-      });
-
-      // أرسل كل ما تغيّر
-      // تنبيه: عند إضافة مريض جديد من wizFinish، يُخزّن في window._pendingPatientSync
-      // ويُرسل بعد 300ms (بعد حفظ الطلب) — لذا نتجاهله هنا لتجنب الإرسال بدون تحاليل
-      toUpsert.forEach(function(record) {
-        if(k === 'patients' && window._pendingPatientSync && window._pendingPatientSync.id === record.id){
-          // تأجيل — سيُرسل مع التحاليل عبر setTimeout في wizFinish
-          _smDebugToBox('⏳ مريض معلّق — سيُرسل بعد حفظ التحاليل: ' + (record.id||'').slice(-6));
-          return;
-        }
-        _smDebugToBox('📤 ' + k + ' #' + (record.id||'').slice(-6));
-        SyncManager.pushUpsert(k, record).catch(function(e){
-          _smDebugToBox('❌ ' + e.message);
-        });
-      });
-
-      // DELETE: عناصر محذوفة
-      prev.forEach(function(record) {
-        if (!record || !record.id) return;
-        if (!currIds.has(record.id)) {
-          _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
-          SyncManager.pushDelete(k, record.id).catch(function(){});
-        }
-      });
-
-      _smPrevState[k] = v.map(function(x){
-        try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
-      });
-    }, 50);
-  };
-
-  // ابنِ الحالة الأولية + أعد بناءها دورياً
-  var _gMap = {patients:'patients', requests:'requests', invoices:'invoices',
-    doctors:'doctors', packages:'packages', inventory:'inventory',
-    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
-    stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
-    billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'};
-
-  function _rebuildPrevState() {
-    SM_KEYS.forEach(function(k) {
-      try {
-        // الأولوية: window global (الأحدث دائماً) ثم _MC
-        var val = window[_gMap[k]||k];
-        if (!Array.isArray(val) || val.length === 0) {
-          var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
-          val = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey] : null;
-        }
-        if (Array.isArray(val)) _smPrevState[k] = val.map(function(x){ return JSON.parse(JSON.stringify(x)); });
-      } catch(_) {}
-    });
-    var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; });
-    _smDebugToBox('✅ hook جاهز | ' + loaded.join(','));
-  }
-
-  setTimeout(_rebuildPrevState, 500);
-  setInterval(_rebuildPrevState, 15000);
-}
-
-// دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
+// دالة مساعدة للكتابة في صندوق التشخيص
 function _smDebugToBox(msg) {
-  // يعمل حتى لو البانل مخفي — فقط يحتاج div#_sm_debug_box موجود
   var box = document.getElementById('_sm_debug_box');
   if (!box) return;
-  var t = new Date().toLocaleTimeString('ar');
-  var line = document.createElement('div');
-  line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
-  line.textContent = t + ' — ' + msg;
-  box.insertBefore(line, box.firstChild);
-  while (box.children.length > 50) box.removeChild(box.lastChild);
+  var t   = new Date().toLocaleTimeString('ar');
+  var div = document.createElement('div');
+  div.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
+  div.textContent = t + ' — ' + msg;
+  box.insertBefore(div, box.firstChild);
+  while (box.children.length > 60) box.removeChild(box.lastChild);
 }
 
-// ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
+// ════════════════════════════════════════════════════════════════
+// BOOTSTRAP — تشغيل SyncManager عند جاهزية التطبيق
+// ════════════════════════════════════════════════════════════════
 window.addEventListener('load', function() {
   var _smInitDone = false;
 
@@ -30933,10 +31056,12 @@ window.addEventListener('load', function() {
     _smInitDone = true;
     initSyncManager().then(function() {
       _hookSaveForSync();
+    }).catch(function(e) {
+      console.warn('[SyncManager v2] bootstrap error:', e);
     });
   }
 
-  // الطريقة 1: hook على startApp
+  // hook على startApp
   var _origStartApp = window.startApp;
   if (typeof _origStartApp === 'function') {
     window.startApp = function() {
@@ -30945,14 +31070,9 @@ window.addEventListener('load', function() {
     };
   }
 
-  // الطريقة 2: fallback — إذا كانت الجلسة موجودة مسبقاً (Refresh)
-  setTimeout(function() {
-    if (!_smInitDone) { _tryInitSync(); }
-  }, 2500);
-
-  // الطريقة 3: محاولة أخيرة
-  setTimeout(function() {
-    if (!_smInitDone) { _tryInitSync(); }
-  }, 5000);
+  // fallback: جلسة موجودة مسبقاً (Refresh)
+  setTimeout(function() { if (!_smInitDone) _tryInitSync(); }, 2500);
+  // محاولة أخيرة
+  setTimeout(function() { if (!_smInitDone) _tryInitSync(); }, 5000);
 });
 </script>
