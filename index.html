@@ -30069,7 +30069,10 @@ setTimeout(function(){
 
   // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
   var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },0); } },
+    patients:        { g:'patients',         fn:function(){ setTimeout(function(){
+      // انتظر 500ms لضمان وصول requests المرافق للمريض الجديد قبل الرسم
+      setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} }, 500);
+    },0); } },
     requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },0); } },
     invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
     packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
@@ -30114,15 +30117,22 @@ setTimeout(function(){
       else if (evt.type === 'DELETE_RECORD') p = _applyDelete(evt);
       else if (evt.type === 'SET_ALL')       p = _applySetAll(evt);
       else return;
-      // ضع flag أثناء تطبيق الأحداث الواردة — يمنع loadResultEntry من التشغيل التلقائي
-      window._smApplyingRemote = true;
+      // عداد يمنع loadResultEntry من التشغيل التلقائي أثناء تطبيق الأحداث الواردة
+      // نستخدم عداداً (وليس boolean) لأن _SM_KEY_MAP.fn تستخدم setTimeout(0)
+      // والعداد يبقى مرفوعاً حتى تنتهي الـ setTimeout callbacks
+      window._smApplyingRemote = (window._smApplyingRemote || 0) + 1;
       return p.then(function() {
         return _markSeen(evt.id);
       }).then(function() {
         _notifyApp(evt.key);
         if (ackAfter) return _acknowledgeEvent(evt);
       }).catch(function(e) { _warn('Apply error:', e); })
-      .then(function() { window._smApplyingRemote = false; });
+      .then(function() {
+        // نُخفّض العداد داخل setTimeout لضمان بقائه مرفوعاً طوال setTimeout callbacks في _SM_KEY_MAP.fn
+        setTimeout(function() {
+          window._smApplyingRemote = Math.max(0, (window._smApplyingRemote || 1) - 1);
+        }, 50);
+      });
     });
   }
 
@@ -30163,8 +30173,12 @@ setTimeout(function(){
         SyncManager._applying = false;
       }
 
-      // حدّث prevState
-      if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
+      // حدّث prevState بنسخة عميقة (deep copy) لمنع مشاركة المراجع مع window.requests
+      if (window._smPrevState) {
+        window._smPrevState[evt.key] = cur.map(function(x){
+          try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
+        });
+      }
       if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
       return Promise.resolve();
     });
@@ -30186,6 +30200,12 @@ setTimeout(function(){
         SyncManager._applying = false;
       }
       _smUpdateGlobal(evt.key, idbKey, filtered);
+      if (window._smPrevState) {
+        window._smPrevState[evt.key] = filtered.map(function(x){
+          try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
+        });
+      }
+      if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
       return Promise.resolve();
     });
   }
@@ -30209,6 +30229,12 @@ setTimeout(function(){
         SyncManager._applying = false;
       }
       _smUpdateGlobal(evt.key, idbKey, merged);
+      if (window._smPrevState) {
+        window._smPrevState[evt.key] = merged.map(function(x){
+          try { return JSON.parse(JSON.stringify(x)); } catch(_) { return x; }
+        });
+      }
+      if (window._smSaveTimers) clearTimeout(window._smSaveTimers[evt.key]);
       return Promise.resolve();
     });
   }
