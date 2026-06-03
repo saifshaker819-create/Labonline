@@ -2591,6 +2591,11 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
   window.electronAPI.onSerialError( e => { if(window._electronSerialCB.error)  window._electronSerialCB.error(e);  });
   window.electronAPI.onSerialClosed(()=> { if(window._electronSerialCB.closed) window._electronSerialCB.closed();  });
 
+  // ── 4. CBC IPC stubs (يُفعَّل من _cbcInitIpcListeners عند الاتصال) ──
+  // نتأكد أن الدوال موجودة حتى لو لم يُسجَّل preload هذه القنوات بعد
+  if(typeof window.electronAPI.onCbcTimeout   === 'undefined') window.electronAPI.onCbcTimeout   = function(){};
+  if(typeof window.electronAPI.onCbcHostQuery === 'undefined') window.electronAPI.onCbcHostQuery  = function(){};
+
   console.log('[MedLab Pro Desktop] Electron APIs ready ✅');
 })();
 </script>
@@ -2703,11 +2708,7 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
       <button class="hbtn" onclick="nav('settings')">⚙️</button>
       <button class="theme-toggle-btn" id="theme-btn" onclick="toggleTheme()" title="تبديل الوضع"></button>
 
-      <!-- مؤشر حالة الاتصال -->
-      <div id="fb-conn-badge" style="display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:14px;font-size:10px;font-weight:800;background:rgba(255,204,0,.10);border:1px solid rgba(255,204,0,.3);color:#ffcc00;transition:all .4s">
-        <span id="fb-conn-dot" style="width:7px;height:7px;border-radius:50%;background:#ffcc00;flex-shrink:0"></span>
-        <span id="fb-conn-lbl">جاري الاتصال</span>
-      </div>
+
 
       <div class="uavatar">👨‍⚕️</div>
     </div>
@@ -2945,7 +2946,12 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                 <button class="btn btn-p btn-lg" style="width:100%" onclick="doPrint()">🖨️ طباعة مباشرة</button>
                 <button class="btn btn-p btn-lg" style="width:100%" onclick="openGroupingModalFromPrint()">📑 تجميع</button>
                 <button class="btn btn-s" style="width:100%;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.4);color:var(--success)" onclick="printCBCFromPrintSection()">🖨️ طباعة CBC فارغة</button>
-                <button class="btn btn-s" style="width:100%;background:rgba(0,180,100,0.25);border-color:rgba(0,180,100,0.6);color:#00c46a;font-weight:800" onclick="printCBCFromDevice(document.getElementById('print-req-sel')?.value||currentReqId)">🔬 CBC من الجهاز</button>
+                <div id="print-cbc-device-btn" style="display:none;flex-direction:column;gap:6px">
+                  <select id="print-cbc-history-sel" class="fc" style="font-size:11px;padding:7px 10px;width:100%;background:rgba(0,180,100,0.08);border:1px solid rgba(0,180,100,0.4);color:var(--text);border-radius:8px" title="اختر نتيجة CBC — من الأحدث للأقدم">
+                    <option value="">🔬 اختر نتيجة CBC...</option>
+                  </select>
+                  <button class="btn btn-s" style="width:100%;background:rgba(0,180,100,0.25);border-color:rgba(0,180,100,0.6);color:#00c46a;font-weight:800" onclick="printCBCFromPrintSel()">🔬 طباعة CBC المختار</button>
+                </div>
                 <button class="btn btn-s" style="width:100%" onclick="openPrintModal()">👁️ معاينة التقرير</button>
                 <button class="btn btn-ok" style="width:100%" onclick="downloadPDF()">📄 تحميل PDF</button>
                 <button class="btn btn-w" style="width:100%" onclick="shareWhatsApp()">📱 إرسال واتساب</button>
@@ -3378,8 +3384,8 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             <div class="gc-hdr" style="display:flex;align-items:center;justify-content:space-between">
               <div class="gc-title">🔬 الأجهزة المتصلة</div>
               <div style="display:flex;gap:6px">
-                <button class="btn btn-p btn-sm" onclick="lisOpenWizard()" style="font-size:10px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(139,63,255,0.2));border-color:rgba(0,212,255,0.4)">🧙 إعداد جديد</button>
-                <button class="btn btn-s btn-sm" onclick="lisOpenAddDevice()">➕ يدوي</button>
+                <button class="btn btn-p btn-sm" onclick="_lisLockedAction(lisOpenWizard)" style="font-size:10px;background:linear-gradient(135deg,rgba(0,212,255,0.2),rgba(139,63,255,0.2));border-color:rgba(0,212,255,0.4)">🧙 إعداد جديد</button>
+                <button class="btn btn-s btn-sm" onclick="_lisLockedAction(lisOpenAddDevice)">➕ يدوي</button>
               </div>
             </div>
             <div class="gc-body" style="padding:10px">
@@ -3393,10 +3399,10 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
           <div class="gc" style="margin-bottom:14px">
             <div class="gc-hdr"><div class="gc-title">⚡ اتصال سريع</div></div>
             <div class="gc-body" style="padding:10px;display:flex;flex-direction:column;gap:8px">
-              <button class="btn btn-p" style="width:100%;justify-content:center" onclick="lisConnectSerial()">
+              <button class="btn btn-p" style="width:100%;justify-content:center" onclick="_lisLockedAction(lisConnectSerial)">
                 🔌 اتصال USB/Serial
               </button>
-              <button class="btn btn-s" style="width:100%;justify-content:center;color:#a78bfa;border-color:rgba(167,139,250,0.4)" onclick="lisConnectFileWatch()">
+              <button class="btn btn-s" style="width:100%;justify-content:center;color:#a78bfa;border-color:rgba(167,139,250,0.4)" onclick="_lisLockedAction(lisConnectFileWatch)">
                 📂 مراقبة مجلد
               </button>
             </div>
@@ -3516,21 +3522,28 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
               <!-- MedLab Connection -->
               <div class="gc">
-                <div class="gc-hdr"><div class="gc-title">🔗 الاتصال بـ MedLab Pro</div></div>
+                <div class="gc-hdr"><div class="gc-title">🌐 ربط LAN — شبكة داخلية</div></div>
                 <div class="gc-body">
-                  <div class="fg" style="margin-bottom:12px">
-                    <label class="fl">طريقة الربط</label>
-                    <select class="fc" id="lis-link-mode" onchange="lisUpdateLinkMode()">
-                      <option value="localstorage">مباشر — داخل التطبيق (الافتراضي)</option>
-                      <option value="file">مزامنة ملف (مجلد مشترك)</option>
-                    </select>
+                  <div style="margin-bottom:12px">
+                    <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:8px">🖥️ وضع هذا الجهاز</div>
+                    <div style="display:flex;gap:8px;margin-bottom:10px">
+                      <button class="btn btn-p btn-sm" style="flex:1" onclick="_lisLockedAction(lisLanStartServer)">🟢 سيرفير (رئيسي)</button>
+                      <button class="btn btn-s btn-sm" style="flex:1" onclick="lisLanConnectClient()">🔵 عميل (ثانوي)</button>
+                    </div>
+                    <div id="lan-status-box" style="background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text2);min-height:40px">
+                      <div id="lan-mode-lbl" style="font-weight:700;margin-bottom:4px">⚪ غير مفعّل</div>
+                      <div id="lan-ip-lbl"></div>
+                      <div id="lan-clients-lbl"></div>
+                    </div>
                   </div>
-                  <div id="lis-file-mode-info" style="display:none;background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;color:var(--text2);margin-bottom:12px">
-                    اختر نفس مجلد المزامنة الذي تستخدمه MedLab Pro
-                    <button class="btn btn-s btn-sm" style="margin-top:8px;width:100%" onclick="lisSelectSyncFolder()">📂 اختر المجلد</button>
-                    <div id="lis-folder-display" style="margin-top:6px;font-size:10px;color:var(--success)"></div>
+                  <div style="margin-bottom:10px">
+                    <label class="fl" style="font-size:11px;margin-bottom:4px">IP السيرفير (للعميل)</label>
+                    <input class="fc" id="lan-server-ip" placeholder="مثال: 192.168.1.5" style="font-size:12px">
                   </div>
-                  <button class="btn btn-s" style="width:100%" onclick="lisCheckMedlabConn()">🔍 اختبار الاتصال</button>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-s btn-sm" style="flex:1" onclick="lisLanDisconnect()">⛔ قطع LAN</button>
+                    <button class="btn btn-s btn-sm" style="flex:1" onclick="lisLanCheckStatus()">🔍 حالة الشبكة</button>
+                  </div>
                 </div>
               </div>
 
@@ -3845,6 +3858,69 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
                     </div>
                   </div>
                   <div style="font-size:10px;color:var(--text2)">💡 اضغط 🔄 لتحديث الطابعات المتاحة</div>
+                </div>
+              </div>
+
+              <!-- ═══ إعدادات حجم ملصق الباركود ═══ -->
+              <div class="gc" style="margin-top:0">
+                <div class="gc-hdr"><div class="gc-title">🏷️ حجم ملصق الباركود</div></div>
+                <div class="gc-body" style="padding:14px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <label class="fl" style="font-size:11px;margin-bottom:4px">العرض (مم)</label>
+                      <input class="fc" type="number" id="st-label-w" min="20" max="200" step="1" value="57"
+                        style="font-size:13px;font-weight:700;text-align:center"
+                        onchange="_saveLabelSize()" oninput="_saveLabelSize()">
+                    </div>
+                    <div>
+                      <label class="fl" style="font-size:11px;margin-bottom:4px">الارتفاع (مم)</label>
+                      <input class="fc" type="number" id="st-label-h" min="10" max="200" step="1" value="30"
+                        style="font-size:13px;font-weight:700;text-align:center"
+                        onchange="_saveLabelSize()" oninput="_saveLabelSize()">
+                    </div>
+                  </div>
+                  <div style="font-size:10px;color:var(--text2);margin-bottom:6px;font-weight:700">📐 أحجام جاهزة:</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:5px">
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(57,30)">57×30</button>
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(57,40)">57×40</button>
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(62,29)">62×29</button>
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(50,25)">50×25</button>
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(40,20)">40×20</button>
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(100,50)">100×50</button>
+                  </div>
+                  <div style="font-size:10px;color:var(--text2);margin-top:8px">💡 الوحدة: مليمتر — يُطبَّق على طابعة الملصق الحرارية تلقائياً</div>
+                </div>
+              </div>
+
+              <!-- ═══ إعدادات حجم ملصق الباركود ═══ -->
+              <div class="gc" style="margin-top:0">
+                <div class="gc-hdr"><div class="gc-title">🏷️ حجم ملصق الباركود</div></div>
+                <div class="gc-body" style="padding:14px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                      <label class="fl" style="font-size:11px;margin-bottom:4px">العرض (مم)</label>
+                      <input class="fc" type="number" id="st-label-w" min="20" max="200" step="1" value="57"
+                        style="font-size:13px;font-weight:700;text-align:center"
+                        onchange="_saveLabelSize()" oninput="_saveLabelSize()">
+                    </div>
+                    <div>
+                      <label class="fl" style="font-size:11px;margin-bottom:4px">الارتفاع (مم)</label>
+                      <input class="fc" type="number" id="st-label-h" min="10" max="200" step="1" value="30"
+                        style="font-size:13px;font-weight:700;text-align:center"
+                        onchange="_saveLabelSize()" oninput="_saveLabelSize()">
+                    </div>
+                  </div>
+                  <!-- أحجام جاهزة شائعة -->
+                  <div style="font-size:10px;color:var(--text2);margin-bottom:6px;font-weight:700">📐 أحجام جاهزة:</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:5px">
+                    <button class="btn btn-s btn-sm" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(57,30)">57×30</button>
+                    <button class="btn btn-s btn-sm" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(57,40)">57×40</button>
+                    <button class="btn btn-s btn-sm" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(62,29)">62×29</button>
+                    <button class="btn btn-s btn-sm" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(50,25)">50×25</button>
+                    <button class="btn btn-s btn-sm" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(40,20)">40×20</button>
+                    <button class="btn btn-s btn-sm" style="font-size:10px;padding:4px 8px" onclick="_setLabelPreset(100,50)">100×50</button>
+                  </div>
+                  <div style="font-size:10px;color:var(--text2);margin-top:8px">💡 الوحدة: مليمتر — يُطبَّق على طابعة الملصق الحرارية تلقائياً</div>
                 </div>
               </div>
 
@@ -5811,7 +5887,7 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
         <button class="btn btn-p btn-sm" onclick="diagFirebase()">🔍 فحص الاتصال والبيانات</button>
         <button class="btn btn-d btn-sm" onclick="cleanAllPasswords()">🔐 مسح كلمات المرور القديمة من DB</button>
-        <button class="btn btn-w btn-sm" onclick="forceSyncToFirebase()">☁️ رفع البيانات المحلية لـ Firebase</button>
+
       </div>
       <div id="diag-result" style="font-size:11px;color:var(--text2);background:rgba(0,0,0,0.2);border-radius:8px;padding:10px;min-height:40px;white-space:pre-wrap;font-family:monospace;display:none"></div>
     </div>
@@ -7751,8 +7827,7 @@ function _updateConnBadge(connected){
     lbl.textContent         = 'غير متصل';
   }
 }
-window.addEventListener('online',  ()=>{ if(typeof fbReady!=='undefined'&&fbReady) _updateConnBadge(true); else _updateConnBadge(false); });
-window.addEventListener('offline', ()=>_updateConnBadge(false));
+// مؤشر Firebase محذوف من الواجهة
 
 // ══════════════════════════════════════════════════════════════
 // مستمعات أوامر الأدمن — sys/
@@ -8165,14 +8240,6 @@ function nav(p){
     const togAC=document.getElementById('tog-auto-cbc');
     if(togAC){ if(settings.autoPrintCBC) togAC.classList.add('on'); else togAC.classList.remove('on'); }
   }
-  if(p==='lis'){
-    // ── فحص قفل LIS ───────────────────────────────────
-    const _lisLocked = localStorage.getItem('_lis_unlocked') !== '1';
-    if(_lisLocked){
-      _showLisLockModal();
-      return;
-    }
-  }
   if(p==='results'){
     if(!window._goToResultCalled) currentReqId=null;
     window._goToResultCalled=false;
@@ -8290,6 +8357,7 @@ function openPatientQuickPanel(pid){
           <button class="btn btn-sm btn-s" onclick="openViewResultsModal('${r.id}');document.getElementById('m-pt-quick').remove()">👁️ عرض/تعديل</button>
           <button class="btn btn-sm btn-ok" onclick="goToPrint('${r.id}');document.getElementById('m-pt-quick').remove()">🖨️ طباعة</button>
           <button class="btn btn-sm btn-p" onclick="openPrintModal('${r.id}');document.getElementById('m-pt-quick').remove()">👁️ معاينة</button>
+          ${(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams))?`<button class="btn btn-sm" style="background:rgba(0,180,100,0.2);border:1px solid rgba(0,180,100,0.5);color:#00c46a;font-size:11px;font-weight:800;border-radius:8px;padding:5px 10px;cursor:pointer" onclick="printCBCFromDevice('${r.id}');document.getElementById('m-pt-quick').remove()">🔬 CBC</button>`:''}
           <button class="btn btn-sm btn-w" onclick="currentReqId='${r.id}';shareWhatsApp();document.getElementById('m-pt-quick').remove()">📱 واتساب</button>
           <button class="btn btn-sm" style="background:rgba(0,184,156,.14);border:1px solid rgba(0,184,156,.38);color:#2dd4bf;font-size:11px;font-weight:700;border-radius:8px;padding:5px 10px;cursor:pointer" onclick="openPatientPortal('${r.id}');document.getElementById('m-pt-quick').remove()">🌐 إرسال</button>
           <button class="btn btn-sm btn-s" onclick="goToResult('${r.id}');document.getElementById('m-pt-quick').remove()">➕ إضافة تحليل</button>
@@ -9515,70 +9583,150 @@ function showPatientResults(){
 // TUBE LABEL — ملصق التيوب
 // ============================================================
 function printTubeLabel(reqId){
-  const r=requests.find(x=>x.id===reqId);
+  var r=requests.find(function(x){return x.id===reqId;});
   if(!r){showNotif('خطأ','الطلب غير موجود','error');return;}
-  const pt=patients.find(p=>p.id===r.patientId)||{};
-  const barcodeId=String(pt.barcode||pt.id||r.id||'000000').replace(/[^0-9]/g,'');
-  const barcodeSvg=genTubeBarcode(barcodeId);
+  var pt=patients.find(function(p){return p.id===r.patientId;})||{};
+  var barcodeId=String(pt.barcode||pt.id||r.id||'000000').replace(/[^0-9A-Za-z]/g,'');
+  if(!barcodeId) barcodeId='000000';
+  var ptName=r.patientName||pt.name||'—';
 
-  // نوع الأنبوبة حسب التحاليل
-  const tubeColors=getTubeColors(r.tests||[]);
+  // حجم الملصق من الإعدادات
+  var _lw=parseFloat((typeof settings!=='undefined'&&settings.labelW)||57)||57;
+  var _lh=parseFloat((typeof settings!=='undefined'&&settings.labelH)||30)||30;
 
-  const win=window.open('','_blank','width=420,height=580');
-  const labName=document.getElementById('set-lab-name')?.value||'MedLab Pro';
-  const labPhone=document.getElementById('set-phone')?.value||'';
-  const today=new Date().toLocaleString('ar-IQ',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const age=pt.ageDisplay||calcAgeFromInput?.(pt.dob,pt.age)||'—';
-  const gender=(pt.gender==='female')?'أنثى':'ذكر';
-  const tests=(r.testNames||r.tests||[]).slice(0,6).join(' · ')+(r.testNames?.length>6?'...':'');
+  // ══ Code 128C للأرقام (أشرطة أعرض وأسهل قراءةً) ══
+  var C128widths=[
+    [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
+    [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
+    [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
+    [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
+    [3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],
+    [1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],
+    [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
+    [3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],
+    [3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
+    [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],
+    [1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],
+    [1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],
+    [2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],
+    [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
+    [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
+    [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
+    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]
+  ];
+  var STOP=[2,3,3,1,1,1,2];
+  var START_B=104, START_C=105;
 
-  win.document.write(`<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
-  <title>ملصق التيوب</title>
-  <style>
-    *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Arial',sans-serif;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px;gap:12px}
-    .label{width:90mm;border:2px solid #222;border-radius:6px;overflow:hidden;background:#fff;page-break-inside:avoid}
-    .label-hdr{background:#003366;color:#fff;padding:5px 10px;display:flex;justify-content:space-between;align-items:center}
-    .label-hdr .lab{font-size:11px;font-weight:900;letter-spacing:0.5px}
-    .label-hdr .phone{font-size:9px;opacity:0.85}
-    .label-body{padding:8px 10px}
-    .pt-name{font-size:15px;font-weight:900;color:#cc0011;direction:rtl;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .pt-info{font-size:10px;color:#333;margin-top:3px;display:flex;gap:8px}
-    .barcode-row{display:flex;flex-direction:column;align-items:center;margin:8px 0 4px}
-    .barcode-num{font-family:'Courier New',monospace;font-size:9px;font-weight:900;letter-spacing:2px;margin-top:3px;color:#000}
-    .tests-row{font-size:9px;color:#444;border-top:1px dashed #ccc;padding-top:5px;margin-top:4px;word-break:break-word;direction:rtl;text-align:right}
-    .tubes-row{display:flex;gap:5px;margin-top:6px;align-items:center}
-    .tube{width:14px;height:28px;border-radius:3px 3px 50% 50%;border:1.5px solid #555;display:flex;align-items:center;justify-content:center}
-    .tube-lbl{font-size:7px;color:#444;font-weight:700}
-    .date-row{font-size:8px;color:#888;margin-top:4px;direction:ltr;text-align:left}
-    .btn-print{margin-top:12px;padding:10px 30px;background:#003366;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Arial',sans-serif}
-    .btn-print:hover{background:#004488}
-    @media print{.btn-print{display:none}body{padding:0}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-  </style></head><body>
-  <div class="label">
-    <div class="label-hdr">
-      <span class="lab">🏥 ${labName}</span>
-      <span class="phone">${labPhone}</span>
-    </div>
-    <div class="label-body">
-      <div class="pt-name">${r.patientName||'—'}</div>
-      <div class="pt-info">
-        <span>${gender}</span>
-        <span>العمر: ${age}</span>
-        <span>طبيب: ${r.doctorName||'—'}</span>
-      </div>
-      <div class="barcode-row">
-        ${barcodeSvg}
-        <div style="font-family:'Courier New',monospace;font-size:13px;font-weight:700;letter-spacing:3px;color:#000;margin-top:3px;text-align:center">${barcodeId}</div>
-      </div>
-      <div class="tests-row">🧪 ${tests||'—'}</div>
-      ${tubeColors.length?`<div class="tubes-row">${tubeColors.map(t=>`<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><div class="tube" style="background:${t.color}"></div><span class="tube-lbl">${t.label}</span></div>`).join('')}</div>`:''}
-      <div class="date-row">${today} · #${r.id}</div>
-    </div>
-  </div>
-  <button class="btn-print" onclick="window.print()">🖨️ طباعة الملصق</button>
-  </body></html>`);
-  win.document.close();
+  // اختيار Code128C للأرقام (يضاعف عرض الشريط)
+  var isAllDigits=/^[0-9]+$/.test(barcodeId);
+  var encodeText=barcodeId;
+  var useC=false;
+  if(isAllDigits){
+    useC=true;
+    if(barcodeId.length%2!==0) encodeText='0'+barcodeId;
+  }
+
+  var codes=[], check=0;
+  if(useC){
+    codes.push(START_C); check=START_C;
+    for(var ci=0;ci<encodeText.length;ci+=2){
+      var pair=parseInt(encodeText.substr(ci,2),10);
+      codes.push(pair);
+      check+=((ci/2)+1)*pair;
+    }
+  } else {
+    var C128Bchars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+    codes.push(START_B); check=START_B;
+    for(var bi=0;bi<barcodeId.length;bi++){
+      var bidx=C128Bchars.indexOf(barcodeId[bi]);
+      if(bidx<0) continue;
+      codes.push(bidx);
+      check+=(bi+1)*bidx;
+    }
+  }
+  codes.push(check%103);
+
+  // بناء bars
+  var bars=[];
+  codes.forEach(function(c){
+    if(!C128widths[c]) return;
+    C128widths[c].forEach(function(w,ei){ bars.push({w:w,d:ei%2===0}); });
+  });
+  STOP.forEach(function(w,ei){ bars.push({w:w,d:ei%2===0}); });
+  bars.push({w:2,d:false});
+
+  // حساب BW المناسب لعرض الملصق
+  var totalUnits=bars.reduce(function(s,b){return s+b.w;},0);
+  var availPx=(_lw-2)*3.7795;
+  var BW=Math.max(1.2,Math.min(3.5,availPx/(totalUnits+20)));
+  var BH=Math.round(_lh*0.55*3.7795);
+  var PAD=BW*10;
+
+  // رسم SVG
+  var totalW=totalUnits*BW+PAD*2;
+  var x=PAD, rects='';
+  bars.forEach(function(b){
+    if(b.d) rects+='<rect x="'+x.toFixed(2)+'" y="0" width="'+(b.w*BW).toFixed(2)+'" height="'+BH+'" fill="#000"/>';
+    x+=b.w*BW;
+  });
+  var barcodeSvg='<svg xmlns="http://www.w3.org/2000/svg"'
+    +' width="'+totalW.toFixed(2)+'" height="'+BH+'"'
+    +' viewBox="0 0 '+totalW.toFixed(2)+' '+BH+'"'
+    +' style="display:block;shape-rendering:crispEdges;background:#fff">'
+    +'<rect width="'+totalW.toFixed(2)+'" height="'+BH+'" fill="#fff"/>'
+    +rects+'</svg>';
+
+  // HTML الملصق
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ملصق</title>'
+    +'<style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'@page{size:'+_lw+'mm '+_lh+'mm;margin:0}'
+    +'body{width:'+_lw+'mm;height:'+_lh+'mm;background:#fff;overflow:hidden;'
+    +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+    +'padding:0;gap:0.4mm;font-family:Arial,sans-serif}'
+    +'.bc-num{font-family:"Courier New",monospace;font-size:6pt;font-weight:900;'
+    +'letter-spacing:1.5px;color:#000;margin-top:0.3mm;text-align:center;line-height:1}'
+    +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
+    +'width:96%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;'
+    +'border-top:0.4pt solid #bbb;padding-top:0.4mm;margin-top:0.2mm}'
+    +'@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}'
+    +'</style></head><body>'
+    +barcodeSvg
+    +'<div class="bc-num">'+barcodeId+'</div>'
+    +'<div class="pt-name">'+ptName+'</div>'
+    +'</body></html>';
+
+  // طباعة صامتة مباشرة عبر Electron
+  var barcodeP=(typeof settings!=='undefined'&&settings.printerBarcode)||'';
+  if(window.electronAPI&&window.electronAPI.printContent&&barcodeP){
+    window.electronAPI.printContent({
+      html:html, printer:barcodeP, silent:true,
+      pageSize:{width:Math.round(_lw*1000),height:Math.round(_lh*1000)},
+      margins:{marginType:'none'}
+    }).then(function(res){
+      if(res&&!res.ok) showNotif('تنبيه طباعة',res.error||'خطأ طباعة','warning');
+    }).catch(function(e){console.warn('printContent err:',e);});
+    return;
+  }
+  // fallback: iframe صامت
+  var old=document.getElementById('_lbl_iframe');
+  if(old) try{document.body.removeChild(old);}catch(ex){}
+  var iframe=document.createElement('iframe');
+  iframe.id='_lbl_iframe';
+  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:'+_lw+'mm;height:'+_lh+'mm;border:none;opacity:0;pointer-events:none;';
+  document.body.appendChild(iframe);
+  var iDoc=iframe.contentWindow.document;
+  iDoc.open();iDoc.write(html);iDoc.close();
+  setTimeout(function(){
+    try{iframe.contentWindow.focus();iframe.contentWindow.print();}
+    catch(e){
+      var w=window.open('','_blank','width=400,height=300');
+      if(w){w.document.open();w.document.write(html);w.document.close();
+        setTimeout(function(){try{w.focus();w.print();}catch(e2){}},120);}
+    }
+    setTimeout(function(){try{document.body.removeChild(iframe);}catch(ex){}},2500);
+  },80);
 }
 
 function genTubeBarcode(code){
@@ -10213,10 +10361,14 @@ function loadResultsDropdown(){
   if(_tb&&_ae&&_tb.contains(_ae)&&(_ae.tagName==='INPUT'||_ae.tagName==='SELECT'||_ae.tagName==='TEXTAREA')){
     return;
   }
-  sel.innerHTML='<option value="">-- اختر طلب --</option>'+requests.filter(r=>r.status!=='done').map(r=>`<option value="${r.id}">${r.id} - ${r.patientName}</option>`).join('');
+  // طلبات قيد التنفيذ + طلبات CBC المحفوظة من الجهاز
+  const _cbcDoneReqs=requests.filter(r=>r.status==='done'&&(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams)));
+  const _pendingReqs=requests.filter(r=>r.status!=='done');
+  const _combined=[..._pendingReqs,..._cbcDoneReqs];
+  sel.innerHTML='<option value="">-- اختر طلب --</option>'+_combined.map(r=>`<option value="${r.id}" ${r.status==='done'?'style="color:#00c46a"':''}>${r.id} - ${r.patientName}${r.status==='done'?' ✅':''}</option>`).join('');
   // فقط حدد الطلب إذا currentReqId موجود فعلاً في القائمة
   if(currentReqId){
-    const exists=requests.find(r=>r.id===currentReqId&&r.status!=='done');
+    const exists=requests.find(r=>r.id===currentReqId&&(r.status!=='done'||(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams))));
     if(exists){sel.value=currentReqId;loadResultEntry();}
     else{currentReqId=null;sel.value='';loadResultEntry();}
   } else {
@@ -11665,7 +11817,7 @@ function filterPrintSearch(v){
         <div onclick="selectPrintReq('${r.id}','${r.patientName}')" style="padding:9px 18px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s;display:flex;justify-content:space-between;align-items:center"
           onmouseover="this.style.background='rgba(0,212,255,0.08)'" onmouseout="this.style.background=''">
           <span style="font-size:12px;color:var(--text)">${r.patientName}</span>
-          <span style="font-size:10px;color:var(--text2)">${r.resultDate||r.date} ${r.printed?'🖨️':''}</span>
+          <span style="font-size:10px;color:var(--text2)">${r.resultDate||r.date} ${r.printed?'🖨️':''} ${(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams))?'<span style="color:#00c46a;font-weight:700">CBC</span>':''}</span>
         </div>`).join('')}
     </div>`).join('');
   box.style.display='block';
@@ -11997,7 +12149,36 @@ function loadPrintPreviewSide(){
   const req=requests.find(r=>r.id===id);
   if(!req){psDiv.style.display='none';return;}
   psDiv.style.display='block';
-  infoDiv.innerHTML=`<b>${req.patientName}</b> | ${req.id}<br>Tests: ${req.testNames?req.testNames.length:0}<br>Date: ${req.resultDate||req.date}<br>Lab Tech: ${req.tech||'-'}`;
+  const _hasCBC=!!(req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams));
+  infoDiv.innerHTML='<b>'+req.patientName+'</b> | '+req.id+'<br>Tests: '+(req.testNames?req.testNames.length:0)+'<br>Date: '+(req.resultDate||req.date)+'<br>Lab Tech: '+(req.tech||'-')+(_hasCBC?' | <span style="color:#00c46a;font-weight:700">🔬 CBC محفوظ</span>':'');
+  // إظهار زر CBC إذا كانت البيانات موجودة
+  const cbcBtn=document.getElementById('print-cbc-device-btn');
+  if(cbcBtn){
+    cbcBtn.style.display=_hasCBC?'flex':'none';
+    // ملء القائمة المنسدلة بتاريخ نتائج CBC من الأحدث للأقدم
+    const histSel=document.getElementById('print-cbc-history-sel');
+    if(histSel && _hasCBC){
+      histSel.innerHTML='<option value="">🔬 اختر نتيجة CBC...</option>';
+      const hist=req.cbcHistory||[];
+      if(!hist.length){
+        // نتيجة واحدة — النتيجة الحالية
+        const dt=req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.datetime
+          ?req.resultDetails.CBC.datetime:req.date||new Date().toISOString();
+        const opt=document.createElement('option');
+        opt.value='__current__';
+        opt.textContent=_formatCbcDt(dt)+' (الأحدث)';
+        histSel.appendChild(opt);
+      } else {
+        hist.forEach(function(entry,i){
+          const opt=document.createElement('option');
+          opt.value=String(i);
+          opt.textContent=_formatCbcDt(entry.datetime)+(i===0?' (الأحدث)':'');
+          histSel.appendChild(opt);
+        });
+      }
+      if(histSel.options.length>1) histSel.selectedIndex=1;
+    }
+  }
   currentReqId=id;
 }
 
@@ -12102,7 +12283,7 @@ function buildPrintHTML(req, opts){
     /* مع 0mm margin في @page نضمن أن الذيل يلامس الحافة (الطابعة ستحترم منطقتها غير المطبوعة) */
     #print-footer{
       position:fixed;
-      bottom:3mm;
+      bottom:0;
       left:0;
       right:0;
       background:#ffffff;
@@ -12119,13 +12300,13 @@ function buildPrintHTML(req, opts){
       margin:0;
       padding:0;
     }
-    #print-spacer{height:${totalFooterH+12}px;display:block;}
+    #print-spacer{height:${totalFooterH+40}px;display:block;}
     @media print{
       @page{margin:0 !important;size:A4 portrait;}
       body{padding:1mm 3mm 0 3mm;}
-      #print-footer{position:fixed;bottom:3mm;left:0;right:0;background:#ffffff;z-index:9999;}
+      #print-footer{position:fixed;bottom:0;left:0;right:0;background:#ffffff;z-index:9999;}
       #print-footer img{display:block;width:100%;height:${footerH}px;object-fit:fill;margin:0;padding:0;}
-      #print-spacer{display:block;height:${totalFooterH+12}px;}
+      #print-spacer{display:block;height:${totalFooterH+40}px;}
     }
   `;
 
@@ -12194,10 +12375,10 @@ function buildPrintHTML(req, opts){
     codes.forEach(c=>{ C128.widths[c].forEach((w,i)=>bars.push({w,dark:i%2===0})); });
     STOP.forEach((w,i)=>bars.push({w,dark:i%2===0}));
     bars.push({w:2,dark:false});
-    const BAR_W=3.2,h=55,PAD=8,totalW=bars.reduce((s,b)=>s+b.w*BAR_W,0)+PAD*2;
+    const BAR_W=1.8,h=38,PAD=4,totalW=bars.reduce((s,b)=>s+b.w*BAR_W,0)+PAD*2;
     let x=PAD,rects='';
-    bars.forEach(b=>{if(b.dark)rects+='<rect x="'+x+'" y="4" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>';x+=b.w*BAR_W;});
-    const totalH=h+6;
+    bars.forEach(b=>{if(b.dark)rects+='<rect x="'+x+'" y="2" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>';x+=b.w*BAR_W;});
+    const totalH=h+4;
     return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'</svg>';
   }
 
@@ -12628,7 +12809,7 @@ function buildPrintHTML(req, opts){
     <body>
     <div id="print-content" style="background:#ffffff;font-family:'Inter',Arial,sans-serif;direction:ltr;width:100%;padding:1mm 3mm 0 3mm">
       ${hdr}${ptBox}<!--BLANK_BODY_PLACEHOLDER-->
-      <div id="print-spacer" style="height:${totalFooterH+12}px"></div>
+      <div id="print-spacer" style="height:${totalFooterH+40}px"></div>
     </div>
     <div id="print-footer" style="line-height:normal">
       ${ftrInner}
@@ -12672,7 +12853,7 @@ function buildPrintHTML(req, opts){
     @media print{
       .report-page{page-break-inside:auto;}
       .report-page+.report-page{page-break-before:always;break-before:page;}
-      #print-footer{position:fixed;bottom:3mm;left:0;right:0;background:#ffffff;z-index:9999;}
+      #print-footer{position:fixed;bottom:0;left:0;right:0;background:#ffffff;z-index:9999;}
     }
   `;
 
@@ -12738,7 +12919,7 @@ function buildPrintHTML(req, opts){
         // الملاحظات تظهر في آخر صفحة فقط
         if(isLast && NOTES_HTML) html += NOTES_HTML;
         // spacer يمنع المحتوى من الاختباء خلف الـ footer الثابت
-        html += '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+12)+'px"></div>';
+        html += '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+40)+'px"></div>';
         div.innerHTML = html;
         return div;
       }
@@ -12764,7 +12945,7 @@ function buildPrintHTML(req, opts){
           p.className = 'report-page';
           p.style.padding = '1mm 3mm 0 3mm';
           p.innerHTML = HDR_HTML + COL_HDR_HTML +
-            '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+12)+'px"></div>';
+            '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+40)+'px"></div>';
           container.appendChild(p);
           return;
         }
@@ -12960,7 +13141,7 @@ function buildPrintHTML(req, opts){
               }
             }
             if(NOTES_HTML) fhtml += NOTES_HTML;
-            fhtml += '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+12)+'px"></div>';
+            fhtml += '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+40)+'px"></div>';
             fp.innerHTML = fhtml;
             container.appendChild(fp);
           }
@@ -13379,6 +13560,29 @@ function chatSendPDFConfirm(){ chatSendConfirm(); }
 
 // openPrintModal defined earlier
 
+function _doPrintFallback(html, afterCB){
+  const old=document.getElementById('_silentPrintFrame');
+  if(old) old.remove();
+  const iframe=document.createElement('iframe');
+  iframe.id='_silentPrintFrame';
+  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
+  document.body.appendChild(iframe);
+  const iDoc=iframe.contentWindow.document;
+  iDoc.open(); iDoc.write(html); iDoc.close();
+  iframe.onload=function(){
+    try{
+      iframe.contentWindow.focus();
+      iframe.contentWindow.addEventListener('afterprint', function(){ if(afterCB) afterCB(); });
+      setTimeout(function(){ try{ iframe.contentWindow.print(); }catch(e){} }, 50);
+    }catch(e){
+      const w=window.open('','_blank','width=900,height=700');
+      w.document.open(); w.document.write(html); w.document.close();
+      w.addEventListener('afterprint', function(){ if(afterCB) afterCB(); });
+      setTimeout(function(){try{w.focus();w.print();}catch(e2){}},100);
+    }
+  };
+}
+
 function doPrint(reqId){
   if(reqId) currentReqId=reqId;
   const req=requests.find(r=>r.id===currentReqId);
@@ -13445,42 +13649,25 @@ function doPrint(reqId){
 
   // دالة تُشغَّل بعد انتهاء طباعة التقرير العادي
   function afterRegularPrint(){
+    // الفحوصات الخاصة (أدرار/خروج/سائل منوي) لا تُطبع هنا — تُطبع من واجهة إدخال نتائجها فقط
     if(calcTests.length>0){
-      // اطبع التحاليل المحسوبة ثم الفحوصات الخاصة
-      printCalcSequential(calcTests, 0, function(){
-        if(specialTests.length>0) setTimeout(()=>printSpecialSequential(specialTests,0),300);
-      });
-    } else {
-      if(specialTests.length>0) printSpecialSequential(specialTests,0);
+      printCalcSequential(calcTests, 0, function(){});
     }
+    // specialTests مُستبعَدة من الطباعة التلقائية مع التقرير العام
   }
 
   // Print regular tests report via hidden iframe (silent print - no printer dialog open step)
   if(regularTests.length>0){
     const content=buildPrintHTML(req);
-    // Remove any existing print iframe
-    const old=document.getElementById('_silentPrintFrame');
-    if(old) old.remove();
-    const iframe=document.createElement('iframe');
-    iframe.id='_silentPrintFrame';
-    iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;opacity:0;';
-    document.body.appendChild(iframe);
-    const iDoc=iframe.contentWindow.document;
-    iDoc.open(); iDoc.write(content); iDoc.close();
-    // بعد إغلاق نافذة الطباعة العادية مباشرةً — اطبع المحسوبة ثم الخاصة
-    iframe.onload=function(){
-      try{
-        iframe.contentWindow.focus();
-        iframe.contentWindow.addEventListener('afterprint', function(){ afterRegularPrint(); });
-        // تأخير صغير (50ms) لضمان اكتمال pagination داخل iframe قبل الطباعة
-        setTimeout(function(){ try{ iframe.contentWindow.print(); }catch(e){} }, 50);
-      }catch(e){
-        const w=window.open('','_blank','width=900,height=700');
-        w.document.open(); w.document.write(content); w.document.close();
-        w.addEventListener('afterprint', function(){ afterRegularPrint(); });
-        setTimeout(()=>{try{w.focus();w.print();}catch(e2){}},100);
-      }
-    };
+    // محاولة الطباعة الصامتة عبر Electron
+    const _printerName = settings.printerMain||'';
+    if(window.electronAPI && window.electronAPI.printContent && _printerName){
+      window.electronAPI.printContent({html: content, printer: _printerName, silent: true})
+        .then(function(r){ afterRegularPrint(); })
+        .catch(function(){ _doPrintFallback(content, afterRegularPrint); });
+    } else {
+      _doPrintFallback(content, afterRegularPrint);
+    }
   } else {
     // لا توجد تحاليل عادية — اطبع المحسوبة ثم الخاصة مباشرة
     afterRegularPrint();
@@ -13593,7 +13780,7 @@ function generatePDFBlob(callback){
               const ftrEl=ftrDiv.firstElementChild;
               if(ftrEl){
                 ftrEl.style.position='absolute';
-                ftrEl.style.bottom='3mm';
+                ftrEl.style.bottom='0';
                 ftrEl.style.left='0';
                 ftrEl.style.right='0';
                 ftrEl.style.zIndex='auto';
@@ -20802,9 +20989,9 @@ function _buildCultureHTML(cid){
     html,body{background:#fff;font-family:Arial,sans-serif;color:#000;font-size:16px;}
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
-    .footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
     @page{margin:0 !important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;} }
+    @media print{ .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
   <div class="content">
     ${hdrHTML}
@@ -21328,11 +21515,11 @@ function _buildUAPrintHTML(r){
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .ua-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
-    .ua-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
     @page{margin:1mm 6mm 1mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{
       body{font-size:13px;}
-      .ua-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;}
+      .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;}
       th,td{font-size:13px !important;padding:2px 7px !important;}
       .ua-title{font-size:13px !important;} .ua-sec-hdr{font-size:13px !important;}
     }
@@ -21896,9 +22083,9 @@ function _buildStoolPrintHTML(r){
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:15px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .se-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
-    .se-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
     @page{margin:1mm 5mm 1mm 5mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .se-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;} }
+    @media print{ .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="se-content">
       ${hdrHTML}
@@ -22457,8 +22644,87 @@ function addSemenField(){
 // CBC BLANK PRINT - طباعة ورقة CBC فارغة
 // ============================================================
 
-function printCBCFromDevice(reqId){
+// طباعة CBC المختار من القائمة في واجهة الطباعة
+function printCBCFromPrintSel(){
+  const reqId=(document.getElementById('print-req-sel')||{}).value||currentReqId||'';
+  if(!reqId){showNotif('تنبيه','اختر طلباً أولاً','warning');return;}
   const req=requests.find(function(r){return r.id===reqId;});
+  if(!req){showNotif('خطأ','الطلب غير موجود','error');return;}
+  const histSel=document.getElementById('print-cbc-history-sel');
+  const selVal=histSel?histSel.value:'__current__';
+  let cbcParamsToUse=null;
+  if(!selVal||selVal==='__current__'){
+    cbcParamsToUse=req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams);
+  } else {
+    const idx=parseInt(selVal,10);
+    const hist=req.cbcHistory||[];
+    if(hist[idx]) cbcParamsToUse=hist[idx].params;
+  }
+  if(!cbcParamsToUse||!Object.keys(cbcParamsToUse).length){
+    showNotif('تنبيه','لا توجد بيانات CBC من الجهاز','warning');return;
+  }
+  const _backup=req.cbcData;
+  req.cbcData=cbcParamsToUse;
+  printCBCFromDevice(reqId);
+  req.cbcData=_backup;
+}
+
+// ── تحديث قائمة CBC التاريخية بعد اختيار الطلب ─────────────────────
+// تحديث قائمة CBC في واجهة الطباعة (تُستدعى بعد وصول نتيجة جديدة)
+function updateCbcHistorySel(reqId){
+  // إذا كان المريض المعروض في الطباعة هو نفسه — أعِد تحميل الجانب
+  const printSel=document.getElementById('print-req-sel');
+  if(printSel && printSel.value===reqId && typeof loadPrintPreviewSide==='function'){
+    loadPrintPreviewSide();
+  }
+}
+function _formatCbcDt(dt){
+  try{
+    const d=new Date(dt);
+    return d.toLocaleDateString('ar-IQ',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+
+           d.toLocaleTimeString('ar-IQ',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){return dt||'—';}
+}
+// طباعة CBC المختار من القائمة المنسدلة
+function printCBCFromDeviceSel(){
+  const sel=document.getElementById('cbc-history-sel');
+  const reqId=(document.getElementById('res-req-sel')||{}).value||currentReqId||'';
+  if(!reqId){showNotif('تنبيه','اختر طلباً أولاً','warning');return;}
+  const req=requests.find(function(r){return r.id===reqId;});
+  if(!req){showNotif('خطأ','الطلب غير موجود','error');return;}
+  const selVal=sel?sel.value:'__current__';
+  // تحديد الـ cbcParams المختارة
+  let cbcParamsToUse=null;
+  if(selVal==='__current__'||selVal===''){
+    cbcParamsToUse=req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams);
+  } else {
+    const idx=parseInt(selVal,10);
+    const hist=req.cbcHistory||[];
+    if(hist[idx]) cbcParamsToUse=hist[idx].params;
+  }
+  if(!cbcParamsToUse||!Object.keys(cbcParamsToUse).length){
+    showNotif('تنبيه','لا توجد بيانات CBC من الجهاز','warning');return;
+  }
+  // استدعِ الطباعة مباشرة مع تعيين cbcData مؤقتاً
+  const _backup=req.cbcData;
+  req.cbcData=cbcParamsToUse;
+  printCBCFromDevice(reqId);
+  req.cbcData=_backup;
+}
+
+function printCBCFromDevice(reqId){
+  // إذا لم يُعطَ reqId أو كان فارغاً — ابحث عن آخر طلب CBC محفوظ للـ select الحالي
+  if(!reqId){
+    const selId=(document.getElementById('res-req-sel')||{}).value||(document.getElementById('print-req-sel')||{}).value||currentReqId||'';
+    if(selId) reqId=selId;
+  }
+  let req=requests.find(function(r){return r.id===reqId;});
+  // fallback: ابحث عن آخر طلب CBC محفوظ بأي حال
+  if(!req||!(req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams))){
+    req=[...requests].reverse().find(function(r){
+      return (r.id===reqId||!reqId)&&(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams));
+    });
+  }
   if(!req){showNotif('خطأ','الطلب غير موجود','error');return;}
   const cbcParams=req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams);
   if(!cbcParams||!Object.keys(cbcParams).length){showNotif('تنبيه','لا توجد بيانات CBC من الجهاز','warning');return;}
@@ -22471,7 +22737,7 @@ function printCBCFromDevice(reqId){
   const gender=pt.gender==='female'?'Female':'Male';
   const age=pt.ageDisplay||(typeof calcAgeFromInput==='function'?calcAgeFromInput(pt.dob,pt.age):pt.age)||'---';
   const sampleDate=req.date||new Date().toISOString().split('T')[0];
-  const doctorName=req.doctor||'---';
+  const doctorName=req.doctorName||req.doctor||(patients.find(function(p){return p.id===req.patientId;})||{}).doctorName||'---';
   const tableColor=settings.tableColor||'#003366';
   const nameColor=settings.colorName||'#cc0011';
   // رأس مطابق للتقارير الأخرى
@@ -22504,26 +22770,12 @@ function printCBCFromDevice(reqId){
     if(flag==='H'||flag==='HH') flagColor='#cc0000';
     const sTop=(key==='WBC'||key==='RBC'||key==='PLT')?'border-top:2px solid #003366;':'';
     const bg=rowNum%2===0?'#f5f5f5':'#fff';
-    rows+='<tr style="background:'+bg+';'+sTop+'"><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:#666">'+rowNum+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:12px;font-weight:600">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:13px;font-weight:800;text-align:center;color:'+flagColor+'">'+((p&&p.value)||'---')+'</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:'+flagColor+';font-weight:700">'+(flag||'')+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000">'+unit+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000">'+ref+'</td></tr>';
+    rows+='<tr style="background:'+bg+';'+sTop+'"><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:#666">'+rowNum+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:12px;font-weight:600">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:13px;font-weight:800;text-align:center;color:'+flagColor+'">'+((p&&p.value)||'---')+'</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:'+flagColor+';font-weight:700">'+(flag||'')+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#444">'+unit+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#555">'+ref+'</td></tr>';
     rowNum++;
   });
-  const html='<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'    +'*{margin:0;padding:0;box-sizing:border-box}'    +'html,body{background:#fff;color:#000;font-family:Arial,sans-serif;}'    +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'    +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'    +'.report-title{text-align:center;font-size:13px;font-weight:800;color:'+tableColor+';border:2px solid '+tableColor+';padding:3px;margin:5px 0;border-radius:3px;}'    +'.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1.5px solid #ccc;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}'    +'.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}'    +'.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:4px 8px;gap:3px;border-left:1.5px solid #ccc;min-width:140px;}'    +'.pt-field{display:flex;gap:4px;align-items:baseline;}'    +'.pt-lbl{color:#555;font-size:11px;font-weight:700;min-width:52px;}'    +'.pt-val{font-weight:800;font-size:12px;}'    +'.rbox{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;text-align:center;min-width:120px;}'    +'table{width:100%;border-collapse:collapse;margin-top:5px;}'    +'th{background:#fff;color:#0055cc;padding:5px 8px;font-size:11px;border:1.5px solid #0055cc;text-align:center;font-weight:700;}'    +'.footer-bar{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}'    +'</style></head><body>'    +hdr    +'<div class="report-title">Hematology Analysis Report — WB-CBC+DIFF</div>'    +'<div class="pt-bar">'      +'<div class="pt-left">'        +'<div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div>'        +'<div class="pt-field"><span class="pt-lbl">Sex/Age:</span><span class="pt-val" style="font-size:14px">'+gender+' / '+age+'</span></div>'        +'<div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val">'+doctorName+'</span></div>'      +'</div>'      +'<div class="pt-right">'        +'<div class="rbox">ID: '+barcodeId+'</div>'        +'<div class="rbox">'+sampleDate+'</div>'        +'<div class="rbox">WB-CBC+DIFF</div>'      +'</div>'    +'</div>'    +'<table><thead><tr><th style="width:28px">#</th><th>Parameter</th><th>Result</th><th style="width:45px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table>'    +'<div class="footer-bar"><span>Operator: '+(settings.labDoctor||'Administrator')+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div>'    +'</body></html>';
-  // طباعة عبر iframe (متوافق مع Electron)
-  const iframe=document.createElement('iframe');
-  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:800px;height:700px;border:none;';
-  document.body.appendChild(iframe);
-  iframe.contentDocument.open();
-  iframe.contentDocument.write(html);
-  iframe.contentDocument.close();
-  // تعيين حالة مطبوع
-  req.printed=true;
-  req._updatedAt=Date.now();
-  if(typeof save==='function') save('requests',requests);
-  if(typeof renderRequestTable==='function') renderRequestTable();
-  setTimeout(function(){
-    try{ iframe.contentWindow.focus(); iframe.contentWindow.print(); }catch(e){}
-    setTimeout(function(){ document.body.removeChild(iframe); },2000);
-  },400);
+  const html='<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'    +'*{margin:0;padding:0;box-sizing:border-box}'    +'html,body{background:#fff;color:#000;font-family:Arial,sans-serif;}'    +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'    +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'    +'.report-title{text-align:center;font-size:13px;font-weight:800;color:'+tableColor+';border:2px solid '+tableColor+';padding:3px;margin:5px 0;border-radius:3px;}'    +'.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1.5px solid #ccc;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}'    +'.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}'    +'.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:4px 8px;gap:3px;border-left:1.5px solid #ccc;min-width:140px;}'    +'.pt-field{display:flex;gap:4px;align-items:baseline;}'    +'.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:48px;}'    +'.pt-val{font-weight:800;font-size:12px;}'    +'.rbox{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;text-align:center;min-width:120px;}'    +'table{width:100%;border-collapse:collapse;margin-top:5px;}'    +'th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;border:1px solid #002244;text-align:center;font-weight:700;}'    +'.footer-bar{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}'    +'</style></head><body>'    +hdr    +'<div class="report-title">Hematology Analysis Report — WB-CBC+DIFF</div>'    +'<div class="pt-bar">'      +'<div class="pt-left">'        +'<div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div>'        +'<div class="pt-field"><span class="pt-lbl">Sex/Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div>'        +'<div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:16px">'+doctorName+'</span></div>'      +'</div>'      +'<div class="pt-right">'        +'<div class="rbox">ID: '+barcodeId+'</div>'        +'<div class="rbox">'+sampleDate+'</div>'        +'<div class="rbox">WB-CBC+DIFF</div>'      +'</div>'    +'</div>'    +'<table><thead><tr><th style="width:28px">#</th><th>Parameter</th><th>Result</th><th style="width:45px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table>'    +'<div class="footer-bar"><span>Operator: '+(settings.labDoctor||'Administrator')+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div>'    +'</body></html>';
+  // طباعة صامتة بدون واجهة
+  _printViaIframe(html, false);
 }
 
 function printCBCBlank(){
@@ -23171,9 +23423,9 @@ function _buildSemenPrintHTML(r){
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:15px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     .sm-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
-    .sm-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
     @page{margin:1mm 6mm 1mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .sm-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;} }
+    @media print{ .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="sm-content">
       ${hdrHTML}
@@ -23262,22 +23514,24 @@ function shareSemenPDFWhatsApp(id){
 // ============================================================
 // PRINT VIA IFRAME — fallback for mobile browsers
 // ============================================================
-function _printViaIframe(html){
-  // إزالة أي iframe سابق
+function _printViaIframe(html, isBarcode){
+  // طباعة صامتة عبر Electron (بدون واجهة اختيار طابعة)
+  const printerName = isBarcode ? (settings.printerBarcode||'') : (settings.printerMain||'');
+  if(window.electronAPI && window.electronAPI.printContent && printerName){
+    window.electronAPI.printContent({html: html, printer: printerName, silent: true})
+      .then(function(r){ if(r&&!r.ok) console.warn('print error:',r.error); })
+      .catch(function(e){ console.warn('printContent err:',e); });
+    return;
+  }
+  // fallback: iframe صامت (Electron بدون طابعة محددة يطبع بالافتراضية)
   const old=document.getElementById('_print_iframe');
   if(old) try{document.body.removeChild(old);}catch(e){}
-
   const iframe=document.createElement('iframe');
   iframe.id='_print_iframe';
-  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;opacity:0;';
+  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;opacity:0;pointer-events:none;';
   document.body.appendChild(iframe);
-
-  // كتابة HTML مباشرة عبر document.write (نفس أسلوب doPrint الموثوق)
-  // بدلاً من Blob URL الذي لا يضمن إطلاق onload في كل المتصفحات
   const iDoc=iframe.contentWindow.document;
   iDoc.open(); iDoc.write(html); iDoc.close();
-
-  // بدون تأخير — الطباعة فورية
   setTimeout(function(){
     try{
       iframe.contentWindow.focus();
@@ -24816,6 +25070,26 @@ document.addEventListener('DOMContentLoaded', function(){
 
 })();
 </script>
+<!-- Modal كلمة مرور LIS -->
+<div class="moverlay" id="m-lis-pass" style="display:none">
+  <div class="modal" style="max-width:360px">
+    <div class="mhdr">
+      <div class="mtitle">🔐 تحقق الهوية</div>
+      <button class="mclose" onclick="document.getElementById('m-lis-pass').style.display='none'">×</button>
+    </div>
+    <div class="mbody" style="padding:20px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">أدخل كلمة مرور المطوّر للمتابعة</div>
+      <input class="fc" id="lis-pass-inp" type="password" placeholder="كلمة المرور..." style="font-size:15px;text-align:center;letter-spacing:3px"
+        onkeydown="if(event.key==='Enter') _lisPassConfirm()">
+      <div id="lis-pass-err" style="color:var(--danger);font-size:11px;margin-top:8px;display:none">❌ كلمة المرور غير صحيحة</div>
+    </div>
+    <div class="mftr">
+      <button class="btn btn-s" onclick="document.getElementById('m-lis-pass').style.display='none'">إلغاء</button>
+      <button class="btn btn-p" onclick="_lisPassConfirm()">✅ تأكيد</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
 
@@ -24954,56 +25228,17 @@ const LIS_DEFAULT_MAPPINGS=[
   {deviceCode:'AFP',medlabCode:'AFP',name:'AFP',device:'all',note:''},
   {deviceCode:'CA125',medlabCode:'CA125',name:'CA-125',device:'all',note:''},
   {deviceCode:'CA199',medlabCode:'CA199',name:'CA 19-9',device:'all',note:''},
-  // CBC — WBC Series
+  // CBC
   {deviceCode:'WBC',medlabCode:'WBC',name:'WBC',device:'all',note:''},
-  {deviceCode:'NEUT#',medlabCode:'NEU#',name:'Neutrophils Abs (Sysmex/Horiba)',device:'all',note:''},
-  {deviceCode:'NEUTRO#',medlabCode:'NEU#',name:'Neutrophils Abs',device:'all',note:''},
-  {deviceCode:'GRAN#',medlabCode:'NEU#',name:'Granulocytes Abs',device:'all',note:''},
-  {deviceCode:'GRA#',medlabCode:'NEU#',name:'Gran# (بعض الأجهزة)',device:'all',note:''},
-  {deviceCode:'LYMPH#',medlabCode:'LYM#',name:'Lymphocytes Abs (Sysmex)',device:'all',note:''},
-  {deviceCode:'LYMP#',medlabCode:'LYM#',name:'Lymph# مختصر',device:'all',note:''},
-  {deviceCode:'LY#',medlabCode:'LYM#',name:'Ly# (Horiba)',device:'all',note:''},
-  {deviceCode:'MONO#',medlabCode:'MON#',name:'Monocytes Abs',device:'all',note:''},
-  {deviceCode:'MO#',medlabCode:'MON#',name:'Mo# (Horiba)',device:'all',note:''},
-  {deviceCode:'EOSINO#',medlabCode:'EOS#',name:'Eosinophils Abs',device:'all',note:''},
-  {deviceCode:'EO#',medlabCode:'EOS#',name:'Eo# (Horiba)',device:'all',note:''},
-  {deviceCode:'BASO#',medlabCode:'BAS#',name:'Basophils Abs (Sysmex)',device:'all',note:''},
-  {deviceCode:'BA#',medlabCode:'BAS#',name:'Ba# (Horiba)',device:'all',note:''},
-  {deviceCode:'NEUT%',medlabCode:'NEU%',name:'Neutrophils % (Sysmex/Horiba)',device:'all',note:''},
-  {deviceCode:'NEUTRO%',medlabCode:'NEU%',name:'Neutrophils %',device:'all',note:''},
-  {deviceCode:'GRAN%',medlabCode:'NEU%',name:'Granulocytes %',device:'all',note:''},
-  {deviceCode:'GRA%',medlabCode:'NEU%',name:'Gran% (بعض الأجهزة)',device:'all',note:''},
-  {deviceCode:'LYMPH%',medlabCode:'LYM%',name:'Lymphocytes % (Sysmex)',device:'all',note:''},
-  {deviceCode:'LYMP%',medlabCode:'LYM%',name:'Lymph% مختصر',device:'all',note:''},
-  {deviceCode:'LY%',medlabCode:'LYM%',name:'Ly% (Horiba)',device:'all',note:''},
-  {deviceCode:'MONO%',medlabCode:'MON%',name:'Monocytes %',device:'all',note:''},
-  {deviceCode:'MO%',medlabCode:'MON%',name:'Mo% (Horiba)',device:'all',note:''},
-  {deviceCode:'EOSINO%',medlabCode:'EOS%',name:'Eosinophils %',device:'all',note:''},
-  {deviceCode:'EO%',medlabCode:'EOS%',name:'Eo% (Horiba)',device:'all',note:''},
-  {deviceCode:'BASO%',medlabCode:'BAS%',name:'Basophils % (Sysmex)',device:'all',note:''},
-  {deviceCode:'BA%',medlabCode:'BAS%',name:'Ba% (Horiba)',device:'all',note:''},
-  // CBC — RBC Series
   {deviceCode:'RBC',medlabCode:'RBC',name:'RBC',device:'all',note:''},
   {deviceCode:'HGB',medlabCode:'HGB',name:'Hemoglobin',device:'all',note:''},
-  {deviceCode:'HB',medlabCode:'HGB',name:'Hemoglobin (مختصر)',device:'all',note:''},
-  {deviceCode:'HAEM',medlabCode:'HGB',name:'Haemoglobin (بعض الأجهزة)',device:'all',note:''},
+  {deviceCode:'HB',medlabCode:'HGB',name:'Hemoglobin',device:'all',note:''},
   {deviceCode:'HCT',medlabCode:'HCT',name:'Hematocrit',device:'all',note:''},
-  {deviceCode:'PCV',medlabCode:'HCT',name:'PCV = HCT',device:'all',note:''},
+  {deviceCode:'PLT',medlabCode:'PLT',name:'Platelets',device:'all',note:''},
+  {deviceCode:'PLT-F',medlabCode:'PLT',name:'Platelets (Sysmex)',device:'all',note:''},
   {deviceCode:'MCV',medlabCode:'MCV',name:'MCV',device:'all',note:''},
   {deviceCode:'MCH',medlabCode:'MCH',name:'MCH',device:'all',note:''},
   {deviceCode:'MCHC',medlabCode:'MCHC',name:'MCHC',device:'all',note:''},
-  {deviceCode:'RDW',medlabCode:'RDW-CV',name:'RDW (= RDW-CV)',device:'all',note:''},
-  {deviceCode:'RDWCV',medlabCode:'RDW-CV',name:'RDW-CV بدون شرطة',device:'all',note:''},
-  {deviceCode:'RDW_CV',medlabCode:'RDW-CV',name:'RDW_CV (شرطة سفلية)',device:'all',note:''},
-  {deviceCode:'RDWSD',medlabCode:'RDW-SD',name:'RDW-SD بدون شرطة',device:'all',note:''},
-  {deviceCode:'RDW_SD',medlabCode:'RDW-SD',name:'RDW_SD (شرطة سفلية)',device:'all',note:''},
-  // CBC — PLT Series
-  {deviceCode:'PLT',medlabCode:'PLT',name:'Platelets',device:'all',note:''},
-  {deviceCode:'PLT-F',medlabCode:'PLT',name:'Platelets (Sysmex)',device:'all',note:''},
-  {deviceCode:'THROMBO',medlabCode:'PLT',name:'Thrombocytes',device:'all',note:''},
-  {deviceCode:'MPV',medlabCode:'MPV',name:'MPV',device:'all',note:''},
-  {deviceCode:'PDW',medlabCode:'PDW',name:'PDW',device:'all',note:''},
-  {deviceCode:'PCT',medlabCode:'PCT',name:'PCT (Plateletcrit)',device:'all',note:''},
   // Vitamins
   {deviceCode:'VITD',medlabCode:'VITD',name:'Vitamin D',device:'all',note:''},
   {deviceCode:'25OHD',medlabCode:'VITD',name:'Vitamin D 25-OH',device:'all',note:''},
@@ -25428,7 +25663,7 @@ function lisDisconnectDevice(id){
   const dev=lisDevices.find(d=>d.id===id);
   if(!dev) return;
   dev.connected=false;
-  // Stop serial reader if this device's port
+  // Stop serial reader
   if(dev.conn==='serial'&&_lisSerialReader){
     try{_lisSerialReader.cancel();}catch(e){}
     _lisSerialReader=null;
@@ -25444,6 +25679,12 @@ function lisDisconnectDevice(id){
   if(dev.conn==='websocket'&&_lisWS){
     try{_lisWS.close();}catch(e){}
     _lisWS=null;
+  }
+  // ✅ قطع TCP (BC-5000)
+  if(dev.conn==='network'&&window.electronAPI&&window.electronAPI.cbcStopServer){
+    window.electronAPI.cbcStopServer().catch(function(){});
+    _cbcServerRunning=false;
+    _cbcActiveDev=null;
   }
   lisSaveState();
   lisAddLog('warn','جهاز منقطع: '+dev.name);
@@ -25661,56 +25902,109 @@ function lisConnectWSDevice(dev){
   const wsPort=dev.wsPort||dev.port||'8765';
   lisConnectWSBridge('ws://localhost:'+wsPort,dev);
 }
-// ── TCP Server (Electron) — يستقبل BC-5000 و أجهزة LAN ──────────
-let _cbcServerRunning=false;
+// ═══════════════════════════════════════════════════════════════
+// TCP DEVICE (Electron IPC) — Mindray BC-5000 و أجهزة LAN
+//
+//  تصميم الـ Listeners:
+//    ✅ الـ IPC listeners تُسجَّل مرة واحدة فقط عند أول اتصال
+//    ✅ كل اتصال جديد يستخدم نفس الـ listeners (لا تكرار)
+//    ✅ _cbcActiveDev يتتبع الجهاز النشط لتوجيه البيانات
+//    ✅ Host Query يُسجَّل في السجل فقط (ليس نتيجة)
+// ═══════════════════════════════════════════════════════════════
+let _cbcServerRunning      = false;  // هل الاتصال نشط؟
+let _cbcActiveDev          = null;   // الجهاز النشط حالياً
+let _cbcIpcListenersInited = false;  // هل تم تسجيل الـ listeners؟
+
+// ── تسجيل الـ IPC listeners مرة واحدة فقط ───────────────────
+// يُستدعى عند أول اتصال TCP — لا يُعاد الاستدعاء في الاتصالات اللاحقة
+function _cbcInitIpcListeners(){
+  if(_cbcIpcListenersInited||!window.electronAPI) return;
+  _cbcIpcListenersInited=true;
+
+  // ── بيانات CBC (ORU^R01) ──────────────────────────────────
+  window.electronAPI.onCbcData(function(text){
+    if(!text||!text.trim()) return;
+    lisAddLog('data','📥 TCP بيانات: '+text.length+' حرف');
+    lisRawMessages.unshift(text);
+    // وجّه البيانات للجهاز النشط
+    const dev=_cbcActiveDev||{name:'BC-5000',protocol:'hl7'};
+    lisParseByProtocol(text,dev);
+    lisRenderRaw();
+  });
+
+  // ── اتصال ناجح ────────────────────────────────────────────
+  window.electronAPI.onCbcConnected(function(info){
+    lisAddLog('ok','✅ متصل بـ '+info.address);
+    _cbcServerRunning=true;
+    const dev=_cbcActiveDev;
+    if(dev){ dev.connected=true; lisSaveState(); lisRenderDevices(); lisUpdateStats(); }
+    showNotif('BC-5000 متصل ✅',info.address,'success');
+  });
+
+  // ── انقطاع الاتصال ────────────────────────────────────────
+  window.electronAPI.onCbcDisconnected(function(info){
+    lisAddLog('warn','⚠️ انقطع الاتصال: '+info.address+' — إعادة محاولة خلال 5 ثواني...');
+    _cbcServerRunning=false;
+    // لا نُصفّر _cbcActiveDev — سيُعاد الاتصال تلقائياً
+  });
+
+  // ── خطأ TCP ───────────────────────────────────────────────
+  window.electronAPI.onCbcError(function(e){
+    lisAddLog('err','❌ TCP خطأ: '+e);
+    // إشعار فقط إذا المستخدم في قسم LIS
+    try{
+      const lisPage=document.getElementById('sec-lis');
+      if(lisPage&&lisPage.style.display!=='none'){
+        showNotif('خطأ TCP',String(e),'error');
+      }
+    }catch(_){}
+  });
+
+  // ── Timeout (لا بيانات — اتصال لا يزال نشطاً) ────────────
+  if(window.electronAPI.onCbcTimeout){
+    window.electronAPI.onCbcTimeout(function(msg){
+      lisAddLog('info','⏱️ '+msg);
+    });
+  }
+
+  // ✅ Host Query: QRY^R02 — الجهاز يبحث عن مريض ببارکود
+  // main.js يُرسل RSP^K11 تلقائياً — هنا نُسجّل فقط في السجل
+  if(window.electronAPI.onCbcHostQuery){
+    window.electronAPI.onCbcHostQuery(function(info){
+      lisAddLog('info','🔍 Host Query ('+info.msgType+') — تم الرد تلقائياً بـ RSP^K11');
+    });
+  }
+}
+
+// ── الاتصال بجهاز TCP (BC-5000) ──────────────────────────────
 async function lisConnectTCPDevice(dev){
   if(!window.electronAPI||!window.electronAPI.cbcStartClient){
     lisAddLog('err','CBC Client غير متاح — تأكد من تشغيل البرنامج كتطبيق سطح مكتب');
     showNotif('خطأ','CBC Client غير متاح','error');
     return;
   }
-  const ip   = dev.ip  || '192.168.0.10';
+  const ip   = dev.ip   || '192.168.0.10';
   const port = parseInt(dev.port) || 5100;
 
-  // حسب دليل Mindray: الجهاز=Server، البرنامج=Client
-  lisAddLog('info','جاري الاتصال بـ BC-5000 على '+ip+':'+port+'...');
+  lisAddLog('info','🔌 جاري الاتصال بـ BC-5000 على '+ip+':'+port+'...');
   const res = await window.electronAPI.cbcStartClient(ip, port);
   if(!res||!res.ok){
     lisAddLog('err','فشل الاتصال: '+(res&&res.error||'خطأ مجهول'));
-    showNotif('خطأ اتصال CBC','فشل الاتصال بـ '+ip+':'+port,'error');
+    showNotif('خطأ اتصال CBC','فشل بدء الاتصال بـ '+ip+':'+port,'error');
     return;
   }
-  _cbcServerRunning=true;
-  lisAddLog('ok','✅ جاري الاتصال بـ BC-5000 على '+ip+':'+port+' — إعادة محاولة تلقائية كل 5 ثواني');
-  showNotif('CBC — جاري الاتصال ✅','الكمبيوتر يتصل بـ '+ip+':'+port,'success');
-  dev.connected=true;
-  lisSaveState();lisRenderDevices();lisUpdateStats();
-  // استقبال البيانات من الجهاز
-  window.electronAPI.onCbcData(text=>{
-    lisAddLog('data','TCP بيانات: '+text.length+' حرف');
-    lisRawMessages.unshift(text);
-    lisParseByProtocol(text,dev);
-    lisRenderRaw();
-  });
-  window.electronAPI.onCbcConnected(info=>{
-    lisAddLog('ok','جهاز متصل: '+info.address);
-    // إشعار فقط إذا كان المستخدم في قسم LIS
-    if(document.getElementById('page-lis')&&document.getElementById('page-lis').style.display!=='none'){
-      showNotif('جهاز متصل ✓',info.address,'success');
-    }
-    dev.connected=true;lisSaveState();lisRenderDevices();lisUpdateStats();
-  });
-  window.electronAPI.onCbcDisconnected(info=>{
-    lisAddLog('warn','جهاز قطع الاتصال: '+info.address);
-    // لا إشعار عند الانقطاع — يُسجَّل في السجل فقط
-  });
-  window.electronAPI.onCbcError(e=>{
-    lisAddLog('err','TCP خطأ: '+e);
-    // إشعار الخطأ فقط في قسم LIS
-    if(document.getElementById('page-lis')&&document.getElementById('page-lis').style.display!=='none'){
-      showNotif('خطأ TCP',e,'error');
-    }
-  });
+
+  // سجّل الجهاز النشط قبل تسجيل الـ listeners
+  _cbcActiveDev    = dev;
+  _cbcServerRunning= true;
+  dev.connected    = true;
+  lisSaveState(); lisRenderDevices(); lisUpdateStats();
+
+  // ✅ سجّل الـ listeners مرة واحدة فقط — الاتصالات اللاحقة تستخدمها تلقائياً
+  _cbcInitIpcListeners();
+
+  lisAddLog('ok','✅ تم بدء الاتصال — يتصل بـ '+ip+':'+port+' (إعادة تلقائية كل 5 ثواني عند الانقطاع)');
+  showNotif('CBC — جاري الاتصال','يتصل بـ '+ip+':'+port,'success');
 }
 function lisConnectWSBridge(url,dev){
   if(_lisWS){try{_lisWS.close();}catch(e){}}
@@ -25861,6 +26155,8 @@ function lisParseASTMDate(raw){
 // CBC AGGREGATOR
 // ═══════════════════════════════════════════════════════════
 const _cbcBuffer = {};
+// سجل آخر طباعة تلقائية لكل طلب — لمنع تكرار الطباعة خلال أقل من 60 ثانية
+const _cbcAutoPrintLog = {};
 const CBC_PARAMS_MAP = {
   // WBC Series
   'WBC':    {ar:'WBC  خلايا الدم البيضاء',   unit:'10^9/L',  refM:'4.0-10.0',  order:1},
@@ -25891,38 +26187,7 @@ const CBC_PARAMS_MAP = {
 };
 const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
 function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
-function cbcNormalizeCode(code){
-  const c=(code||'').toUpperCase().replace(/\s/g,'');
-  // 1) lisMappings: ربط المستخدم (أي جهاز)
-  if(typeof lisMappings!=='undefined'&&lisMappings.length){
-    const m=lisMappings.find(function(x){return x.deviceCode.toUpperCase().replace(/\s/g,'')=== c;});
-    if(m){const mc=m.medlabCode.toUpperCase().replace(/\s/g,'');if(CBC_PARAM_KEYS.includes(mc)) return mc;}
-  }
-  // 2) aliases شائعة لأجهزة مختلفة
-  const ALIASES={
-    'NEUT#':'NEU#','NEUTRO#':'NEU#','GRAN#':'NEU#','GRA#':'NEU#',
-    'LYMPH#':'LYM#','LYMP#':'LYM#','LY#':'LYM#',
-    'MONO#':'MON#','MO#':'MON#',
-    'EOSINO#':'EOS#','EO#':'EOS#',
-    'BASO#':'BAS#','BA#':'BAS#',
-    'NEUT%':'NEU%','NEUTRO%':'NEU%','GRAN%':'NEU%','GRA%':'NEU%',
-    'LYMPH%':'LYM%','LYMP%':'LYM%','LY%':'LYM%',
-    'MONO%':'MON%','MO%':'MON%',
-    'EOSINO%':'EOS%','EO%':'EOS%',
-    'BASO%':'BAS%','BA%':'BAS%',
-    'HB':'HGB','HGBL':'HGB','HAEM':'HGB','HEM':'HGB',
-    'HT':'HCT','HCTO':'HCT','PCV':'HCT',
-    'RDW':'RDW-CV','RDWCV':'RDW-CV','RDW_CV':'RDW-CV',
-    'RDWSD':'RDW-SD','RDW_SD':'RDW-SD',
-    'THROMBO':'PLT','PLATELET':'PLT','PLATELETS':'PLT','PLAT':'PLT',
-    'MPVL':'MPV','MEANPV':'MPV',
-    'PCTL':'PCT','PLCR':'PCT',
-    'PDWL':'PDW',
-  };
-  if(ALIASES[c]) return ALIASES[c];
-  // 3) البحث المعتاد
-  return CBC_PARAM_KEYS.find(function(k){return c===k||c.startsWith(k);})||c;
-}
+function cbcNormalizeCode(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
 function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   if(!sampleId) return;
   if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
@@ -25932,10 +26197,20 @@ function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   if(buf.timer) clearTimeout(buf.timer);
   buf.timer=setTimeout(function(){cbcFlush(sampleId);},600);
 }
+// سجل آخر flush لكل sampleId — يمنع تكرار المعالجة لنفس المريض خلال 60 ثانية
+const _cbcFlushLog = {};
 function cbcFlush(sampleId){
   const buf=_cbcBuffer[sampleId];
   if(!buf||!Object.keys(buf.params).length) return;
   delete _cbcBuffer[sampleId];
+  // ── حماية التكرار: إذا فُلِشَ نفس المريض خلال آخر 60 ثانية — تجاهل ──
+  const _flushNow=Date.now();
+  const _lastFlush=_cbcFlushLog[sampleId]||0;
+  if(_flushNow-_lastFlush<60000 && _lastFlush>0){
+    lisAddLog('warn','CBC مكرر (تجاهل) SID:'+sampleId+' — آخر استلام منذ '+Math.round((_flushNow-_lastFlush)/1000)+' ثانية');
+    return;
+  }
+  _cbcFlushLog[sampleId]=_flushNow;
   lisAddLog('ok','CBC مكتمل SID:'+sampleId+' '+Object.keys(buf.params).length+' باراميتر');
   const sid=String(sampleId).trim();
   // نظف الـ SID من أي رموز (بعض الأجهزة تضيف S أو P قبل الرقم)
@@ -25949,26 +26224,66 @@ function cbcFlush(sampleId){
     });
   }
   if(typeof requests!=='undefined'&&targetPatient){
+    // أولاً: ابحث عن طلب معلق فيه CBC
     targetReq=requests.find(function(r){
       return r.patientId===targetPatient.id&&r.status!=='done'&&(r.tests||[]).some(function(t){return t==='CBC'||t==='h001';});
     });
+    // ثانياً: ابحث عن آخر طلب CBC محفوظ لتحديثه
     if(!targetReq){
-      targetReq={id:'LIS-CBC-'+sid+'-'+Date.now(),patientId:targetPatient.id,patientName:targetPatient.name||buf.name,tests:['CBC'],results:{},resultDetails:{},cbcData:null,status:'pending',date:new Date().toISOString().split('T')[0],fromDevice:true};
+      targetReq=[...requests].reverse().find(function(r){
+        return r.patientId===targetPatient.id&&(r.tests||[]).some(function(t){return t==='CBC'||t==='h001';});
+      });
+    }
+    // لا يوجد أي طلب — أنشئ جديداً
+    if(!targetReq){
+      targetReq={id:'LIS-CBC-'+sid+'-'+Date.now(),patientId:targetPatient.id,patientName:targetPatient.name||buf.name,
+        doctorName:targetPatient.doctorName||'',doctorId:targetPatient.doctorId||'',
+        tests:['CBC'],results:{},resultDetails:{},cbcData:null,status:'pending',
+        date:new Date().toISOString().split('T')[0],fromDevice:true};
       requests.push(targetReq);
     }
   }
   if(targetReq){
+    // ── حفظ CBC بدون المساس بالتحاليل الأخرى ──────────────
+    // نحفظ بيانات CBC الجديدة
     targetReq.cbcData=buf.params;
+    // دمج نتيجة CBC فقط — لا نبني results من الصفر
+    if(!targetReq.results) targetReq.results={};
+    if(!targetReq.resultDetails) targetReq.resultDetails={};
     targetReq.results['CBC']='done';
+    // نحتفظ بسجل تاريخي لنتائج CBC: مصفوفة مرتبة من الأحدث للأقدم
+    if(!targetReq.cbcHistory) targetReq.cbcHistory=[];
+    const _cbcEntry={params:buf.params,datetime:new Date().toISOString(),device:'BC-5000'};
+    targetReq.cbcHistory.unshift(_cbcEntry); // الأحدث أولاً
     targetReq.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:buf.params,fromDevice:'BC-5000',datetime:new Date().toISOString()};
-    targetReq.status='done';
+    // status=done فقط إذا جميع التحاليل الأخرى مكتملة أيضاً أو لا توجد
+    const _otherTests=(targetReq.tests||[]).filter(function(t){return t!=='CBC'&&t!=='h001';});
+    const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
+    if(_otherDone) targetReq.status='done';
+    // إذا كان هناك تحاليل أخرى لم تُكمَل — يبقى status pending
     if(typeof save==='function') save('requests',requests);
     lisAddLog('ok','CBC نُقل للمريض: '+(targetPatient?targetPatient.name:sid));
     showNotif('CBC مكتمل','تم إدخال نتائج CBC للمريض: '+(targetPatient?targetPatient.name:sid),'success');
     if(typeof renderRequestTable==='function') renderRequestTable();
+    // تحديث قائمة CBC التاريخية إذا كان المريض المعروض حالياً هو نفسه
+    if(currentReqId===targetReq.id && typeof updateCbcHistorySel==='function'){
+      updateCbcHistorySel(targetReq.id);
+    }
     // طباعة تلقائية إذا مفعلة
-    if(settings.autoPrintCBC && targetReq && targetReq.id){
-      setTimeout(function(){ printCBCFromDevice(targetReq.id); }, 1000);
+    var _autoCBCReqId = targetReq.id;
+    var _autoCBCSetting = settings.autoPrintCBC;
+    if(!_autoCBCSetting){
+      try{ var _s=localStorage.getItem((window._currentUser||'admin')+'_settings');
+        if(_s){ var _sp=JSON.parse(_s); _autoCBCSetting=_sp.autoPrintCBC; } }catch(_){}
+    }
+    if(_autoCBCSetting && _autoCBCReqId){
+      // حماية ضد التكرار: لا تطبع إذا طُبع نفس الطلب خلال آخر 60 ثانية
+      var _now=Date.now();
+      var _lastPrint=_cbcAutoPrintLog[_autoCBCReqId]||0;
+      if(_now-_lastPrint>=60000){
+        _cbcAutoPrintLog[_autoCBCReqId]=_now;
+        setTimeout(function(){ printCBCFromDevice(_autoCBCReqId); }, 800);
+      }
     }
   } else {
     const cbcResult={id:'cbc'+Date.now(),sampleId:sid,patName:buf.name,deviceCode:'CBC',medlabCode:'CBC',value:'CBC('+Object.keys(buf.params).length+' param)',unit:'',cbcParams:buf.params,refRange:'',flags:'',status:'final',device:'BC-5000',protocol:'HL7',datetime:new Date().toISOString(),transferred:false};
@@ -26201,9 +26516,13 @@ function lisTransferToMedlabPro(list){
           // ابحث عن التحليل في الطلب
           const code=res.medlabCode||res.deviceCode;
           if(!req.results) req.results={};
-          req.results[code]=res.value;
+          // البحث عن t.id الصحيح من قاعدة البيانات (النتائج تُخزَّن بـ t.id مثل h009 وليس بالكود مثل MCHC)
+          const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+          const _matchedTest=_allTests.find(t=>(t.code||'').toUpperCase()===(code||'').toUpperCase()||(t.nameShort||'').toUpperCase()===(code||'').toUpperCase());
+          const resultKey=_matchedTest?_matchedTest.id:code;
+          req.results[resultKey]=res.value;
           if(!req.resultDetails) req.resultDetails={};
-          req.resultDetails[code]={
+          req.resultDetails[resultKey]={
             value:res.value,
             unit:res.unit,
             refRange:res.refRange,
@@ -26495,66 +26814,6 @@ function lisDownload(filename,content){
   const a=document.createElement('a');
   a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(content);
   a.download=filename;a.click();
-}
-
-// ═══════════════════════════════════════════════
-// LIS SECTION LOCK — قفل قسم LIS بالرمز السري
-// ═══════════════════════════════════════════════
-const _LIS_PASS = 'SsAaIiFf@100';
-
-function _showLisLockModal(){
-  let mod = document.getElementById('m-lis-lock');
-  if(mod){ mod.remove(); }
-  mod = document.createElement('div');
-  mod.id = 'm-lis-lock';
-  mod.className = 'moverlay';
-  mod.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(4,8,20,0.92)';
-  mod.innerHTML = `<div class="modal" style="max-width:380px;width:100%">
-    <div class="mhdr">
-      <div class="mtitle">🔒 قسم ربط الأجهزة (LIS)</div>
-    </div>
-    <div class="mbody" style="text-align:center">
-      <div style="font-size:52px;margin-bottom:12px">🔬</div>
-      <div style="font-size:14px;font-weight:800;color:var(--primary);margin-bottom:6px">هذا القسم محمي برمز سري</div>
-      <div style="font-size:11px;color:var(--text2);margin-bottom:18px">أدخل الرمز السري للوصول إلى إعدادات ربط الأجهزة</div>
-      <div class="fg">
-        <input class="fc" id="lis-lock-inp" type="password" placeholder="أدخل الرمز السري..."
-          autocomplete="off" style="text-align:center;letter-spacing:2px;font-size:15px"
-          onkeydown="if(event.key==='Enter') _confirmLisLock()">
-      </div>
-      <div id="lis-lock-err" style="display:none;background:rgba(255,34,68,0.12);border:1px solid rgba(255,34,68,0.35);border-radius:8px;padding:9px;font-size:12px;color:var(--danger);margin-top:10px"></div>
-    </div>
-    <div class="mftr" style="gap:8px">
-      <button class="btn btn-s" onclick="document.getElementById('m-lis-lock').remove()">إلغاء</button>
-      <button class="btn btn-p" onclick="_confirmLisLock()">🔓 دخول</button>
-    </div>
-  </div>`;
-  document.body.appendChild(mod);
-  setTimeout(()=>{ const inp=document.getElementById('lis-lock-inp'); if(inp) inp.focus(); }, 120);
-}
-
-function _confirmLisLock(){
-  const val = (document.getElementById('lis-lock-inp').value||'').trim();
-  const errEl = document.getElementById('lis-lock-err');
-  if(!val){
-    if(errEl){ errEl.textContent='❌ يرجى إدخال الرمز السري'; errEl.style.display='block'; }
-    return;
-  }
-  if(val !== _LIS_PASS){
-    if(errEl){ errEl.textContent='❌ رمز سري خاطئ — حاول مجدداً'; errEl.style.display='block'; }
-    document.getElementById('lis-lock-inp').value='';
-    document.getElementById('lis-lock-inp').focus();
-    return;
-  }
-  // صحيح — افتح القسم
-  localStorage.setItem('_lis_unlocked','1');
-  document.getElementById('m-lis-lock').remove();
-  nav('lis');
-  // إعادة القفل بعد 30 دقيقة من عدم الاستخدام
-  clearTimeout(window._lisLockTimer);
-  window._lisLockTimer = setTimeout(()=>{
-    localStorage.removeItem('_lis_unlocked');
-  }, 30 * 60 * 1000);
 }
 
 // ═══════════════════════════════════════════════
@@ -27047,64 +27306,6 @@ function _showRestorePreview(parsed){
     `;
     const previewBox = document.getElementById('db-import-preview');
     if(previewBox) previewBox.style.display='block';
-}
-
-// ═══════════════════════════════════════════════
-// IMPORT DATABASE — تأكيد واسترداد النسخة الاحتياطية
-// ═══════════════════════════════════════════════
-async function confirmImport(){
-  if(!pendingImportData){
-    showNotif('تنبيه','لا توجد بيانات للاسترداد','warning');
-    return;
-  }
-  try{
-    const parsed = pendingImportData;
-    const data   = parsed.data || {};
-
-    // كتابة جميع مفاتيح البيانات في localStorage
-    Object.entries(data).forEach(([key, val])=>{
-      try{
-        if(val === null || val === undefined) return;
-        localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val));
-      }catch(e){ console.warn('[Import] failed key:', key, e); }
-    });
-
-    // محاولة الكتابة في IndexedDB أيضاً إذا كان متاحاً
-    if(typeof IDB !== 'undefined' && IDB && typeof IDB.setAll === 'function'){
-      try{ await IDB.setAll(data); }catch(e){ console.warn('[Import] IDB write partial error', e); }
-    }
-
-    pendingImportData = null;
-    const previewBox = document.getElementById('db-import-preview');
-    if(previewBox) previewBox.style.display = 'none';
-
-    showNotif('تم الاسترداد ✅','تم استرداد جميع البيانات بنجاح — يُنصح بإعادة تشغيل البرنامج','success');
-    setTimeout(()=>{ location.reload(); }, 2200);
-  }catch(err){
-    showNotif('خطأ في الاسترداد','فشل الاسترداد: '+err.message,'error');
-  }
-}
-
-function cancelImport(){
-  pendingImportData = null;
-  const previewBox = document.getElementById('db-import-preview');
-  if(previewBox) previewBox.style.display = 'none';
-  showNotif('إلغاء','تم إلغاء الاسترداد','info');
-}
-
-function importDatabase(input){
-  const f = input.files[0]; if(!f) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    try{
-      const text = e.target.result;
-      _fsaProcessRestore(text);
-    }catch(err){
-      showNotif('خطأ','فشل قراءة الملف: '+err.message,'error');
-    }
-  };
-  reader.readAsText(f);
-  input.value = '';
 }
 
 // ── النقل التلقائي أسبوعياً (أو فوراً إذا تجاوز IDB 80%) ────
@@ -29403,7 +29604,7 @@ function dlPDF(i){
             var ftrDiv=iDoc.createElement('div');
             ftrDiv.innerHTML=footerHTML;
             var ftrEl=ftrDiv.firstElementChild;
-            if(ftrEl){ftrEl.style.position='absolute';ftrEl.style.bottom='3mm';ftrEl.style.left='0';ftrEl.style.right='0';ftrEl.style.zIndex='auto';ftrEl.style.display='block';ftrEl.id='';pg.appendChild(ftrEl);}
+            if(ftrEl){ftrEl.style.position='absolute';ftrEl.style.bottom='0';ftrEl.style.left='0';ftrEl.style.right='0';ftrEl.style.zIndex='auto';ftrEl.style.display='block';ftrEl.id='';pg.appendChild(ftrEl);}
             pg.style.position='relative';pg.style.height='1123px';pg.style.minHeight='1123px';pg.style.maxHeight='1123px';pg.style.boxSizing='border-box';pg.style.overflow='hidden';pg.style.margin='0';pg.style.padding=pg.style.padding||'1mm 3mm 0 3mm';
           });
           body.style.margin='0';body.style.padding='0';
@@ -31542,6 +31743,9 @@ async function _loadPrinters(){
     if(!selMain||!selBarcode){ showNotif('تنبيه','افتح إعدادات الطباعة أولاً','warning'); return; }
     const savedMain = settings.printerMain||'';
     const savedBc = settings.printerBarcode||'';
+    setTimeout(function(){ if(typeof _loadLabelSizeUI==='function') _loadLabelSizeUI(); },50);
+    // تحميل حجم الملصق في الواجهة
+    setTimeout(function(){ if(typeof _loadLabelSizeUI==='function') _loadLabelSizeUI(); }, 50);
     [selMain, selBarcode].forEach(function(sel, idx){
       const saved = idx===0 ? savedMain : savedBc;
       sel.innerHTML = '<option value="">-- الطابعة الافتراضية --</option>';
@@ -31555,12 +31759,58 @@ async function _loadPrinters(){
     });
     if(printers.length===0) showNotif('تنبيه','لم يتم العثور على طابعات متصلة','warning');
     else showNotif('✅','تم تحديث قائمة الطابعات ('+printers.length+' طابعة)','success');
+    // تحميل حجم الملصق
+    if(typeof _loadLabelSizeUI==='function') _loadLabelSizeUI();
   } catch(e){ console.warn('_loadPrinters error:', e); }
 }
 
 function _savePrinter(key, value){
   settings[key] = value;
   if(typeof save==='function') save('settings', settings);
+}
+function _saveLabelSize(){
+  var w=parseFloat(document.getElementById('st-label-w')?.value)||57;
+  var h=parseFloat(document.getElementById('st-label-h')?.value)||30;
+  settings.labelW=Math.max(20,Math.min(200,w));
+  settings.labelH=Math.max(10,Math.min(200,h));
+  if(typeof save==='function') save('settings',settings);
+}
+function _setLabelPreset(w,h){
+  var iw=document.getElementById('st-label-w');
+  var ih=document.getElementById('st-label-h');
+  if(iw) iw.value=w;
+  if(ih) ih.value=h;
+  _saveLabelSize();
+}
+function _loadLabelSizeUI(){
+  var iw=document.getElementById('st-label-w');
+  var ih=document.getElementById('st-label-h');
+  if(iw) iw.value=settings.labelW||57;
+  if(ih) ih.value=settings.labelH||30;
+}
+
+// حفظ حجم الملصق
+function _saveLabelSize(){
+  const w=parseFloat(document.getElementById('st-label-w')?.value)||57;
+  const h=parseFloat(document.getElementById('st-label-h')?.value)||30;
+  settings.labelW=Math.max(20,Math.min(200,w));
+  settings.labelH=Math.max(10,Math.min(200,h));
+  if(typeof save==='function') save('settings', settings);
+}
+// تطبيق حجم جاهز
+function _setLabelPreset(w,h){
+  const iw=document.getElementById('st-label-w');
+  const ih=document.getElementById('st-label-h');
+  if(iw) iw.value=w;
+  if(ih) ih.value=h;
+  _saveLabelSize();
+}
+// تحميل حجم الملصق المحفوظ في واجهة الإعدادات
+function _loadLabelSizeUI(){
+  const iw=document.getElementById('st-label-w');
+  const ih=document.getElementById('st-label-h');
+  if(iw) iw.value=settings.labelW||57;
+  if(ih) ih.value=settings.labelH||30;
 }
 
 function _saveAutoCBC(val){
@@ -31570,22 +31820,271 @@ function _saveAutoCBC(val){
 
 // ─── طباعة مباشرة عبر iframe بدون واجهة ────────────────
 function _printViaIframeSilent(html, isBarcode){
-  // استخدام Electron silent print إذا متاح ومعرّفة طابعة
-  const printerName = isBarcode ? (settings.printerBarcode||'') : (settings.printerMain||'');
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none;';
-  document.body.appendChild(iframe);
-  const doc = iframe.contentDocument;
-  doc.open();
-  doc.write(html);
-  doc.close();
-  setTimeout(function(){
-    try{
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-    } catch(e){}
-    setTimeout(function(){ try{ document.body.removeChild(iframe); }catch(_){} }, 3000);
-  }, 500);
+  // طباعة صامتة — بدون واجهة طابعة
+  _printViaIframe(html, isBarcode);
+}
+
+// ════════════════════════════════════════════════════════════
+// LIS — قفل الأزرار بكلمة السر SsAaIiFf@100
+// ════════════════════════════════════════════════════════════
+var _LIS_PASS = 'SsAaIiFf@100';
+var _lisPendingFn = null;
+
+function _lisLockedAction(fn){
+  _lisPendingFn = fn;
+  var modal = document.getElementById('m-lis-pass');
+  var inp   = document.getElementById('lis-pass-inp');
+  var err   = document.getElementById('lis-pass-err');
+  if(!modal){
+    // fallback إذا لم يُحمَّل الـ modal بعد
+    var pass = window.prompt ? window.prompt('أدخل كلمة المرور:') : '';
+    if(pass === _LIS_PASS && typeof fn === 'function') fn();
+    return;
+  }
+  if(inp) inp.value = '';
+  if(err) err.style.display = 'none';
+  modal.style.display = 'flex';
+  setTimeout(function(){ if(inp) inp.focus(); }, 100);
+}
+
+function _lisPassConfirm(){
+  var inp  = document.getElementById('lis-pass-inp');
+  var err  = document.getElementById('lis-pass-err');
+  var pass = inp ? inp.value.trim() : '';
+  if(pass === _LIS_PASS){
+    document.getElementById('m-lis-pass').style.display = 'none';
+    if(typeof _lisPendingFn === 'function'){
+      var fn = _lisPendingFn;
+      _lisPendingFn = null;
+      fn();
+    }
+  } else {
+    if(err){ err.style.display = 'block'; }
+    if(inp){ inp.value = ''; inp.focus(); }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+// LAN SYNC — ربط الحاسبات عبر الشبكة المحلية
+// ════════════════════════════════════════════════════════════
+var _lanWS        = null;   // WebSocket (عميل) أو null
+var _lanClients   = new Set(); // WebSocket clients (سيرفير)
+var _lanMode      = null;   // 'server' | 'client' | null
+var _lanHttpServer= null;
+var _LAN_PORT     = 8797;
+var _LAN_SYNC_KEYS= ['patients','requests','invoices','doctors'];
+
+// تحديث شريط حالة LAN
+function _lanUpdateStatus(){
+  var modeEl = document.getElementById('lan-mode-lbl');
+  var ipEl   = document.getElementById('lan-ip-lbl');
+  var cliEl  = document.getElementById('lan-clients-lbl');
+  if(!modeEl) return;
+  if(_lanMode==='server'){
+    modeEl.innerHTML='<span style="color:var(--success)">🟢 سيرفير نشط — بورت '+_LAN_PORT+'</span>';
+    if(window.electronAPI && window.electronAPI.getLocalIP){
+      window.electronAPI.getLocalIP().then(function(r){
+        if(ipEl) ipEl.textContent='IP هذا الجهاز: '+(r||'---');
+      });
+    }
+    if(cliEl) cliEl.textContent='أجهزة متصلة: '+_lanClients.size;
+  } else if(_lanMode==='server-info'){
+    modeEl.innerHTML='<span style="color:var(--warning)">🟡 وضع السيرفير (افتح CMD→ipconfig للـ IP)</span>';
+    if(ipEl) ipEl.textContent='';
+    if(cliEl) cliEl.textContent='';
+  } else if(_lanMode==='client'){
+    modeEl.innerHTML='<span style="color:#4af">🔵 متصل بالسيرفير</span>';
+    var srv=document.getElementById('lan-server-ip');
+    if(ipEl) ipEl.textContent='السيرفير: '+(srv?srv.value:'---');
+    if(cliEl) cliEl.textContent='';
+  } else {
+    modeEl.innerHTML='<span style="color:var(--text2)">⚪ غير مفعّل</span>';
+    if(ipEl) ipEl.textContent='';
+    if(cliEl) cliEl.textContent='';
+  }
+}
+
+// بث التغيير لجميع الأجهزة المرتبطة
+function lanBroadcast(key, data){
+  var msg = JSON.stringify({type:'sync', key:key, data:data, ts:Date.now()});
+  if(_lanMode==='server'){
+    // السيرفير يبث للعملاء
+    _lanClients.forEach(function(ws){
+      try{ if(ws.readyState===1) ws.send(msg); }catch(e){}
+    });
+  } else if(_lanMode==='client' && _lanWS && _lanWS.readyState===1){
+    // العميل يرسل للسيرفير
+    try{ _lanWS.send(msg); }catch(e){}
+  }
+}
+
+// معالجة الرسالة الواردة
+function _lanHandleMessage(raw){
+  try{
+    var msg = JSON.parse(raw);
+    if(msg.type==='sync' && _LAN_SYNC_KEYS.indexOf(msg.key)!==-1){
+      // تحديث البيانات محلياً بدون تبث (لمنع الحلقة اللانهائية)
+      if(typeof window._smSetters === 'object' && window._smSetters[msg.key]){
+        window._smSetters[msg.key](msg.data);
+      }
+      if(typeof save==='function') save(msg.key, msg.data);
+      // تحديث الواجهة
+      if(msg.key==='patients' && typeof renderPatients==='function') renderPatients();
+      if(msg.key==='requests' && typeof renderRequests==='function') renderRequests();
+      if(msg.key==='invoices' && typeof renderBilling==='function') renderBilling();
+      if(msg.key==='doctors' && typeof renderDoctors==='function') renderDoctors();
+      showNotif('🌐 LAN','تم استقبال تحديث: '+msg.key,'info');
+    } else if(msg.type==='cbc' && msg.reqId){
+      // نتيجة CBC وصلت من جهاز على حاسبة أخرى
+      if(typeof lisCbcFromLAN==='function') lisCbcFromLAN(msg);
+    }
+  }catch(e){}
+}
+
+// تشغيل LAN كسيرفير
+function lisLanStartServer(){
+  _ensureLanSaveHook();
+  if(_lanMode==='server'){ showNotif('LAN','السيرفير يعمل بالفعل','warning'); return; }
+  if(window.electronAPI && window.electronAPI.lanStartServer){
+    // تشغيل عبر Electron
+    window.electronAPI.lanStartServer(_LAN_PORT).then(function(r){
+      if(r && r.ok){
+        _lanMode = 'server';
+        window.electronAPI.onLanMessage(function(msg){
+          _lanHandleMessage(typeof msg==='string' ? msg : msg.data);
+        });
+        _lanUpdateStatus();
+        showNotif('🌐 LAN','✅ السيرفير نشط — بورت '+_LAN_PORT,'success');
+        setInterval(function(){ if(_lanMode==='server') _lanUpdateStatus(); }, 4000);
+      } else {
+        showNotif('LAN خطأ',(r&&r.error)||'فشل تشغيل السيرفير','error');
+      }
+    }).catch(function(e){ showNotif('LAN خطأ',e.message,'error'); });
+  } else {
+    // متصفح عادي - عرض IP للمستخدم فقط
+    _lanMode = 'server-info';
+    showNotif('LAN — معلومات', 'لتشغيل السيرفير استخدم التطبيق المكتبي. IP هذا الجهاز: افتح CMD ثم ipconfig', 'info');
+    _lanUpdateStatus();
+  }
+}
+
+// الاتصال كعميل
+function lisLanConnectClient(){
+  _ensureLanSaveHook();
+  var ipInp = document.getElementById('lan-server-ip');
+  var ip = ipInp ? ipInp.value.trim() : '';
+  if(!ip){ showNotif('تنبيه','أدخل IP السيرفير أولاً','warning'); return; }
+  if(_lanWS && _lanWS.readyState<2){ _lanWS.close(); }
+  var wsUrl = 'ws://'+ip+':'+_LAN_PORT;
+  try{
+    _lanWS = new WebSocket(wsUrl);
+    _lanWS.onopen = function(){
+      _lanMode='client';
+      _lanUpdateStatus();
+      showNotif('🌐 LAN','متصل بالسيرفير: '+ip,'success');
+    };
+    _lanWS.onmessage = function(e){ _lanHandleMessage(e.data); };
+    _lanWS.onclose = function(){
+      _lanMode=null; _lanWS=null; _lanUpdateStatus();
+      showNotif('LAN','انقطع الاتصال بالسيرفير','warning');
+    };
+    _lanWS.onerror = function(){
+      showNotif('LAN خطأ','فشل الاتصال بـ '+ip,'error');
+    };
+  }catch(e){
+    showNotif('LAN خطأ',e.message,'error');
+  }
+}
+
+// قطع LAN
+function lisLanDisconnect(){
+  if(_lanWS){ try{ _lanWS.close(); }catch(e){} _lanWS=null; }
+  if(window.electronAPI && window.electronAPI.lanStopServer){
+    window.electronAPI.lanStopServer().catch(function(){});
+  }
+  _lanMode=null; _lanClients.clear(); _lanUpdateStatus();
+  showNotif('LAN','تم قطع الشبكة المحلية ✓','info');
+}
+
+// عرض الحالة
+function lisLanCheckStatus(){
+  _lanUpdateStatus();
+  if(!_lanMode){
+    showNotif('LAN','الشبكة المحلية غير مفعّلة — فعّل السيرفير أو اتصل بجهاز سيرفير','info');
+    return;
+  }
+  var msg;
+  if(_lanMode==='server')       msg='🟢 سيرفير نشط — '+_lanClients.size+' جهاز متصل';
+  else if(_lanMode==='server-info') msg='🟡 وضع السيرفير (متصفح)';
+  else msg='🔵 عميل — متصل بالسيرفير';
+  showNotif('🌐 LAN',msg,'success');
+}
+
+// hook على save لنشر التغييرات تلقائياً عبر LAN
+// يُفعَّل عند أول استخدام للـ LAN
+var _lanSaveHooked = false;
+function _ensureLanSaveHook(){
+  if(_lanSaveHooked) return;
+  if(typeof window.save !== 'function') return;
+  var _origSave = window.save;
+  window.save = function(key, data){
+    _origSave.apply(this, arguments);
+    if(_lanMode && _LAN_SYNC_KEYS.indexOf(key) !== -1){
+      lanBroadcast(key, data);
+    }
+  };
+  _lanSaveHooked = true;
+}
+
+// ════════════════════════════════════════════════════════════
+// منع الخروج وقطع الاتصال عند وجود جهاز متصل
+// ════════════════════════════════════════════════════════════
+function _lisAnyDeviceConnected(){
+  // تحقق من LIS devices
+  if(typeof lisDevices!=='undefined'){
+    for(var i=0;i<lisDevices.length;i++){
+      if(lisDevices[i].connected) return true;
+    }
+  }
+  // تحقق من CBC TCP
+  if(typeof _cbcServerRunning!=='undefined' && _cbcServerRunning) return true;
+  return false;
+}
+
+// رسالة التحذير
+var _LIS_BLOCK_MSG = '⚠️ تنبيه: يوجد جهاز متصل بالبرنامج حالياً.\n\nيجب إيقاف الجهاز أو قطع اتصاله أولاً قبل الخروج.\n\nاذهب إلى قسم ربط الأجهزة وأوقف الاتصال، ثم أعد المحاولة.';
+
+// حجب زر تسجيل الخروج إذا كان هناك جهاز متصل
+var _origDoLogout = window.doLogout;
+window.doLogout = function(){
+  if(_lisAnyDeviceConnected()){
+    alert(_LIS_BLOCK_MSG);
+    nav('lis'); // انتقل لقسم الأجهزة
+    return;
+  }
+  if(typeof _origDoLogout==='function') _origDoLogout();
+};
+
+// حجب إغلاق التطبيق إذا كان هناك جهاز متصل
+window.addEventListener('beforeunload', function(e){
+  if(_lisAnyDeviceConnected()){
+    e.preventDefault();
+    e.returnValue = _LIS_BLOCK_MSG;
+    return _LIS_BLOCK_MSG;
+  }
+});
+
+// إشعار Electron بمنع الإغلاق
+if(window.electronAPI && window.electronAPI.isElectron){
+  document.addEventListener('keydown', function(e){
+    if((e.altKey && e.key==='F4') || (e.ctrlKey && e.key==='w')){
+      if(_lisAnyDeviceConnected()){
+        e.preventDefault();
+        alert(_LIS_BLOCK_MSG);
+        nav('lis');
+      }
+    }
+  });
 }
 
 </script>
