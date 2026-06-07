@@ -2511,118 +2511,199 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
 .pt-suggest,#notif-panel,#cal-panel{animation:none!important;transition:none!important}
 
 /* ══════════════════════════════════════════════════════════════
-   DOCTOR PORTAL — بوابة الطبيب
+   DOCTOR PORTAL — بوابة الطبيب (v2)
 ══════════════════════════════════════════════════════════════ */
-.dp-toggle-btn{
-  position:fixed;left:0;top:calc(50% + 68px);
-  width:32px;height:64px;
-  background:linear-gradient(180deg,#00e87a,#00b85c);
-  border-radius:0 12px 12px 0;cursor:pointer;z-index:298;
+
+/* زر في السايدبار — لا يحتاج CSS خاص لأنه يستخدم .ni */
+
+/* Modal كامل الشاشة */
+.dp-modal-overlay{
+  position:fixed;inset:0;z-index:8000;
+  background:rgba(2,6,16,0.97);
+  display:none;flex-direction:column;
+  animation:dpFadeIn 0.22s ease;
+}
+.dp-modal-overlay.open{display:flex;}
+@keyframes dpFadeIn{from{opacity:0;transform:scale(0.98)}to{opacity:1;transform:scale(1)}}
+
+/* شريط العنوان العلوي للـ modal */
+.dp-modal-hdr{
+  background:rgba(4,10,22,1);
+  border-bottom:2px solid rgba(0,232,122,0.35);
+  padding:0 20px;
+  height:56px;
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.dp-modal-hdr-title{
+  font-size:15px;font-weight:900;color:#00e87a;
+  font-family:'Cairo',sans-serif;display:flex;align-items:center;gap:8px;
+}
+.dp-modal-hdr-right{display:flex;align-items:center;gap:8px;}
+.dp-modal-close-btn{
+  width:36px;height:36px;border-radius:9px;
+  border:1px solid rgba(255,255,255,0.15);
+  background:rgba(255,255,255,0.06);color:#fff;
+  cursor:pointer;font-size:16px;
   display:flex;align-items:center;justify-content:center;
-  font-size:18px;color:#000;box-shadow:4px 0 16px rgba(0,232,122,0.35);
-  transition:all 0.3s;
+  transition:all 0.2s;font-family:monospace;
 }
-.dp-toggle-btn:hover{width:36px;box-shadow:6px 0 20px rgba(0,232,122,0.5);}
-.dp-panel{
-  position:fixed;left:0;top:0;bottom:0;width:340px;
-  background:rgba(4,10,22,0.99);border-right:1px solid rgba(0,232,122,0.25);
-  z-index:300;display:flex;flex-direction:column;transform:translateX(-100%);
-  transition:transform 0.3s ease;
+.dp-modal-close-btn:hover{background:rgba(255,34,68,0.3);border-color:#ff2244;color:#ff2244;}
+
+/* تخطيط المحتوى: قائمة يمين + عارض يسار */
+.dp-modal-body{
+  display:flex;flex:1;overflow:hidden;
 }
-.dp-panel.open{transform:translateX(0);}
-.dp-panel-hdr{
-  padding:14px 14px 12px;border-bottom:1px solid rgba(0,232,122,0.2);
-  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+
+/* الشريط الجانبي الأيمن — قائمة المرضى */
+.dp-sidebar{
+  width:300px;min-width:260px;max-width:320px;
   background:rgba(4,10,22,0.99);
+  border-left:1px solid rgba(0,232,122,0.18);
+  display:flex;flex-direction:column;
+  flex-shrink:0;
 }
-.dp-panel-hdr h3{font-size:12px;font-weight:800;color:#00e87a;display:flex;align-items:center;gap:7px;margin:0;}
-.dp-close-btn{
-  width:30px;height:30px;border-radius:8px;border:1px solid rgba(0,232,122,0.25);
-  background:rgba(0,232,122,0.06);color:rgba(255,255,255,0.6);cursor:pointer;font-size:11px;
-  display:flex;align-items:center;justify-content:center;transition:all 0.2s;
+.dp-search-wrap{
+  padding:10px 12px 8px;
+  border-bottom:1px solid rgba(0,232,122,0.15);
+  flex-shrink:0;position:relative;
 }
-.dp-close-btn:hover{background:rgba(255,77,109,0.2);color:#ff2244;border-color:#ff2244;}
-.dp-search-wrap{padding:10px 12px 8px;border-bottom:1px solid rgba(0,232,122,0.15);flex-shrink:0;position:relative;}
 .dp-search-inp{
-  width:100%;background:rgba(255,255,255,0.05);border:1.5px solid rgba(0,232,122,0.25);
-  border-radius:9px;padding:8px 12px 8px 34px;color:#fff;font-family:'Cairo',sans-serif;
-  font-size:11px;outline:none;transition:all 0.2s;box-sizing:border-box;
+  width:100%;background:rgba(255,255,255,0.05);
+  border:1.5px solid rgba(0,232,122,0.3);
+  border-radius:9px;padding:8px 36px 8px 12px;
+  color:#fff;font-family:'Cairo',sans-serif;
+  font-size:12px;outline:none;transition:all 0.2s;
+  box-sizing:border-box;
 }
 .dp-search-inp:focus{border-color:#00e87a;background:rgba(0,232,122,0.05);}
+.dp-search-icon{
+  position:absolute;right:22px;top:50%;transform:translateY(-50%);
+  font-size:14px;pointer-events:none;color:#00e87a;
+}
 .dp-stats-bar{
-  padding:6px 12px;border-bottom:1px solid rgba(0,232,122,0.12);
-  display:flex;gap:6px;flex-shrink:0;
+  padding:7px 12px;
+  border-bottom:1px solid rgba(0,232,122,0.12);
+  display:flex;gap:5px;flex-shrink:0;
 }
 .dp-stat-badge{
-  flex:1;padding:5px 4px;border-radius:7px;text-align:center;font-size:10px;font-weight:700;
+  flex:1;padding:5px 3px;border-radius:7px;
+  text-align:center;font-size:10px;font-weight:700;
   font-family:'Cairo',sans-serif;
 }
-.dp-stat-badge.total{background:rgba(0,212,255,0.1);color:#00d4ff;border:1px solid rgba(0,212,255,0.2);}
-.dp-stat-badge.done{background:rgba(0,232,122,0.1);color:#00e87a;border:1px solid rgba(0,232,122,0.25);}
-.dp-stat-badge.pending{background:rgba(255,204,0,0.1);color:#ffcc00;border:1px solid rgba(255,204,0,0.2);}
+.dp-stat-badge.total {background:rgba(0,212,255,0.1);color:#00d4ff;border:1px solid rgba(0,212,255,0.22);}
+.dp-stat-badge.done  {background:rgba(0,232,122,0.1);color:#00e87a;border:1px solid rgba(0,232,122,0.28);}
+.dp-stat-badge.pend  {background:rgba(255,204,0,0.1);color:#ffcc00;border:1px solid rgba(255,204,0,0.22);}
 .dp-list{flex:1;overflow-y:auto;padding:6px 8px;min-height:0;}
+.dp-list::-webkit-scrollbar{width:4px;}
+.dp-list::-webkit-scrollbar-thumb{background:rgba(0,232,122,0.3);border-radius:2px;}
+
 .dp-patient-card{
-  display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:10px;
-  border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.03);
-  cursor:pointer;transition:all 0.2s;margin-bottom:4px;
+  display:flex;align-items:center;gap:9px;
+  padding:9px 10px;border-radius:10px;
+  border:1px solid rgba(255,255,255,0.06);
+  background:rgba(255,255,255,0.03);
+  cursor:pointer;transition:all 0.18s;margin-bottom:4px;
 }
-.dp-patient-card:hover{background:rgba(0,232,122,0.07);border-color:rgba(0,232,122,0.3);}
-.dp-patient-card.st-done{border-right:3px solid #00e87a;}
-.dp-patient-card.st-pending{border-right:3px solid #ffcc00;}
-.dp-patient-card.st-inprogress{border-right:3px solid #00d4ff;}
+.dp-patient-card:hover{
+  background:rgba(0,232,122,0.07);
+  border-color:rgba(0,232,122,0.35);
+  transform:translateX(-2px);
+}
+.dp-patient-card.active{
+  background:rgba(0,232,122,0.12);
+  border-color:#00e87a;
+}
+.dp-patient-card.st-done    {border-right:3px solid #00e87a;}
+.dp-patient-card.st-pending {border-right:3px solid #ffcc00;}
+.dp-patient-card.st-inprog  {border-right:3px solid #00d4ff;}
+
 .dp-pt-avatar{
-  width:34px;height:34px;border-radius:50%;flex-shrink:0;
+  width:36px;height:36px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-size:12px;font-weight:800;color:#000;
+  font-size:13px;font-weight:800;color:#000;
 }
-.dp-pt-avatar.st-done{background:linear-gradient(135deg,#00e87a,#00b85c);}
+.dp-pt-avatar.st-done   {background:linear-gradient(135deg,#00e87a,#00b85c);}
 .dp-pt-avatar.st-pending{background:linear-gradient(135deg,#ffcc00,#e6b800);}
-.dp-pt-avatar.st-inprogress{background:linear-gradient(135deg,#00d4ff,#0099bb);}
+.dp-pt-avatar.st-inprog {background:linear-gradient(135deg,#00d4ff,#0099bb);}
+
 .dp-pt-info{flex:1;min-width:0;}
-.dp-pt-name{font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.dp-pt-sub{font-size:10px;color:rgba(255,255,255,0.5);margin-top:1px;}
+.dp-pt-name{
+  font-size:12px;font-weight:700;color:#fff;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.dp-pt-sub{font-size:10px;color:rgba(255,255,255,0.48);margin-top:2px;}
 .dp-pt-badge{
-  font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;
-  flex-shrink:0;font-family:'Cairo',sans-serif;
+  font-size:9px;font-weight:800;padding:2px 7px;
+  border-radius:6px;flex-shrink:0;font-family:'Cairo',sans-serif;
 }
-.dp-pt-badge.st-done{background:rgba(0,232,122,0.18);color:#00e87a;border:1px solid rgba(0,232,122,0.35);}
-.dp-pt-badge.st-pending{background:rgba(255,204,0,0.14);color:#ffcc00;border:1px solid rgba(255,204,0,0.3);}
-.dp-pt-badge.st-inprogress{background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.25);}
-.dp-empty{text-align:center;padding:40px 20px;color:rgba(255,255,255,0.3);font-size:12px;font-family:'Cairo',sans-serif;}
-.dp-report-overlay{
-  position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);
-  display:none;align-items:flex-start;justify-content:center;
-  padding:12px;overflow-y:auto;
+.dp-pt-badge.st-done   {background:rgba(0,232,122,0.18);color:#00e87a;border:1px solid rgba(0,232,122,0.38);}
+.dp-pt-badge.st-pending{background:rgba(255,204,0,0.14);color:#ffcc00;border:1px solid rgba(255,204,0,0.32);}
+.dp-pt-badge.st-inprog {background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.28);}
+
+.dp-empty{
+  text-align:center;padding:40px 16px;
+  color:rgba(255,255,255,0.28);font-size:12px;
+  font-family:'Cairo',sans-serif;
 }
-.dp-report-overlay.open{display:flex;}
-.dp-report-box{
-  background:#fff;border-radius:12px;max-width:860px;width:100%;
-  box-shadow:0 20px 60px rgba(0,0,0,0.8);overflow:hidden;margin:auto;
+
+/* منطقة العارض الأيسر */
+.dp-viewer{
+  flex:1;overflow-y:auto;
+  background:#e8ecf0;
+  display:flex;flex-direction:column;
 }
-.dp-report-toolbar{
-  background:rgba(4,8,20,0.97);padding:10px 14px;
-  display:flex;align-items:center;justify-content:space-between;
-  border-bottom:2px solid #00e87a;position:sticky;top:0;z-index:5;
+.dp-viewer::-webkit-scrollbar{width:6px;}
+.dp-viewer::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.2);border-radius:3px;}
+
+.dp-viewer-placeholder{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:12px;
+  color:#8899aa;font-family:'Cairo',sans-serif;
+  padding:40px;
 }
-.dp-report-title-text{font-size:13px;font-weight:800;color:#00e87a;font-family:'Cairo',sans-serif;}
-.dp-report-close-btn{
-  width:32px;height:32px;border-radius:8px;border:1px solid rgba(255,255,255,0.2);
-  background:rgba(255,255,255,0.08);color:#fff;cursor:pointer;font-size:14px;
-  display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-family:monospace;
+
+/* رسالة الانتظار داخل العارض */
+.dp-wait-card{
+  margin:30px auto;max-width:480px;width:calc(100% - 40px);
+  background:#fff;border-radius:14px;
+  box-shadow:0 4px 24px rgba(0,0,0,0.12);
+  overflow:hidden;
 }
-.dp-report-close-btn:hover{background:rgba(255,34,68,0.3);border-color:#ff2244;color:#ff2244;}
-.dp-report-pages{padding:0;}
-.dp-report-page-frame{width:100%;border:none;display:block;background:#fff;}
-.dp-waiting-box{
-  padding:70px 30px;text-align:center;background:#fff;font-family:'Cairo',sans-serif;
+.dp-wait-top{
+  background:linear-gradient(135deg,#003d7a,#0055a0);
+  padding:28px 24px 22px;text-align:center;color:#fff;
 }
-body.light-mode .dp-panel{background:rgba(248,249,251,0.99);border-right-color:#dde4ec;}
-body.light-mode .dp-panel-hdr{background:#fff;border-bottom-color:#dde4ec;}
-body.light-mode .dp-search-inp{background:#f0f3f7;color:#000;border-color:#b8d4c8;}
-body.light-mode .dp-patient-card{background:#f8f9fb;border-color:#e2e8f0;}
+.dp-wait-body{padding:20px 24px;}
+
+/* frame لعرض التقرير */
+.dp-report-frame{
+  width:100%;border:none;display:block;background:#fff;
+  box-shadow:0 2px 12px rgba(0,0,0,0.1);
+}
+.dp-page-sep{height:8px;background:#d0d8e0;}
+
+/* شريط حالة LAN */
+.dp-lan-bar{
+  padding:5px 20px;background:rgba(0,100,40,0.15);
+  border-bottom:1px solid rgba(0,232,122,0.2);
+  font-size:11px;font-weight:700;color:#00e87a;
+  font-family:'Cairo',sans-serif;display:flex;
+  align-items:center;gap:8px;flex-shrink:0;
+}
+.dp-lan-bar.offline{background:rgba(60,60,60,0.2);color:rgba(255,255,255,0.35);display:none;}
+
+/* light-mode */
+body.light-mode .dp-modal-overlay{background:rgba(240,244,248,0.98);}
+body.light-mode .dp-modal-hdr{background:#fff;border-bottom-color:rgba(0,180,80,0.3);}
+body.light-mode .dp-sidebar{background:#f8f9fb;border-left-color:#dde4ec;}
+body.light-mode .dp-search-inp{background:#f0f3f7;color:#000;border-color:#9dc9ae;}
+body.light-mode .dp-patient-card{background:#f8f9fb;border-color:#e2e8f0;color:#000;}
 body.light-mode .dp-patient-card:hover{background:#edfaf3;border-color:#7ed8a8;}
 body.light-mode .dp-pt-name{color:#0d1b2a;}
 body.light-mode .dp-pt-sub{color:#6b7280;}
+body.light-mode .dp-viewer{background:#d8dde3;}
+
 </style>
 
 <!-- ══════════════════════════════════════════════════════════
@@ -2822,6 +2903,9 @@ body.light-mode .dp-pt-sub{color:#6b7280;}
     <div class="ni" data-perm="chat" id="chat-nav-btn" onclick="toggleChatPanel()">
       <span class="ni-ic">💬</span>محادثات المختبرات
       <span class="ni-badge" id="nb-chat" style="display:none">0</span>
+    </div>
+    <div class="ni" id="dp-nav-btn" onclick="dpOpenModal()" style="color:#00e87a;">
+      <span class="ni-ic">🩺</span>بوابة الطبيب
     </div>
   </div>
   <div class="sidebar-footer">
@@ -6231,55 +6315,61 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
 </div>
 
 <!-- ══════════════════════════════════════════════════════════
-     DOCTOR PORTAL — زر التبديل + اللوحة الجانبية
+     DOCTOR PORTAL v2 — Modal كامل الشاشة
 ══════════════════════════════════════════════════════════════ -->
-<div class="dp-toggle-btn" id="dp-toggle-btn" onclick="dpTogglePanel()" title="بوابة الطبيب">
-  🩺
-</div>
+<div class="dp-modal-overlay" id="dp-modal-overlay">
 
-<div class="dp-panel" id="dp-panel">
-  <!-- HEADER -->
-  <div class="dp-panel-hdr">
-    <h3>🩺 بوابة الطبيب</h3>
-    <div style="display:flex;align-items:center;gap:6px">
-      <span id="dp-lan-badge" style="font-size:9px;padding:2px 7px;border-radius:6px;font-weight:700;font-family:'Cairo',sans-serif;display:none"></span>
-      <button class="dp-close-btn" onclick="dpTogglePanel()">✕</button>
+  <!-- شريط العنوان -->
+  <div class="dp-modal-hdr">
+    <div class="dp-modal-hdr-title">
+      🩺 بوابة الطبيب
+      <span id="dp-lan-badge" style="font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;font-family:'Cairo',sans-serif;margin-right:4px;display:none"></span>
+    </div>
+    <div class="dp-modal-hdr-right">
+      <span id="dp-hdr-date" style="font-size:11px;color:rgba(255,255,255,0.45);font-family:'Cairo',sans-serif;"></span>
+      <button class="dp-modal-close-btn" onclick="dpCloseModal()" title="إغلاق بوابة الطبيب">✕</button>
     </div>
   </div>
 
-  <!-- SEARCH -->
-  <div class="dp-search-wrap">
-    <span style="position:absolute;right:22px;top:50%;transform:translateY(-50%);font-size:13px;pointer-events:none;color:#00e87a;margin-top:-4px">🔍</span>
-    <input class="dp-search-inp" id="dp-search-inp" lang="ar" placeholder="بحث باسم المريض..." oninput="dpFilterList(this.value)" autocomplete="off">
+  <!-- شريط LAN -->
+  <div class="dp-lan-bar offline" id="dp-lan-bar">
+    <span id="dp-lan-bar-text">⚪ الشبكة المحلية غير متصلة</span>
+    <span style="margin-right:auto;font-size:10px;opacity:0.7">تحديث تلقائي كل 8 ثانية</span>
+    <button onclick="dpRenderAll()" style="border:1px solid rgba(0,232,122,0.4);background:rgba(0,232,122,0.1);color:#00e87a;border-radius:6px;padding:2px 10px;font-size:10px;cursor:pointer;font-family:'Cairo',sans-serif;font-weight:700;">🔄 تحديث</button>
   </div>
 
-  <!-- STATS -->
-  <div class="dp-stats-bar">
-    <div class="dp-stat-badge total" id="dp-stat-total">الكل: 0</div>
-    <div class="dp-stat-badge done" id="dp-stat-done">✅ مكتمل: 0</div>
-    <div class="dp-stat-badge pending" id="dp-stat-pending">⏳ انتظار: 0</div>
-  </div>
+  <!-- المحتوى الرئيسي -->
+  <div class="dp-modal-body">
 
-  <!-- LIST -->
-  <div class="dp-list" id="dp-list">
-    <div class="dp-empty">
-      <div style="font-size:28px;margin-bottom:8px">🩺</div>
-      <div style="font-weight:700;margin-bottom:4px;color:rgba(255,255,255,0.5)">لا توجد طلبات اليوم</div>
+    <!-- الشريط الجانبي الأيمن: قائمة المرضى -->
+    <div class="dp-sidebar">
+      <div class="dp-search-wrap">
+        <span class="dp-search-icon">🔍</span>
+        <input class="dp-search-inp" id="dp-search-inp"
+          lang="ar" placeholder="بحث باسم المريض..."
+          oninput="dpFilterList(this.value)" autocomplete="off">
+      </div>
+      <div class="dp-stats-bar">
+        <div class="dp-stat-badge total" id="dp-stat-total">الكل: 0</div>
+        <div class="dp-stat-badge done"  id="dp-stat-done">✅ 0</div>
+        <div class="dp-stat-badge pend"  id="dp-stat-pend">⏳ 0</div>
+      </div>
+      <div class="dp-list" id="dp-list">
+        <div class="dp-empty"><div style="font-size:30px;margin-bottom:8px">🩺</div><div>لا توجد طلبات اليوم</div></div>
+      </div>
     </div>
+
+    <!-- منطقة العارض الأيسر -->
+    <div class="dp-viewer" id="dp-viewer">
+      <div class="dp-viewer-placeholder" id="dp-viewer-placeholder">
+        <div style="font-size:52px">🩺</div>
+        <div style="font-size:16px;font-weight:700;color:#5a6a7a">اختر مريضاً من القائمة</div>
+        <div style="font-size:13px;color:#8899aa;margin-top:4px">ستظهر نتائجه هنا مباشرة</div>
+      </div>
+    </div>
+
   </div>
 </div>
-
-<!-- نافذة عرض التقرير للطبيب -->
-<div class="dp-report-overlay" id="dp-report-overlay">
-  <div class="dp-report-box" id="dp-report-box">
-    <div class="dp-report-toolbar">
-      <div class="dp-report-title-text" id="dp-report-patient-name">تقرير المريض</div>
-      <button class="dp-report-close-btn" onclick="dpCloseReport()" title="إغلاق">✕</button>
-    </div>
-    <div id="dp-report-pages" class="dp-report-pages"></div>
-  </div>
-</div>
-
 
 <!-- Chat: My Profile -->
 <div class="moverlay" id="m-chat-profile">
@@ -32514,388 +32604,381 @@ if(window.electronAPI && window.electronAPI.isElectron){
 
 
 // ════════════════════════════════════════════════════════════════════
-// DOCTOR PORTAL — بوابة الطبيب
+
+// ════════════════════════════════════════════════════════════════════
+// DOCTOR PORTAL v2 — بوابة الطبيب (modal كامل الشاشة)
 // ════════════════════════════════════════════════════════════════════
 (function(){
+  'use strict';
 
-  // ── حالة اللوحة ───────────────────────────────────────────────
-  var _dpOpen      = false;
   var _dpSearch    = '';
+  var _dpActive    = null;   // reqId المفتوح حالياً في العارض
   var _dpAutoTimer = null;
 
-  // ── فتح / إغلاق اللوحة ────────────────────────────────────────
-  window.dpTogglePanel = function(){
-    _dpOpen = !_dpOpen;
-    var panel  = document.getElementById('dp-panel');
-    var toggle = document.getElementById('dp-toggle-btn');
-    if(_dpOpen){
-      panel.classList.add('open');
-      toggle.style.display = 'none';
-      dpRenderList();
-      _dpStartAutoRefresh();
-    } else {
-      panel.classList.remove('open');
-      toggle.style.display = 'flex';
-      _dpStopAutoRefresh();
+  // ── فتح الـ modal ─────────────────────────────────────────────
+  window.dpOpenModal = function(){
+    var overlay = document.getElementById('dp-modal-overlay');
+    if(!overlay) return;
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    // ضبط التاريخ
+    var dateEl = document.getElementById('dp-hdr-date');
+    if(dateEl){
+      var today = new Date();
+      dateEl.textContent = today.toLocaleDateString('ar-IQ',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     }
+    dpRenderAll();
+    _dpStartAuto();
   };
 
-  // ── تحديث تلقائي كل 8 ثوانٍ (مزامنة LAN) ─────────────────────
-  function _dpStartAutoRefresh(){
-    _dpStopAutoRefresh();
+  // ── إغلاق الـ modal ───────────────────────────────────────────
+  window.dpCloseModal = function(){
+    var overlay = document.getElementById('dp-modal-overlay');
+    if(overlay) overlay.classList.remove('open');
+    document.body.style.overflow = '';
+    _dpStopAuto();
+    _dpActive = null;
+  };
+
+  // ── Escape يغلق ───────────────────────────────────────────────
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape'){
+      var overlay = document.getElementById('dp-modal-overlay');
+      if(overlay && overlay.classList.contains('open')) window.dpCloseModal();
+    }
+  });
+
+  // ── تحديث تلقائي كل 8 ثوانٍ ──────────────────────────────────
+  function _dpStartAuto(){
+    _dpStopAuto();
     _dpAutoTimer = setInterval(function(){
-      if(_dpOpen) dpRenderList();
+      var overlay = document.getElementById('dp-modal-overlay');
+      if(overlay && overlay.classList.contains('open')) dpRenderAll();
     }, 8000);
   }
-  function _dpStopAutoRefresh(){
+  function _dpStopAuto(){
     if(_dpAutoTimer){ clearInterval(_dpAutoTimer); _dpAutoTimer = null; }
   }
 
   // ── تصفية البحث ───────────────────────────────────────────────
   window.dpFilterList = function(val){
     _dpSearch = (val||'').trim().toLowerCase();
-    dpRenderList();
+    _dpRenderList();
+  };
+
+  // ── تحديث كامل (قائمة + LAN badge) ───────────────────────────
+  window.dpRenderAll = function(){
+    _dpUpdateLan();
+    _dpRenderList();
+    // إذا مريض مفتوح — حدّث العارض أيضاً (قد تكون نتائجه اكتملت)
+    if(_dpActive) _dpCheckActiveUpdate();
   };
 
   // ── جلب طلبات اليوم ───────────────────────────────────────────
-  function _dpGetTodayRequests(){
+  function _dpTodayReqs(){
     var today = new Date().toISOString().split('T')[0];
     if(typeof requests === 'undefined' || !Array.isArray(requests)) return [];
     return requests.filter(function(r){ return r.date === today; });
   }
 
-  // ── تحديد حالة الطلب الإجمالية ───────────────────────────────
-  // done = جميع التحاليل مكتملة
-  // inprogress = بعضها مكتمل
-  // pending = لا شيء مكتمل
-  function _dpGetReqStatus(req){
+  // ── حالة الطلب ────────────────────────────────────────────────
+  function _dpStatus(req){
     return req.status === 'done' ? 'done'
-         : req.status === 'inprogress' ? 'inprogress'
+         : req.status === 'inprogress' ? 'inprog'
          : 'pending';
   }
-
   function _dpStatusLabel(st){
-    if(st==='done')       return 'مكتمل';
-    if(st==='inprogress') return 'جارٍ';
-    return 'انتظار';
+    return st==='done' ? 'مكتمل' : st==='inprog' ? 'جارٍ' : 'انتظار';
   }
 
-  // ── بناء أحرف الاسم للـ avatar ────────────────────────────────
-  function _dpInitials(name){
-    var parts = (name||'').trim().split(/\s+/);
-    if(parts.length >= 2) return parts[0].charAt(0) + parts[1].charAt(0);
-    return (name||'?').charAt(0);
+  // ── أحرف الاسم الأولى ─────────────────────────────────────────
+  function _dpInit(name){
+    var p = (name||'').trim().split(/\s+/);
+    return p.length >= 2 ? p[0][0]+p[1][0] : (name||'?')[0];
   }
 
-  // ── تحديث شارة حالة LAN ──────────────────────────────────────
-  function _dpUpdateLanBadge(){
-    var badge = document.getElementById('dp-lan-badge');
-    if(!badge) return;
-    if(typeof _lanMode === 'undefined' || !_lanMode){
-      badge.style.display = 'none';
-      return;
+  // ── LAN badge + bar ───────────────────────────────────────────
+  function _dpUpdateLan(){
+    var badge  = document.getElementById('dp-lan-badge');
+    var bar    = document.getElementById('dp-lan-bar');
+    var barTxt = document.getElementById('dp-lan-bar-text');
+    var mode   = (typeof _lanMode !== 'undefined') ? _lanMode : null;
+    if(badge){
+      if(mode === 'server'){
+        badge.style.cssText = 'display:inline-block;background:rgba(0,232,122,0.15);color:#00e87a;border:1px solid rgba(0,232,122,0.35);';
+        badge.textContent = '🟢 سيرفير';
+      } else if(mode === 'client'){
+        badge.style.cssText = 'display:inline-block;background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.28);';
+        badge.textContent = '🔵 عميل';
+      } else {
+        badge.style.display = 'none';
+      }
     }
-    badge.style.display = 'inline-block';
-    if(_lanMode === 'server'){
-      badge.textContent = '🟢 سيرفير';
-      badge.style.background = 'rgba(0,232,122,0.15)';
-      badge.style.color = '#00e87a';
-      badge.style.border = '1px solid rgba(0,232,122,0.3)';
-    } else if(_lanMode === 'client'){
-      badge.textContent = '🔵 عميل';
-      badge.style.background = 'rgba(0,212,255,0.12)';
-      badge.style.color = '#00d4ff';
-      badge.style.border = '1px solid rgba(0,212,255,0.25)';
-    } else {
-      badge.style.display = 'none';
+    if(bar && barTxt){
+      if(mode === 'server' || mode === 'client'){
+        bar.className = 'dp-lan-bar';
+        barTxt.textContent = mode==='server'
+          ? '🟢 سيرفير LAN نشط — التغييرات تنتقل تلقائياً'
+          : '🔵 متصل بسيرفير LAN — يستقبل التحديثات تلقائياً';
+      } else {
+        bar.className = 'dp-lan-bar offline';
+      }
     }
   }
 
   // ── رسم قائمة المرضى ──────────────────────────────────────────
-  window.dpRenderList = function(){
-    _dpUpdateLanBadge();
-    var list    = document.getElementById('dp-list');
-    var statT   = document.getElementById('dp-stat-total');
-    var statD   = document.getElementById('dp-stat-done');
-    var statP   = document.getElementById('dp-stat-pending');
-    if(!list) return;
+  function _dpRenderList(){
+    var listEl = document.getElementById('dp-list');
+    var statT  = document.getElementById('dp-stat-total');
+    var statD  = document.getElementById('dp-stat-done');
+    var statP  = document.getElementById('dp-stat-pend');
+    if(!listEl) return;
 
-    var reqs = _dpGetTodayRequests();
-
-    // إحصاء
-    var cntDone    = reqs.filter(function(r){ return r.status==='done'; }).length;
-    var cntPending = reqs.filter(function(r){ return r.status!=='done'; }).length;
+    var reqs = _dpTodayReqs();
+    var cD = reqs.filter(function(r){ return r.status==='done'; }).length;
+    var cP = reqs.filter(function(r){ return r.status!=='done'; }).length;
     if(statT) statT.textContent = 'الكل: ' + reqs.length;
-    if(statD) statD.textContent = '✅ مكتمل: ' + cntDone;
-    if(statP) statP.textContent = '⏳ انتظار: ' + cntPending;
+    if(statD) statD.textContent = '✅ ' + cD;
+    if(statP) statP.textContent = '⏳ ' + cP;
 
-    // تصفية البحث
-    var filtered = reqs;
-    if(_dpSearch){
-      filtered = reqs.filter(function(r){
-        return (r.patientName||'').toLowerCase().indexOf(_dpSearch) !== -1;
-      });
-    }
+    var filtered = _dpSearch
+      ? reqs.filter(function(r){ return (r.patientName||'').toLowerCase().indexOf(_dpSearch)!==-1; })
+      : reqs;
 
     if(!filtered.length){
-      list.innerHTML = '<div class="dp-empty"><div style="font-size:28px;margin-bottom:8px">'
-        + (_dpSearch ? '🔍' : '🩺') + '</div><div style="font-weight:700;color:rgba(255,255,255,0.4)">'
-        + (_dpSearch ? 'لا توجد نتائج للبحث' : 'لا توجد طلبات اليوم') + '</div></div>';
+      listEl.innerHTML = '<div class="dp-empty"><div style="font-size:28px;margin-bottom:6px">'
+        +(_dpSearch?'🔍':'🩺')+'</div><div>'
+        +(_dpSearch?'لا توجد نتائج':'لا توجد طلبات اليوم')+'</div></div>';
       return;
     }
 
-    // ترتيب: المكتملون أولاً ثم الجارية ثم الانتظار، ثم أبجدياً
-    var order = {done:0, inprogress:1, pending:2};
+    var ord = {done:0,inprog:1,pending:2};
     filtered.sort(function(a,b){
-      var sa = order[_dpGetReqStatus(a)] || 2;
-      var sb = order[_dpGetReqStatus(b)] || 2;
-      if(sa !== sb) return sa - sb;
-      return (a.patientName||'').localeCompare(b.patientName||'');
+      var da=ord[_dpStatus(a)]||2, db=ord[_dpStatus(b)]||2;
+      return da!==db ? da-db : (a.patientName||'').localeCompare(b.patientName||'');
     });
 
     var html = '';
     filtered.forEach(function(req){
-      var st    = _dpGetReqStatus(req);
-      var label = _dpStatusLabel(st);
-      var name  = req.patientName || '---';
-      var init  = _dpInitials(name);
-      var testsCount = (req.tests||[]).length;
-      var pt = (typeof patients !== 'undefined' && Array.isArray(patients))
-               ? patients.find(function(p){ return p.id === req.patientId; }) || {}
-               : {};
-      var gender = pt.gender === 'female' ? 'أنثى' : 'ذكر';
-      var age    = pt.ageDisplay || pt.age || '';
-      var sub    = (age ? age + ' — ' : '') + gender + ' — ' + testsCount + ' تحليل';
-      var doctor = req.doctorName ? ' | د. ' + req.doctorName : '';
+      var st   = _dpStatus(req);
+      var lbl  = _dpStatusLabel(st);
+      var nm   = req.patientName || '---';
+      var init = _dpInit(nm);
+      var pt   = (typeof patients!=='undefined'&&Array.isArray(patients))
+                  ? patients.find(function(p){return p.id===req.patientId;})||{}
+                  : {};
+      var age    = pt.ageDisplay||pt.age||'';
+      var gender = pt.gender==='female'?'أنثى':'ذكر';
+      var tc     = (req.tests||[]).length;
+      var sub    = (age?age+' — ':'')+gender+' — '+tc+' تحليل';
+      var dr     = req.doctorName ? ' | د.'+req.doctorName : '';
+      var activeClass = (_dpActive===req.id) ? ' active' : '';
 
-      html += '<div class="dp-patient-card st-' + st + '" onclick="dpOpenPatientReport(' + "'" + req.id + "'" + ')">'
-        + '<div class="dp-pt-avatar st-' + st + '">' + init + '</div>'
-        + '<div class="dp-pt-info">'
-        +   '<div class="dp-pt-name">' + _escHtml(name) + '</div>'
-        +   '<div class="dp-pt-sub">' + _escHtml(sub) + _escHtml(doctor) + '</div>'
-        + '</div>'
-        + '<span class="dp-pt-badge st-' + st + '">' + label + '</span>'
-        + '</div>';
+      html += '<div class="dp-patient-card st-'+st+activeClass+'" onclick="dpSelectPatient('+JSON.stringify(req.id)+')">'
+        +'<div class="dp-pt-avatar st-'+st+'">'+_esc(init)+'</div>'
+        +'<div class="dp-pt-info">'
+        +'<div class="dp-pt-name">'+_esc(nm)+'</div>'
+        +'<div class="dp-pt-sub">'+_esc(sub+dr)+'</div>'
+        +'</div>'
+        +'<span class="dp-pt-badge st-'+st+'">'+lbl+'</span>'
+        +'</div>';
     });
-    list.innerHTML = html;
-  };
+    listEl.innerHTML = html;
+  }
 
-  function _escHtml(s){
+  function _esc(s){
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // ── فتح تقرير مريض ────────────────────────────────────────────
-  window.dpOpenPatientReport = function(reqId){
-    var req = (typeof requests !== 'undefined' && Array.isArray(requests))
-              ? requests.find(function(r){ return r.id === reqId; })
-              : null;
-    if(!req){ return; }
+  // ── اختيار مريض ───────────────────────────────────────────────
+  window.dpSelectPatient = function(reqId){
+    _dpActive = reqId;
+    _dpRenderList();  // تحديث الـ active class
+    var req = (typeof requests!=='undefined'&&Array.isArray(requests))
+              ? requests.find(function(r){return r.id===reqId;}) : null;
+    if(!req) return;
+    _dpShowReport(req);
+  };
 
-    var overlay = document.getElementById('dp-report-overlay');
-    var pages   = document.getElementById('dp-report-pages');
-    var title   = document.getElementById('dp-report-patient-name');
-    if(!overlay || !pages) return;
+  // ── تحقق إذا المريض المفتوح تحدّثت نتائجه ────────────────────
+  function _dpCheckActiveUpdate(){
+    if(!_dpActive) return;
+    var req = (typeof requests!=='undefined'&&Array.isArray(requests))
+              ? requests.find(function(r){return r.id===_dpActive;}) : null;
+    if(req) _dpShowReport(req);
+  }
 
-    if(title) title.textContent = (req.patientName||'المريض') + ' — ' + (req.date||'');
+  // ── عرض التقرير في العارض ─────────────────────────────────────
+  function _dpShowReport(req){
+    var viewer = document.getElementById('dp-viewer');
+    if(!viewer) return;
 
-    // إذا النتائج غير مكتملة — عرض رسالة انتظار
     if(req.status !== 'done'){
-      pages.innerHTML = _dpBuildWaitingHTML(req);
-      overlay.classList.add('open');
+      viewer.innerHTML = _dpWaitHTML(req);
       return;
     }
 
-    // بناء صفحات التقرير
-    pages.innerHTML = '<div style="padding:30px;text-align:center;background:#fff;font-family:Cairo,sans-serif;color:#003;">'
-      + '<div style="font-size:16px;color:#00a0cc;">⏳ جاري تحميل التقرير...</div></div>';
-    overlay.classList.add('open');
+    // مؤشر تحميل
+    viewer.innerHTML = '<div class="dp-viewer-placeholder"><div style="font-size:36px">⏳</div>'
+      +'<div style="font-size:14px;color:#5a6a7a;font-family:Cairo,sans-serif;">جاري تحميل التقرير...</div></div>';
 
-    // نبني HTML في setTimeout لإتاحة الرسم
     setTimeout(function(){
       try{
-        pages.innerHTML = '';
+        viewer.innerHTML = '';
         var allTests = (req.tests||[]).map(function(tid){
-          return (typeof tests !== 'undefined' ? tests.find(function(t){ return t.id===tid; }) : null);
+          return (typeof tests!=='undefined') ? tests.find(function(t){return t.id===tid;}) : null;
         }).filter(Boolean);
 
-        var regularTests = allTests.filter(function(t){ return !t.isSpecialExam && !t.isCalc; });
-        var calcTests    = allTests.filter(function(t){ return t.isCalc && req.results && req.results[t.id]; });
-        var specialTests = allTests.filter(function(t){ return t.isSpecialExam; });
+        var regTests  = allTests.filter(function(t){return !t.isSpecialExam&&!t.isCalc;});
+        var calcTests = allTests.filter(function(t){return t.isCalc&&req.results&&req.results[t.id];});
+        var spTests   = allTests.filter(function(t){return !!t.isSpecialExam;});
 
-        // ① التقرير العام
-        if(regularTests.length > 0){
-          var regHtml = (typeof buildPrintHTML === 'function') ? buildPrintHTML(req) : '';
-          if(regHtml) pages.appendChild(_dpMakeFrame(regHtml));
+        var added = 0;
+
+        // ① تقرير عام
+        if(regTests.length > 0 && typeof buildPrintHTML==='function'){
+          var h = buildPrintHTML(req);
+          if(h){ viewer.appendChild(_dpFrame(h)); added++; }
         }
 
-        // ② التحاليل المحسوبة
+        // ② تحاليل محسوبة
         calcTests.forEach(function(ct){
-          var cHtml = (typeof buildCalcTestPrintHTML === 'function') ? buildCalcTestPrintHTML(req, ct) : '';
-          if(cHtml) pages.appendChild(_dpMakeFrame(cHtml));
-        });
-
-        // ③ فحوصات خاصة (أدرار / خروج / سائل منوي)
-        if(typeof loadUARecords === 'function') loadUARecords();
-        if(typeof loadStoolExamRecords === 'function') loadStoolExamRecords();
-        if(typeof loadSemenRecords === 'function') loadSemenRecords();
-
-        specialTests.forEach(function(st_t){
-          var rec = null, sHtml = '';
-          if(st_t.isSpecialExam === 'ua'){
-            rec = (typeof uaRecords!=='undefined' && Array.isArray(uaRecords))
-                  ? uaRecords.find(function(r){ return r.reqId===req.id; }) : null;
-            if(rec && typeof _buildUAPrintHTML === 'function') sHtml = _buildUAPrintHTML(rec);
-          } else if(st_t.isSpecialExam === 'stool'){
-            rec = (typeof stoolExamRecords!=='undefined' && Array.isArray(stoolExamRecords))
-                  ? stoolExamRecords.find(function(r){ return r.reqId===req.id; }) : null;
-            if(rec && typeof _buildStoolPrintHTML === 'function') sHtml = _buildStoolPrintHTML(rec);
-          } else if(st_t.isSpecialExam === 'semen'){
-            rec = (typeof semenRecords!=='undefined' && Array.isArray(semenRecords))
-                  ? semenRecords.find(function(r){ return r.reqId===req.id; }) : null;
-            if(rec && typeof _buildSemenPrintHTML === 'function') sHtml = _buildSemenPrintHTML(rec);
+          if(typeof buildCalcTestPrintHTML==='function'){
+            var h = buildCalcTestPrintHTML(req,ct);
+            if(h){ if(added>0) viewer.appendChild(_dpSep()); viewer.appendChild(_dpFrame(h)); added++; }
           }
-          if(sHtml) pages.appendChild(_dpMakeFrame(sHtml));
         });
 
-        // ④ نتائج الزرع
-        if(typeof cultureRecords !== 'undefined' && Array.isArray(cultureRecords)){
-          var cultures = cultureRecords.filter(function(c){ return c.reqId===req.id; });
-          cultures.forEach(function(c){
-            var cHtml = (typeof _buildCultureHTML === 'function') ? _buildCultureHTML(c.id) : '';
-            if(cHtml) pages.appendChild(_dpMakeFrame(cHtml));
+        // ③ فحوصات خاصة
+        if(typeof loadUARecords==='function') loadUARecords();
+        if(typeof loadStoolExamRecords==='function') loadStoolExamRecords();
+        if(typeof loadSemenRecords==='function') loadSemenRecords();
+
+        spTests.forEach(function(st){
+          var rec=null, h='';
+          if(st.isSpecialExam==='ua'){
+            rec=(typeof uaRecords!=='undefined'&&Array.isArray(uaRecords))
+                ?uaRecords.find(function(r){return r.reqId===req.id;}):null;
+            if(rec&&typeof _buildUAPrintHTML==='function') h=_buildUAPrintHTML(rec);
+          } else if(st.isSpecialExam==='stool'){
+            rec=(typeof stoolExamRecords!=='undefined'&&Array.isArray(stoolExamRecords))
+                ?stoolExamRecords.find(function(r){return r.reqId===req.id;}):null;
+            if(rec&&typeof _buildStoolPrintHTML==='function') h=_buildStoolPrintHTML(rec);
+          } else if(st.isSpecialExam==='semen'){
+            rec=(typeof semenRecords!=='undefined'&&Array.isArray(semenRecords))
+                ?semenRecords.find(function(r){return r.reqId===req.id;}):null;
+            if(rec&&typeof _buildSemenPrintHTML==='function') h=_buildSemenPrintHTML(rec);
+          }
+          if(h){ if(added>0) viewer.appendChild(_dpSep()); viewer.appendChild(_dpFrame(h)); added++; }
+        });
+
+        // ④ زرع
+        if(typeof cultureRecords!=='undefined'&&Array.isArray(cultureRecords)){
+          cultureRecords.filter(function(c){return c.reqId===req.id;}).forEach(function(c){
+            if(typeof _buildCultureHTML==='function'){
+              var h = _buildCultureHTML(c.id);
+              if(h){ if(added>0) viewer.appendChild(_dpSep()); viewer.appendChild(_dpFrame(h)); added++; }
+            }
           });
         }
 
-        // إذا لم يُبنَ أي شيء
-        if(!pages.children.length){
-          pages.innerHTML = _dpBuildWaitingHTML(req);
+        if(added===0){
+          viewer.innerHTML = _dpWaitHTML(req);
         }
-
       } catch(err){
-        console.warn('[DoctorPortal] report build error:', err);
-        pages.innerHTML = '<div style="padding:30px;text-align:center;font-family:Cairo,sans-serif;color:red;">'
-          + 'تعذّر بناء التقرير: ' + err.message + '</div>';
+        viewer.innerHTML = '<div class="dp-viewer-placeholder"><div style="font-size:30px">⚠️</div>'
+          +'<div style="color:red;font-family:Cairo,sans-serif;">'+_esc(err.message)+'</div></div>';
       }
-    }, 80);
-  };
+    }, 60);
+  }
 
-  // ── بناء iframe يحتوي صفحة HTML ──────────────────────────────
-  function _dpMakeFrame(htmlStr){
+  // ── فاصل بين الصفحات ──────────────────────────────────────────
+  function _dpSep(){
+    var d = document.createElement('div');
+    d.className = 'dp-page-sep';
+    return d;
+  }
+
+  // ── iframe لعرض صفحة HTML ─────────────────────────────────────
+  function _dpFrame(htmlStr){
     var wrap = document.createElement('div');
-    wrap.style.cssText = 'border-bottom:2px dashed rgba(0,100,200,0.15);padding-bottom:0;';
+    wrap.style.cssText = 'background:#fff;';
     var iframe = document.createElement('iframe');
-    iframe.style.cssText = 'width:100%;border:none;display:block;min-height:400px;background:#fff;';
+    iframe.className = 'dp-report-frame';
+    iframe.style.minHeight = '500px';
     iframe.scrolling = 'no';
     wrap.appendChild(iframe);
-    // سنكتب المحتوى بعد إضافته للـ DOM
     setTimeout(function(){
       try{
         var doc = iframe.contentWindow.document;
         doc.open(); doc.write(htmlStr); doc.close();
-        // ضبط الارتفاع تلقائياً
-        var _resize = function(){
+        var _fit = function(){
           try{
-            var h = iframe.contentWindow.document.body.scrollHeight;
-            if(h > 100) iframe.style.height = h + 'px';
+            var h = iframe.contentDocument.body.scrollHeight;
+            if(h > 100) iframe.style.height = (h+10)+'px';
           }catch(e){}
         };
-        iframe.onload = _resize;
-        setTimeout(_resize, 300);
-        setTimeout(_resize, 800);
+        iframe.onload = _fit;
+        setTimeout(_fit, 250);
+        setTimeout(_fit, 800);
       }catch(e){}
     }, 0);
     return wrap;
   }
 
   // ── HTML رسالة الانتظار ───────────────────────────────────────
-  function _dpBuildWaitingHTML(req){
-    var name = req.patientName || '---';
-    var allTests = (req.tests||[]).map(function(tid){
-      return (typeof tests !== 'undefined') ? tests.find(function(t){ return t.id===tid; }) : null;
+  function _dpWaitHTML(req){
+    var nm  = req.patientName||'---';
+    var allT = (req.tests||[]).map(function(tid){
+      return (typeof tests!=='undefined') ? tests.find(function(t){return t.id===tid;}):null;
     }).filter(Boolean);
-    var doneCount = 0;
-    if(req.results){
-      allTests.forEach(function(t){ if(req.results[t.id]==='done') doneCount++; });
-    }
-    var total = allTests.length;
-    var pct   = total > 0 ? Math.round(doneCount/total*100) : 0;
-    var color = req.status === 'inprogress' ? '#00d4ff' : '#ffcc00';
-    var icon  = req.status === 'inprogress' ? '🔬' : '⏳';
-    var msg   = req.status === 'inprogress' ? 'التحليل جارٍ...' : 'التحليل قيد الانتظار';
+    var done = 0;
+    if(req.results) allT.forEach(function(t){ if(req.results[t.id]==='done') done++; });
+    var total = allT.length;
+    var pct   = total>0 ? Math.round(done/total*100) : 0;
+    var isInP = req.status==='inprogress';
+    var col   = isInP ? '#00d4ff' : '#ffcc00';
+    var icon  = isInP ? '🔬' : '⏳';
+    var msg   = isInP ? 'التحليل جارٍ...' : 'التحليل قيد الانتظار';
 
-    var rows = allTests.map(function(t){
-      var isDone = req.results && req.results[t.id] === 'done';
-      return '<tr style="border-bottom:1px solid #f0f0f0;">'
-        + '<td style="padding:7px 12px;font-size:12px;">' + _escHtml(t.nameEn||t.nameShort||t.code||'') + '</td>'
-        + '<td style="padding:7px 12px;text-align:center;">'
-        + (isDone
-          ? '<span style="color:#00b050;font-weight:800;font-size:13px;">✓</span>'
-          : '<span style="color:#cc9900;font-size:12px;">...</span>')
-        + '</td></tr>';
+    var rows = allT.map(function(t){
+      var d = req.results && req.results[t.id]==='done';
+      return '<tr style="border-bottom:1px solid #f0f0f0">'
+        +'<td style="padding:8px 14px;font-size:13px;font-family:Cairo,sans-serif;">'+_esc(t.nameEn||t.nameShort||t.code||'')+'</td>'
+        +'<td style="padding:8px 14px;text-align:center;font-size:16px;">'+(d?'<span style="color:#00b050;font-weight:900;">✓</span>':'<span style="color:#cc9900;">·</span>')+'</td>'
+        +'</tr>';
     }).join('');
 
-    return '<div class="dp-waiting-box">'
-      + '<div style="font-size:48px;margin-bottom:14px;">' + icon + '</div>'
-      + '<div style="font-size:20px;font-weight:900;color:#003366;margin-bottom:6px;">' + _escHtml(name) + '</div>'
-      + '<div style="font-size:15px;font-weight:700;color:' + color + ';margin-bottom:20px;">' + msg + '</div>'
-      + (total > 0
-        ? '<div style="background:#f5f8ff;border-radius:10px;padding:4px;margin:0 auto 20px;max-width:320px;">'
-          + '<div style="height:10px;border-radius:8px;background:linear-gradient(90deg,' + color + ',#0099bb);width:' + pct + '%;transition:width 0.4s;min-width:4px;"></div>'
-          + '</div>'
-          + '<div style="font-size:13px;color:#555;margin-bottom:20px;">'
-          + doneCount + ' من ' + total + ' تحليل مكتمل'
-          + '</div>'
-          + '<table style="width:100%;max-width:380px;margin:0 auto;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.07);">'
-          + '<thead><tr style="background:#003366;color:#fff;">'
-          + '<th style="padding:8px 12px;font-size:11px;text-align:right;">التحليل</th>'
-          + '<th style="padding:8px 12px;font-size:11px;width:60px;">الحالة</th>'
-          + '</tr></thead><tbody>' + rows + '</tbody></table>'
-        : '')
-      + '</div>';
+    return '<div class="dp-wait-card">'
+      +'<div class="dp-wait-top">'
+      +'<div style="font-size:50px;margin-bottom:10px;">'+icon+'</div>'
+      +'<div style="font-size:22px;font-weight:900;margin-bottom:4px;">'+_esc(nm)+'</div>'
+      +'<div style="font-size:15px;font-weight:700;color:'+col+';">'+msg+'</div>'
+      +'</div>'
+      +'<div class="dp-wait-body">'
+      +(total>0
+        ?'<div style="margin-bottom:14px;">'
+         +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:5px;font-family:Cairo,sans-serif;">'
+         +'<span>'+done+' من '+total+' تحليل</span><span>'+pct+'%</span></div>'
+         +'<div style="height:10px;background:#eee;border-radius:8px;overflow:hidden;">'
+         +'<div style="height:100%;background:linear-gradient(90deg,'+col+',#0099bb);width:'+pct+'%;transition:width 0.4s;min-width:3px;border-radius:8px;"></div>'
+         +'</div></div>'
+         +'<table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;">'
+         +'<thead><tr style="background:#003366;color:#fff;">'
+         +'<th style="padding:8px 14px;font-size:12px;text-align:right;font-family:Cairo,sans-serif;">التحليل</th>'
+         +'<th style="padding:8px 14px;font-size:12px;width:60px;font-family:Cairo,sans-serif;">الحالة</th>'
+         +'</tr></thead><tbody>'+rows+'</tbody></table>'
+        :'<div style="text-align:center;color:#888;padding:20px;font-family:Cairo,sans-serif;">لا توجد تحاليل مسجّلة</div>')
+      +'</div></div>';
   }
 
-  // ── إغلاق نافذة التقرير ───────────────────────────────────────
-  window.dpCloseReport = function(){
-    var overlay = document.getElementById('dp-report-overlay');
-    var pages   = document.getElementById('dp-report-pages');
-    if(overlay) overlay.classList.remove('open');
-    // تأخير مسح المحتوى لإتاحة الأنيميشن
-    setTimeout(function(){ if(pages) pages.innerHTML = ''; }, 300);
-  };
-
-  // ── إغلاق بالضغط خارج الصندوق ────────────────────────────────
-  document.addEventListener('click', function(e){
-    var overlay = document.getElementById('dp-report-overlay');
-    if(overlay && overlay.classList.contains('open') && e.target === overlay){
-      window.dpCloseReport();
-    }
+  // ── ربط حدث LAN: تحديث القائمة عند وصول بيانات ───────────────
+  document.addEventListener('dp:refresh', function(){
+    var overlay = document.getElementById('dp-modal-overlay');
+    if(overlay && overlay.classList.contains('open')) dpRenderAll();
   });
 
-  // ── Hook على LAN: عند وصول بيانات جديدة، حدّث القائمة ─────────
-  // نُضيف listener على _lanHandleMessage بعد تعريفه
-  var _dpOrigLanHandle = null;
-  function _dpHookLAN(){
-    if(typeof _lanHandleMessage !== 'undefined' && _dpOrigLanHandle === null){
-      try{
-        _dpOrigLanHandle = _lanHandleMessage;
-        // نعيد تعريف _lanHandleMessage بحيث نستدعي الأصلي ثم نحدّث القائمة
-        window._lanHandleMessage = function(raw){
-          _dpOrigLanHandle(raw);
-          if(_dpOpen){
-            setTimeout(dpRenderList, 400);
-          }
-        };
-      }catch(e){}
-    }
-  }
-  // نحاول الـ hook بعد تحميل الصفحة
-  setTimeout(_dpHookLAN, 2000);
-  setTimeout(_dpHookLAN, 5000); // محاولة ثانية في حال تأخر التهيئة
-
-  // ── ربط LAN: عند تلقي sync request/patients، نحدّث القائمة أيضاً ──
-  // نستمع لـ save hook
-  document.addEventListener('dp:refresh', function(){ if(_dpOpen) dpRenderList(); });
-
 }());
+
 
 </script>
