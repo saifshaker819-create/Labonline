@@ -32624,8 +32624,8 @@ if(window.electronAPI && window.electronAPI.isElectron){
 // ════════════════════════════════════════════════════════════════════
 
 // ════════════════════════════════════════════════════════════════════
-// DOCTOR PORTAL v3 — بوابة الطبيب
-// المشكلة المصلحة: iframe يُكتب فيه بعد إضافته للـ DOM مباشرة
+// DOCTOR PORTAL v4 — بوابة الطبيب
+// الحل: srcdoc لعرض التقارير — يعمل على المتصفح والـ Electron
 // ════════════════════════════════════════════════════════════════════
 (function(){
   'use strict';
@@ -32635,7 +32635,7 @@ if(window.electronAPI && window.electronAPI.isElectron){
   var _dpActiveId = null;
   var _dpTimer    = null;
 
-  // ═══ فتح / إغلاق ════════════════════════════════════════════════
+  // ══ فتح / إغلاق ══════════════════════════════════════════════════
 
   window.dpOpenModal = function(){
     var el = document.getElementById('dp-modal-overlay');
@@ -32666,36 +32666,7 @@ if(window.electronAPI && window.electronAPI.isElectron){
     }
   });
 
-  // ═══ تبويب اليوم / الكل ══════════════════════════════════════════
-
-  window.dpSetTab = function(tab){
-    _dpTab = tab;
-    _dpSearch = '';
-    var inp = document.getElementById('dp-search-inp');
-    if(inp) inp.value = '';
-    var t1 = document.getElementById('dp-tab-today');
-    var t2 = document.getElementById('dp-tab-all');
-    if(t1) t1.className = 'dp-ftab' + (tab==='today'?' active':'');
-    if(t2) t2.className = 'dp-ftab' + (tab==='all'  ?' active':'');
-    _dpRenderList();
-  };
-
-  // ═══ بحث ═════════════════════════════════════════════════════════
-
-  window.dpFilterList = function(val){
-    _dpSearch = (val||'').trim().toLowerCase();
-    _dpRenderList();
-  };
-
-  // ═══ تحديث كامل ══════════════════════════════════════════════════
-
-  window.dpRenderAll = function(){
-    _dpUpdateLan();
-    _dpRenderList();
-    if(_dpActiveId) _dpRefreshViewer();
-  };
-
-  // ═══ Timer ═══════════════════════════════════════════════════════
+  // ══ Timer تحديث تلقائي ════════════════════════════════════════════
 
   function _dpStartTimer(){
     _dpStopTimer();
@@ -32708,7 +32679,52 @@ if(window.electronAPI && window.electronAPI.isElectron){
     if(_dpTimer){ clearInterval(_dpTimer); _dpTimer = null; }
   }
 
-  // ═══ جلب الطلبات ═════════════════════════════════════════════════
+  // ══ تبويب اليوم / الكل ═══════════════════════════════════════════
+
+  window.dpSetTab = function(tab){
+    _dpTab    = tab;
+    _dpSearch = '';
+    var inp = document.getElementById('dp-search-inp');
+    if(inp) inp.value = '';
+    var t1 = document.getElementById('dp-tab-today');
+    var t2 = document.getElementById('dp-tab-all');
+    if(t1) t1.className = 'dp-ftab' + (tab==='today'?' active':'');
+    if(t2) t2.className = 'dp-ftab' + (tab==='all'  ?' active':'');
+    _dpRenderList();
+  };
+
+  // ══ بحث ══════════════════════════════════════════════════════════
+
+  window.dpFilterList = function(val){
+    _dpSearch = (val||'').trim().toLowerCase();
+    _dpRenderList();
+  };
+
+  // ══ تحديث كامل ═══════════════════════════════════════════════════
+
+  window.dpRenderAll = function(){
+    _dpUpdateLan();
+    _dpRenderList();
+    // إذا مريض مفتوح وكانت نتائجه في انتظار → تحقق إذا اكتملت
+    if(_dpActiveId){
+      var req = _dpFindReq(_dpActiveId);
+      if(req){
+        var viewer = document.getElementById('dp-viewer');
+        if(viewer && viewer.querySelector && viewer.querySelector('.dp-wait-wrap')){
+          // كانت رسالة انتظار — أعد المحاولة إذا اكتملت
+          if(req.status === 'done') _dpShowReport(req);
+          else _dpUpdateWait(req, viewer);
+        }
+      }
+    }
+  };
+
+  // ══ جلب الطلبات ══════════════════════════════════════════════════
+
+  function _dpFindReq(id){
+    if(typeof requests === 'undefined' || !Array.isArray(requests)) return null;
+    return requests.find(function(r){ return r.id === id; }) || null;
+  }
 
   function _dpGetReqs(){
     if(typeof requests === 'undefined' || !Array.isArray(requests)) return [];
@@ -32716,19 +32732,21 @@ if(window.electronAPI && window.electronAPI.isElectron){
       var today = new Date().toISOString().split('T')[0];
       return requests.filter(function(r){ return r.date === today; });
     }
-    return requests;
+    return requests.slice().reverse(); // الأحدث أولاً في وضع الكل
   }
 
-  // ═══ حالة الطلب ══════════════════════════════════════════════════
+  // ══ حالة الطلب ════════════════════════════════════════════════════
 
   function _dpSt(req){
-    return req.status==='done' ? 'done' : req.status==='inprogress' ? 'inprog' : 'pending';
+    return req.status==='done' ? 'done'
+         : req.status==='inprogress' ? 'inprog'
+         : 'pending';
   }
   function _dpStLbl(st){
-    return st==='done'?'مكتمل':st==='inprog'?'جارٍ':'انتظار';
+    return st==='done' ? 'مكتمل' : st==='inprog' ? 'جارٍ' : 'انتظار';
   }
 
-  // ═══ LAN badge ═══════════════════════════════════════════════════
+  // ══ LAN badge + bar ══════════════════════════════════════════════
 
   function _dpUpdateLan(){
     var badge  = document.getElementById('dp-lan-badge');
@@ -32737,28 +32755,38 @@ if(window.electronAPI && window.electronAPI.isElectron){
     var mode   = (typeof _lanMode !== 'undefined') ? _lanMode : null;
     if(badge){
       if(mode==='server'){
-        badge.style.cssText='display:inline-block;background:rgba(0,232,122,0.15);color:#00e87a;border:1px solid rgba(0,232,122,0.35);padding:2px 7px;border-radius:5px;';
+        badge.style.cssText='display:inline-block;background:rgba(0,232,122,0.15);color:#00e87a;border:1px solid rgba(0,232,122,0.35);padding:2px 7px;border-radius:5px;font-size:10px;font-family:Cairo,sans-serif;font-weight:700;';
         badge.textContent='🟢 سيرفير';
       } else if(mode==='client'){
-        badge.style.cssText='display:inline-block;background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.28);padding:2px 7px;border-radius:5px;';
+        badge.style.cssText='display:inline-block;background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.28);padding:2px 7px;border-radius:5px;font-size:10px;font-family:Cairo,sans-serif;font-weight:700;';
         badge.textContent='🔵 عميل';
       } else {
         badge.style.display='none';
       }
     }
-    if(bar&&barTxt){
-      if(mode==='server'||mode==='client'){
-        bar.className='dp-lan-bar';
-        barTxt.textContent=mode==='server'
-          ?'🟢 سيرفير LAN — التغييرات تنتقل تلقائياً'
-          :'🔵 متصل بسيرفير LAN';
+    if(bar && barTxt){
+      if(mode==='server' || mode==='client'){
+        bar.className = 'dp-lan-bar';
+        barTxt.textContent = mode==='server'
+          ? '🟢 سيرفير LAN — التغييرات تنتقل تلقائياً'
+          : '🔵 متصل بسيرفير LAN';
       } else {
-        bar.className='dp-lan-bar dp-lan-off';
+        bar.className = 'dp-lan-bar dp-lan-off';
       }
     }
   }
 
-  // ═══ رسم القائمة ═════════════════════════════════════════════════
+  // ══ رسم القائمة ══════════════════════════════════════════════════
+
+  function _dpInit(name){
+    var p = (name||'').trim().split(/\s+/);
+    return p.length>=2 ? p[0][0]+p[1][0] : (name||'?')[0];
+  }
+
+  function _esc(s){
+    return String(s||'')
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
   function _dpRenderList(){
     var listEl = document.getElementById('dp-list');
@@ -32768,47 +32796,53 @@ if(window.electronAPI && window.electronAPI.isElectron){
     if(!listEl) return;
 
     var reqs = _dpGetReqs();
-    var cD = reqs.filter(function(r){return r.status==='done';}).length;
-    var cP = reqs.filter(function(r){return r.status!=='done';}).length;
-    if(statT) statT.textContent = 'الكل: '+reqs.length;
-    if(statD) statD.textContent = '✅ '+cD;
-    if(statP) statP.textContent = '⏳ '+cP;
+    var cD = reqs.filter(function(r){ return r.status==='done'; }).length;
+    var cP = reqs.filter(function(r){ return r.status!=='done'; }).length;
+    if(statT) statT.textContent = 'الكل: ' + reqs.length;
+    if(statD) statD.textContent = '✅ ' + cD;
+    if(statP) statP.textContent = '⏳ ' + cP;
 
     var list = _dpSearch
-      ? reqs.filter(function(r){return (r.patientName||'').toLowerCase().indexOf(_dpSearch)!==-1;})
+      ? reqs.filter(function(r){
+          return (r.patientName||'').toLowerCase().indexOf(_dpSearch) !== -1;
+        })
       : reqs;
 
     if(!list.length){
       listEl.innerHTML = '<div class="dp-empty"><div style="font-size:26px;margin-bottom:6px">'
         +(_dpSearch?'🔍':'🩺')+'</div><div>'
-        +(_dpSearch?'لا نتائج':_dpTab==='today'?'لا طلبات اليوم':'لا توجد طلبات')+'</div></div>';
+        +(_dpSearch?'لا نتائج':_dpTab==='today'?'لا طلبات اليوم':'لا توجد طلبات')
+        +'</div></div>';
       return;
     }
 
-    var ord={done:0,inprog:1,pending:2};
-    list.sort(function(a,b){
-      var da=ord[_dpSt(a)]||2, db=ord[_dpSt(b)]||2;
-      if(da!==db) return da-db;
+    // ترتيب: مكتمل أولاً ثم جارٍ ثم انتظار
+    var ord = {done:0, inprog:1, pending:2};
+    var sorted = list.slice().sort(function(a,b){
+      var da = ord[_dpSt(a)]||2, db = ord[_dpSt(b)]||2;
+      if(da !== db) return da - db;
       return (a.patientName||'').localeCompare(b.patientName||'');
     });
 
-    var html='';
-    list.forEach(function(req){
+    var html = '';
+    sorted.forEach(function(req){
       var st   = _dpSt(req);
       var lbl  = _dpStLbl(st);
-      var nm   = req.patientName||'---';
+      var nm   = req.patientName || '---';
       var init = _dpInit(nm);
-      var pt   = (typeof patients!=='undefined'&&Array.isArray(patients))
-                  ?patients.find(function(p){return p.id===req.patientId;})||{}:{};
+      var pt   = (typeof patients!=='undefined' && Array.isArray(patients))
+                  ? patients.find(function(p){ return p.id===req.patientId; })||{}
+                  : {};
       var age    = pt.ageDisplay||pt.age||'';
-      var gender = pt.gender==='female'?'أنثى':'ذكر';
+      var gender = pt.gender==='female' ? 'أنثى' : 'ذكر';
       var tc     = (req.tests||[]).length;
       var sub    = (age?age+' — ':'')+gender+' — '+tc+' تحليل';
       if(req.doctorName) sub += ' | د.'+req.doctorName;
-      var dateStr = (_dpTab==='all'&&req.date)?' — '+req.date:'';
-      var isActive= (_dpActiveId===req.id)?' dp-active':'';
+      var dateStr = (_dpTab==='all'&&req.date) ? ' ('+req.date+')' : '';
+      var isActive = (_dpActiveId===req.id) ? ' dp-active' : '';
+      var rid = req.id.replace(/'/g,"\'");
 
-      html += '<div class="dp-patient-card st-'+st+isActive+'" onclick="dpSelectPt('+JSON.stringify(req.id)+')">'
+      html += '<div class="dp-patient-card st-'+st+isActive+'" data-rid="'+_esc(req.id)+'">'
         +'<div class="dp-pt-avatar st-'+st+'">'+_esc(init)+'</div>'
         +'<div class="dp-pt-info">'
         +'<div class="dp-pt-name">'+_esc(nm)+_esc(dateStr)+'</div>'
@@ -32818,232 +32852,285 @@ if(window.electronAPI && window.electronAPI.isElectron){
         +'</div>';
     });
     listEl.innerHTML = html;
+    // ربط النقر عبر event delegation بدل onclick inline
+    listEl.onclick = function(e){
+      var card = e.target.closest ? e.target.closest('.dp-patient-card') : null;
+      if(!card) return;
+      var rid = card.getAttribute('data-rid');
+      if(rid) window.dpSelectPt(rid);
+    };
   }
 
-  function _dpInit(name){
-    var p=(name||'').trim().split(/\s+/);
-    return p.length>=2?p[0][0]+p[1][0]:(name||'?')[0];
-  }
-  function _esc(s){
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  // ═══ اختيار مريض ═════════════════════════════════════════════════
+  // ══ اختيار مريض ══════════════════════════════════════════════════
 
   window.dpSelectPt = function(reqId){
     _dpActiveId = reqId;
     _dpRenderList();
-    var req=(typeof requests!=='undefined'&&Array.isArray(requests))
-             ?requests.find(function(r){return r.id===reqId;}):null;
+    var req = _dpFindReq(reqId);
     if(req) _dpShowReport(req);
   };
 
-  // تحديث العارض إذا تغيرت حالة المريض المفتوح
-  function _dpRefreshViewer(){
-    var req=(typeof requests!=='undefined'&&Array.isArray(requests))
-             ?requests.find(function(r){return r.id===_dpActiveId;}):null;
-    if(!req) return;
-    // فقط أعد العرض إذا كانت الحالة done (قد تكون اكتملت للتو)
-    var viewer=document.getElementById('dp-viewer');
-    if(!viewer) return;
-    // إذا كان العارض يعرض رسالة الانتظار والحالة أصبحت done → أعد البناء
-    if(req.status==='done' && viewer.querySelector('.dp-wait-wrap')){
-      _dpShowReport(req);
-    } else if(req.status!=='done'){
-      _dpShowReport(req);
-    }
-  }
-
-  // ═══ عرض التقرير — الدالة الرئيسية ══════════════════════════════
+  // ══ عرض التقرير ══════════════════════════════════════════════════
 
   function _dpShowReport(req){
     var viewer = document.getElementById('dp-viewer');
     if(!viewer) return;
 
-    // غير مكتمل → رسالة انتظار
     if(req.status !== 'done'){
       viewer.innerHTML = '';
       viewer.appendChild(_dpWaitEl(req));
       return;
     }
 
-    // مكتمل → مؤشر تحميل أولاً
-    viewer.innerHTML = '<div class="dp-loading"><div style="font-size:30px;">⏳</div><div>جاري تحميل التقرير...</div></div>';
+    // مؤشر تحميل فوري
+    viewer.innerHTML = '<div class="dp-loading">'
+      +'<div style="font-size:32px;animation:spin 1s linear infinite;">⏳</div>'
+      +'<div>جاري تحميل التقرير...</div>'
+      +'</div>';
 
+    // بناء الصفحات بعد تأخير قصير لإتاحة رسم الـ loading
     setTimeout(function(){
-      try{
-        _dpBuildPages(req, viewer);
-      } catch(err){
-        console.warn('[DP] error:', err);
-        viewer.innerHTML = '<div class="dp-err-box"><div style="font-size:28px;margin-bottom:10px;">⚠️</div><div>'+_esc(err.message)+'</div></div>';
-      }
-    }, 50);
+      _dpBuildPages(req, viewer);
+    }, 30);
   }
 
-  // ═══ بناء صفحات التقرير ══════════════════════════════════════════
+  // ══ بناء صفحات التقرير ═══════════════════════════════════════════
 
   function _dpBuildPages(req, viewer){
-    viewer.innerHTML = '';
-
-    var allTests=(req.tests||[]).map(function(tid){
-      return typeof tests!=='undefined'?tests.find(function(t){return t.id===tid;}):null;
-    }).filter(Boolean);
-
-    var regTests  = allTests.filter(function(t){return !t.isSpecialExam&&!t.isCalc;});
-    var calcTests = allTests.filter(function(t){return t.isCalc&&req.results&&req.results[t.id];});
-    var spTests   = allTests.filter(function(t){return !!t.isSpecialExam;});
-
+    // ① جمع كل HTML strings للصفحات
     var pages = [];
 
-    // ① تقرير عام
-    if(regTests.length>0 && typeof buildPrintHTML==='function'){
-      var h = buildPrintHTML(req);
-      if(h) pages.push(h);
-    }
+    try{
+      var allTests = (req.tests||[]).map(function(tid){
+        return typeof tests!=='undefined'
+          ? tests.find(function(t){ return t.id===tid; })
+          : null;
+      }).filter(Boolean);
 
-    // ② تحاليل محسوبة
-    if(typeof buildCalcTestPrintHTML==='function'){
-      calcTests.forEach(function(ct){
-        var h = buildCalcTestPrintHTML(req,ct);
-        if(h) pages.push(h);
-      });
-    }
+      var regTests  = allTests.filter(function(t){ return !t.isSpecialExam && !t.isCalc; });
+      var calcTests = allTests.filter(function(t){ return t.isCalc && req.results && req.results[t.id]; });
+      var spTests   = allTests.filter(function(t){ return !!t.isSpecialExam; });
 
-    // ③ فحوصات خاصة
-    if(typeof loadUARecords==='function') loadUARecords();
-    if(typeof loadStoolExamRecords==='function') loadStoolExamRecords();
-    if(typeof loadSemenRecords==='function') loadSemenRecords();
-
-    spTests.forEach(function(st){
-      var rec=null, h='';
-      if(st.isSpecialExam==='ua'){
-        rec=typeof uaRecords!=='undefined'?uaRecords.find(function(r){return r.reqId===req.id;}):null;
-        if(rec&&typeof _buildUAPrintHTML==='function') h=_buildUAPrintHTML(rec);
-      } else if(st.isSpecialExam==='stool'){
-        rec=typeof stoolExamRecords!=='undefined'?stoolExamRecords.find(function(r){return r.reqId===req.id;}):null;
-        if(rec&&typeof _buildStoolPrintHTML==='function') h=_buildStoolPrintHTML(rec);
-      } else if(st.isSpecialExam==='semen'){
-        rec=typeof semenRecords!=='undefined'?semenRecords.find(function(r){return r.reqId===req.id;}):null;
-        if(rec&&typeof _buildSemenPrintHTML==='function') h=_buildSemenPrintHTML(rec);
+      // تقرير عام
+      if(regTests.length > 0 && typeof buildPrintHTML === 'function'){
+        var h = buildPrintHTML(req);
+        if(h && h.length > 50) pages.push(h);
       }
-      if(h) pages.push(h);
-    });
 
-    // ④ زرع
-    if(typeof cultureRecords!=='undefined'&&Array.isArray(cultureRecords)){
-      cultureRecords.filter(function(c){return c.reqId===req.id;}).forEach(function(c){
-        if(typeof _buildCultureHTML==='function'){
-          var h=_buildCultureHTML(c.id);
-          if(h) pages.push(h);
+      // تحاليل محسوبة
+      if(typeof buildCalcTestPrintHTML === 'function'){
+        calcTests.forEach(function(ct){
+          var h = buildCalcTestPrintHTML(req, ct);
+          if(h && h.length > 50) pages.push(h);
+        });
+      }
+
+      // فحوصات خاصة
+      if(typeof loadUARecords        === 'function') loadUARecords();
+      if(typeof loadStoolExamRecords === 'function') loadStoolExamRecords();
+      if(typeof loadSemenRecords     === 'function') loadSemenRecords();
+
+      spTests.forEach(function(st){
+        var rec = null, h = '';
+        if(st.isSpecialExam==='ua'){
+          rec = (typeof uaRecords!=='undefined' && Array.isArray(uaRecords))
+                ? uaRecords.find(function(r){ return r.reqId===req.id; }) : null;
+          if(rec && typeof _buildUAPrintHTML==='function') h = _buildUAPrintHTML(rec);
+        } else if(st.isSpecialExam==='stool'){
+          rec = (typeof stoolExamRecords!=='undefined' && Array.isArray(stoolExamRecords))
+                ? stoolExamRecords.find(function(r){ return r.reqId===req.id; }) : null;
+          if(rec && typeof _buildStoolPrintHTML==='function') h = _buildStoolPrintHTML(rec);
+        } else if(st.isSpecialExam==='semen'){
+          rec = (typeof semenRecords!=='undefined' && Array.isArray(semenRecords))
+                ? semenRecords.find(function(r){ return r.reqId===req.id; }) : null;
+          if(rec && typeof _buildSemenPrintHTML==='function') h = _buildSemenPrintHTML(rec);
         }
+        if(h && h.length > 50) pages.push(h);
       });
+
+      // زرع
+      if(typeof cultureRecords!=='undefined' && Array.isArray(cultureRecords)){
+        cultureRecords
+          .filter(function(c){ return c.reqId===req.id; })
+          .forEach(function(c){
+            if(typeof _buildCultureHTML==='function'){
+              var h = _buildCultureHTML(c.id);
+              if(h && h.length > 50) pages.push(h);
+            }
+          });
+      }
+
+      // CBC من جهاز
+      if(req.cbcData || (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.cbcParams)){
+        if(typeof printCBCFromDevice === 'function'){
+          // لا نطبع — لكن نبني HTML للعرض
+          // نستخدم نفس منطق printCBCFromDevice لكن نأخذ الـ HTML فقط
+          if(typeof _dpBuildCBCHTML === 'function'){
+            var cbcH = _dpBuildCBCHTML(req.id);
+            if(cbcH && cbcH.length > 50) pages.push(cbcH);
+          }
+        }
+      }
+
+    } catch(buildErr){
+      console.warn('[DP] build error:', buildErr);
     }
 
-    if(pages.length===0){
+    if(pages.length === 0){
+      viewer.innerHTML = '';
       viewer.appendChild(_dpWaitEl(req));
       return;
     }
 
-    // ── رسم الصفحات كـ iframes — الحل الصحيح ──
-    // نُضيف كل iframe للـ DOM أولاً ثم نكتب فيه
-    pages.forEach(function(htmlStr, idx){
-      if(idx>0){
-        var sep=document.createElement('div');
-        sep.className='dp-page-sep';
-        viewer.appendChild(sep);
-      }
-      var wrap=document.createElement('div');
-      wrap.style.cssText='background:#fff;';
-      var iframe=document.createElement('iframe');
-      iframe.style.cssText='width:100%;border:none;display:block;min-height:600px;';
-      iframe.setAttribute('scrolling','no');
-      wrap.appendChild(iframe);
-      viewer.appendChild(wrap);  // ← أضف للـ DOM أولاً
-
-      // الآن iframe في الـ DOM → آمن للكتابة
-      var capturedHtml = htmlStr;
-      var capturedFrame = iframe;
-      (function(fr, html){
-        try{
-          var doc = fr.contentDocument || fr.contentWindow.document;
-          doc.open('text/html','replace');
-          doc.write(html);
-          doc.close();
-        } catch(e){
-          console.warn('[DP] write error:', e);
-        }
-        // ضبط الارتفاع بعد تحميل المحتوى
-        function fitHeight(){
-          try{
-            var body = fr.contentDocument.body || fr.contentWindow.document.body;
-            var h = Math.max(body.scrollHeight, body.offsetHeight, 600);
-            fr.style.height = h + 'px';
-          } catch(e2){}
-        }
-        fr.onload = fitHeight;
-        setTimeout(fitHeight, 400);
-        setTimeout(fitHeight, 1000);
-        setTimeout(fitHeight, 2000);
-      })(capturedFrame, capturedHtml);
-    });
+    // ② رسم الصفحات — مسح الـ viewer ثم إدراج الـ iframes
+    viewer.innerHTML = '';
+    _dpRenderPages(viewer, pages, 0);
   }
 
-  // ═══ رسالة الانتظار ══════════════════════════════════════════════
+  // ══ رسم الصفحات بالتتابع (لضمان الترتيب الصحيح) ═════════════════
+
+  function _dpRenderPages(viewer, pages, idx){
+    if(idx >= pages.length) return;
+
+    if(idx > 0){
+      var sep = document.createElement('div');
+      sep.className = 'dp-page-sep';
+      viewer.appendChild(sep);
+    }
+
+    var pageHtml = pages[idx];
+    var wrap     = document.createElement('div');
+    wrap.style.cssText = 'background:#fff;overflow:hidden;';
+
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'width:100%;border:none;display:block;';
+    iframe.setAttribute('scrolling', 'no');
+
+    // ── الطريقة الصحيحة: srcdoc أولاً كـ fallback، ثم نحاول doc.write
+    // srcdoc يعمل على Chrome/Firefox/Edge/Electron بدون قيود CSP
+    try{
+      iframe.srcdoc = pageHtml;
+    } catch(e){
+      // بعض بيئات Electron القديمة لا تدعم srcdoc — نتركه فارغاً
+    }
+
+    wrap.appendChild(iframe);
+    viewer.appendChild(wrap); // ← أضف للـ DOM أولاً دائماً
+
+    // دالة ضبط الارتفاع
+    function fitH(){
+      try{
+        var iDoc  = iframe.contentDocument || iframe.contentWindow.document;
+        var body  = iDoc.body || iDoc.documentElement;
+        if(!body) return;
+        var h = Math.max(body.scrollHeight, body.offsetHeight, 400);
+        iframe.style.height = (h + 20) + 'px';
+      } catch(e2){}
+    }
+
+    iframe.addEventListener('load', function(){
+      fitH();
+      // إذا srcdoc لم ينجح (iframe فارغ) — جرّب doc.write
+      try{
+        var iDoc = iframe.contentDocument || iframe.contentWindow.document;
+        var body = iDoc.body;
+        if(body && body.children.length === 0 && body.innerHTML.trim() === ''){
+          iDoc.open();
+          iDoc.write(pageHtml);
+          iDoc.close();
+          setTimeout(fitH, 300);
+          setTimeout(fitH, 800);
+        }
+      } catch(e3){}
+
+      // رسم الصفحة التالية
+      setTimeout(function(){ _dpRenderPages(viewer, pages, idx+1); }, 50);
+    });
+
+    // timeout احتياطي إذا لم ينطلق onload
+    setTimeout(function(){
+      fitH();
+      setTimeout(fitH, 500);
+      setTimeout(fitH, 1500);
+    }, 600);
+  }
+
+  // ══ تحديث رسالة الانتظار (تغيير نسبة الإنجاز) ════════════════════
+
+  function _dpUpdateWait(req, viewer){
+    var old = viewer.querySelector('.dp-wait-wrap');
+    if(!old) return;
+    var newEl = _dpWaitEl(req);
+    viewer.replaceChild(newEl, old);
+  }
+
+  // ══ عنصر رسالة الانتظار ══════════════════════════════════════════
 
   function _dpWaitEl(req){
-    var nm   = req.patientName||'---';
+    var nm   = req.patientName || '---';
     var allT = (req.tests||[]).map(function(tid){
-      return typeof tests!=='undefined'?tests.find(function(t){return t.id===tid;}):null;
+      return typeof tests!=='undefined'
+        ? tests.find(function(t){ return t.id===tid; })
+        : null;
     }).filter(Boolean);
 
-    var doneC=0;
-    if(req.results) allT.forEach(function(t){if(req.results[t.id]==='done') doneC++;});
-    var total=allT.length;
-    var pct  =total>0?Math.round(doneC/total*100):0;
-    var isIP =req.status==='inprogress';
-    var col  =isIP?'#00d4ff':'#ffcc00';
-    var icon =isIP?'🔬':'⏳';
-    var msg  =isIP?'التحليل جارٍ...':'التحليل قيد الانتظار';
+    var doneC = 0;
+    if(req.results){
+      allT.forEach(function(t){ if(req.results[t.id]==='done') doneC++; });
+    }
+    var total = allT.length;
+    var pct   = total > 0 ? Math.round(doneC/total*100) : 0;
+    var isIP  = req.status === 'inprogress';
+    var col   = isIP ? '#00d4ff' : '#ffcc00';
+    var icon  = isIP ? '🔬' : '⏳';
+    var msg   = isIP ? 'التحليل جارٍ...' : 'التحليل قيد الانتظار';
 
-    var rows=allT.map(function(t){
-      var d=req.results&&req.results[t.id]==='done';
+    var rows = allT.map(function(t){
+      var d = req.results && req.results[t.id]==='done';
       return '<tr style="border-bottom:1px solid #f0f0f0;">'
-        +'<td style="padding:7px 14px;font-size:13px;font-family:Cairo,sans-serif;">'+_esc(t.nameEn||t.nameShort||t.code||'')+'</td>'
-        +'<td style="padding:7px 14px;text-align:center;">'+(d?'<span style="color:#00b050;font-weight:900;font-size:15px;">✓</span>':'<span style="color:#cc9900;font-size:14px;">·</span>')+'</td>'
-        +'</tr>';
+        +'<td style="padding:7px 14px;font-size:13px;font-family:Cairo,sans-serif;">'
+        +_esc(t.nameEn||t.nameShort||t.code||'')+'</td>'
+        +'<td style="padding:7px 14px;text-align:center;">'
+        +(d ? '<span style="color:#00b050;font-weight:900;font-size:15px;">✓</span>'
+            : '<span style="color:#cc9900;font-size:16px;">·</span>')
+        +'</td></tr>';
     }).join('');
 
-    var div=document.createElement('div');
-    div.className='dp-wait-wrap';
-    div.innerHTML='<div class="dp-wait-top">'
+    var div = document.createElement('div');
+    div.className = 'dp-wait-wrap';
+    div.innerHTML =
+      '<div class="dp-wait-top">'
       +'<div style="font-size:48px;margin-bottom:8px;">'+icon+'</div>'
       +'<div style="font-size:20px;font-weight:900;margin-bottom:4px;">'+_esc(nm)+'</div>'
       +'<div style="font-size:14px;font-weight:700;color:'+col+';">'+msg+'</div>'
       +'</div>'
       +'<div class="dp-wait-body">'
       +(total>0
-        ?'<div style="margin-bottom:12px;">'
-         +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:4px;font-family:Cairo,sans-serif;">'
-         +'<span>'+doneC+' من '+total+' تحليل</span><span>'+pct+'%</span></div>'
-         +'<div style="height:9px;background:#eee;border-radius:8px;overflow:hidden;">'
-         +'<div style="height:100%;background:linear-gradient(90deg,'+col+',#0099bb);width:'+pct+'%;min-width:3px;border-radius:8px;"></div></div></div>'
-         +'<table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;">'
-         +'<thead><tr style="background:#003366;color:#fff;">'
-         +'<th style="padding:8px 14px;font-size:12px;text-align:right;font-family:Cairo,sans-serif;">التحليل</th>'
-         +'<th style="padding:8px 14px;font-size:12px;width:60px;font-family:Cairo,sans-serif;">الحالة</th>'
-         +'</tr></thead><tbody>'+rows+'</tbody></table>'
-        :'<p style="text-align:center;color:#888;font-family:Cairo,sans-serif;">لا توجد تحاليل مسجّلة</p>')
+        ? '<div style="margin-bottom:12px;">'
+          +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:4px;font-family:Cairo,sans-serif;">'
+          +'<span>'+doneC+' من '+total+' تحليل</span>'
+          +'<span>'+pct+'%</span></div>'
+          +'<div style="height:9px;background:#eee;border-radius:8px;overflow:hidden;">'
+          +'<div style="height:100%;background:linear-gradient(90deg,'+col+',#0099bb);'
+          +'width:'+pct+'%;min-width:3px;border-radius:8px;"></div></div></div>'
+          +'<table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;">'
+          +'<thead><tr style="background:#003366;color:#fff;">'
+          +'<th style="padding:8px 14px;font-size:12px;text-align:right;font-family:Cairo,sans-serif;">التحليل</th>'
+          +'<th style="padding:8px 14px;font-size:12px;width:60px;font-family:Cairo,sans-serif;">الحالة</th>'
+          +'</tr></thead><tbody>'+rows+'</tbody></table>'
+        : '<p style="text-align:center;color:#888;font-family:Cairo,sans-serif;">لا توجد تحاليل مسجّلة</p>')
       +'</div>';
     return div;
   }
 
-  // ═══ ربط LAN ══════════════════════════════════════════════════════
+  // ══ ربط أحداث LAN ════════════════════════════════════════════════
 
   document.addEventListener('dp:refresh', function(){
-    var el=document.getElementById('dp-modal-overlay');
-    if(el&&el.classList.contains('open')) dpRenderAll();
+    var el = document.getElementById('dp-modal-overlay');
+    if(el && el.classList.contains('open')) dpRenderAll();
   });
 
 }());
+
 
 </script>
