@@ -2798,11 +2798,16 @@ body.light-mode .dp-viewer{background:#d8dde3;}
   // كل جهاز مستقل بـ deviceId — يوجّه البيانات للجهاز الصحيح
   if(typeof window.electronAPI.onDeviceData === 'function'){
     window.electronAPI.onDeviceData((d) => {
-      // ابحث عن الجهاز في قائمة LIS بـ deviceId
       const targetDev = lisDevices.find(x => x.id === d.deviceId);
       if(!targetDev) return;
       lisRawMessages.unshift(d.data);
-      lisParseByProtocol(d.data, targetDev);
+      // إذا أرسل main.js بيانات محللة مسبقاً استخدمها مباشرةً
+      // isCBC: يُوجّه للمسار الصحيح حتى لو كان patientId فارغاً
+      if(d.parsed && (d.parsed.patientId || d.parsed.isCBC)){
+        lisParseHL7Parsed(d.parsed, targetDev.name);
+      } else {
+        lisParseByProtocol(d.data, targetDev);
+      }
       targetDev.rxCount = (targetDev.rxCount||0) + (d.data||'').length;
     });
   }
@@ -2848,6 +2853,72 @@ body.light-mode .dp-viewer{background:#d8dde3;}
   }
 
   console.log('[MedLab Pro Desktop] Electron APIs ready ✅');
+
+  // ── Host Query — ثنائي الاتجاه (TCP Server + sendAck) ─────────────────────
+  // يُفعَّل فقط عندما يرسل MAGLUMI (أو أي جهاز Server) استعلام QBP^Q11 / QRY^R02
+  // CBC (BC-5000) لا يصل هنا أبداً
+  if(typeof window.electronAPI.onLisHostQuery === 'function'){
+    window.electronAPI.onLisHostQuery(async (d) => {
+      // d: { deviceId, queryId, sampleId, deviceName }
+      const { queryId, sampleId, deviceName } = d;
+      if(!queryId || !sampleId){
+        // بيانات ناقصة — أرسل NF
+        if(queryId && window.electronAPI.lisQueryReply)
+          window.electronAPI.lisQueryReply({ queryId, tests: [] }).catch(()=>{});
+        return;
+      }
+
+      lisAddLog('info', '🔍 Host Query من ' + (deviceName||d.deviceId) + ' — SampleId: ' + sampleId);
+
+      try {
+        // ── البحث عن المريض بالباركود ─────────────────────────────────────
+        // pt.barcode === sampleId  (الباركود هو المعرف الرابط)
+        const pt = (typeof patients !== 'undefined' ? patients : [])
+          .find(p => String(p.barcode || '').replace(/[^0-9A-Za-z]/g,'') === String(sampleId).replace(/[^0-9A-Za-z]/g,''));
+
+        if(!pt){
+          lisAddLog('warn', '⚠️ Host Query: لم يُعثر على مريض بالباركود ' + sampleId + ' — NF');
+          window.electronAPI.lisQueryReply({ queryId, tests: [] }).catch(()=>{});
+          return;
+        }
+
+        // ── البحث عن آخر طلب pending أو اليوم لهذا المريض ───────────────
+        const allReqs = (typeof requests !== 'undefined' ? requests : [])
+          .filter(r => r.patientId === pt.id)
+          .sort((a, b) => (b.registered||b.date||'').localeCompare(a.registered||a.date||''));
+
+        // أولوية: pending → partial → اليوم → آخر طلب
+        const today = new Date().toISOString().slice(0,10);
+        const req =
+          allReqs.find(r => r.status === 'pending') ||
+          allReqs.find(r => r.status === 'partial') ||
+          allReqs.find(r => (r.registered||r.date||'').startsWith(today)) ||
+          allReqs[0];
+
+        if(!req || !req.tests || !req.tests.length){
+          lisAddLog('warn', '⚠️ Host Query: لا طلبات لـ ' + (pt.name||sampleId) + ' — NF');
+          window.electronAPI.lisQueryReply({ queryId, tests: [] }).catch(()=>{});
+          return;
+        }
+
+        // ── بناء قائمة التحاليل من DB ─────────────────────────────────────
+        const allTests = typeof tests !== 'undefined' ? tests : [];
+        const testsList = req.tests
+          .map(tid => allTests.find(t => t.id === tid))
+          .filter(Boolean)
+          .map(t => ({ code: t.code || t.id, nameEn: t.nameEn || t.name || t.code || t.id }));
+
+        lisAddLog('ok', '✅ Host Query: ' + (pt.name||sampleId) + ' → ' + testsList.length + ' تحليل — OK');
+
+        window.electronAPI.lisQueryReply({ queryId, tests: testsList }).catch(()=>{});
+
+      } catch(err) {
+        lisAddLog('err', '❌ Host Query error: ' + err.message);
+        window.electronAPI.lisQueryReply({ queryId, tests: [] }).catch(()=>{});
+      }
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 })();
 </script>
 
@@ -23211,13 +23282,21 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
     const unit=(p&&p.unit)||info.unit||'';
     let flag=(p&&p.flag)||'';
     let flagColor='#000';
+    const _fRaw=(flag||'').toUpperCase().trim();
+    if(_fRaw==='N'||_fRaw==='N-N'||_fRaw==='NORMAL') flag='';
+    else if(_fRaw.startsWith('L')) flag='L';
+    else if(_fRaw.startsWith('H')) flag='H';
+    // تلوين تلقائي من نطاق المرجع إذا لم يُرسل الجهاز flag
     if(!flag&&ref&&!isNaN(numVal)){
       const parts=ref.replace(/[^0-9. ]/g,' ').trim().split(/\s+/);
-      if(parts.length>=2){const lo=parseFloat(parts[0]),hi=parseFloat(parts[parts.length-1]);if(!isNaN(lo)&&!isNaN(hi)){if(numVal<lo){flag='L';flagColor='#0066cc';}else if(numVal>hi){flag='H';flagColor='#cc0000';}}}
+      if(parts.length>=2){const lo=parseFloat(parts[0]),hi=parseFloat(parts[parts.length-1]);if(!isNaN(lo)&&!isNaN(hi)){if(numVal<lo){flag='L';}else if(numVal>hi){flag='H';}}}
     }
-    if(flag==='L'||flag==='LL') flagColor='#0066cc';
-    if(flag==='H'||flag==='HH') flagColor='#cc0000';
-    return {val,flag,flagColor,ref,unit};
+    if(flag==='L') flagColor='#0066cc';
+    else if(flag==='H') flagColor='#cc0000';
+    else flagColor='#000'; // N = أسود
+    // إذا كان flag فارغاً نعرض N
+    const displayFlag=flag||'N';
+    return {val,flag:displayFlag,flagColor,ref,unit};
   }
 
   const tpl=String(templateId||settings.cbcTemplate||'1');
@@ -23296,7 +23375,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       const {val,flag,flagColor,ref,unit}=getParam(key);
       const sep=(key==='WBC'||key==='RBC'||key==='PLT');
       const bg=sep?ac+'0d':'#fff';
-      rows+='<tr style="background:'+bg+'\">'+(sep?'<td colspan="6" style="padding:3px 10px;font-size:10px;font-weight:900;color:'+ac+';letter-spacing:1px;background:'+ac+'15;border-top:1.5px solid '+ac+'44">'+(key==='WBC'?'▸ WBC DIFFERENTIAL':key==='RBC'?'▸ RED CELL INDICES':'▸ PLATELET INDICES')+'</td></tr><tr style="background:#fff">':'')+'<td style="padding:3px 8px;font-size:11px;color:#888;border-bottom:1px solid #f0f0f0;text-align:center">'+rowNum+'</td><td style="padding:3px 10px;font-size:12px;font-weight:700;color:#2c3e50;border-bottom:1px solid #f0f0f0">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+';border-bottom:1px solid #f0f0f0">'+val+'</td><td style="padding:3px 6px;text-align:center;border-bottom:1px solid #f0f0f0"><span style="display:inline-block;min-width:22px;padding:1px 4px;border-radius:10px;font-size:10px;font-weight:800;background:'+(flag?(flagColor+'18'):'#f5f5f5')+';color:'+(flag||flagColor?flagColor:'#aaa')+'">'+(flag||'—')+'</span></td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+unit+'</td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+ref+'</td></tr>';
+      rows+='<tr style="background:'+bg+'\">'+(sep?'<td colspan="6" style="padding:3px 10px;font-size:10px;font-weight:900;color:'+ac+';letter-spacing:1px;background:'+ac+'15;border-top:1.5px solid '+ac+'44">'+(key==='WBC'?'▸ WBC DIFFERENTIAL':key==='RBC'?'▸ RED CELL INDICES':'▸ PLATELET INDICES')+'</td></tr><tr style="background:#fff">':'')+'<td style="padding:3px 8px;font-size:11px;color:#888;border-bottom:1px solid #f0f0f0;text-align:center">'+rowNum+'</td><td style="padding:3px 10px;font-size:12px;font-weight:700;color:#2c3e50;border-bottom:1px solid #f0f0f0">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+';border-bottom:1px solid #f0f0f0">'+val+'</td><td style="padding:3px 6px;text-align:center;border-bottom:1px solid #f0f0f0"><span style="display:inline-block;min-width:22px;padding:1px 4px;border-radius:10px;font-size:10px;font-weight:800;background:'+(flag!=='N'?(flagColor+'18'):'#f5f5f5')+';color:'+flagColor+'">'+flag+'</span></td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+unit+'</td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+ref+'</td></tr>';
       rowNum++;
     });
     const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.outer{border:2px solid '+ac+';border-radius:10px;overflow:hidden;margin:6px 0;}.ttl{text-align:center;font-size:13px;font-weight:900;background:'+ac+';color:#fff;padding:5px;}.pt-wrap{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:'+ac+'0a;border-bottom:1px solid '+ac+'33;}.pt-l{display:flex;flex-direction:column;gap:3px;}.pt-row{display:flex;gap:6px;align-items:center;}.pt-k{font-size:10px;color:#888;font-weight:600;min-width:50px;}.pt-v{font-size:12px;font-weight:800;color:#1a2035;}.chips{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}.chip{background:'+ac+';color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;}table{width:100%;border-collapse:collapse;}th{padding:5px 8px;font-size:11px;font-weight:700;color:'+ac+';text-align:center;border-bottom:2px solid '+ac+'33;background:'+ac+'0d;}.foot{padding:5px 14px;background:'+ac+'0a;border-top:1px solid '+ac+'33;display:flex;justify-content:space-between;font-size:10px;color:#888;}';
@@ -27021,7 +27100,14 @@ function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   const _numV=_rawV.match(/([<>]?\s*\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
   const cleanValue=_numV?_numV[1].replace(/\s/g,''):_rawV;
   const _autoFlag=!_numV&&/[HL]$/.test(_rawV)?_rawV.slice(-1):'';
-  const cleanFlag=flag||_autoFlag;
+  // تطبيع flag عند الحفظ — BC-5000 يرسل: L, H, LL, HH, L-N, H-N, N, N-N
+  // نحوّلها لـ L أو H أو فارغ حتى يعمل التلوين بشكل صحيح في جميع النماذج
+  let _rawFlag=(flag||_autoFlag||'').toUpperCase().trim();
+  let cleanFlag='';
+  if(_rawFlag==='N'||_rawFlag==='N-N'||_rawFlag==='NORMAL') cleanFlag='';
+  else if(_rawFlag.startsWith('L')) cleanFlag='L';
+  else if(_rawFlag.startsWith('H')) cleanFlag='H';
+  else cleanFlag=_rawFlag;
 
   // ── فلترة OBX التعليقات: BC-5000 يرسل أسطر مثل "RBC ABNORMAL DISTRIBUTION" ──
   // هذه الأسطر تطابق cbcIsParam بسبب startsWith("RBC") لكنها ليست قيم حقيقية.
@@ -27144,65 +27230,121 @@ function cbcFlush(sampleId){
 function lisParseHL7(raw,deviceName){
   lisAddLog('astm','تحليل HL7 من: '+deviceName);
   const segs=raw.split(/\r\n|\r|\n/).filter(function(s){return s.trim();});
-  let pid={id:'',name:''},isCBC=false;
+
+  // ── المرور الأول: استخراج SID ومعلومات المريض من PID/SPM فقط ──
+  // القاعدة: رقم المريض يأتي من PID أو SPM — لا نستخدم OBR لتحديد المريض
+  // OBR يحتوي رقم الطلب (RQ) وليس رقم المريض — استخدامه سبب ظهور RQ غلط
+  let pid={id:'',name:''};
+  let isCBC=false;
   segs.forEach(function(seg){
     const f=seg.split('|');
     if(f[0]==='PID'){
       pid.name=(f[5]||'').replace(/\^/g,' ').trim();
-      const pidId=(f[3]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
-      if(pidId) pid.id=pidId;
+      // PID-3: Patient ID List — المصدر الأساسي لرقم المريض
+      const pid3=(f[3]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
+      if(pid3) pid.id=pid3;
+      // PID-2: Alternate Patient ID — احتياطي إذا كان PID-3 فارغاً
+      if(!pid.id){
+        const pid2=(f[2]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
+        if(pid2) pid.id=pid2;
+      }
+      // PID-4: Alternate Patient ID — احتياطي ثانٍ
+      if(!pid.id){
+        const pid4=(f[4]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
+        if(pid4) pid.id=pid4;
+      }
 
     } else if(f[0]==='SPM'){
-      // ── MAGLUMI 600: Sample ID في SPM[2] مثل "100289^^" ──
-      // BC-5000 لا يُرسل SPM لذا هذا لا يؤثر عليه
+      // MAGLUMI 600: Sample ID في SPM-2 — أولوية عليا تكتب فوق PID
+      // SPM-2 مثل: "100289^^" أو "S100289^^"
       const spmSid=(f[2]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
       if(spmSid) pid.id=spmSid;
 
     } else if(f[0]==='OBR'){
-      // BC-5000 يضع Sample ID في OBR[3]
-      const obrSid=(f[3]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
-      if(obrSid) pid.id=obrSid;
+      // OBR: نستخدمه فقط للتعرف على نوع التحليل (CBC أم لا)
+      // لا نأخذ رقم المريض من OBR — هذا كان سبب ظهور RQ غلط
       const obrid=(f[4]||'').toUpperCase();
       if(obrid.includes('CBC')||obrid.includes('WBC')||obrid.includes('HGB')||obrid.includes('DIFF')||obrid.includes('COUNT')) isCBC=true;
+    }
+  });
 
-    } else if(f[0]==='OBX'){
-      // ── استخراج كود التحليل ──
-      // MAGLUMI يرسل: OBX|1||Vit B12 III||442^|...
-      // f[3] = 'Vit B12 III' (بدون ^)  → codeRaw[0]='Vit B12 III', codeRaw[1]=undefined
-      // نحتفظ بنسختين: مع مسافات للمطابقة، وبدون للتخزين
-      const codeRaw=(f[3]||'').split('^');
-      const codeWithSpaces=(codeRaw[1]||codeRaw[0]||'').trim().toUpperCase();
-      const code=codeWithSpaces.replace(/\s+/g,'');  // للتخزين: 'VITB12III'
+  // ── المرور الثاني: معالجة OBX بعد معرفة SID ──
+  segs.forEach(function(seg){
+    const f=seg.split('|');
+    if(f[0]!=='OBX') return;
 
-      // ── تنظيف القيمة ──
-      // MAGLUMI يرسل: '442^' — نزيل ^ والأحرف غير الرقمية
-      // BC-5000 يرسل: '4.50T' أو '<0.5'
-      const rawVal=(f[5]||'').split('^')[0].trim(); // إزالة ^ وما بعده أولاً
-      const _numMatch = rawVal.match(/([<>]?\s*\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
-      const value = _numMatch ? _numMatch[1].replace(/\s/g,'') : rawVal;
+    // ── استخراج كود التحليل ──
+    // MAGLUMI يرسل: OBX|1||Vit B12 III||442^|...
+    // f[3] = 'Vit B12 III' (بدون ^)  → codeRaw[0]='Vit B12 III', codeRaw[1]=undefined
+    // نحتفظ بنسختين: مع مسافات للمطابقة، وبدون للتخزين
+    const codeRaw=(f[3]||'').split('^');
+    const codeWithSpaces=(codeRaw[1]||codeRaw[0]||'').trim().toUpperCase();
+    const code=codeWithSpaces.replace(/\s+/g,'');  // للتخزين: 'VITB12III'
 
-      const unit=(f[6]||'').split('^')[0].trim().replace(/\*/g,'^');
-      const range=(f[7]||'').trim();
-      const flag=(f[8]||'').split('~')[0].trim();
+    // ── تنظيف القيمة ──
+    // MAGLUMI يرسل: '442^' — نزيل ^ والأحرف غير الرقمية
+    // BC-5000 يرسل: '4.50T' أو '<0.5'
+    const rawVal=(f[5]||'').split('^')[0].trim(); // إزالة ^ وما بعده أولاً
+    const _numMatch = rawVal.match(/([<>]?\s*\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
+    const value = _numMatch ? _numMatch[1].replace(/\s/g,'') : rawVal;
 
-      lisAddLog('astm','HL7 OBX: '+codeWithSpaces+'='+rawVal+(value!==rawVal?' → '+value:'')+' '+unit+' (SID:'+pid.id+')');
+    const unit=(f[6]||'').split('^')[0].trim().replace(/\*/g,'^');
+    const range=(f[7]||'').trim();
+    // تطبيع flag: L-N→L, H-N→H, N→''
+    const _flagRaw=(f[8]||'').split('~')[0].trim().toUpperCase();
+    const flag=(_flagRaw==='N'||_flagRaw==='N-N')?'':_flagRaw.startsWith('L')?'L':_flagRaw.startsWith('H')?'H':_flagRaw;
 
-      if(cbcIsParam(code)||isCBC){
-        isCBC=true;
-        cbcAddParam(pid.id||'HL7',code,value,unit,range,flag,pid.name);
-      } else {
-        // نستخدم codeWithSpaces للمطابقة مع lisResolveCode لأن الـ mappings تحتوي مسافات
-        lisIngestResult({
-          id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
-          sampleId:  pid.id||'HL7',
-          patName:   pid.name||'',
-          deviceCode:codeWithSpaces,          // مع مسافات: 'VIT B12 III'
-          medlabCode:lisResolveCode(codeWithSpaces)||lisResolveCode(code),
-          value, unit, refRange:range, flags:flag,
-          status:'final', device:deviceName, protocol:'HL7',
-          datetime:new Date().toISOString(), transferred:false,
-        });
-      }
+    lisAddLog('astm','HL7 OBX: '+codeWithSpaces+'='+rawVal+(value!==rawVal?' → '+value:'')+' '+unit+' (SID:'+pid.id+')');
+
+    if(cbcIsParam(code)||isCBC){
+      isCBC=true;
+      cbcAddParam(pid.id||'HL7',code,value,unit,range,flag,pid.name);
+    } else {
+      // نستخدم codeWithSpaces للمطابقة مع lisResolveCode لأن الـ mappings تحتوي مسافات
+      lisIngestResult({
+        id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
+        sampleId:  pid.id||'HL7',
+        patName:   pid.name||'',
+        deviceCode:codeWithSpaces,          // مع مسافات: 'VIT B12 III'
+        medlabCode:lisResolveCode(codeWithSpaces)||lisResolveCode(code),
+        value, unit, refRange:range, flags:flag,
+        status:'final', device:deviceName, protocol:'HL7',
+        datetime:new Date().toISOString(), transferred:false,
+      });
+    }
+  });
+}
+
+// ── استخدام البيانات المحللة مسبقاً من main.js ──────────────────────────────
+// تُستدعى عندما يرسل main.js حقل parsed مع البيانات
+// تتجنب إعادة تحليل HL7 وتضمن استخدام patientId الصحيح من PID
+function lisParseHL7Parsed(parsed, deviceName){
+  if(!parsed||!parsed.results||!parsed.results.length) return;
+  lisAddLog('astm','تحليل HL7 (parsed) من: '+deviceName+' | SID:'+parsed.patientId);
+
+  parsed.results.forEach(function(obx){
+    const codeWithSpaces=(obx.testName||obx.testCode||'').trim().toUpperCase();
+    const code=codeWithSpaces.replace(/\s+/g,'');
+    const value=obx.value||'';
+    if(!code&&!value) return;
+
+    lisAddLog('astm','HL7 OBX: '+codeWithSpaces+'='+value+' '+obx.unit+' (SID:'+parsed.patientId+')');
+
+    if(cbcIsParam(code)){
+      const _fg=(obx.flag||'').toUpperCase().trim();
+      const normFlag=(_fg==='N'||_fg==='N-N')?'':_fg.startsWith('L')?'L':_fg.startsWith('H')?'H':_fg;
+      cbcAddParam(parsed.patientId||'HL7', code, value, obx.unit, obx.refRange, normFlag, parsed.patientName);
+    } else {
+      lisIngestResult({
+        id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
+        sampleId:   parsed.patientId||'HL7',
+        patName:    parsed.patientName||'',
+        deviceCode: codeWithSpaces,
+        medlabCode: lisResolveCode(codeWithSpaces)||lisResolveCode(code),
+        value, unit:obx.unit||'', refRange:obx.refRange||'', flags:obx.flag||'',
+        status:'final', device:deviceName, protocol:'HL7',
+        datetime:new Date().toISOString(), transferred:false,
+      });
     }
   });
 }
@@ -27365,32 +27507,71 @@ function lisTransferAll(){
 }
 
 // ── مساعد: مطابقة نتيجة جهاز مع طلب من القائمة ───────────────────────────
+// القاعدة الأساسية: MAGLUMI يرسل رقم المريض كـ SID
+// نبحث عن طلب غير منتهٍ للمريض صاحب هذا الرقم
 function _lisMatchReqInList(reqs, res, ptsList){
-  return reqs.find(function(r){
+  const sid=String(res.sampleId||'').trim();
+  if(!sid) return undefined;
+  const sidNum=sid.replace(/[^0-9]/g,'');
+
+  // جمع المرشحين أولاً ثم اختيار الأفضل
+  const candidates=[];
+
+  reqs.forEach(function(r){
     const rId=String(r.id||'').trim();
-    const sid=String(res.sampleId||'').trim();
-    if(!sid) return false;
-    // مطابقة رقم الطلب مع SID
-    if(rId===sid||rId.endsWith(sid)||sid.endsWith(rId)) return true;
-    // مطابقة sampleId/sampleNum المخزون في الطلب
+
+    // 1. مطابقة رقم الطلب مباشرة مع SID (BC-5000 يرسل رقم الطلب كـ SID)
+    if(rId===sid||rId.endsWith(sid)||sid.endsWith(rId)){candidates.push({r,score:100});return;}
+    const rIdNum=rId.replace(/[^0-9]/g,'');
+    if(sidNum&&rIdNum&&rIdNum===sidNum){candidates.push({r,score:100});return;}
+
+    // 2. مطابقة patientId في الطلب مع SID (MAGLUMI يرسل رقم المريض كـ SID)
+    const rPtIdNum=String(r.patientId||'').replace(/[^0-9]/g,'');
+    if(rPtIdNum&&sidNum&&rPtIdNum===sidNum){candidates.push({r,score:90});return;}
+
+    // 3. مطابقة sampleId/sampleNum المخزون في الطلب
     const rSid=String(r.sampleId||r.sampleNum||'').trim();
-    if(rSid&&(rSid===sid||rSid.endsWith(sid)||sid.endsWith(rSid))) return true;
-    // مطابقة باركود المريض — MAGLUMI يرسل رقم العينة = باركود المريض
+    if(rSid){
+      const rSidNum=rSid.replace(/[^0-9]/g,'');
+      if(rSid===sid||rSid.endsWith(sid)||sid.endsWith(rSid)){candidates.push({r,score:80});return;}
+      if(sidNum&&rSidNum&&rSidNum===sidNum){candidates.push({r,score:80});return;}
+    }
+
+    // 4. مطابقة barcode المريض مع SID
     const _pts=ptsList||(typeof patients!=='undefined'?patients:[]);
     const pt2=_pts.find(function(p){return p.id===r.patientId;});
     if(pt2&&pt2.barcode){
-      const bc=String(pt2.barcode).trim().toUpperCase();
-      const sidUp=sid.toUpperCase();
-      if(bc===sidUp||bc.endsWith(sidUp)||sidUp.endsWith(bc)) return true;
+      const bc=String(pt2.barcode).trim().replace(/[^0-9]/g,'');
+      if(bc&&sidNum&&bc===sidNum){candidates.push({r,score:70});return;}
     }
-    // مطابقة بـ patientId مباشرة مع SID (رقم المريض = رقم العينة)
-    const pid=String(r.patientId||'').replace(/[^0-9]/g,'');
-    const sidNum=sid.replace(/[^0-9]/g,'');
-    if(pid&&sidNum&&pid===sidNum) return true;
-    // مطابقة بالاسم فقط إذا كلاهما غير فارغ
-    if(r.patientName&&res.patName&&res.patName.trim()&&r.patientName.trim()&&r.patientName===res.patName&&r.status!=='done') return true;
-    return false;
+
+    // 5. مطابقة patient ID المريض من قائمة المرضى
+    if(pt2){
+      const ptIdNum=String(pt2.id||'').replace(/[^0-9]/g,'');
+      if(ptIdNum&&sidNum&&ptIdNum===sidNum){candidates.push({r,score:70});return;}
+    }
+
+    // 6. مطابقة بالاسم (آخر درجة)
+    if(r.patientName&&res.patName&&res.patName.trim()&&
+       r.patientName.trim()===res.patName.trim()&&r.status!=='done'){
+      candidates.push({r,score:50});
+    }
   });
+
+  if(!candidates.length) return undefined;
+
+  // ترتيب الأولوية: score عالي أولاً، ثم الطلبات غير المنتهية، ثم الأحدث
+  candidates.sort(function(a,b){
+    if(b.score!==a.score) return b.score-a.score;
+    // نفضل الطلبات غير المنتهية على المنتهية
+    const aNotDone=(a.r.status!=='done')?1:0;
+    const bNotDone=(b.r.status!=='done')?1:0;
+    if(bNotDone!==aNotDone) return bNotDone-aNotDone;
+    // نفضل الأحدث (id أكبر)
+    return String(b.r.id).localeCompare(String(a.r.id));
+  });
+
+  return candidates[0].r;
 }
 
 // ── مساعد: تطبيق نتيجة على طلب وحفظه ────────────────────────────────────
@@ -27410,7 +27591,21 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
     const tneNorm=tne.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
     return(tc===_codeUp||tcNorm===_codeNorm||tns===_codeUp||tnsNorm===_codeNorm||tneNorm===_codeNorm||_codeNorm.startsWith(tcNorm)||tcNorm.startsWith(_codeNorm));
   });
-  const resultKey=_matchedTest?_matchedTest.id:code;
+  // ── تحديد resultKey بدقة ────────────────────────────────────
+  // المشكلة: إذا كان resultKey لا يطابق بالضبط الكود في req.tests
+  // ستُحفظ النتيجة في مكان خاطئ والحقل يبقى فارغاً في واجهة الإدخال
+  // الحل: ابحث في req.tests عن كود يطابق — استخدمه مباشرةً
+  let resultKey=_matchedTest?_matchedTest.id:code;
+  if(Array.isArray(req.tests)&&req.tests.length){
+    const exactMatch=req.tests.find(function(tc){
+      const tcUp=(tc||'').toUpperCase();
+      const tcNorm=tcUp.replace(/[-\s]+/g,'');
+      return tcUp===_codeUp||tcNorm===_codeNorm||
+             (_matchedTest&&tcUp===(_matchedTest.id||'').toUpperCase());
+    });
+    if(exactMatch) resultKey=exactMatch;
+  }
+
   req.results[resultKey]=res.value;
   req.resultDetails[resultKey]={value:res.value,unit:res.unit,refRange:res.refRange,flags:res.flags,fromDevice:res.device,datetime:res.datetime};
   const allCodes=(req.tests||[]);
@@ -27418,17 +27613,16 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   if(allDone) req.status='done';
   else if(req.status==='pending') req.status='inprogress';
 
-  // حفظ في IDB (المصدر الحقيقي للبيانات) + تحديث _MC وmصفوفة requests
+  // حفظ في IDB + تحديث _MC + تحديث requests العالمية
   if(typeof IDB!=='undefined'&&idbKey){
     IDB.set(idbKey, reqs).catch(function(e){console.warn('[LIS] IDB save error',e);});
   }
   if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
-  // تحديث مصفوفة requests العالمية في الذاكرة
   if(typeof requests!=='undefined'&&Array.isArray(requests)){
     const idx=requests.findIndex(function(x){return x.id===req.id;});
     if(idx>=0) requests[idx]=req; else requests.push(req);
   }
-  lisAddLog('ok','نُقلت: '+code+'='+res.value+' → طلب '+req.id+' (مريض: '+req.patientName+')');
+  lisAddLog('ok','نُقلت: '+code+'='+res.value+' → طلب '+req.id+' (مريض: '+req.patientName+') [key:'+resultKey+']');
   return resultKey;
 }
 
@@ -27498,7 +27692,10 @@ async function lisTransferToMedlabPro(list){
       }catch(e){}
       res.transferred=true;
       notFound++;
-      lisAddLog('warn','SID '+res.sampleId+' غير موجود (IDB+ذاكرة) — تم الحفظ في الانتظار');
+      // سجل تفصيلي لتسهيل debugging
+      const _availIds=_allPts.slice(0,5).map(function(p){return p.id;}).join(', ');
+      lisAddLog('warn','SID '+res.sampleId+' غير موجود في MedLab Pro — تم الحفظ في الانتظار');
+      lisAddLog('warn','  ↳ أمثلة IDs المرضى المتاحة: ['+_availIds+'] (إجمالي: '+_allPts.length+')');
     }
   }
 
@@ -30755,2933 +30952,913 @@ function dlPDF(i){
   if(fd>=0) setTimeout(()=>tog(fd),300);
 })();
 <\/script>
-</body>
-</html>`;
-}
 
-// ── إرسال الملف عبر واتساب ──────────────────────
-async function _pmSendFile() {
-  const btn = document.getElementById('pm-btn-send');
-  if (btn) btn.classList.add('loading');
 
-  try {
-    const req = requests.find(r => r.id === _pmReqId);
-    if (!req) throw new Error('الطلب غير موجود');
-
-    const pt = patients.find(p => p.id === req.patientId) || {};
-    if (!pt.phone) throw new Error('لا يوجد رقم هاتف');
-
-    // بناء البيانات والـ HTML
-    const data = _pmBuildData(req.patientId);
-    if (!data) throw new Error('فشل بناء البيانات');
-
-    const html = _pmBuildHTML(data);
-    const ptName = data.patient.name;
-    const labName = data.lab.name;
-
-    // تحميل الملف
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `نتائج_${ptName}.html`.replace(/\s+/g,'_');
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-
-    // رسالة واتساب
-    const doneReqs = data.requests.filter(r => r.status === 'done').length;
-    const msg =
-      `🏥 *${labName}*\n` +
-      `━━━━━━━━━━━━━━━━━━\n` +
-      `السلام عليكم *${ptName}* 👋\n\n` +
-      `✅ نتائج تحاليلك جاهزة! (${doneReqs} طلب مكتمل)\n\n` +
-      `📎 *الخطوات:*\n` +
-      `1️⃣ احفظ الملف المرفق\n` +
-      `2️⃣ افتحه بـ Chrome أو Safari\n` +
-      `3️⃣ ستظهر نتائجك فوراً 🎉\n\n` +
-      `_يمكنك تحميل PDF لكل تحليل من داخل الملف_\n\n` +
-      `📞 للاستفسار: ${data.lab.phone || 'تواصل مع المختبر'}`;
-
-    const intPhone = _formatPhoneForWhatsApp(pt.phone, pt.phoneCC);
-
-    // فتح واتساب بعد لحظة لضمان بدء تحميل الملف
-    setTimeout(() => {
-      _openWhatsAppDirect(intPhone + '?text=' + encodeURIComponent(msg).replace(/\?text=/, ''));
-      window.open('https://wa.me/' + intPhone + '?text=' + encodeURIComponent(msg), '_blank');
-    }, 600);
-
-    _pmClose();
-    showNotif('✅ جاهز','تم تحميل الملف وفتح واتساب — أرسل الملف للمريض 📎','success');
-
-  } catch(err) {
-    showNotif('خطأ', err.message || 'حدث خطأ', 'error');
-    console.error('[Portal]', err);
-  } finally {
-    if (btn) btn.classList.remove('loading');
-  }
-}
-
-/* ══════════════════════════════════════════════════════
-   NEON BANNER SYSTEM — بانر الترحيب النيون
-══════════════════════════════════════════════════════ */
-const NEON_BANNER_KEY     = 'medlab_neon_banner_text';
-const NEON_BANNER_DEFAULT = 'أهلاً وسهلاً بكم في نظام MedLab Pro';
-const NEON_SPEED          = 85;   // ms per character
-const NEON_TRAIL          = 3;    // trailing glow length
-const NEON_PAUSE          = 650;  // pause at end before restart
-
-/* ── بناء جزيئات عائمة ── */
-function _wnbMakeParticles(containerId) {
-  // الجزيئات معطلة لتحسين الأداء
-  return;
-}
-
-/* ── cancel tokens لإيقاف سلاسل الأنيميشن القديمة ── */
-const _wnbTokens = {};
-
-/* ── تحويل النص إلى spans + تشغيل النيون ── */
-function _wnbAnimate(textElId) {
-  const el = document.getElementById(textElId);
-  if (!el) return;
-
-  // إلغاء أي سلسلة setTimeout سابقة لنفس العنصر
-  if (_wnbTokens[textElId]) _wnbTokens[textElId].cancelled = true;
-  const token = { cancelled: false };
-  _wnbTokens[textElId] = token;
-
-  const text = el.textContent || el.innerText;
-  el.textContent = '';
-  const chars = [];
-  for (const ch of text) {
-    const s = document.createElement('span');
-    s.className = 'wnb-char';
-    s.textContent = ch;
-    el.appendChild(s);
-    chars.push(s);
-  }
-
-  let idx = 0;
-  function clearAll() { chars.forEach(c => c.classList.remove('neon-active','neon-trail')); }
-  function step() {
-    if (token.cancelled) return;
-    clearAll();
-    if (idx < chars.length) {
-      chars[idx].classList.add('neon-active');
-      for (let t = 1; t <= NEON_TRAIL; t++) {
-        if (idx - t >= 0) chars[idx - t].classList.add('neon-trail');
-      }
-      idx++;
-      setTimeout(step, NEON_SPEED);
-    } else {
-      setTimeout(() => { if (token.cancelled) return; clearAll(); idx = 0; setTimeout(step, 300); }, NEON_PAUSE);
-    }
-  }
-  setTimeout(step, 800);
-  return chars;
-}
-
-/* ── تحديث نص البانر حياً (بدون إعادة تهيئة كاملة) ── */
-function _wnbRebuild(textElId, newText) {
-  const el = document.getElementById(textElId);
-  if (!el) return;
-  el.textContent = newText;
-  _wnbAnimate(textElId);
-}
-
-/* ── تهيئة كلا البانرَين ── */
-function initNeonBanners() {
-  const saved = localStorage.getItem(NEON_BANNER_KEY) || NEON_BANNER_DEFAULT;
-
-  /* الشريط العلوي */
-  const hdrEl = document.getElementById('wnb-hdr-text-el');
-  if (hdrEl) { hdrEl.textContent = saved; }
-  _wnbAnimate('wnb-hdr-text-el');
-
-  /* حقل الأدمن */
-  const inp = document.getElementById('admin-neon-text-inp');
-  const prev = document.getElementById('admin-neon-preview');
-  if (inp)  inp.value = saved;
-  if (prev) prev.textContent = saved;
-}
-
-/* ── حفظ النص الجديد من لوحة الأدمن ── */
-function saveNeonBannerText() {
-  const inp = document.getElementById('admin-neon-text-inp');
-  if (!inp) return;
-  const val = inp.value.trim();
-  if (!val) { showNotif('تنبيه','الحقل فارغ — اكتب جملة أولاً','warning'); return; }
-
-  localStorage.setItem(NEON_BANNER_KEY, val);
-
-  /* تطبيق فوري على البانرَين */
-  _wnbRebuild('wnb-hdr-text-el', val);
-
-  /* رسالة النجاح */
-  const msg = document.getElementById('admin-neon-save-msg');
-  if (msg) { msg.style.display='block'; setTimeout(()=>msg.style.display='none', 3000); }
-  showNotif('✅ تم','تم تطبيق النص الجديد على بانر الترحيب','success');
-}
-
-/* ── إعادة النص الافتراضي ── */
-function resetNeonBannerText() {
-  localStorage.removeItem(NEON_BANNER_KEY);
-  const inp  = document.getElementById('admin-neon-text-inp');
-  const prev = document.getElementById('admin-neon-preview');
-  if (inp)  inp.value = NEON_BANNER_DEFAULT;
-  if (prev) prev.textContent = NEON_BANNER_DEFAULT;
-  _wnbRebuild('wnb-hdr-text-el', NEON_BANNER_DEFAULT);
-  showNotif('↩ تمت الإعادة','تم استعادة النص الافتراضي','success');
-}
-
-/* ── تشغيل عند فتح لوحة الأدمن (تحديث الحقل بالقيمة المحفوظة) ── */
-function _wnbSyncAdminField() {
-  const saved = localStorage.getItem(NEON_BANNER_KEY) || NEON_BANNER_DEFAULT;
-  const inp   = document.getElementById('admin-neon-text-inp');
-  const prev  = document.getElementById('admin-neon-preview');
-  if (inp)  inp.value = saved;
-  if (prev) prev.textContent = saved;
-}
-
-/* ── تشغيل عند تحميل الصفحة ── */
-document.addEventListener('DOMContentLoaded', () => {
-  initNeonBanners();
-
-  /* مزامنة حقل الأدمن عند فتح اللوحة */
-  const adminPanel = document.getElementById('admin-panel');
-  if (adminPanel) {
-    const observer = new MutationObserver(muts => {
-      muts.forEach(m => {
-        if (m.type === 'attributes' && m.attributeName === 'class') {
-          if (adminPanel.classList.contains('show')) _wnbSyncAdminField();
-        }
-      });
-    });
-    observer.observe(adminPanel, { attributes: true });
-  }
-});
-
-/* ══════════════════════════════════════════════════════
-   ✨ Ripple Effect — تفاعل الضغط على الأزرار
-══════════════════════════════════════════════════════ */
-(function initRipple(){
-  document.addEventListener('mousedown',function(e){
-    const btn=e.target.closest('.btn');
-    if(!btn) return;
-    const rect=btn.getBoundingClientRect();
-    btn.style.setProperty('--rx',((e.clientX-rect.left)/rect.width*100).toFixed(1)+'%');
-    btn.style.setProperty('--ry',((e.clientY-rect.top)/rect.height*100).toFixed(1)+'%');
-    btn.classList.remove('ripple-go','ripple-fade');
-    requestAnimationFrame(function(){
-      btn.classList.add('ripple-go');
-      setTimeout(function(){
-        btn.classList.remove('ripple-go');
-        btn.classList.add('ripple-fade');
-        setTimeout(function(){btn.classList.remove('ripple-fade');},400);
-      },450);
-    });
-  },{passive:true});
-})();
-
-/* ══════════════════════════════════════════════════════
-   🚀 تحسين wizard — badge animation + scroll reset
-══════════════════════════════════════════════════════ */
-document.addEventListener('DOMContentLoaded',function(){
-  // keyboard navigation في جدول النتائج
-  const secRes=document.getElementById('sec-results');
-  if(secRes){
-    secRes.addEventListener('keydown',function(e){
-      if(e.key==='Enter'||(e.key==='Tab'&&!e.shiftKey)){
-        const inputs=[...document.querySelectorAll('#res-entry-tbody input:not([disabled]),#res-entry-tbody select:not([disabled])')];
-        const idx=inputs.indexOf(document.activeElement);
-        if(idx>=0&&idx<inputs.length-1){
-          e.preventDefault();
-          const next=inputs[idx+1];
-          next.focus();
-          if(next.tagName==='INPUT') next.select();
-        }
-      }
-    });
-  }
-});
-
-/* patch filterWizTests لإعادة scroll للأعلى */
-setTimeout(function(){
-  if(typeof filterWizTests==='function'){
-    const _orig2=window.filterWizTests;
-    window.filterWizTests=function(){
-      _orig2.apply(this,arguments);
-      const list=document.getElementById('wiz-test-list');
-      if(list) list.scrollTop=0;
-    };
-  }
-},0);
-
-/* ══════════════════════════════════════════════════════════════
-   ⚡ حزمة تحسينات الأداء — MedLab Performance Patch
-   تُطبَّق بعد تحميل كل الكود الأصلي لضمان الأولوية
-══════════════════════════════════════════════════════════════ */
-(function applyPerfPatches(){
-
-  // ─── أداة debounce مشتركة ────────────────────────────────────
-  function _debounce(fn, ms){
-    var t;
-    return function(){
-      var ctx=this, args=arguments;
-      clearTimeout(t);
-      t=setTimeout(function(){ fn.apply(ctx,args); }, ms);
-    };
-  }
-
-  // ─── 1. suggestPatients: debounce على البحث في IDB ───────────
-  // المشكلة: كل حرف يطلق query إلى IDB (async) — يُبطئ الكتابة
-  // الحل: debounce 150ms على استدعاء الجزء الـ IDB فقط
-  if(typeof window.suggestPatients === 'function'){
-    var _origSuggest = window.suggestPatients;
-    var _idbSuggestDebounced = _debounce(function(v){
-      // هذا الجزء يعيد استدعاء الدالة الأصلية — IDB سيعمل بعد 150ms من توقف الكتابة
-      _origSuggest(v);
-    }, 150);
-
-    window.suggestPatients = function(v){
-      var box = document.getElementById('pt-suggest-box');
-      if(!v || v.length < 1){ if(box) box.style.display='none'; return; }
-      // عرض نتائج الذاكرة (patients[]) فوراً بدون تأخير
-      var q = v.toLowerCase();
-      var lsMatches = (typeof patients !== 'undefined' ? patients : []).filter(function(p){
-        return p.name.toLowerCase().includes(q) || ((p.phone||'').includes(q));
-      });
-      if(lsMatches.length && box){
-        box.innerHTML = lsMatches.slice(0,8).map(function(p){
-          return '<div class="pt-suggest-item" onclick="selectExistingPatient(\''+p.id+'\')">'
-            +'<div class="pt-suggest-name">'+p.name+'</div>'
-            +'<div class="pt-suggest-sub">📞 '+(p.phone||'-')+' | '+(p.ageDisplay||calcAgeFromInput(p.dob,p.age)+' سنة')+' | '+p.id+'</div>'
-            +'</div>';
-        }).join('');
-        box.style.display='block';
-      } else if(box) {
-        box.style.display='none';
-      }
-      // البحث في IDB يتم فقط بعد 150ms من توقف الكتابة
-      _idbSuggestDebounced(v);
-    };
-  }
-
-  // ─── 2. filterWizTests: debounce على البحث النصي السريع ──────
-  // المشكلة: oninput يستدعي renderWizTestList فوراً لكل حرف
-  // الحل: debounce 120ms على renderWizTestList داخل filterWizTests
-  if(typeof window.filterWizTests === 'function'){
-    var _origFilterWiz = window.filterWizTests;
-    var _renderWizDebounced = _debounce(function(cat){
-      _origFilterWiz(cat);
-      // scroll reset
-      var list = document.getElementById('wiz-test-list');
-      if(list) list.scrollTop = 0;
-    }, 120);
-
-    window.filterWizTests = function(cat){
-      // إذا كان التغيير بسبب ضغطة فئة (cat مُعطى) — اعمل فوراً
-      if(cat && cat !== (typeof currentTestCat !== 'undefined' ? currentTestCat : '')){
-        _origFilterWiz(cat);
-        var list = document.getElementById('wiz-test-list');
-        if(list) list.scrollTop = 0;
-        return;
-      }
-      // إذا كان التغيير بسبب البحث النصي — debounce
-      _renderWizDebounced(cat);
-    };
-  }
-
-  // ─── 3. filterPrintSearch: debounce على بحث الطباعة ─────────
-  // المشكلة: يعيد بناء DOM كامل مع كل حرف
-  if(typeof window.filterPrintSearch === 'function'){
-    var _origPrintSearch = window.filterPrintSearch;
-    window.filterPrintSearch = _debounce(function(v){
-      _origPrintSearch(v);
-    }, 150);
-  }
-
-  // ─── 4. searchReq: فوري بدون أي تأخير ────────────────────────
-  if(typeof window.searchReq === 'function'){
-    window.searchReq = function(v){
-      if(window._srTimer) clearTimeout(window._srTimer);
-      var activeTab = document.querySelector('#sec-requests .req-pill[data-filter].active');
-      var filter = (activeTab && activeTab.getAttribute('data-filter')) || 'today';
-      if(typeof renderRequestsFiltered === 'function') renderRequestsFiltered(filter, v);
-    };
-  }
-
-  // ─── 5. _autoSaveResults: رفع delay لتقليل حفظ أثناء الكتابة ─
-  // المشكلة: 500ms كان جيداً لكن updateDashboard+updateBadges يُثقّلان
-  // الحل: تأجيل updateDashboard/updateBadges لما بعد توقف الكتابة
-  if(typeof window._autoSaveResults === 'function'){
-    window._autoSaveResults = function(){
-      if(window._autoSaveTimer) clearTimeout(window._autoSaveTimer);
-      window._autoSaveTimer = setTimeout(function(){
-        var id = document.getElementById('res-req-sel') && document.getElementById('res-req-sel').value;
-        if(!id) return;
-        var req = (typeof requests !== 'undefined') ? requests.find(function(r){return r.id===id;}) : null;
-        if(!req) return;
-        var reqTests = req.tests.map(function(tid){return (typeof tests!=='undefined'?tests:[]).find(function(t){return t.id===tid;});}).filter(Boolean);
-        if(!req.resultNotesPer) req.resultNotesPer={};
-        reqTests.forEach(function(t){
-          if(t.isSpecialExam) return;
-          var sel=document.getElementById('rv-'+t.id);
-          if(!sel) return;
-          var v=sel.value;
-          if(v==='__manual__'){var m=document.getElementById('rv-manual-'+t.id);v=m?m.value:'';}
-          if(v!==undefined&&v!=='') req.results[t.id]=v;
-          var noteEl=document.getElementById('rnote-'+t.id);
-          if(noteEl&&noteEl.value) req.resultNotesPer[t.id]=noteEl.value;
-        });
-        var tech=document.getElementById('res-tech');
-        if(tech) req.tech=tech.value;
-        var rd=document.getElementById('res-date');
-        if(rd) req.resultDate=rd.value;
-        // تحديث الحالة
-        var regularTests=reqTests.filter(function(t){return !t.isSpecialExam;});
-        var allFilled=regularTests.length>0 && regularTests.every(function(t){
-          var v=req.results[t.id];
-          return v!==undefined && v!==null && String(v).trim()!=='';
-        });
-        if(allFilled) req.status='done';
-        else if(req.status!=='done') req.status='inprogress';
-        if(typeof save==='function') save('requests',requests);
-        // تحديث الـ badges فقط بتأخير إضافي لتجنب إعاقة الكتابة
-        setTimeout(function(){
-          if(typeof updateDashboard==='function') updateDashboard();
-          if(typeof updateBadges==='function') updateBadges();
-        }, 300);
-      }, 600);
-    };
-  }
-
-  // ─── 6. _sendReportAsImage: تخزين html2canvas مؤقتاً ────────
-  // المشكلة: كل إرسال يحمّل html2canvas من CDN من جديد (تأخير شبكة)
-  // الحل: تحميله مرة واحدة وتخزين الوعد
-  if(typeof window._sendReportAsImage === 'function'){
-    var _origSendReport = window._sendReportAsImage;
-    // preload html2canvas في الخلفية فوراً
-    var _h2cReady = null;
-    function _preloadH2C(){
-      if(window.html2canvas){ _h2cReady = Promise.resolve(window.html2canvas); return; }
-      if(_h2cReady) return; // جاري التحميل بالفعل
-      _h2cReady = new Promise(function(resolve, reject){
-        var s = document.createElement('script');
-        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-        s.onload = function(){ resolve(window.html2canvas); };
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-    // بدء preload فوراً بعد 2 ثانية من تحميل الصفحة
-    setTimeout(_preloadH2C, 2000);
-
-    window._sendReportAsImage = function(req){
-      if(typeof buildPrintHTML !== 'function'){ _origSendReport(req); return; }
-      showNotif('','⏳ جاري تحويل التقرير...','info');
-      var printHtml = buildPrintHTML(req);
-      var iframe = document.createElement('iframe');
-      iframe.style.cssText='position:fixed;left:-9999px;top:0;width:794px;height:1px;border:none;visibility:hidden;';
-      document.body.appendChild(iframe);
-      iframe.contentDocument.open();
-      iframe.contentDocument.write(printHtml);
-      iframe.contentDocument.close();
-
-      _preloadH2C(); // تأكد من التحميل
-      var loaded = false;
-      iframe.onload = function(){
-        if(loaded) return; loaded = true;
-        // استخدم html2canvas المُحمَّل مسبقاً بدون تأخير
-        setTimeout(function(){
-          (_h2cReady || Promise.resolve(window.html2canvas)).then(function(h2c){
-            if(!h2c){ document.body.removeChild(iframe); if(typeof chatSendResultAsText==='function') chatSendResultAsText(req,''); return; }
-            // حقن html2canvas في الـ iframe إذا لزم
-            if(!iframe.contentWindow.html2canvas){
-              iframe.contentWindow.html2canvas = h2c;
-            }
-            h2c(iframe.contentDocument.body,{
-              scale:1.8, useCORS:true, backgroundColor:'#ffffff',
-              width:794, windowWidth:794
-            }).then(function(canvas){
-              if(typeof push==='function') push({t:'img', d:canvas.toDataURL('image/jpeg',0.85)});
-              document.body.removeChild(iframe);
-              showNotif('تم','تم إرسال التقرير كصورة 📄','success');
-            }).catch(function(){
-              document.body.removeChild(iframe);
-              if(typeof chatSendResultAsText==='function') chatSendResultAsText(req,'');
-            });
-          }).catch(function(){
-            document.body.removeChild(iframe);
-            if(typeof chatSendResultAsText==='function') chatSendResultAsText(req,'');
-          });
-        }, 300); // تخفيض من 600ms إلى 300ms
-      };
-      setTimeout(function(){
-        if(!loaded && iframe.contentDocument && iframe.contentDocument.body){
-          loaded = true;
-          iframe.onload && iframe.onload();
-        }
-      }, 800);
-    };
-  }
-
-  // ─── 7. wizFinish: انتقال مباشر أسرع لصفحة النتائج ──────────
-  // المشكلة: setTimeout 50ms بعد nav يسبب وميضاً
-  // تحسين: ربط currentReqId قبل nav ليُحمَّل مباشرةً
-  if(typeof window.wizFinish === 'function'){
-    var _origWizFinish = window.wizFinish;
-    window.wizFinish = function(){
-      // استدعاء الدالة الأصلية — ستضع currentReqId وتستدعي nav
-      _origWizFinish.apply(this, arguments);
-      // بعد nav، إذا لم يُحمَّل loadResultEntry تلقائياً عبر _goToResultCalled → نُشغّله
-      setTimeout(function(){
-        if(typeof loadResultEntry === 'function' && typeof currentReqId !== 'undefined' && currentReqId){
-          var sel = document.getElementById('res-req-sel');
-          if(sel && sel.value !== currentReqId){
-            sel.value = currentReqId;
-            loadResultEntry();
-          }
-        }
-      }, 80);
-    };
-  }
-
-
-})(); // END applyPerfPatches
-
-/* ══════════════════════════════════════════════════════════════
-   ⚡ Speed Boost v3.0 — تسريع شامل كتطبيق موبايل
-══════════════════════════════════════════════════════════════ */
-(function speedBoost(){
-
-  /* ─── 1. CSS: تقليل التحريكات وتسريع كل شيء ─────────────── */
-  var st = document.createElement('style');
-  st.textContent = [
-    /* أزرار: استجابة فورية للمس بدون delay */
-    '.btn,.hbtn,.ni,.tab,.cat-btn,.mclose,.tog,.extend-btn,.chpw-btn,',
-    '.session-kick-btn,.wiz-card,.wiz-conn-card,.st-card-hdr,button,[onclick]{',
-    '  touch-action:manipulation;',
-    '  -webkit-tap-highlight-color:transparent;',
-    '  transition-duration:0.06s !important;',
-    '}',
-
-    /* استثناء الزر العائم — يحتاج touch-action:none للسحب */
-    '#req-float-btn { touch-action:none !important; cursor:grab !important; }',
-
-    /* بدون animation عند تبديل الأقسام */
-    '.sec.active { animation:none !important; }',
-
-    /* مودالات: بدون blur مكلف */
-    '.moverlay { backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }',
-    '.moverlay.open { animation:none !important; }',
-    '.modal { animation:su 0.1s ease !important; }',
-
-    /* القوائم المنسدلة: ظهور فوري */
-    '.pt-suggest,#notif-panel,#cal-panel {',
-    '  animation:none !important; transition:none !important;',
-    '}',
-
-    /* GPU للعناصر الرئيسية */
-    '.main-content,.sec,.sidebar,.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
-
-    /* إخفاء الأقسام غير النشطة من render tree */
-    '.sec:not(.active) { content-visibility:hidden; }',
-
-    /* تسريع الـ scroll على موبايل */
-    '.main-content,.sidebar,.modal,tbody { -webkit-overflow-scrolling:touch; scroll-behavior:auto !important; }',
-
-    /* منع reflow عند hover */
-    '.ni:hover,.btn:hover,.hbtn:hover { transform:translateZ(0); }',
-
-    /* badges و notifications بدون animation */
-    '.ni-badge,.ndot { animation:none !important; transition:none !important; }',
-    '.notif { animation-duration:0.1s !important; }',
-
-    /* إزالة click delay 300ms على موبايل */
-    'html { touch-action:manipulation; }'
-  ].join('');
-  document.head.appendChild(st);
-
-  /* ─── 2. DOM cache للعناصر الثابتة ──────────────────────── */
-  var _cache = {};
-  var _static = ['ptitle','pbc','sidebar','sidebar-overlay',                 'notif-panel','notif-dot'];
-  var _origGBI = document.getElementById.bind(document);
-  document.getElementById = function(id){
-    if(_static.indexOf(id) !== -1){
-      if(!_cache[id] || !_cache[id].isConnected) _cache[id] = _origGBI(id);
-      return _cache[id];
-    }
-    return _origGBI(id);
-  };
-
-  /* ─── 3. passive listeners للـ scroll و touch ────────────── */
-  try {
-    var _addEvt = EventTarget.prototype.addEventListener;
-    EventTarget.prototype.addEventListener = function(type, fn, opts){
-      var passiveTypes = {scroll:1, touchstart:1, touchmove:1, wheel:1, mousewheel:1};
-      if(passiveTypes[type]){
-        if(typeof opts !== 'object' || opts === null) opts = {passive:true, capture:!!opts};
-        else if(opts.passive === undefined) opts = Object.assign({}, opts, {passive:true});
-      }
-      return _addEvt.call(this, type, fn, opts);
-    };
-  } catch(e){}
-
-  /* ─── 4. debounce على دوال الرسم الثقيلة ───────────────── */
-  function _deb(fn, ms){
-    var t;
-    return function(){ var a=arguments,c=this; clearTimeout(t); t=setTimeout(function(){fn.apply(c,a);},ms); };
-  }
-
-  /* updateDashboard */
-  if(typeof window.updateDashboard === 'function'){
-    var _od = window.updateDashboard;
-    window.updateDashboard = _deb(function(){ requestAnimationFrame(_od); }, 60);
-  }
-
-  /* updateBadges */
-  if(typeof window.updateBadges === 'function'){
-    var _ob = window.updateBadges;
-    window.updateBadges = _deb(_ob, 120);
-  }
-
-  /* ─── 5. تسريع nav: تنظيف فوري قبل الانتقال ─────────────── */
-  if(typeof window.nav === 'function'){
-    var _on = window.nav;
-    window.nav = function(p){ _on(p); };
-  }
-
-  /* ─── 6. preconnect للموارد الخارجية ─────────────────────── */
-  [
-    {rel:'preconnect', href:'https://fonts.googleapis.com'},
-    {rel:'preconnect', href:'https://fonts.gstatic.com', co:'anonymous'},
-    {rel:'dns-prefetch', href:'https://cdnjs.cloudflare.com'}
-  ].forEach(function(l){
-    if(!document.querySelector('link[href="'+l.href+'"]')){
-      var lk=document.createElement('link');
-      lk.rel=l.rel; lk.href=l.href;
-      if(l.co) lk.crossOrigin=l.co;
-      document.head.appendChild(lk);
-    }
-  });
-
-
-})(); // END speedBoost
-
-
-/* ══════════════════════════════════════════════════════════════
-   🔍 زر البحث العائم — قسم الطلبات  v2
-══════════════════════════════════════════════════════════════ */
-(function initReqFloatBtn() {
-  var STORE_KEY = 'medlab_float_btn_pos';
-  var BTN_SIZE  = 56;
-  var btn, box;
-  var posX = -1, posY = -1;
-  var dragStartX, dragStartY, dragOrigX, dragOrigY;
-  var dragging = false, moved = false;
-
-  /* ── حفظ واسترجاع الموضع ── */
-  function savePos() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({x:posX,y:posY})); } catch(e){}
-  }
-  function loadPos() {
-    try {
-      var s = localStorage.getItem(STORE_KEY);
-      if (s) { var p = JSON.parse(s); posX = p.x; posY = p.y; }
-    } catch(e){}
-  }
-
-  /* ── حدود الشاشة ── */
-  function clamp() {
-    var maxX = window.innerWidth  - BTN_SIZE - 8;
-    var maxY = window.innerHeight - BTN_SIZE - 8;
-    posX = Math.max(8,  Math.min(posX, maxX));
-    posY = Math.max(80, Math.min(posY, maxY));
-  }
-
-  function applyPos() {
-    clamp();
-    btn.style.left = posX + 'px';
-    btn.style.top  = posY + 'px';
-  }
-
-  function defaultPos() {
-    posX = window.innerWidth  - BTN_SIZE - 22;
-    posY = window.innerHeight - BTN_SIZE - 90;
-  }
-
-  /* ── صندوق البحث ── */
-  function positionBox() {
-    var bw = Math.min(290, window.innerWidth - 16);
-    var bx = posX + BTN_SIZE - bw;
-    var by = posY - 120;
-    if (by < 80) by = posY + BTN_SIZE + 10;
-    if (bx < 8)  bx = 8;
-    box.style.left  = bx + 'px';
-    box.style.top   = by + 'px';
-    box.style.width = bw + 'px';
-  }
-
-  window.closeReqFloatSearch = function() {
-    if (!box) return;
-    box.style.display = 'none';
-  };
-
-  window.syncReqSearch = function(v) {
-    var m = document.getElementById('req-srch-inp');
-    if (m) m.value = v;
-  };
-
-  function openBox() {
-    box.style.display = 'flex';
-    positionBox();
-    setTimeout(function() {
-      var inp = document.getElementById('req-float-srch-inp');
-      if (inp) { inp.focus(); inp.select(); }
-    }, 30);
-  }
-
-  function toggleBox() {
-    if (box.style.display === 'flex') closeReqFloatSearch();
-    else openBox();
-  }
-
-  /* ══ Pointer Events للسحب — يعمل على موبايل وديسكتوب ══ */
-  function onPD(e) {        // pointerdown
-    /* تجاهل نقرات على العناصر الداخلية */
-    if (e.target !== btn) return;
-    dragging  = true;
-    moved     = false;
-    dragStartX = e.clientX;
-    dragStartY = e.clientY;
-    dragOrigX  = posX;
-    dragOrigY  = posY;
-    btn.setPointerCapture(e.pointerId);   // ← يضمن استمرار الأحداث
-    btn.classList.add('dragging');
-    e.preventDefault();
-    e.stopPropagation();
-  }
-
-  function onPM(e) {        // pointermove
-    if (!dragging) return;
-    var dx = e.clientX - dragStartX;
-    var dy = e.clientY - dragStartY;
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-    posX = dragOrigX + dx;
-    posY = dragOrigY + dy;
-    applyPos();
-    if (box.style.display === 'flex') positionBox();
-    e.preventDefault();
-  }
-
-  function onPU(e) {        // pointerup / pointercancel
-    if (!dragging) return;
-    dragging = false;
-    btn.classList.remove('dragging');
-    if (moved) {
-      savePos();            // احفظ الموضع الجديد
-    } else {
-      toggleBox();          // نقرة بدون سحب = فتح/إغلاق
-    }
-  }
-
-  /* ── إظهار / إخفاء الزر ── */
-  function showBtn() {
-    if (!btn) return;
-    btn.style.display = 'flex';
-  }
-  function hideBtn() {
-    if (!btn) return;
-    btn.style.display = 'none';
-    closeReqFloatSearch();
-  }
-
-  /* ── ربط nav ── */
-  function hookNav() {
-    var _nav = window.nav;
-    if (typeof _nav !== 'function') return;
-    window.nav = function(page) {
-      _nav(page);
-      setTimeout(function() {
-        if (page === 'requests') showBtn();
-        else hideBtn();
-      }, 50);
-    };
-  }
-
-  /* ── تهيئة بعد تحميل DOM ── */
-  function init() {
-    btn = document.getElementById('req-float-btn');
-    box = document.getElementById('req-float-search-box');
-    if (!btn || !box) return;
-
-    /* موضع محفوظ أو افتراضي */
-    loadPos();
-    if (posX < 0) defaultPos();
-    applyPos();
-
-    /* ربط أحداث الـ Pointer (يشمل اللمس والماوس) */
-    btn.addEventListener('pointerdown',   onPD, {capture:true});
-    btn.addEventListener('pointermove',   onPM, {capture:true});
-    btn.addEventListener('pointerup',     onPU, {capture:true});
-    btn.addEventListener('pointercancel', onPU, {capture:true});
-
-    /* إغلاق الصندوق بالنقر خارجه */
-    document.addEventListener('pointerdown', function(e) {
-      if (box.style.display === 'flex' &&
-          !box.contains(e.target) &&
-          e.target !== btn) {
-        closeReqFloatSearch();
-      }
-    }, true);
-
-    /* مزامنة حقل البحث الرئيسي مع العائم */
-    var mainInp = document.getElementById('req-srch-inp');
-    if (mainInp) {
-      mainInp.addEventListener('input', function() {
-        var fi = document.getElementById('req-float-srch-inp');
-        if (fi) fi.value = this.value;
-      });
-    }
-
-    hookNav();
-
-    /* إظهار الزر إن كان القسم نشطاً الآن */
-    setTimeout(function() {
-      var sec = document.getElementById('sec-requests');
-      if (sec && sec.classList.contains('active')) showBtn();
-    }, 400);
-  }
-
-  /* resize: إعادة التقييد فقط بدون تغيير الموضع المحفوظ */
-  window.addEventListener('resize', function() {
-    if (btn && btn.style.display !== 'none') applyPos();
-    if (box && box.style.display === 'flex') positionBox();
-  });
-
-  if (document.readyState === 'loading')
-    document.addEventListener('DOMContentLoaded', init);
-  else
-    init();
-
-})();
-
-
-
-
-
-
-
-
-/* ════════════════════════════════════════════════════════
-   💡 هل تعلم؟ — نافذة معلومات تحليلية تظهر عند الخمول
-════════════════════════════════════════════════════════ */
-(function() {
-
-  var facts = [
-    { icon:'🩸', test:'تحليل السكر الصائم (FBS)', fact:'يُجرى بعد 8 ساعات من الامتناع عن الأكل. النتيجة الطبيعية أقل من 100 ملغ/ديسيلتر. إذا كانت بين 100–125 فهذا يعني مقدمات السكري، وفوق 126 بقراءتين يستدعي مراجعة الطبيب.' },
-    { icon:'❤️', test:'الكوليسترول الكلي', fact:'أفضل نتيجة هي أقل من 200 ملغ/ديسيلتر. ارتفاعه لا يسبب أعراضاً واضحة لذلك يُسمّى "القاتل الصامت". الإكثار من الدهون المشبعة والتدخين من أبرز أسباب ارتفاعه.' },
-    { icon:'🫀', test:'الهيموغلوبين (Hgb)', fact:'يقيس كمية الهيموغلوبين الحامل للأكسجين. الطبيعي للرجال 13.5–17.5 وللنساء 12–15.5 غ/ديسيلتر. انخفاضه يعني فقر الدم، وارتفاعه قد يدل على الجفاف.' },
-    { icon:'🔬', test:'هرمون الغدة الدرقية (TSH)', fact:'يُعدّ TSH "قائد الأوركسترا" لأنه يتحكم في نشاط الغدة الدرقية. القيمة الطبيعية 0.4–4.0 mIU/L. ارتفاعه يعني خمول الغدة، وانخفاضه يعني فرط نشاطها.' },
-    { icon:'💛', test:'البيليروبين', fact:'ينتج من تكسّر خلايا الدم الحمراء. ارتفاعه يسبب اصفرار الجلد والعيون (اليرقان). القيمة الطبيعية الكلية أقل من 1.2 ملغ/ديسيلتر وهو مؤشر مهم لصحة الكبد.' },
-    { icon:'🧪', test:'الكرياتينين', fact:'يعكس كفاءة الكلى في تنقية الدم. الطبيعي للرجال 0.7–1.3 وللنساء 0.6–1.1 ملغ/ديسيلتر. ارتفاعه المستمر قد يشير إلى قصور كلوي يستوجب المتابعة.' },
-    { icon:'⚪', test:'خلايا الدم البيضاء (WBC)', fact:'جيش الجسم الدفاعي! النطاق الطبيعي 4,500–11,000 خلية/ميكرولتر. ارتفاعها يدل على التهاب أو عدوى، وانخفاضها قد يضعف المناعة.' },
-    { icon:'🩺', test:'سكر التراكمي (HbA1c)', fact:'يكشف متوسط مستوى السكر خلال 3 أشهر كاملة ولا يتأثر بوجبة أمس. هدف المريض السكري أقل من 7%. أدق من قياس السكر اليومي لتقييم التحكم بالمرض.' },
-    { icon:'🦴', test:'فيتامين D', fact:'يُسمّى "فيتامين الشمس" لأن الجلد ينتجه بالتعرض للشمس. القيمة الطبيعية 30–100 نانوغرام/مل. نقصه شائع جداً ويؤثر على العظام والمناعة والمزاج.' },
-    { icon:'⚡', test:'البوتاسيوم (K)', fact:'يجب أن يبقى بين 3.5–5.0 mEq/L بدقة. انحرافه قليلاً يؤثر على ضربات القلب! الموز والأفوكادو مصادر ممتازة له في الغذاء.' },
-    { icon:'🔴', test:'الحديد (Serum Iron)', fact:'ضروري لصنع هيموغلوبين الدم. النطاق الطبيعي 60–170 ميكروغرام/ديسيلتر. نقصه أكثر شيوعاً عند النساء. الشاي والقهوة يقللان امتصاصه إذا أُخذا مع الوجبة.' },
-    { icon:'🧬', test:'بروتين CRP الالتهابي', fact:'يرتفع خلال ساعات من بدء أي التهاب في الجسم. القيمة الطبيعية أقل من 10 ملغ/لتر. يُستخدم لمتابعة فعالية العلاج، كلما انخفض كلما تحسنت الاستجابة.' },
-    { icon:'💜', test:'حمض اليوريك', fact:'ارتفاعه قد يسبب النقرس — ألم مفاجئ شديد في المفاصل. الطبيعي للرجال 3.4–7.0 وللنساء 2.4–6.0 ملغ/ديسيلتر. اللحوم والمأكولات البحرية ترفعه.' },
-    { icon:'🟠', test:'إنزيم الكبد ALT', fact:'موجود داخل خلايا الكبد. ارتفاعه في الدم يعني أن خلايا الكبد تتضرر. القيمة الطبيعية أقل من 56 وحدة/لتر. الإفراط في الدهون أو بعض الأدوية قد يرفعه.' },
-    { icon:'🩵', test:'الصوديوم (Na)', fact:'يتحكم في توازن السوائل وضغط الدم. القيمة الطبيعية 136–145 mEq/L. انخفاضه يسبب الصداع والتعب، وارتفاعه يدل عادةً على الجفاف.' },
-
-    /* ── حقائق إضافية ── */
-    { icon:'🧫', test:'صورة الدم الكاملة (CBC)', fact:'تحليل واحد يقيس أكثر من 20 مؤشراً دموياً دفعة واحدة! يشمل خلايا الدم الحمراء والبيضاء والصفائح الدموية. يعتبر من أكثر التحاليل طلباً في العالم لاكتشاف فقر الدم والتهابات الجسم المختلفة.' },
-    { icon:'🫁', test:'نسبة الأكسجين (SpO2)', fact:'الجسم الطبيعي يشبع بالأكسجين بنسبة 95–100٪. انخفاض النسبة تحت 90٪ يُعد حالة طوارئ تستوجب التدخل الفوري. يقاس بجهاز بسيط يُلصق على الإصبع يُسمى مقياس النبض.' },
-    { icon:'🫘', test:'الكالسيوم (Ca)', fact:'أكثر من 99٪ من الكالسيوم في الجسم محفوظ في العظام والأسنان. القيمة الطبيعية في الدم 8.5–10.5 ملغ/ديسيلتر. نقصه يسبب تشنجات العضلات، وارتفاعه قد يشير إلى فرط نشاط الغدة جارة الدرقية.' },
-    { icon:'🟣', test:'الفيريتين (Ferritin)', fact:'يمثل مخزون الحديد في الجسم لا الحديد الحر. يمكن أن يكون مستوى الحديد طبيعياً بينما الفيريتين منخفض، مما يعني نضوب المخزون قبل ظهور فقر الدم. الطبيعي للرجال 30–300 وللنساء 15–200 نانوغرام/مل.' },
-    { icon:'💉', test:'الأنسولين الصائم', fact:'يُقاس مع سكر الصائم لتقييم مقاومة الأنسولين. القيمة الطبيعية 3–25 mIU/L. ارتفاعه مع سكر طبيعي يُعدّ إنذاراً مبكراً لمقدمات السكري قبل سنوات من ظهوره.' },
-    { icon:'🧠', test:'هرمون كورتيزول', fact:'يُسمّى "هرمون التوتر" ويبلغ ذروته في الصباح الباكر بين 6–8 صباحاً. يؤثر على مناعتك وضغط دمك وحتى ذاكرتك. قياسه الصحيح يكون دائماً في الصباح الباكر صائماً.' },
-    { icon:'🫶', test:'الصفائح الدموية (Platelets)', fact:'تُوقف النزيف بالتجمع فوق الجرح وتكوين جلطة مؤقتة. الطبيعي 150,000–450,000/ميكرولتر. انخفاضها الشديد تحت 20,000 خطير جداً، وارتفاعها فوق المليون قد يزيد خطر الجلطات.' },
-    { icon:'🔵', test:'الدهون الثلاثية (Triglycerides)', fact:'ترتفع بعد الوجبات مباشرةً لذا يجب الصيام 12 ساعة قبل القياس. الطبيعي أقل من 150 ملغ/ديسيلتر. السكريات والكحول ترفعها أكثر من الدهون المباشرة! وارتفاعها يزيد خطر التهاب البنكرياس.' },
-    { icon:'🟡', test:'هرمون TSH الدرقي + T4 الحر', fact:'قياس TSH وحده يكفي للفحص الأولي لأنه أحساس المؤشرات. لكن عند اكتشاف خلل يضاف T4 الحر لتحديد نوع الاضطراب ودرجته بدقة أكبر. الغدة الدرقية تؤثر على كل خلية في الجسم.' },
-    { icon:'🩶', test:'بروتين الكلى (Albumin)', fact:'أكثر بروتينات الدم وفرةً ويصنعه الكبد. الطبيعي 3.5–5.0 غ/ديسيلتر. انخفاضه مؤشر خطير يدل على ضعف التغذية أو مرض كبدي متقدم. يتأخر انخفاضه عن المرض لأن نصف عمره 20 يوماً.' },
-    { icon:'🟢', test:'فيتامين B12', fact:'يُخزّن في الكبد لسنوات لذا تأخذ أعراض النقص وقتاً طويلاً للظهور. الطبيعي 200–900 بيكوغرام/مل. النباتيون معرضون لنقصه أكثر لأنه موجود في المنتجات الحيوانية فقط. نقصه يضر الأعصاب.' },
-    { icon:'🔶', test:'إنزيم GGT الكبدي', fact:'أكثر حساسية من ALT لأمراض الكبد المزمنة. يرتفع مع تناول الكحول والأدوية حتى دون ضرر خلوي. الطبيعي أقل من 60 وحدة/لتر. يُستخدم مع إنزيمات أخرى للحصول على صورة كاملة عن صحة الكبد.' },
-    { icon:'🌊', test:'اليوريا في الدم (BUN)', fact:'نفاية بروتينية تُنقّيها الكلى. ارتفاعها يحدث في الفشل الكلوي أو الجفاف أو الإفراط بالبروتين. النطاق الطبيعي 7–20 ملغ/ديسيلتر. نسبة BUN/Creatinine تُساعد في التمييز بين أسباب القصور الكلوي.' },
-    { icon:'⚗️', test:'نسبة ESR (ترسيب الدم)', fact:'تقيس مدى سرعة ترسّب خلايا الدم الحمراء. ارتفاعها يدل على وجود التهاب في مكان ما بالجسم لكنها لا تحدد مكانه. الطبيعي للرجال أقل من 15 وللنساء أقل من 20 مم/ساعة. ترتفع في كثير من الأمراض.' },
-    { icon:'🌡️', test:'بروكالسيتونين (PCT)', fact:'مؤشر ممتاز للتمييز بين العدوى البكتيرية والفيروسية. يرتفع بشكل كبير جداً في البكتيريا الشديدة مثل الإنتان. يُستخدم لتوجيه قرار استخدام المضادات الحيوية وتجنب إعطائها بلا داعٍ.' },
-    { icon:'🧲', test:'المغنيسيوم (Mg)', fact:'يشارك في أكثر من 300 تفاعل إنزيمي في الجسم! الطبيعي 1.7–2.4 ملغ/ديسيلتر. نقصه شائع ويسبب تشنجات عضلية وأرق وصداع نصفي. الشوكولاتة الداكرة والمكسرات مصادر غنية به.' },
-    { icon:'💊', test:'اختبار وظائف البنكرياس (Amylase/Lipase)', fact:'الليباز أكثر تخصصاً من الأميلاز للبنكرياس. ارتفاع الليباز 3 أضعاف يكاد يؤكد التهاب البنكرياس. الأميلاز يرتفع أيضاً في أمراض الغدة النكفية. الطبيعي للأميلاز 23–85 وللليباز 0–160 وحدة/لتر.' },
-    { icon:'🫠', test:'تحليل البول الكامل (Urinalysis)', fact:'عشرون معلومة من عينة واحدة! يكشف السكري والتهابات المسالك والحصوات والأمراض الكلوية. وجود بروتين في البول يعني احتمال مشكلة كلوية. أول عينة بول صباحية هي الأكثر دقةً للتحليل.' },
-    { icon:'🦠', test:'مزرعة البكتيريا وحساسية (C&S)', fact:'التحليل الوحيد الذي يحدد المضاد الحيوي الأنسب! يحتاج 24–72 ساعة لنمو البكتيريا. أخذها قبل بدء المضاد الحيوي ضروري جداً وإلا قد تظهر سلبية رغم وجود عدوى حقيقية.' },
-    { icon:'⚖️', test:'نسبة HDL / LDL الكوليسترول', fact:'HDL هو الكوليسترول "الجيد" الذي يُرجع الدهون للكبد، وLDL هو "السيئ" الذي يتراكم في الشرايين. الهدف: HDL فوق 60 وLDL تحت 100 ملغ/ديسيلتر. التمارين ترفع HDL والتوقف عن التدخين يحسن النسبتين معاً.' }
-  ];
-
-  var IDLE_MS = 2 * 60 * 1000;
-  var idleTimer = null;
-  var lastIdx = -1;
-  var isShowing = false;
-
-  function pickFact() {
-    var idx;
-    do { idx = Math.floor(Math.random() * facts.length); }
-    while (idx === lastIdx && facts.length > 1);
-    lastIdx = idx;
-    return facts[idx];
-  }
-
-  function showPopup() {
-    if (isShowing) return;
-    isShowing = true;
-    var f = pickFact();
-    var isLight = document.body.classList.contains('light-mode');
-
-    var boxBg     = isLight ? 'linear-gradient(145deg,#ffffff,#eef4fb)' : 'linear-gradient(145deg,#060c1a,#0c1628)';
-    var accentCol = isLight ? '#0077b6' : '#00d4ff';
-    var headerBg  = isLight ? 'linear-gradient(135deg,#0077b6,#0096c7)' : 'linear-gradient(135deg,#00b4d8,#0077b6)';
-    var boxShadow = isLight ? '0 0 50px rgba(0,119,182,0.2),0 24px 60px rgba(0,0,0,0.15)' : '0 0 70px rgba(0,212,255,0.22),0 28px 70px rgba(0,0,0,0.85)';
-    var textCol   = isLight ? '#0d1a2e' : '#e8f4fd';
-    var text2Col  = isLight ? '#5a7a94' : 'rgba(255,255,255,0.5)';
-    var divCol    = isLight ? 'rgba(0,119,182,0.13)' : 'rgba(0,212,255,0.13)';
-    var btnShadow = isLight ? '0 4px 18px rgba(0,119,182,0.35)' : '0 4px 18px rgba(0,180,255,0.35)';
-
-    var overlay = document.createElement('div');
-    overlay.id = 'dyk-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;direction:rtl;animation:fadeInBg 0.3s ease;';
-
-    overlay.innerHTML =
-      '<div id="dyk-box" style="background:'+boxBg+';border:2px solid '+accentCol+';border-radius:22px;max-width:450px;width:100%;box-shadow:'+boxShadow+';overflow:hidden;animation:dykPopIn 0.18s ease;font-family:\'Cairo\',\'Inter\',sans-serif;">' +
-
-        '<div style="background:'+headerBg+';padding:18px 22px 15px;display:flex;align-items:center;gap:13px;">' +
-          '<span style="font-size:34px;line-height:1;flex-shrink:0;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.3))">'+f.icon+'</span>' +
-          '<div>' +
-            '<div style="font-size:9.5px;font-weight:800;letter-spacing:2.5px;color:rgba(255,255,255,0.78);text-transform:uppercase;margin-bottom:4px;">💡 هل تعلم؟</div>' +
-            '<div style="font-size:15px;font-weight:800;color:#fff;line-height:1.35;">'+f.test+'</div>' +
-          '</div>' +
-        '</div>' +
-
-        '<div style="padding:22px 24px 16px;">' +
-          '<p style="margin:0;font-size:13.5px;line-height:2.1;color:'+textCol+';border-right:3px solid '+accentCol+';padding-right:14px;">'+f.fact+'</p>' +
-        '</div>' +
-
-        '<div style="padding:12px 22px 20px;border-top:1px solid '+divCol+';display:flex;align-items:center;justify-content:space-between;">' +
-          '<span style="font-size:10.5px;color:'+text2Col+';">تظهر تلقائياً بعد دقيقتين خمول ✨</span>' +
-          '<button id="dyk-ok-btn" style="background:'+headerBg+';color:#fff;border:none;border-radius:12px;padding:10px 28px;font-size:13px;font-weight:800;font-family:\'Cairo\',\'Inter\',sans-serif;cursor:pointer;box-shadow:'+btnShadow+';transition:transform 0.15s,box-shadow 0.15s;letter-spacing:0.3px;"' +
-            ' onmouseover="this.style.transform=\'translateY(-2px)\';this.style.opacity=\'0.92\'"' +
-            ' onmouseout="this.style.transform=\'\';this.style.opacity=\'1\'">' +
-            '👍&nbsp; فهمت!' +
-          '</button>' +
-        '</div>' +
-
-      '</div>';
-
-    document.body.appendChild(overlay);
-
-    function close() {
-      overlay.style.animation = 'dykFadeOut 0.28s ease forwards';
-      setTimeout(function() {
-        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
-        isShowing = false;
-        resetTimer();
-      }, 260);
-    }
-
-    document.getElementById('dyk-ok-btn').addEventListener('click', close);
-    overlay.addEventListener('click', function(e) { if (e.target === overlay) close(); });
-  }
-
-  function resetTimer() {
-    clearTimeout(idleTimer);
-    idleTimer = setTimeout(showPopup, IDLE_MS);
-  }
-
-  ['mousemove','mousedown','keydown','touchstart','scroll','click','pointermove'].forEach(function(ev) {
-    document.addEventListener(ev, resetTimer, {passive:true});
-  });
-
-  var s = document.createElement('style');
-  s.textContent = '@keyframes dykPopIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}@keyframes dykFadeOut{from{opacity:1}to{opacity:0}}';
-  document.head.appendChild(s);
-
-  resetTimer();
-
-})();
-
-</script>
-
+<!-- ══ MedLab Smart AI Assistant ══ -->
 <script>
+
 // ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║        MedLab Pro — Firebase IDB SyncManager v1.0                          ║
-// ║  نظام المزامنة عبر Firebase كوسيط مؤقت + IDB كقاعدة بيانات محلية دائمة   ║
+// ║          MedLab Pro — المساعد الذكي الصوتي  v2.0                           ║
+// ║          بدون API مدفوع · Web Speech API · Pattern Matching متطور          ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
-(function(global) {
+
+(function () {
   'use strict';
 
-  const SM_VERSION         = '1.0.0';
-  const SM_IDB_NAME        = 'medlab_syncmgr';
-  const SM_IDB_VER         = 1;
-  const SM_STORE_PENDING   = 'pending_events';
-  const SM_STORE_SEEN      = 'seen_events';
-  const SM_STORE_DEVICES   = 'known_devices';
-
-  const SM_SYNC_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  const FB_PATH_EVENTS  = (u) => 'sync_events/'  + u;
-  const FB_PATH_DEVICES = (u) => 'sync_devices/' + u;
-
-  // ── State ────────────────────────────────────────────
-  let _smDb       = null;
-  let _fbDb       = null;
-  let _username   = '';
-  let _deviceId   = '';
-  let _enabled    = false;
-  let _online     = navigator.onLine;
-  let _listening  = false;
-  let _evtRef     = null;
-  let _evtCb      = null;
-  let _heartTimer = null;
-
-  // ── UUID ─────────────────────────────────────────────
-  function _uuid() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
-    });
-  }
-
-  function _log()  { console.log('[SyncMgr]',  ...arguments); }
-  function _warn() { console.warn('[SyncMgr]', ...arguments); }
-
-  // شاشة تشخيص مرئية — تفوّض لـ _smDebugToBox الخارجية
-  function _smDebugLog(msg) {
-    if (typeof _smDebugToBox === 'function') { _smDebugToBox(msg); return; }
-    var box = document.getElementById('_sm_debug_box');
-    if (!box) return;
-    var t = new Date().toLocaleTimeString('ar');
-    var line = document.createElement('div');
-    line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.08);color:#0f0';
-    line.textContent = t + ' — ' + msg;
-    box.insertBefore(line, box.firstChild);
-    while (box.children.length > 40) box.removeChild(box.lastChild);
-  }
-
-  // ── SyncManager IDB ──────────────────────────────────
-  function _openSMDB() {
-    if (_smDb) return Promise.resolve(_smDb);
-    return new Promise(function(res, rej) {
-      var req = indexedDB.open(SM_IDB_NAME, SM_IDB_VER);
-      req.onupgradeneeded = function(e) {
-        var db = e.target.result;
-        if (!db.objectStoreNames.contains(SM_STORE_PENDING)) {
-          var ps = db.createObjectStore(SM_STORE_PENDING, { keyPath: 'id' });
-          ps.createIndex('by_ts', 'ts');
-        }
-        if (!db.objectStoreNames.contains(SM_STORE_SEEN)) {
-          db.createObjectStore(SM_STORE_SEEN, { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains(SM_STORE_DEVICES)) {
-          db.createObjectStore(SM_STORE_DEVICES, { keyPath: 'id' });
-        }
-      };
-      req.onsuccess = function(e) { _smDb = e.target.result; res(_smDb); };
-      req.onerror   = function(e) { rej(e); };
-    });
-  }
-
-  function _getPending() {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_PENDING, 'readonly');
-        var req = tx.objectStore(SM_STORE_PENDING).index('by_ts').getAll();
-        req.onsuccess = function() { res(req.result || []); };
-        req.onerror   = function() { res([]); };
-      });
-    });
-  }
-
-  function _removePending(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).delete(id);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _addPending(evt) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).put(evt);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _hasSeen(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_SEEN, 'readonly');
-        var req = tx.objectStore(SM_STORE_SEEN).get(id);
-        req.onsuccess = function() { res(!!req.result); };
-        req.onerror   = function() { res(false); };
-      });
-    });
-  }
-
-  function _markSeen(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_SEEN, 'readwrite');
-        tx.objectStore(SM_STORE_SEEN).put({ id: id, ts: Date.now() });
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _cleanOldSeen() {
-    var cutoff = Date.now() - 48 * 3600 * 1000;
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx    = db.transaction(SM_STORE_SEEN, 'readwrite');
-        var store = tx.objectStore(SM_STORE_SEEN);
-        var req   = store.getAll();
-        req.onsuccess = function() {
-          (req.result || []).forEach(function(item) {
-            if (item.ts < cutoff) store.delete(item.id);
-          });
-          tx.oncomplete = res; tx.onerror = res;
-        };
-      });
-    });
-  }
-
-  // ── App IDB (medlab_idb) ─────────────────────────────
-  // يستخدم IDB.get/IDB.set مباشرة — تتعامل مع ضغط LZS تلقائياً
-  function _readAppIDB(key) {
-    // IDB هو الـ singleton المعرّف في التطبيق ويدعم LZS
-    if (typeof IDB !== 'undefined' && typeof IDB.get === 'function') {
-      return IDB.get(key).then(function(v) {
-        return v; // IDB.get يرجع القيمة مفكوكة الضغط مباشرة
-      }).catch(function() { return null; });
-    }
-    return Promise.resolve(null);
-  }
-
-  function _writeAppIDB(key, value) {
-    // IDB.set يحفظ مع ضغط LZS ويحدّث _MC cache تلقائياً
-    if (typeof IDB !== 'undefined' && typeof IDB.set === 'function') {
-      return IDB.set(key, value).then(function() {}).catch(function() {});
-    }
-    return Promise.resolve();
-  }
-
-  // ── Device ID ─────────────────────────────────────────
-  function _getDeviceId() {
-    if (_deviceId) return _deviceId;
-    var id = localStorage.getItem('_sm_device_id');
-    if (!id) {
-      id = 'dev_' + _uuid().slice(0,8) + '_' + Date.now().toString(36);
-      localStorage.setItem('_sm_device_id', id);
-    }
-    _deviceId = id;
-    return id;
-  }
-
-  function _registerDevice() {
-    if (!_fbDb || !_username) return;
-    var path = FB_PATH_DEVICES(_username) + '/' + _getDeviceId();
-    _fbDb.ref(path).set({ id: _getDeviceId(), ts: Date.now(), online: true })
-      .catch(function(){});
-    _fbDb.ref(path + '/online').onDisconnect().set(false);
-    clearInterval(_heartTimer);
-    _heartTimer = setInterval(function() {
-      if (_fbDb && _username && _enabled)
-        _fbDb.ref(path + '/ts').set(Date.now()).catch(function(){});
-    }, 60000);
-  }
-
-  function _getOtherDevices() {
-    if (!_fbDb || !_username) return Promise.resolve([]);
-    return _fbDb.ref(FB_PATH_DEVICES(_username)).once('value').then(function(snap) {
-      var val    = snap.val() || {};
-      var cutoff = Date.now() - 5 * 60 * 1000;
-      return Object.keys(val).filter(function(id) {
-        return id !== _getDeviceId() && val[id] && val[id].ts > cutoff;
-      });
-    }).catch(function() { return []; });
-  }
-
-  // ── Apply Event to local IDB ──────────────────────────
-
-  // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
-  var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },0); } },
-    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },0); } },
-    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
-    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
-    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
-    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} },0); } },
-    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} },0); } },
-    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} },0); } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } }
+  // ══════════════════════════════════════════════════════
+  //  1. خريطة التحاليل: عربي ← كود إنجليزي
+  // ══════════════════════════════════════════════════════
+  const TEST_MAP = {
+    // ── CBC ──────────────────────────────────────────
+    'cbc': 'CBC', 'سي بي سي': 'CBC', 'صورة دم': 'CBC', 'صورة دم كاملة': 'CBC',
+    'فحص دم كامل': 'CBC', 'تعداد دم': 'CBC', 'دموية كاملة': 'CBC',
+    'هيموغلوبين': 'HGB', 'hgb': 'HGB', 'hb': 'HGB', 'اتش بي': 'HGB', 'اتش جي بي': 'HGB',
+    'هيماتوكريت': 'HCT', 'hct': 'HCT', 'اتش سي تي': 'HCT',
+    'كريات حمراء': 'RBC', 'rbc': 'RBC', 'ار بي سي': 'RBC', 'خلايا حمراء': 'RBC',
+    'كريات بيضاء': 'WBC', 'wbc': 'WBC', 'دبليو بي سي': 'WBC', 'خلايا بيضاء': 'WBC',
+    'صفائح': 'PLT', 'plt': 'PLT', 'بي ال تي': 'PLT', 'platelets': 'PLT', 'صفائح دموية': 'PLT',
+    'mcv': 'MCV', 'ام سي في': 'MCV',
+    'mch': 'MCH', 'ام سي اتش': 'MCH',
+    'mchc': 'MCHC', 'ام سي اتش سي': 'MCHC',
+    'rdw': 'RDW', 'ار دي دبليو': 'RDW',
+    'esr': 'ESR', 'اي اس ار': 'ESR', 'ترسيب': 'ESR', 'سرعة الترسيب': 'ESR',
+    'pt': 'PT', 'بي تي': 'PT', 'بروثرومبين': 'PT', 'زمن البروثرومبين': 'PT',
+    'ptt': 'APTT', 'aptt': 'APTT', 'بي تي تي': 'APTT', 'ثرومبوبلاستين': 'APTT',
+    'inr': 'INR', 'اي ان ار': 'INR',
+    'فيريتين': 'FERR', 'ferritin': 'FERR', 'فيريتن': 'FERR',
+    'حديد': 'SERUM-FE', 'حديد دم': 'SERUM-FE', 'serum iron': 'SERUM-FE',
+    'tibc': 'TIBC', 'تي اي بي سي': 'TIBC',
+    'فيتامين ب12': 'VIT-B12', 'b12': 'VIT-B12', 'بي 12': 'VIT-B12', 'بي اثنا عشر': 'VIT-B12',
+    'فيتامين د': 'VIT-D', 'vit d': 'VIT-D', 'في دي': 'VIT-D', 'فيتامين دي': 'VIT-D',
+    'فيتامين ب9': 'FOLATE', 'folic acid': 'FOLATE', 'فوليك': 'FOLATE', 'حمض فوليك': 'FOLATE',
+    'مجموعة دم': 'BLOOD-GRP', 'فصيلة دم': 'BLOOD-GRP', 'فصيلة الدم': 'BLOOD-GRP', 'زمرة دم': 'BLOOD-GRP',
+    'd dimer': 'DIMER', 'دي دايمر': 'DIMER', 'دي ديمر': 'DIMER',
+    'g6pd': 'G6PD', 'جي 6 بي دي': 'G6PD',
+    // ── سكر ───────────────────────────────────────────
+    'سكر صيام': 'FBS', 'fbs': 'FBS', 'اف بي اس': 'FBS', 'glu': 'FBS', 'سكر': 'FBS',
+    'سكر عشوائي': 'RBS', 'rbs': 'RBS', 'ار بي اس': 'RBS', 'سكر عشوائية': 'RBS',
+    'سكر بعد اكل': 'PPBS', 'ppbs': 'PPBS', 'سكر بعد الاكل': 'PPBS',
+    'hba1c': 'HBA1C', 'اتش بي ايه': 'HBA1C', 'سكر تراكمي': 'HBA1C', 'سكر تراكم': 'HBA1C',
+    'انسولين': 'INS', 'insulin': 'INS',
+    // ── دهون ─────────────────────────────────────────
+    'كولسترول': 'CHOL', 'cholesterol': 'CHOL', 'كوليسترول': 'CHOL', 'chol': 'CHOL',
+    'ثلاثي': 'TG', 'tg': 'TG', 'تي جي': 'TG', 'triglycerides': 'TG', 'دهون ثلاثية': 'TG',
+    'hdl': 'HDL', 'اتش دي ال': 'HDL', 'كولسترول جيد': 'HDL',
+    'ldl': 'LDL', 'ال دي ال': 'LDL', 'كولسترول سيء': 'LDL',
+    // ── كلى ──────────────────────────────────────────
+    'يوريا': 'UREA', 'urea': 'UREA', 'bun': 'BUN', 'بي يو ان': 'BUN',
+    'كرياتنين': 'CREAT', 'creatinine': 'CREAT', 'كرياتينين': 'CREAT', 'كريات': 'CREAT',
+    'حمض يوريك': 'UA', 'uric acid': 'UA', 'يوريك': 'UA',
+    'gfr': 'EGFR', 'جي اف ار': 'EGFR', 'egfr': 'EGFR',
+    // ── كبد ──────────────────────────────────────────
+    'ast': 'AST', 'اي اس تي': 'AST', 'sgot': 'AST', 'اس جي او تي': 'AST',
+    'alt': 'ALT', 'اي ال تي': 'ALT', 'sgpt': 'ALT', 'اس جي بي تي': 'ALT',
+    'alp': 'ALP', 'اي ال بي': 'ALP', 'alkaline': 'ALP', 'قلوي': 'ALP',
+    'بيليروبين': 'TBIL', 'bilirubin': 'TBIL', 'بيلي': 'TBIL',
+    'البومين': 'ALB', 'albumin': 'ALB', 'الب': 'ALB',
+    'بروتين كلي': 'TP', 'total protein': 'TP', 'tp': 'TP',
+    'ggt': 'GGT', 'جي جي تي': 'GGT',
+    // ── درقية ────────────────────────────────────────
+    'tsh': 'TSH', 'تي اس اتش': 'TSH', 'تي اس اج': 'TSH', 'ثيروتروبين': 'TSH', 'هرمون درقية': 'TSH',
+    't3': 'T3', 'تي 3': 'T3', 'تي ثلاثة': 'T3',
+    't4': 'T4', 'تي 4': 'T4', 'تي اربعة': 'T4',
+    'ft3': 'FT3', 'اف تي 3': 'FT3', 'ft4': 'FT4', 'اف تي 4': 'FT4',
+    'anti tpo': 'ANTI-TPO', 'انتي تي بي او': 'ANTI-TPO', 'tpo': 'ANTI-TPO',
+    // ── كورتيزول / هرمونات ───────────────────────────
+    'كورتيزول': 'AM-CORT', 'cortisol': 'AM-CORT',
+    'lh': 'LH', 'ال اتش': 'LH', 'هرمون اللوتيين': 'LH',
+    'fsh': 'FSH', 'اف اس اتش': 'FSH', 'هرمون حوصلي': 'FSH',
+    'prolactin': 'PROL', 'بروليكتين': 'PROL', 'بي ار ال': 'PROL',
+    'testosterone': 'TEST', 'تستوستيرون': 'TEST',
+    'estradiol': 'E2', 'استراديول': 'E2', 'اي 2': 'E2',
+    'progesterone': 'PROG', 'بروجستيرون': 'PROG',
+    'bhcg': 'BHCG-QUANT', 'hcg': 'BHCG-QUANT', 'اتش سي جي': 'BHCG-QUANT', 'حمل': 'PREG-SER',
+    'igf1': 'IGF1', 'اي جي اف': 'IGF1',
+    // ── التهاب / مناعة ───────────────────────────────
+    'crp': 'CRP', 'سي ار بي': 'CRP', 'بروتين تفاعلي': 'CRP',
+    'rf': 'RF', 'ار اف': 'RF', 'عامل روماتويد': 'RF', 'روماتويد': 'RF',
+    'aso': 'ASO', 'اي اس او': 'ASO', 'ستربتوليزين': 'ASO',
+    'ana': 'ANA', 'اي ان اي': 'ANA',
+    'anti ds dna': 'ANTI-DSDNA', 'ds dna': 'ANTI-DSDNA',
+    'complement': 'C3', 'c3': 'C3', 'سي 3': 'C3',
+    'c4': 'C4', 'سي 4': 'C4',
+    // ── قلب ──────────────────────────────────────────
+    'troponin': 'TROP-I', 'تروبونين': 'TROP-I', 'تروبنين': 'TROP-I',
+    'ck mb': 'CK-MB', 'سي كي ام بي': 'CK-MB', 'ck': 'CK', 'سي كي': 'CK',
+    'bnp': 'BNP', 'بي ان بي': 'BNP', 'proBNP': 'PROBNP', 'برو بي ان بي': 'PROBNP',
+    // ── بكتيريا / أمراض ───────────────────────────────
+    'hbs ag': 'HBS-AG', 'hbsag': 'HBS-AG', 'اتش بي اس': 'HBS-AG', 'التهاب كبد ب': 'HBS-AG',
+    'hcv': 'HCV-AB', 'اتش سي في': 'HCV-AB', 'التهاب كبد سي': 'HCV-AB',
+    'hiv': 'HIV-AB', 'اتش اي في': 'HIV-AB', 'ايدز': 'HIV-AB',
+    'vdrl': 'VDRL', 'في دي ار ال': 'VDRL', 'سفلس': 'VDRL',
+    'widal': 'WIDAL', 'وايدال': 'WIDAL', 'حمى تيفوئيد': 'WIDAL',
+    'brucella': 'BRUCEL', 'بروسيلا': 'BRUCEL', 'حمى مالطا': 'BRUCEL',
+    'h pylori': 'H-PYLORI', 'اتش بايلوري': 'H-PYLORI', 'باكتيريا المعدة': 'H-PYLORI',
+    'malaria': 'MALAR', 'ملاريا': 'MALAR',
+    'toxoplasma': 'TOXO-IGG', 'توكسوبلازما': 'TOXO-IGG', 'توكسو': 'TOXO-IGG',
+    'rubella': 'RUB-IGG', 'حصبة المانية': 'RUB-IGG', 'روبيلا': 'RUB-IGM',
+    'cmv': 'CMV-IGG', 'سي ام في': 'CMV-IGG', 'سيتومبغالو': 'CMV-IGG',
+    'herpes': 'HSV-IGG', 'هيربس': 'HSV-IGG',
+    'torch': 'TOXO-IGG', // يؤدي لتورش
+    // ── بول ──────────────────────────────────────────
+    'تحليل بول': 'Urine', 'فحص بول': 'Urine', 'gue': 'Urine', 'جي يو اي': 'Urine', 'بول': 'Urine',
+    'ميكروالبومين': 'MICROALB', 'microalbumin': 'MICROALB',
+    // ── براز ─────────────────────────────────────────
+    'براز': 'Stoole', 'تحليل براز': 'Stoole', 'فحص براز': 'Stoole',
+    // ── منوي ─────────────────────────────────────────
+    'سائل منوي': 'SEMEN', 'تحليل منوي': 'SEMEN', 'semen': 'SEMEN', 'منوية': 'SEMEN',
+    // ── دم – زرع ─────────────────────────────────────
+    'زرع دم': 'B-CULT', 'blood culture': 'B-CULT',
+    'زرع بول': 'U-CULT', 'urine culture': 'U-CULT',
+    'زرع مسحة': 'SW-CULT', 'swab': 'SW-CULT',
+    // ── أمراض أخرى ───────────────────────────────────
+    'psa': 'PSA', 'بي اس اي': 'PSA', 'بروستات': 'PSA',
+    'cea': 'CEA', 'سي اي اي': 'CEA', 'ورم سرطاني': 'CEA',
+    'afp': 'AFP', 'اي اف بي': 'AFP', 'الفا فيتو': 'AFP',
+    'ca125': 'CA-125', 'سي اي 125': 'CA-125', 'مبيض': 'CA-125',
+    'ca153': 'CA-153', 'ثدي': 'CA-153',
+    'ca199': 'CA-199', 'بنكرياس': 'CA-199',
+    'coombs': 'COOMBS-D', 'كومبس': 'COOMBS-D',
+    'covid': 'COVID-Ag', 'كوفيد': 'COVID-Ag', 'كورونا': 'COVID-Ag',
+    'امراض التهابية': 'CRP',
   };
 
-  // تحديث المتغير العالمي + كاش الذاكرة فوراً
-  function _smUpdateGlobal(key, idbKey, data) {
-    var meta = _SM_KEY_MAP[key];
-    if (!meta || !Array.isArray(data)) return;
-    // setter registry: يحدّث let variable في script block الصحيح
-    if (window._smSetters && typeof window._smSetters[key] === 'function') {
-      window._smSetters[key](data);
-      _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
+  // ══════════════════════════════════════════════════════
+  //  2. حالة المساعد
+  // ══════════════════════════════════════════════════════
+  const AI = {
+    recognition: null,
+    active: false,
+    listening: false,
+    transcript: '',
+    pendingAction: null,   // للتأكيد قبل التنفيذ الخطر
+    restartTimer: null,
+    sessionCtx: {},        // سياق محادثة مؤقت
+  };
+
+  // ══════════════════════════════════════════════════════
+  //  3. واجهة المساعد (UI)
+  // ══════════════════════════════════════════════════════
+  function buildUI() {
+    const style = document.createElement('style');
+    style.textContent = `
+      #ml-ai-btn {
+        position: fixed; bottom: 28px; left: 28px; z-index: 99999;
+        width: 58px; height: 58px; border-radius: 50%;
+        background: linear-gradient(135deg, #6c63ff, #3ecfcf);
+        border: none; cursor: pointer; box-shadow: 0 4px 20px rgba(108,99,255,0.5);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 26px; transition: all 0.3s; color: #fff;
+      }
+      #ml-ai-btn.active { background: linear-gradient(135deg, #ff4d6d, #ff9a3c); animation: mlPulse 1.2s infinite; }
+      #ml-ai-btn.thinking { background: linear-gradient(135deg, #f7b731, #e67e22); animation: mlSpin 1s linear infinite; }
+      @keyframes mlPulse { 0%,100%{box-shadow:0 4px 20px rgba(255,77,109,0.5)} 50%{box-shadow:0 4px 35px rgba(255,77,109,0.9)} }
+      @keyframes mlSpin  { 0%{transform:rotate(0deg)} 100%{transform:rotate(360deg)} }
+
+      #ml-ai-panel {
+        position: fixed; bottom: 100px; left: 20px; z-index: 99998;
+        width: 360px; max-height: 520px;
+        background: var(--bg-card, #1a2035);
+        border: 1.5px solid rgba(108,99,255,0.35);
+        border-radius: 18px; overflow: hidden;
+        box-shadow: 0 12px 50px rgba(0,0,0,0.45);
+        display: none; flex-direction: column;
+        font-family: 'Cairo', sans-serif;
+        direction: rtl;
+      }
+      #ml-ai-panel.open { display: flex; animation: mlSlideUp 0.28s cubic-bezier(.22,.68,0,1.2) both; }
+      @keyframes mlSlideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+      #ml-ai-header {
+        padding: 14px 16px 10px;
+        background: linear-gradient(135deg, rgba(108,99,255,0.15), rgba(62,207,207,0.1));
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+        display: flex; align-items: center; gap: 10px;
+      }
+      #ml-ai-header .ml-avatar {
+        width: 38px; height: 38px; border-radius: 50%;
+        background: linear-gradient(135deg,#6c63ff,#3ecfcf);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; flex-shrink: 0;
+      }
+      #ml-ai-header .ml-title { flex: 1; }
+      #ml-ai-header .ml-title h4 { margin: 0; font-size: 14px; font-weight: 700; color: var(--text,#fff); }
+      #ml-ai-header .ml-title span { font-size: 11px; color: #3ecfcf; }
+      #ml-ai-close-btn {
+        background: none; border: none; color: var(--text2,#aaa);
+        font-size: 18px; cursor: pointer; padding: 4px 8px; border-radius: 8px;
+        transition: background 0.2s;
+      }
+      #ml-ai-close-btn:hover { background: rgba(255,255,255,0.08); }
+
+      #ml-ai-log {
+        flex: 1; overflow-y: auto; padding: 12px 14px;
+        display: flex; flex-direction: column; gap: 8px;
+        scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+      }
+      .ml-msg {
+        max-width: 88%; padding: 9px 13px; border-radius: 14px;
+        font-size: 13px; line-height: 1.5; animation: mlFadeIn 0.2s ease;
+        word-break: break-word;
+      }
+      @keyframes mlFadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+      .ml-msg.user {
+        align-self: flex-start;
+        background: rgba(108,99,255,0.18); color: var(--text,#e8e8f0);
+        border-radius: 14px 14px 4px 14px;
+      }
+      .ml-msg.ai {
+        align-self: flex-end;
+        background: rgba(62,207,207,0.13); color: var(--text,#e8e8f0);
+        border-radius: 14px 14px 14px 4px;
+      }
+      .ml-msg.ai.success { border-right: 3px solid #00d46a; }
+      .ml-msg.ai.error   { border-right: 3px solid #ff4d6d; }
+      .ml-msg.ai.warn    { border-right: 3px solid #f7b731; }
+
+      #ml-ai-status {
+        padding: 8px 14px 12px;
+        display: flex; align-items: center; gap: 8px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+      }
+      #ml-ai-wave {
+        display: flex; gap: 3px; align-items: center; height: 22px;
+      }
+      #ml-ai-wave span {
+        display: block; width: 3px; border-radius: 3px;
+        background: #6c63ff; transition: height 0.1s;
+      }
+      #ml-ai-wave.listening span { animation: mlWave 0.8s infinite ease-in-out; background: #3ecfcf; }
+      #ml-ai-wave span:nth-child(2) { animation-delay: 0.1s !important; }
+      #ml-ai-wave span:nth-child(3) { animation-delay: 0.2s !important; }
+      #ml-ai-wave span:nth-child(4) { animation-delay: 0.3s !important; }
+      #ml-ai-wave span:nth-child(5) { animation-delay: 0.15s !important; }
+      @keyframes mlWave { 0%,100%{height:4px} 50%{height:18px} }
+      #ml-ai-status-text { font-size: 12px; color: var(--text2,#aaa); flex: 1; }
+
+      #ml-ai-input-row {
+        display: flex; gap: 6px; padding: 0 14px 12px;
+      }
+      #ml-ai-text-input {
+        flex: 1; padding: 8px 12px; border-radius: 10px;
+        border: 1.5px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.05);
+        color: var(--text,#fff); font-family: 'Cairo',sans-serif; font-size: 13px;
+        outline: none; transition: border-color 0.2s;
+      }
+      #ml-ai-text-input:focus { border-color: #6c63ff; }
+      #ml-ai-text-input::placeholder { color: var(--text2,#888); }
+      #ml-ai-send-btn {
+        width: 36px; height: 36px; border-radius: 10px; border: none;
+        background: linear-gradient(135deg,#6c63ff,#3ecfcf);
+        color: #fff; cursor: pointer; font-size: 15px;
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 0.15s;
+      }
+      #ml-ai-send-btn:hover { transform: scale(1.08); }
+
+      #ml-ai-confirm-bar {
+        display: none; padding: 8px 14px;
+        background: rgba(247,183,49,0.12);
+        border-top: 1px solid rgba(247,183,49,0.2);
+        gap: 8px; align-items: center; flex-wrap: wrap;
+      }
+      #ml-ai-confirm-bar.show { display: flex; }
+      #ml-ai-confirm-bar .ml-confirm-msg { font-size: 12px; color: #f7b731; flex: 1; min-width: 0; }
+      .ml-btn-yes, .ml-btn-no {
+        padding: 5px 14px; border-radius: 8px; border: none; cursor: pointer;
+        font-family: 'Cairo',sans-serif; font-size: 12px; font-weight: 700;
+      }
+      .ml-btn-yes { background: #00d46a; color: #000; }
+      .ml-btn-no  { background: #ff4d6d; color: #fff; }
+
+      #ml-ai-help-btn {
+        position: fixed; bottom: 28px; left: 98px; z-index: 99997;
+        background: rgba(108,99,255,0.15); border: 1.5px solid rgba(108,99,255,0.3);
+        color: var(--text,#ccc); border-radius: 24px; padding: 8px 14px;
+        font-family: 'Cairo',sans-serif; font-size: 12px; cursor: pointer;
+        display: none; transition: all 0.2s;
+      }
+      #ml-ai-help-btn:hover { background: rgba(108,99,255,0.3); }
+    `;
+    document.head.appendChild(style);
+
+    // زر الفتح
+    const btn = document.createElement('button');
+    btn.id = 'ml-ai-btn';
+    btn.title = 'المساعد الذكي';
+    btn.innerHTML = '🤖';
+    document.body.appendChild(btn);
+
+    // زر مساعدة صغير
+    const helpBtn = document.createElement('button');
+    helpBtn.id = 'ml-ai-help-btn';
+    helpBtn.textContent = '💡 أوامر';
+    document.body.appendChild(helpBtn);
+
+    // اللوحة الرئيسية
+    const panel = document.createElement('div');
+    panel.id = 'ml-ai-panel';
+    panel.innerHTML = `
+      <div id="ml-ai-header">
+        <div class="ml-avatar">🤖</div>
+        <div class="ml-title">
+          <h4>مساعد MedLab الذكي</h4>
+          <span id="ml-ai-badge">⬤ جاهز للاستماع</span>
+        </div>
+        <button id="ml-ai-close-btn">✕</button>
+      </div>
+      <div id="ml-ai-log"></div>
+      <div id="ml-ai-confirm-bar">
+        <span class="ml-confirm-msg" id="ml-confirm-msg"></span>
+        <button class="ml-btn-yes" id="ml-btn-yes">✅ نعم</button>
+        <button class="ml-btn-no"  id="ml-btn-no">❌ لا</button>
+      </div>
+      <div id="ml-ai-status">
+        <div id="ml-ai-wave">
+          <span style="height:4px"></span><span style="height:8px"></span>
+          <span style="height:14px"></span><span style="height:8px"></span>
+          <span style="height:4px"></span>
+        </div>
+        <span id="ml-ai-status-text">اضغط الزر لتفعيل الاستماع</span>
+      </div>
+      <div id="ml-ai-input-row">
+        <input id="ml-ai-text-input" type="text" placeholder="أو اكتب أمرك هنا..." autocomplete="off">
+        <button id="ml-ai-send-btn">➤</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    // ربط الأحداث
+    btn.addEventListener('click', toggleAssistant);
+    helpBtn.addEventListener('click', showHelp);
+    document.getElementById('ml-ai-close-btn').addEventListener('click', closePanel);
+    document.getElementById('ml-ai-send-btn').addEventListener('click', () => {
+      const v = document.getElementById('ml-ai-text-input').value.trim();
+      if (v) { processCommand(v); document.getElementById('ml-ai-text-input').value = ''; }
+    });
+    document.getElementById('ml-ai-text-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { document.getElementById('ml-ai-send-btn').click(); }
+    });
+    document.getElementById('ml-btn-yes').addEventListener('click', confirmAction);
+    document.getElementById('ml-btn-no').addEventListener('click', cancelAction);
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  4. تحكم الواجهة
+  // ══════════════════════════════════════════════════════
+  function toggleAssistant() {
+    const panel = document.getElementById('ml-ai-panel');
+    const helpBtn = document.getElementById('ml-ai-help-btn');
+    if (!panel.classList.contains('open')) {
+      panel.classList.add('open');
+      helpBtn.style.display = 'block';
+      if (!AI.active) startListening();
     } else {
-      _smDebugLog('⚠️ no setter: ' + key);
-    }
-    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // Firebase يحوّل المصفوفات المتداخلة إلى Objects عند الاسترجاع
-  // مثال: ['h001','h002'] → {0:'h001', 1:'h002'}
-  // هذه الدالة تُعيد تحويلها لمصفوفات حقيقية بشكل متكرر
-  // ══════════════════════════════════════════════════════════════
-  function _fixFirebaseArrays(obj) {
-    if (obj === null || obj === undefined) return obj;
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) {
-      return obj.map(_fixFirebaseArrays);
-    }
-    // اكتشاف: هل هذا Object بمفاتيح أرقام متتالية تبدأ من 0؟ → مصفوفة
-    var keys = Object.keys(obj);
-    if (keys.length > 0) {
-      var isArr = keys.every(function(k) { return /^\d+$/.test(k); });
-      if (isArr) {
-        var maxIdx = Math.max.apply(null, keys.map(Number));
-        // تحقق إضافي: المؤشرات متسلسلة (0,1,2,...,n) وليس فجوات كبيرة
-        if (maxIdx === keys.length - 1) {
-          var arr = new Array(keys.length);
-          keys.forEach(function(k) { arr[Number(k)] = _fixFirebaseArrays(obj[k]); });
-          return arr;
-        }
-      }
-    }
-    // Object عادي — نُصلح القيم الداخلية فقط
-    var result = {};
-    keys.forEach(function(k) { result[k] = _fixFirebaseArrays(obj[k]); });
-    return result;
-  }
-
-  function _applyEvent(evt, ackAfter) {
-    return _hasSeen(evt.id).then(function(seen) {
-      if (seen) { _log('Duplicate skipped:', evt.id); _smDebugLog('مكرر تجاهل: ' + evt.id.slice(0,8)); return; }
-      _log('Applying event:', evt.type, evt.key, evt.id);
-      _smDebugLog('تطبيق: ' + evt.type + ' / ' + evt.key);
-
-      // ✅ إصلاح: Firebase يحوّل arrays إلى objects — نُعيدها لمصفوفات حقيقية
-      if (evt.record)  evt.record = _fixFirebaseArrays(evt.record);
-      if (evt.data)    evt.data   = _fixFirebaseArrays(evt.data);
-
-      var p;
-      if      (evt.type === 'UPSERT_RECORD') p = _applyUpsert(evt);
-      else if (evt.type === 'DELETE_RECORD') p = _applyDelete(evt);
-      else if (evt.type === 'SET_ALL')       p = _applySetAll(evt);
-      else return;
-      return p.then(function() {
-        return _markSeen(evt.id);
-      }).then(function() {
-        _notifyApp(evt.key);
-        if (ackAfter) return _acknowledgeEvent(evt);
-      }).catch(function(e) { _warn('Apply error:', e); });
-    });
-  }
-
-  // نستخدم SyncManager._applying كـ flag مشترك
-
-  function _applyUpsert(evt) {
-    if (!evt.key || !evt.record) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-
-    // اقرأ من _MC إذا كانت تحتوي بيانات فعلية
-    var current = null;
-    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) {
-      current = _MC[idbKey].slice();
-    }
-    var readP = (current !== null) ? Promise.resolve(current) : _readAppIDB(idbKey);
-
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
-      if (idx >= 0) {
-        cur[idx] = evt.record;
-      } else {
-        cur.push(evt.record);
-      }
-
-      // حدّث _MC فوراً
-      if (typeof _MC !== 'undefined') _MC[idbKey] = cur;
-
-      // حدّث setter (patients/requests/...) فوراً
-      _smUpdateGlobal(evt.key, idbKey, cur);
-
-      // احفظ في IDB + DB بدون إطلاق hook (SyncManager._applying = true يمنعه)
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, cur);
-      } finally {
-        SyncManager._applying = false;
-      }
-
-      // ✅ حدّث prevState للمفتاح هذا فقط إذا لم يكن هناك timer معلّق
-      // (timer معلّق = المستخدم لديه تعديل محلي لم يُرسَل بعد — لا نُلغيه)
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer) {
-        if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
-      }
-      // لا نستدعي clearTimeout هنا أبداً — لا نُلغي تعديلات المستخدم المحلية
-
-      return Promise.resolve();
-    });
-  }
-
-  function _applyDelete(evt) {
-    if (!evt.key || !evt.recordId) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) return;
-      var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
-      if (typeof _MC !== 'undefined') _MC[idbKey] = filtered;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, filtered);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, filtered);
-      // حدّث prevState فقط إذا لا يوجد timer محلي معلّق
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer && window._smPrevState) window._smPrevState[evt.key] = filtered.slice();
-      return Promise.resolve();
-    });
-  }
-
-  function _applySetAll(evt) {
-    if (!evt.key || !Array.isArray(evt.data)) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var remoteMap = new Map();
-      evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
-      var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
-      var merged = Array.from(remoteMap.values()).concat(localOnly);
-      if (typeof _MC !== 'undefined') _MC[idbKey] = merged;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, merged);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, merged);
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer && window._smPrevState) window._smPrevState[evt.key] = merged.slice();
-      return Promise.resolve();
-    });
-  }
-
-  // ── Acknowledge ───────────────────────────────────────
-  // حذف الحدث من Firebase بعد 30 ثانية (وقت كافٍ لكل الأجهزة)
-  function _acknowledgeEvent(evt) {
-    if (!_fbDb || !_username || !evt.fbKey) return Promise.resolve();
-    var path = FB_PATH_EVENTS(_username) + '/' + evt.fbKey;
-    // احذف بعد 30 ثانية
-    setTimeout(function() {
-      if (_fbDb) _fbDb.ref(path).remove().catch(function() {});
-    }, 30000);
-    return Promise.resolve();
-  }
-
-  // ── Push event to Firebase ────────────────────────────
-  function _pushToFB(evt) {
-    return new Promise(function(res, rej) {
-      var ref = _fbDb.ref(FB_PATH_EVENTS(_username)).push();
-      evt.fbKey = ref.key;
-      ref.set(Object.assign({}, evt, { ack: {} })).then(function() {
-        _log('Pushed:', evt.id, evt.type, evt.key);
-        _smDebugLog('أُرسل: ' + evt.type + ' / ' + evt.key);
-        res();
-      }).catch(function(e) {
-        _warn('Push error:', e);
-        _smDebugLog('فشل الإرسال: ' + e.message);
-        rej(e);
-      });
-    });
-  }
-
-  function _pushEvent(evt) {
-    evt.id           = evt.id || _uuid();
-    evt.originDevice = _getDeviceId();
-    evt.ts           = Date.now();
-    evt.username     = _username;
-
-    return _markSeen(evt.id).then(function() {
-      if (!_online || !_fbDb || !_enabled) {
-        return _addPending(evt).then(function() {
-          _log('Queued offline:', evt.id);
-        });
-      }
-      return _pushToFB(evt).catch(function(e) {
-        _warn('Push failed, queuing:', e);
-        return _addPending(evt);
-      });
-    });
-  }
-
-  // ── Flush pending ─────────────────────────────────────
-  function _flushPending() {
-    if (!_online || !_fbDb || !_enabled) return Promise.resolve();
-    return _getPending().then(function(pending) {
-      if (!pending.length) return;
-      _log('Flushing', pending.length, 'pending events');
-      var chain = Promise.resolve();
-      pending.forEach(function(evt) {
-        chain = chain.then(function() {
-          return _pushToFB(evt).then(function() {
-            return _removePending(evt.id);
-          }).catch(function(e) {
-            _warn('Flush failed for:', evt.id, e);
-            return Promise.reject(e); // stop chain on error
-          });
-        });
-      });
-      return chain.catch(function() {});
-    });
-  }
-
-  // ── Full sync ─────────────────────────────────────────
-  function _fullSync() {
-    if (!_fbDb || !_username || !_enabled) return Promise.resolve();
-    _log('Full sync start for:', _username);
-    return _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val();
-      if (!val) { _log('Full sync: no remote events'); return; }
-      var events = Object.values(val);
-      // تجاهل الأحداث الصادرة من هذا الجهاز نفسه
-      events = events.filter(function(evt) {
-        return evt && evt.originDevice !== _getDeviceId();
-      });
-      _log('Full sync: found', events.length, 'applicable events');
-      var chain = Promise.resolve();
-      events.forEach(function(evt) {
-        chain = chain.then(function() { return _applyEvent(evt, false); });
-      });
-      return chain;
-    }).then(function() {
-      return _flushPending();
-    }).then(function() {
-      // ── إعادة رسم كاملة بعد استلام كل البيانات من Firebase ──
-      // هذا يحل مشكلة قائمة المرضى الفارغة عند الجهاز الثاني
-      setTimeout(function() {
-        try {
-          if (typeof renderAll        === 'function') renderAll();
-          if (typeof updateDashboard  === 'function') updateDashboard();
-          if (typeof updateBadges     === 'function') updateBadges();
-          if (typeof loadResultsDropdown === 'function') loadResultsDropdown();
-          if (typeof loadPrintDropdown   === 'function') loadPrintDropdown();
-          _smDebugLog('✅ إعادة رسم بعد fullSync');
-        } catch(e) { _warn('Re-render after fullSync failed:', e); }
-      }, 300);
-    }).catch(function(e) { _warn('Full sync error:', e); });
-  }
-
-  // ── Live sync ─────────────────────────────────────────
-  var _keepaliveTimer = null;
-  var _connMonitorStarted = false;
-
-  function _pollPendingEvents() {
-    if (!_fbDb || !_username || !_enabled) return;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
-      var val = s.val();
-      if (!val) return;
-      var keys = Object.keys(val);
-      if (keys.length > 0) _smDebugLog('📡 poll: ' + keys.length + ' حدث');
-      keys.forEach(function(fbKey) {
-        var evt = val[fbKey];
-        if (!evt || !evt.id) return;
-        if (evt.originDevice === _getDeviceId()) return;
-        evt.fbKey = fbKey;
-        _applyEvent(evt, true).catch(function(){});
-      });
-    }).catch(function(){});
-  }
-
-  function _startLive() {
-    if (!_fbDb || !_username || !_enabled || _listening) return;
-    _listening = true;
-
-    try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
-
-    // ── listener رئيسي: يستلم الأحداث الجديدة ──
-    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
-    _evtCb  = _evtRef.on('child_added', function(snap) {
-      var evt = snap.val();
-      if (!evt || !evt.id) return;
-      if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
-      evt.fbKey = snap.key;
-      _smDebugLog('📥 ' + evt.type + '/' + evt.key);
-      _applyEvent(evt, true).catch(function(e) { _warn('apply error:', e); });
-    }, function(err) {
-      _warn('listener error:', err.message);
-      _listening = false;
-      setTimeout(_startLive, 5000);
-    });
-
-    // ── مراقبة الاتصال: poll عند إعادة الاتصال ──
-    if (!_connMonitorStarted) {
-      _connMonitorStarted = true;
-      _fbDb.ref('.info/connected').on('value', function(snap) {
-        _smDebugLog(snap.val() ? '🟢 متصل' : '🔴 منقطع');
-        if (snap.val()) _pollPendingEvents();
-      });
-    }
-
-    // ── keepalive: poll كل 5 ثوانٍ لمنع Firebase sleep ──
-    clearInterval(_keepaliveTimer);
-    _keepaliveTimer = setInterval(_pollPendingEvents, 5000);
-
-    _log('Live sync started');
-    _smDebugLog('✅ listener + poll/5s');
-  }
-
-  function _stopLive() {
-    if (_evtRef && _evtCb) { _evtRef.off('child_added', _evtCb); }
-    _evtRef = null; _evtCb = null; _listening = false;
-    _log('Live sync stopped');
-  }
-
-  // ── Auto cleanup Firebase ─────────────────────────────
-  function _autoClean() {
-    if (!_fbDb || !_username || !_enabled || !_online) return;
-    var cutoff = Date.now() - 3600 * 1000;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val() || {};
-      var removes = Object.keys(val).filter(function(k) {
-        return val[k].ts && val[k].ts < cutoff;
-      }).map(function(k) {
-        return _fbDb.ref(FB_PATH_EVENTS(_username) + '/' + k).remove();
-      });
-      if (removes.length) {
-        Promise.all(removes).then(function() {
-          _log('Cleaned', removes.length, 'old Firebase events');
-        });
-      }
-    }).catch(function() {});
-  }
-
-  // ── Notify App ────────────────────────────────────────
-  function _notifyApp(key) {
-    var meta = _SM_KEY_MAP[key];
-    var labels = {
-      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-    };
-    // رسم فوري
-    if (meta) { try { meta.fn(); } catch(e) {} }
-    // ✅ عند وصول requests أو patients: أعد تحميل قائمة النتائج وقائمة الطباعة دائماً
-    if (key === 'requests' || key === 'patients') {
-      setTimeout(function() {
-        try { if(typeof loadResultsDropdown==='function') loadResultsDropdown(); } catch(e){}
-        try { if(typeof loadPrintDropdown==='function') loadPrintDropdown(); } catch(e){}
-        // إذا صفحة إدخال النتائج مفتوحة، أعد تحميل النتيجة الحالية
-        try {
-          var sel = document.getElementById('res-req-sel');
-          if (sel && sel.value && typeof loadResultEntry === 'function') loadResultEntry();
-        } catch(e){}
-      }, 150);
-    }
-    // badges + dashboard
-    try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
-    try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
-    // إشعار
-    try {
-      if (typeof showNotif === 'function')
-        showNotif('🔄', (labels[key]||key), 'info');
-    } catch(e) {}
-  }
-
-  // ════════════════════════════════════════════════════════
-  // PUBLIC API
-  // ════════════════════════════════════════════════════════
-  var SyncManager = {
-
-    version: SM_VERSION,
-    _applying: false, // flag لمنع حلقة DB.set → hook → Firebase → DB.set
-
-    init: function(fbDb, username, enabled) {
-      _fbDb     = fbDb;
-      _username = username;
-      _enabled  = !!enabled;
-
-      var self = this;
-      return _openSMDB().then(function() {
-        _log('Init: user=' + username + ', enabled=' + enabled + ', device=' + _getDeviceId());
-        _smDebugLog('init: ' + username + ' | enabled:' + enabled + ' | dev:' + _getDeviceId().slice(-6));
-
-        if (!_enabled) { _log('Sync disabled — IDB only mode'); _smDebugLog('مزامنة معطّلة'); return; }
-        if (!_fbDb)    { _warn('Firebase not available'); _smDebugLog('Firebase غير متاح!'); return; }
-
-        _registerDevice();
-
-        return _cleanOldSeen().then(function() {
-          _autoClean();
-          return _fullSync();
-        }).then(function() {
-          _startLive();
-        });
-      }).then(function() {
-        window.addEventListener('online',  function() { _online = true;  self._onOnline(); });
-        window.addEventListener('offline', function() { _online = false; _log('Offline — queuing events'); });
-        setInterval(_autoClean, 30 * 60 * 1000);
-        _log('SyncManager ready');
-      });
-    },
-
-    _onOnline: function() {
-      _log('Online — flushing pending');
-      _flushPending().then(function() {
-        if (!_listening) _startLive();
-        _registerDevice();
-      });
-    },
-
-    setEnabled: function(val) {
-      _enabled = !!val;
-      if (_enabled) {
-        _registerDevice();
-        _flushPending();
-        _startLive();
-      } else {
-        _stopLive();
-        clearInterval(_heartTimer);
-      }
-      _log('Sync enabled:', _enabled);
-    },
-
-    isEnabled:  function() { return _enabled; },
-    isOnline:   function() { return _online; },
-    getDeviceId: function() { return _getDeviceId(); },
-
-    /** إرسال حدث UPSERT (إضافة أو تعديل record) */
-    pushUpsert: function(key, record) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'UPSERT_RECORD', key: key, record: record });
-    },
-
-    /** إرسال حدث DELETE (حذف record) */
-    pushDelete: function(key, recordId) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'DELETE_RECORD', key: key, recordId: recordId });
-    },
-
-    /** إرسال مصفوفة كاملة (SET_ALL) */
-    pushSetAll: function(key, data) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      if (!Array.isArray(data) || !data.length) return Promise.resolve();
-      return _pushEvent({ type: 'SET_ALL', key: key, data: data });
-    },
-
-    /** الاستماع لأحداث التحديث */
-    onUpdate: function(cb) {
-      window.addEventListener('syncmanager:update', function(e) { cb(e.detail.key); });
-    },
-
-    /** عدد الأحداث المعلّقة */
-    pendingCount: function() {
-      return _getPending().then(function(p) { return p.length; });
-    },
-
-    destroy: function() {
-      _stopLive();
-      clearInterval(_heartTimer);
-    }
-  };
-
-  global.SyncManager = SyncManager;
-
-})(window);
-
-// ════════════════════════════════════════════════════════════════
-// دمج SyncManager مع تدفق التطبيق
-// ════════════════════════════════════════════════════════════════
-
-/** تحقق هل المزامنة مفعّلة لهذا المستخدم */
-function _isSyncEnabled(username) {
-  try {
-    var users = typeof getAdminUsers === 'function'
-      ? getAdminUsers()
-      : JSON.parse(localStorage.getItem('medlab_admin_users') || '[]');
-    var u = users.find(function(x) { return x.username === username; });
-    return u ? !!u.firebaseSync : false;
-  } catch(e) { return false; }
-}
-
-/** تهيئة SyncManager بعد تسجيل الدخول */
-async function initSyncManager() {
-  var session = typeof getSession === 'function' ? getSession() : null;
-  if (!session || !session.username) return;
-
-  var username = session.username;
-  var enabled  = _isSyncEnabled(username);
-
-  // انتظر Firebase أن يكون جاهزاً
-  var ok = false;
-  try { ok = await (typeof loadFirebase === 'function' ? loadFirebase() : Promise.resolve(false)); } catch(e) {}
-
-  var fbInstance = (ok && typeof fbDb !== 'undefined') ? fbDb : null;
-
-  try {
-    await SyncManager.init(fbInstance, username, enabled);
-
-    // إضافة مؤشر المزامنة في الواجهة — دائماً حتى بعد Refresh
-    _renderSyncIndicator(enabled);
-    _renderSyncDebugPanel();
-
-    console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled,
-      '| device:', SyncManager.getDeviceId());
-  } catch(e) {
-    console.warn('[SyncManager] Init failed:', e);
-    // حتى لو فشل Firebase — أظهر المؤشر كـ محلي
-    try { _renderSyncIndicator(false); } catch(_) {}
-  }
-}
-
-/** شاشة تشخيص المزامنة المرئية */
-function _renderSyncDebugPanel() {
-  var old = document.getElementById('_sm_debug_panel');
-  if (old) old.remove();
-
-  var panel = document.createElement('div');
-  panel.id = '_sm_debug_panel';
-  // البوكس مخفي افتراضياً — فقط div#_sm_debug_box موجود للكتابة
-  panel.style.cssText = [
-    'position:fixed','bottom:60px','left:8px','right:8px',
-    'max-height:220px','background:rgba(0,0,0,.92)',
-    'border:1px solid rgba(0,212,255,.4)','border-radius:10px',
-    'z-index:99999','overflow:hidden','font-family:monospace',
-    'display:none','flex-direction:column'  // مخفي افتراضياً
-  ].join(';');
-
-  // زر إظهار/إخفاء البوكس في الشريط العلوي
-  var toggleBtn = document.createElement('button');
-  toggleBtn.id = '_sm_toggle_btn';
-  // الزر ظاهر بشكل خافت — غير قابل للضغط — يُبقي Firebase نشطاً
-  toggleBtn.style.cssText = 'position:fixed;bottom:6px;left:6px;z-index:100000;background:rgba(0,0,0,.3);border:1px solid rgba(0,212,255,.15);border-radius:20px;color:rgba(0,212,255,.35);font-size:7px;padding:1px 5px;cursor:default;font-family:monospace;pointer-events:none;user-select:none;';
-  toggleBtn.textContent = '⚡';
-  toggleBtn.onclick = function(e){ e.preventDefault(); e.stopPropagation(); return false; };
-  document.body.appendChild(toggleBtn);
-
-  // رأس الشاشة
-  var hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(0,212,255,.12);border-bottom:1px solid rgba(0,212,255,.3)';
-  hdr.innerHTML = '<span style="font-size:11px;font-weight:700;color:#00d4ff">🔧 تشخيص المزامنة</span>' +
-    '<span style="font-size:10px;color:rgba(255,255,255,.5)">جهاز: ' + (SyncManager.getDeviceId()||'').slice(-8) + '</span>' +
-    '<button onclick="document.getElementById(&quot;_sm_debug_panel&quot;).remove()" style="background:none;border:none;color:#ff2244;font-size:14px;cursor:pointer;padding:0 4px">✕</button>';
-  panel.appendChild(hdr);
-
-  // زر اختبار الإرسال
-  var testBtn = document.createElement('div');
-  testBtn.style.cssText = 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px';
-  testBtn.innerHTML = '<button onclick="_smTestSend()" style="flex:1;padding:5px;background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);border-radius:6px;color:#00d4ff;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">📤 اختبار إرسال</button>' +
-    '<button onclick="_smTestCheck()" style="flex:1;padding:5px;background:rgba(139,63,255,.15);border:1px solid rgba(139,63,255,.4);border-radius:6px;color:#a78bfa;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔍 فحص Firebase</button>';
-  panel.appendChild(testBtn);
-
-  // صندوق الرسائل
-  var box = document.createElement('div');
-  box.id = '_sm_debug_box';
-  box.style.cssText = 'flex:1;overflow-y:auto;padding:6px 10px;';
-  panel.appendChild(box);
-
-  panel.style.display = 'none'; // مخفي افتراضياً
-  document.body.appendChild(panel);
-
-  // ضمان وجود _sm_debug_box في DOM حتى تعمل _smDebugLog
-  if (!document.getElementById('_sm_debug_box')) {
-    var hiddenBox = document.createElement('div');
-    hiddenBox.id = '_sm_debug_box';
-    hiddenBox.style.display = 'none';
-    document.body.appendChild(hiddenBox);
-  }
-}
-
-/** اختبار إرسال حدث تجريبي */
-function _smTestSend() {
-  if (typeof SyncManager === 'undefined' || !SyncManager.isEnabled()) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ المزامنة غير مفعّلة لهذا الحساب';
-      box.insertBefore(l, box.firstChild);
-    }
-    return;
-  }
-  var testRecord = { id: 'test_' + Date.now(), _test: true, _updatedAt: Date.now() };
-  SyncManager.pushUpsert('patients', testRecord).then(function() {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#00e87a;padding:2px 0';
-      l.textContent = '✅ أُرسل حدث تجريبي — انتظر الجهاز الآخر';
-      box.insertBefore(l, box.firstChild);
-    }
-  }).catch(function(e) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ فشل: ' + e.message;
-      box.insertBefore(l, box.firstChild);
-    }
-  });
-}
-
-/** فحص Firebase مباشرة */
-function _smTestCheck() {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-
-  var session = typeof getSession === 'function' ? getSession() : null;
-  var username = session ? session.username : '?';
-  var path = 'sync_events/' + username;
-
-  var info = document.createElement('div');
-  info.style.cssText = 'font-size:10px;color:#ffcc00;padding:2px 0';
-  info.textContent = '🔍 فحص: ' + path;
-  box.insertBefore(info, box.firstChild);
-
-  if (typeof fbDb === 'undefined' || !fbDb) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ fbDb = null — Firebase غير مهيّأ';
-    box.insertBefore(l, box.firstChild);
-    return;
-  }
-
-  // فحص auth
-  var authLbl = document.createElement('div');
-  authLbl.style.cssText = 'font-size:10px;color:#a0a0a0;padding:2px 0';
-  var authUser = (typeof fbAuth !== 'undefined' && fbAuth && fbAuth.currentUser);
-  authLbl.textContent = 'Auth: ' + (authUser ? '✅ ' + authUser.uid.slice(0,8) : '❌ غير مسجّل');
-  box.insertBefore(authLbl, box.firstChild);
-
-  // اقرأ sync_events
-  fbDb.ref(path).once('value').then(function(snap) {
-    var val = snap.val();
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:10px;color:#00e87a;padding:2px 0';
-    l.textContent = '📦 sync_events: ' + (val ? Object.keys(val).length + ' حدث' : 'فارغ');
-    box.insertBefore(l, box.firstChild);
-  }).catch(function(e) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ قراءة Firebase: ' + e.message;
-    box.insertBefore(l, box.firstChild);
-  });
-}
-
-/** عرض مؤشر حالة المزامنة في الشريط العلوي */
-function _renderSyncIndicator(enabled) {
-  var existing = document.getElementById('sm-status-badge');
-  if (existing) existing.remove();
-
-  var topbarActions = document.querySelector('.topbar-actions');
-  if (!topbarActions) return;
-
-  var badge = document.createElement('div');
-  badge.id = 'sm-status-badge';
-  badge.style.cssText = [
-    'display:flex','align-items:center','gap:5px',
-    'padding:5px 12px','border-radius:16px','font-size:10px',
-    'font-weight:700','cursor:default','transition:all .3s',
-    enabled
-      ? 'background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.35);color:#00e87a'
-      : 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.4)'
-  ].join(';');
-
-  var dot = document.createElement('span');
-  dot.id = 'sm-dot';
-  dot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:' +
-    (enabled ? '#00e87a' : 'rgba(255,255,255,.3)') +
-    ';' + (enabled ? 'animation:pulse 2s infinite' : '');
-
-  var lbl = document.createElement('span');
-  lbl.id = 'sm-lbl';
-  lbl.textContent = enabled ? '☁️ مزامنة' : '💾 محلي';
-
-  badge.appendChild(dot);
-  badge.appendChild(lbl);
-
-  // أدرج قبل أول زر
-  topbarActions.insertBefore(badge, topbarActions.firstChild);
-
-  // استمع لتغيير الحالة (عند تفعيل/تعطيل المزامنة من admin)
-  window.addEventListener('syncmanager:statuschange', function(e) {
-    var en = e.detail.enabled;
-    badge.style.background = en ? 'rgba(0,232,122,.12)' : 'rgba(255,255,255,.06)';
-    badge.style.borderColor = en ? 'rgba(0,232,122,.35)' : 'rgba(255,255,255,.12)';
-    badge.style.color = en ? '#00e87a' : 'rgba(255,255,255,.4)';
-    dot.style.background = en ? '#00e87a' : 'rgba(255,255,255,.3)';
-    dot.style.animation  = en ? 'pulse 2s infinite' : '';
-    lbl.textContent = en ? '☁️ مزامنة' : '💾 محلي';
-  });
-
-  // مؤشر offline
-  window.addEventListener('offline', function() {
-    dot.style.background = '#ffcc00';
-    lbl.textContent      = '⚡ بلا إنترنت';
-    badge.style.color    = '#ffcc00';
-  });
-  window.addEventListener('online', function() {
-    var isEn = SyncManager.isEnabled();
-    dot.style.background = isEn ? '#00e87a' : 'rgba(255,255,255,.3)';
-    lbl.textContent = isEn ? '☁️ مزامنة' : '💾 محلي';
-    badge.style.color = isEn ? '#00e87a' : 'rgba(255,255,255,.4)';
-  });
-}
-
-/**
- * hook على save() لإرسال الأحداث تلقائياً عند كل تعديل
- * يُنفَّذ بعد تهيئة التطبيق بالكامل
- */
-function _hookSaveForSync() {
-  if (window._smHooked) return;
-  window._smHooked = true;
-
-  var SM_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  // ── prevState: snapshot لكل مفتاح بعد آخر إرسال ────────────
-  var _smPrevState = {};
-  window._smPrevState = _smPrevState;
-
-  // ── الـ hook: يُستدعى من DB.set عند كل تعديل ───────────────
-  window._smDBHook = function(k, v) {
-    if (!SyncManager.isEnabled()) return;
-    if (!SM_KEYS.includes(k)) return;
-    if (!Array.isArray(v)) return;
-
-    // debounce 80ms per key — وقت كافٍ لجمع التغييرات المتزامنة
-    window._smSaveTimers = window._smSaveTimers || {};
-    // لا نلغي timer موجود إذا كان مصدره تعديل مستخدم محلي
-    // نستخدم snapshot فوري من v لتجنب تغيرها قبل انتهاء الـ debounce
-    var vSnapshot = v.slice();
-    clearTimeout(window._smSaveTimers[k]);
-    window._smSaveTimers[k] = setTimeout(function() {
-      // استخدم snapshot المأخوذ وقت الاستدعاء لا وقت التنفيذ
-      var current = vSnapshot;
-      var prev    = _smPrevState[k] || [];
-      var prevMap = {};
-      prev.forEach(function(x){ if(x && x.id) prevMap[x.id] = x; });
-      var currIds = new Set();
-      current.forEach(function(x){ if(x && x.id) currIds.add(x.id); });
-
-      var toUpsert = [];
-      current.forEach(function(record) {
-        if (!record || !record.id) return;
-        var oldRec = prevMap[record.id];
-        if (!oldRec) {
-          toUpsert.push(record);
-        } else if (JSON.stringify(record) !== JSON.stringify(oldRec)) {
-          toUpsert.push(record);
-        }
-      });
-
-      // أرسل كل ما تغيّر
-      toUpsert.forEach(function(record) {
-        _smDebugToBox('📤 ' + k + ' #' + (record.id||'').slice(-6));
-        SyncManager.pushUpsert(k, record).catch(function(e){
-          _smDebugToBox('❌ ' + e.message);
-        });
-      });
-
-      // DELETE: عناصر محذوفة من الطرف المحلي
-      prev.forEach(function(record) {
-        if (!record || !record.id) return;
-        if (!currIds.has(record.id)) {
-          _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
-          SyncManager.pushDelete(k, record.id).catch(function(){});
-        }
-      });
-
-      // ✅ حدّث prevState بعد الإرسال فقط
-      _smPrevState[k] = current.slice();
-    }, 80);
-  };
-
-  // ── بناء prevState الأولي ────────────────────────────────────
-  var _gMap = {
-    patients:'patients', requests:'requests', invoices:'invoices',
-    doctors:'doctors', packages:'packages', inventory:'inventory',
-    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
-    stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
-    billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'
-  };
-
-  function _rebuildPrevState(force) {
-    SM_KEYS.forEach(function(k) {
-      // لا تُعِد بناء مفتاح له timer معلّق — يعني هناك تعديل محلي لم يُرسَل بعد
-      if (!force && window._smSaveTimers && window._smSaveTimers[k]) return;
-      try {
-        var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
-        var val = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0)
-          ? _MC[idbKey]
-          : window[_gMap[k] || k];
-        if (Array.isArray(val) && val.length > 0) _smPrevState[k] = val.slice();
-      } catch(_) {}
-    });
-    var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; });
-    _smDebugToBox('✅ hook جاهز | ' + loaded.join(','));
-  }
-
-  // بناء أولي بعد 800ms (بعد اكتمال startApp + IDB)
-  setTimeout(function(){ _rebuildPrevState(true); }, 800);
-  // إعادة بناء دورية كل 30 ثانية — فقط للمفاتيح التي لا يوجد timer معلق عليها
-  setInterval(function(){ _rebuildPrevState(false); }, 30000);
-}
-
-// دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
-function _smDebugToBox(msg) {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-  var t = new Date().toLocaleTimeString('ar');
-  var line = document.createElement('div');
-  line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
-  line.textContent = t + ' — ' + msg;
-  box.insertBefore(line, box.firstChild);
-  while (box.children.length > 50) box.removeChild(box.lastChild);
-}
-
-// ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
-window.addEventListener('load', function() {
-  var _smInitDone = false;
-
-  function _tryInitSync() {
-    if (_smInitDone) return;
-    var session = typeof getSession === 'function' ? getSession() : null;
-    if (!session || !session.username) return;
-    _smInitDone = true;
-    initSyncManager().then(function() {
-      _hookSaveForSync();
-    });
-  }
-
-  // الطريقة 1: hook على startApp
-  var _origStartApp = window.startApp;
-  if (typeof _origStartApp === 'function') {
-    window.startApp = function() {
-      _origStartApp.apply(this, arguments);
-      setTimeout(_tryInitSync, 2000);
-    };
-  }
-
-  // الطريقة 2: fallback — إذا كانت الجلسة موجودة مسبقاً (Refresh)
-  setTimeout(function() {
-    if (!_smInitDone) _tryInitSync();
-  }, 2500);
-
-  // الطريقة 3: محاولة أخيرة بعد 5 ثواني
-  setTimeout(function() {
-    if (!_smInitDone) _tryInitSync();
-  }, 5000);
-});
-
-// ═══════════════════════════════════════════════════════
-// إدارة الطابعات
-// ═══════════════════════════════════════════════════════
-async function _loadPrinters(){
-  try{
-    const printers = window.electronAPI?.getPrinters ? await window.electronAPI.getPrinters() : [];
-    const selMain = document.getElementById('st-printer-main');
-    const selBarcode = document.getElementById('st-printer-barcode');
-    if(!selMain||!selBarcode){ showNotif('تنبيه','افتح إعدادات الطباعة أولاً','warning'); return; }
-    const savedMain = settings.printerMain||'';
-    const savedBc = settings.printerBarcode||'';
-    setTimeout(function(){ if(typeof _loadLabelSizeUI==='function') _loadLabelSizeUI(); },50);
-    // تحميل حجم الملصق في الواجهة
-    setTimeout(function(){ if(typeof _loadLabelSizeUI==='function') _loadLabelSizeUI(); }, 50);
-    [selMain, selBarcode].forEach(function(sel, idx){
-      const saved = idx===0 ? savedMain : savedBc;
-      sel.innerHTML = '<option value="">-- الطابعة الافتراضية --</option>';
-      printers.forEach(function(p){
-        const opt = document.createElement('option');
-        opt.value = p.displayName||p.name;
-        opt.textContent = p.displayName||p.name;
-        if(opt.value === saved) opt.selected = true;
-        sel.appendChild(opt);
-      });
-    });
-    if(printers.length===0) showNotif('تنبيه','لم يتم العثور على طابعات متصلة','warning');
-    else showNotif('✅','تم تحديث قائمة الطابعات ('+printers.length+' طابعة)','success');
-    // تحميل حجم الملصق
-    if(typeof _loadLabelSizeUI==='function') _loadLabelSizeUI();
-  } catch(e){ console.warn('_loadPrinters error:', e); }
-}
-
-function _savePrinter(key, value){
-  settings[key] = value;
-  if(typeof save==='function') save('settings', settings);
-}
-function _saveLabelSize(){
-  var w=parseFloat(document.getElementById('st-label-w')?.value)||57;
-  var h=parseFloat(document.getElementById('st-label-h')?.value)||30;
-  settings.labelW=Math.max(20,Math.min(200,w));
-  settings.labelH=Math.max(10,Math.min(200,h));
-  if(typeof save==='function') save('settings',settings);
-}
-function _setLabelPreset(w,h){
-  var iw=document.getElementById('st-label-w');
-  var ih=document.getElementById('st-label-h');
-  if(iw) iw.value=w;
-  if(ih) ih.value=h;
-  _saveLabelSize();
-}
-function _loadLabelSizeUI(){
-  var iw=document.getElementById('st-label-w');
-  var ih=document.getElementById('st-label-h');
-  if(iw) iw.value=settings.labelW||57;
-  if(ih) ih.value=settings.labelH||30;
-}
-
-// حفظ حجم الملصق
-function _saveLabelSize(){
-  const w=parseFloat(document.getElementById('st-label-w')?.value)||57;
-  const h=parseFloat(document.getElementById('st-label-h')?.value)||30;
-  settings.labelW=Math.max(20,Math.min(200,w));
-  settings.labelH=Math.max(10,Math.min(200,h));
-  if(typeof save==='function') save('settings', settings);
-}
-// تطبيق حجم جاهز
-function _setLabelPreset(w,h){
-  const iw=document.getElementById('st-label-w');
-  const ih=document.getElementById('st-label-h');
-  if(iw) iw.value=w;
-  if(ih) ih.value=h;
-  _saveLabelSize();
-}
-// تحميل حجم الملصق المحفوظ في واجهة الإعدادات
-function _loadLabelSizeUI(){
-  const iw=document.getElementById('st-label-w');
-  const ih=document.getElementById('st-label-h');
-  if(iw) iw.value=settings.labelW||57;
-  if(ih) ih.value=settings.labelH||30;
-}
-
-function _saveAutoCBC(val){
-  settings.autoPrintCBC = val;
-  if(typeof save==='function') save('settings', settings);
-}
-
-// ─── طباعة مباشرة عبر iframe بدون واجهة ────────────────
-function _printViaIframeSilent(html, isBarcode){
-  // طباعة صامتة — بدون واجهة طابعة
-  _printViaIframe(html, isBarcode);
-}
-
-// ════════════════════════════════════════════════════════════
-// LIS — قفل الأزرار بكلمة السر SsAaIiFf@100
-// ════════════════════════════════════════════════════════════
-var _LIS_PASS = 'SsAaIiFf@100';
-var _lisPendingFn = null;
-
-function _lisLockedAction(fn){
-  _lisPendingFn = fn;
-  var modal = document.getElementById('m-lis-pass');
-  var inp   = document.getElementById('lis-pass-inp');
-  var err   = document.getElementById('lis-pass-err');
-  if(!modal){
-    // fallback إذا لم يُحمَّل الـ modal بعد
-    var pass = window.prompt ? window.prompt('أدخل كلمة المرور:') : '';
-    if(pass === _LIS_PASS && typeof fn === 'function') fn();
-    return;
-  }
-  if(inp) inp.value = '';
-  if(err) err.style.display = 'none';
-  modal.style.display = 'flex';
-  setTimeout(function(){ if(inp) inp.focus(); }, 100);
-}
-
-function _lisPassConfirm(){
-  var inp  = document.getElementById('lis-pass-inp');
-  var err  = document.getElementById('lis-pass-err');
-  var pass = inp ? inp.value.trim() : '';
-  if(pass === _LIS_PASS){
-    document.getElementById('m-lis-pass').style.display = 'none';
-    if(typeof _lisPendingFn === 'function'){
-      var fn = _lisPendingFn;
-      _lisPendingFn = null;
-      fn();
-    }
-  } else {
-    if(err){ err.style.display = 'block'; }
-    if(inp){ inp.value = ''; inp.focus(); }
-  }
-}
-
-// ════════════════════════════════════════════════════════════
-// LAN SYNC — ربط الحاسبات عبر الشبكة المحلية
-// ════════════════════════════════════════════════════════════
-var _lanWS        = null;   // WebSocket (عميل) أو null
-var _lanClients   = new Set(); // WebSocket clients (سيرفير)
-var _lanMode      = null;   // 'server' | 'client' | null
-var _lanHttpServer= null;
-var _LAN_PORT     = 8797;
-var _LAN_SYNC_KEYS= ['patients','requests','invoices','doctors'];
-
-// تحديث شريط حالة LAN
-function _lanUpdateStatus(){
-  var modeEl = document.getElementById('lan-mode-lbl');
-  var ipEl   = document.getElementById('lan-ip-lbl');
-  var cliEl  = document.getElementById('lan-clients-lbl');
-  if(!modeEl) return;
-  if(_lanMode==='server'){
-    modeEl.innerHTML='<span style="color:var(--success)">🟢 سيرفير نشط — بورت '+_LAN_PORT+'</span>';
-    if(window.electronAPI && window.electronAPI.getLocalIP){
-      window.electronAPI.getLocalIP().then(function(r){
-        if(ipEl) ipEl.textContent='IP هذا الجهاز: '+(r||'---');
-      });
-    }
-    if(cliEl) cliEl.textContent='أجهزة متصلة: '+_lanClients.size;
-  } else if(_lanMode==='server-info'){
-    modeEl.innerHTML='<span style="color:var(--warning)">🟡 وضع السيرفير (افتح CMD→ipconfig للـ IP)</span>';
-    if(ipEl) ipEl.textContent='';
-    if(cliEl) cliEl.textContent='';
-  } else if(_lanMode==='client'){
-    modeEl.innerHTML='<span style="color:#4af">🔵 متصل بالسيرفير</span>';
-    var srv=document.getElementById('lan-server-ip');
-    if(ipEl) ipEl.textContent='السيرفير: '+(srv?srv.value:'---');
-    if(cliEl) cliEl.textContent='';
-  } else {
-    modeEl.innerHTML='<span style="color:var(--text2)">⚪ غير مفعّل</span>';
-    if(ipEl) ipEl.textContent='';
-    if(cliEl) cliEl.textContent='';
-  }
-}
-
-// بث التغيير لجميع الأجهزة المرتبطة
-function lanBroadcast(key, data){
-  var msg = JSON.stringify({type:'sync', key:key, data:data, ts:Date.now()});
-  if(_lanMode==='server'){
-    // السيرفير يبث للعملاء عبر Electron IPC (main process يملك WebSocket clients الحقيقية)
-    if(window.electronAPI && window.electronAPI.lanBroadcast){
-      window.electronAPI.lanBroadcast(msg);
-    }
-  } else if(_lanMode==='client' && _lanWS && _lanWS.readyState===1){
-    // العميل يرسل للسيرفير
-    try{ _lanWS.send(msg); }catch(e){}
-  }
-}
-
-// معالجة الرسالة الواردة
-function _lanHandleMessage(raw){
-  try{
-    var msg = JSON.parse(raw);
-    if(msg.type==='sync' && _LAN_SYNC_KEYS.indexOf(msg.key)!==-1){
-      // تحديث البيانات محلياً بدون تبث (لمنع الحلقة اللانهائية)
-      if(typeof window._smSetters === 'object' && window._smSetters[msg.key]){
-        window._smSetters[msg.key](msg.data);
-      }
-      if(typeof save==='function') save(msg.key, msg.data);
-      // تحديث الواجهة
-      if(msg.key==='patients' && typeof renderPatients==='function') renderPatients();
-      if(msg.key==='requests' && typeof renderRequests==='function') renderRequests();
-      if(msg.key==='invoices' && typeof renderBilling==='function') renderBilling();
-      if(msg.key==='doctors' && typeof renderDoctors==='function') renderDoctors();
-      showNotif('🌐 LAN','تم استقبال تحديث: '+msg.key,'info');
-      // إشعار بوابة الطبيب بالتحديث
-      document.dispatchEvent(new CustomEvent('dp:refresh'));
-    } else if(msg.type==='cbc' && msg.reqId){
-      // نتيجة CBC وصلت من جهاز على حاسبة أخرى
-      if(typeof lisCbcFromLAN==='function') lisCbcFromLAN(msg);
-    }
-  }catch(e){}
-}
-
-// تشغيل LAN كسيرفير
-function lisLanStartServer(){
-  _ensureLanSaveHook();
-  if(_lanMode==='server'){ showNotif('LAN','السيرفير يعمل بالفعل','warning'); return; }
-  if(window.electronAPI && window.electronAPI.lanStartServer){
-    // تشغيل عبر Electron
-    window.electronAPI.lanStartServer(_LAN_PORT).then(function(r){
-      if(r && r.ok){
-        _lanMode = 'server';
-        window.electronAPI.onLanMessage(function(msg){
-          _lanHandleMessage(typeof msg==='string' ? msg : msg.data);
-        });
-        _lanUpdateStatus();
-        showNotif('🌐 LAN','✅ السيرفير نشط — بورت '+_LAN_PORT,'success');
-        setInterval(function(){ if(_lanMode==='server') _lanUpdateStatus(); }, 4000);
-      } else {
-        showNotif('LAN خطأ',(r&&r.error)||'فشل تشغيل السيرفير','error');
-      }
-    }).catch(function(e){ showNotif('LAN خطأ',e.message,'error'); });
-  } else {
-    // متصفح عادي - عرض IP للمستخدم فقط
-    _lanMode = 'server-info';
-    showNotif('LAN — معلومات', 'لتشغيل السيرفير استخدم التطبيق المكتبي. IP هذا الجهاز: افتح CMD ثم ipconfig', 'info');
-    _lanUpdateStatus();
-  }
-}
-
-// الاتصال كعميل
-function lisLanConnectClient(){
-  _ensureLanSaveHook();
-  var ipInp = document.getElementById('lan-server-ip');
-  var ip = ipInp ? ipInp.value.trim() : '';
-  if(!ip){ showNotif('تنبيه','أدخل IP السيرفير أولاً','warning'); return; }
-  if(_lanWS && _lanWS.readyState<2){ _lanWS.close(); }
-  var wsUrl = 'ws://'+ip+':'+_LAN_PORT;
-  try{
-    _lanWS = new WebSocket(wsUrl);
-    _lanWS.onopen = function(){
-      _lanMode='client';
-      _lanUpdateStatus();
-      showNotif('🌐 LAN','متصل بالسيرفير: '+ip,'success');
-    };
-    _lanWS.onmessage = function(e){ _lanHandleMessage(e.data); };
-    _lanWS.onclose = function(){
-      _lanMode=null; _lanWS=null; _lanUpdateStatus();
-      showNotif('LAN','انقطع الاتصال بالسيرفير','warning');
-    };
-    _lanWS.onerror = function(){
-      showNotif('LAN خطأ','فشل الاتصال بـ '+ip,'error');
-    };
-  }catch(e){
-    showNotif('LAN خطأ',e.message,'error');
-  }
-}
-
-// قطع LAN
-function lisLanDisconnect(){
-  if(_lanWS){ try{ _lanWS.close(); }catch(e){} _lanWS=null; }
-  if(window.electronAPI && window.electronAPI.lanStopServer){
-    window.electronAPI.lanStopServer().catch(function(){});
-  }
-  _lanMode=null; _lanClients.clear(); _lanUpdateStatus();
-  showNotif('LAN','تم قطع الشبكة المحلية ✓','info');
-}
-
-// عرض الحالة
-function lisLanCheckStatus(){
-  _lanUpdateStatus();
-  if(!_lanMode){
-    showNotif('LAN','الشبكة المحلية غير مفعّلة — فعّل السيرفير أو اتصل بجهاز سيرفير','info');
-    return;
-  }
-  var msg;
-  if(_lanMode==='server')       msg='🟢 سيرفير نشط — '+_lanClients.size+' جهاز متصل';
-  else if(_lanMode==='server-info') msg='🟡 وضع السيرفير (متصفح)';
-  else msg='🔵 عميل — متصل بالسيرفير';
-  showNotif('🌐 LAN',msg,'success');
-}
-
-// hook على save لنشر التغييرات تلقائياً عبر LAN
-// يُفعَّل عند أول استخدام للـ LAN
-var _lanSaveHooked = false;
-function _ensureLanSaveHook(){
-  if(_lanSaveHooked) return;
-  if(typeof window.save !== 'function') return;
-  var _origSave = window.save;
-  window.save = function(key, data){
-    _origSave.apply(this, arguments);
-    if(_lanMode && _LAN_SYNC_KEYS.indexOf(key) !== -1){
-      lanBroadcast(key, data);
-    }
-  };
-  _lanSaveHooked = true;
-}
-
-// ════════════════════════════════════════════════════════════
-// منع الخروج وقطع الاتصال عند وجود جهاز متصل
-// ════════════════════════════════════════════════════════════
-function _lisAnyDeviceConnected(){
-  // تحقق من LIS devices
-  if(typeof lisDevices!=='undefined'){
-    for(var i=0;i<lisDevices.length;i++){
-      if(lisDevices[i].connected) return true;
-    }
-  }
-  // تحقق من CBC TCP
-  if(typeof _cbcServerRunning!=='undefined' && _cbcServerRunning) return true;
-  return false;
-}
-
-// رسالة التحذير
-var _LIS_BLOCK_MSG = '⚠️ تنبيه: يوجد جهاز متصل بالبرنامج حالياً.\n\nيجب إيقاف الجهاز أو قطع اتصاله أولاً قبل الخروج.\n\nاذهب إلى قسم ربط الأجهزة وأوقف الاتصال، ثم أعد المحاولة.';
-
-// حجب زر تسجيل الخروج إذا كان هناك جهاز متصل
-var _origDoLogout = window.doLogout;
-window.doLogout = function(){
-  if(_lisAnyDeviceConnected()){
-    alert(_LIS_BLOCK_MSG);
-    nav('lis'); // انتقل لقسم الأجهزة
-    return;
-  }
-  if(typeof _origDoLogout==='function') _origDoLogout();
-};
-
-// حجب إغلاق التطبيق إذا كان هناك جهاز متصل
-window.addEventListener('beforeunload', function(e){
-  if(_lisAnyDeviceConnected()){
-    e.preventDefault();
-    e.returnValue = _LIS_BLOCK_MSG;
-    return _LIS_BLOCK_MSG;
-  }
-});
-
-// إشعار Electron بمنع الإغلاق
-if(window.electronAPI && window.electronAPI.isElectron){
-  document.addEventListener('keydown', function(e){
-    if((e.altKey && e.key==='F4') || (e.ctrlKey && e.key==='w')){
-      if(_lisAnyDeviceConnected()){
-        e.preventDefault();
-        alert(_LIS_BLOCK_MSG);
-        nav('lis');
-      }
-    }
-  });
-}
-
-
-// ════════════════════════════════════════════════════════════════════
-
-// ═════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════════
-// DOCTOR PORTAL v5 — بوابة الطبيب
-// الإصلاح: iframe مع قياس ارتفاع صحيح للـ Electron والمتصفح
-// ════════════════════════════════════════════════════════════════════
-(function(){
-  'use strict';
-
-  var _dpSearch   = '';
-  var _dpTab      = 'today';
-  var _dpActiveId = null;
-  var _dpTimer    = null;
-
-  // ══ فتح / إغلاق ══════════════════════════════════════════════════
-
-  window.dpOpenModal = function(){
-    var el = document.getElementById('dp-modal-overlay');
-    if(!el) return;
-    el.classList.add('open');
-    document.body.style.overflow = 'hidden';
-    var dateEl = document.getElementById('dp-hdr-date');
-    if(dateEl){
-      dateEl.textContent = new Date().toLocaleDateString('ar-IQ',
-        {weekday:'short',year:'numeric',month:'long',day:'numeric'});
-    }
-    dpRenderAll();
-    _dpStartTimer();
-  };
-
-  window.dpCloseModal = function(){
-    var el = document.getElementById('dp-modal-overlay');
-    if(el) el.classList.remove('open');
-    document.body.style.overflow = '';
-    _dpStopTimer();
-    _dpActiveId = null;
-  };
-
-  document.addEventListener('keydown', function(e){
-    if(e.key === 'Escape'){
-      var el = document.getElementById('dp-modal-overlay');
-      if(el && el.classList.contains('open')) window.dpCloseModal();
-    }
-  });
-
-  // ══ Timer ════════════════════════════════════════════════════════
-
-  function _dpStartTimer(){
-    _dpStopTimer();
-    _dpTimer = setInterval(function(){
-      var el = document.getElementById('dp-modal-overlay');
-      if(el && el.classList.contains('open')) dpRenderAll();
-    }, 8000);
-  }
-  function _dpStopTimer(){
-    if(_dpTimer){ clearInterval(_dpTimer); _dpTimer = null; }
-  }
-
-  // ══ تبويب اليوم / الكل ═══════════════════════════════════════════
-
-  window.dpSetTab = function(tab){
-    _dpTab    = tab;
-    _dpSearch = '';
-    var inp = document.getElementById('dp-search-inp');
-    if(inp) inp.value = '';
-    var t1 = document.getElementById('dp-tab-today');
-    var t2 = document.getElementById('dp-tab-all');
-    if(t1) t1.className = 'dp-ftab' + (tab==='today'?' active':'');
-    if(t2) t2.className = 'dp-ftab' + (tab==='all'  ?' active':'');
-    _dpRenderList();
-  };
-
-  // ══ بحث ══════════════════════════════════════════════════════════
-
-  window.dpFilterList = function(val){
-    _dpSearch = (val||'').trim().toLowerCase();
-    _dpRenderList();
-  };
-
-  // ══ تحديث كامل ═══════════════════════════════════════════════════
-
-  window.dpRenderAll = function(){
-    _dpUpdateLan();
-    _dpRenderList();
-    if(_dpActiveId){
-      var req = _dpFindReq(_dpActiveId);
-      if(req){
-        var viewer = document.getElementById('dp-viewer');
-        if(viewer && viewer.querySelector('.dp-wait-wrap')){
-          if(req.status === 'done') _dpShowReport(req);
-          else _dpUpdateWait(req, viewer);
-        }
-      }
-    }
-  };
-
-  // ══ جلب الطلبات ══════════════════════════════════════════════════
-
-  function _dpFindReq(id){
-    if(typeof requests === 'undefined' || !Array.isArray(requests)) return null;
-    return requests.find(function(r){ return r.id === id; }) || null;
-  }
-
-  function _dpGetReqs(){
-    if(typeof requests === 'undefined' || !Array.isArray(requests)) return [];
-    if(_dpTab === 'today'){
-      var today = new Date().toISOString().split('T')[0];
-      return requests.filter(function(r){ return r.date === today; });
-    }
-    return requests.slice().reverse();
-  }
-
-  // ══ حالة الطلب ════════════════════════════════════════════════════
-
-  function _dpSt(req){
-    return req.status==='done' ? 'done'
-         : req.status==='inprogress' ? 'inprog' : 'pending';
-  }
-  function _dpStLbl(st){
-    return st==='done'?'مكتمل':st==='inprog'?'جارٍ':'انتظار';
-  }
-
-  // ══ LAN ══════════════════════════════════════════════════════════
-
-  function _dpUpdateLan(){
-    var badge  = document.getElementById('dp-lan-badge');
-    var bar    = document.getElementById('dp-lan-bar');
-    var barTxt = document.getElementById('dp-lan-bar-text');
-    var mode   = (typeof _lanMode !== 'undefined') ? _lanMode : null;
-    if(badge){
-      if(mode==='server'){
-        badge.style.cssText='display:inline-block;background:rgba(0,232,122,0.15);color:#00e87a;border:1px solid rgba(0,232,122,0.35);padding:2px 7px;border-radius:5px;font-size:10px;font-family:Cairo,sans-serif;font-weight:700;';
-        badge.textContent='🟢 سيرفير';
-      } else if(mode==='client'){
-        badge.style.cssText='display:inline-block;background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.28);padding:2px 7px;border-radius:5px;font-size:10px;font-family:Cairo,sans-serif;font-weight:700;';
-        badge.textContent='🔵 عميل';
-      } else {
-        badge.style.display='none';
-      }
-    }
-    if(bar && barTxt){
-      if(mode==='server'||mode==='client'){
-        bar.className='dp-lan-bar';
-        barTxt.textContent=mode==='server'?'🟢 سيرفير LAN — التغييرات تنتقل تلقائياً':'🔵 متصل بسيرفير LAN';
-      } else {
-        bar.className='dp-lan-bar dp-lan-off';
-      }
+      closePanel();
     }
   }
 
-  // ══ رسم القائمة ══════════════════════════════════════════════════
-
-  function _dpInit(name){
-    var p=(name||'').trim().split(/\s+/);
-    return p.length>=2?p[0][0]+p[1][0]:(name||'?')[0];
-  }
-  function _esc(s){
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  function closePanel() {
+    document.getElementById('ml-ai-panel').classList.remove('open');
+    document.getElementById('ml-ai-help-btn').style.display = 'none';
   }
 
-  function _dpRenderList(){
-    var listEl = document.getElementById('dp-list');
-    var statT  = document.getElementById('dp-stat-total');
-    var statD  = document.getElementById('dp-stat-done');
-    var statP  = document.getElementById('dp-stat-pend');
-    if(!listEl) return;
+  function setStatus(text, wave = false) {
+    const st = document.getElementById('ml-ai-status-text');
+    const wv = document.getElementById('ml-ai-wave');
+    const badge = document.getElementById('ml-ai-badge');
+    if (st) st.textContent = text;
+    if (wv) wave ? wv.classList.add('listening') : wv.classList.remove('listening');
+    if (badge) {
+      badge.textContent = wave ? '🔴 يستمع...' : '⬤ جاهز';
+      badge.style.color = wave ? '#ff4d6d' : '#3ecfcf';
+    }
+  }
 
-    var reqs = _dpGetReqs();
-    var cD = reqs.filter(function(r){return r.status==='done';}).length;
-    var cP = reqs.filter(function(r){return r.status!=='done';}).length;
-    if(statT) statT.textContent='الكل: '+reqs.length;
-    if(statD) statD.textContent='✅ '+cD;
-    if(statP) statP.textContent='⏳ '+cP;
+  function addMsg(text, who = 'ai', cls = '') {
+    const log = document.getElementById('ml-ai-log');
+    if (!log) return;
+    const div = document.createElement('div');
+    div.className = `ml-msg ${who} ${cls}`;
+    div.textContent = text;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
 
-    var list = _dpSearch
-      ? reqs.filter(function(r){return(r.patientName||'').toLowerCase().indexOf(_dpSearch)!==-1;})
-      : reqs;
+  function showConfirm(msg, action) {
+    AI.pendingAction = action;
+    document.getElementById('ml-confirm-msg').textContent = msg;
+    document.getElementById('ml-ai-confirm-bar').classList.add('show');
+  }
 
-    if(!list.length){
-      listEl.innerHTML='<div class="dp-empty"><div style="font-size:26px;margin-bottom:6px">'+
-        (_dpSearch?'🔍':'🩺')+'</div><div>'+
-        (_dpSearch?'لا نتائج':_dpTab==='today'?'لا طلبات اليوم':'لا توجد طلبات')+
-        '</div></div>';
-      listEl.onclick = null;
+  function confirmAction() {
+    document.getElementById('ml-ai-confirm-bar').classList.remove('show');
+    if (AI.pendingAction) { AI.pendingAction(); AI.pendingAction = null; }
+  }
+
+  function cancelAction() {
+    document.getElementById('ml-ai-confirm-bar').classList.remove('show');
+    AI.pendingAction = null;
+    addMsg('تم الإلغاء.', 'ai', 'warn');
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  5. Web Speech API
+  // ══════════════════════════════════════════════════════
+  function startListening() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      addMsg('⚠️ المتصفح لا يدعم التعرف على الصوت. استخدم Chrome أو Edge.', 'ai', 'error');
       return;
     }
-
-    var ord={done:0,inprog:1,pending:2};
-    var sorted=list.slice().sort(function(a,b){
-      var da=ord[_dpSt(a)]||2, db=ord[_dpSt(b)]||2;
-      if(da!==db) return da-db;
-      return (a.patientName||'').localeCompare(b.patientName||'');
-    });
-
-    var html='';
-    sorted.forEach(function(req){
-      var st  =_dpSt(req);
-      var lbl =_dpStLbl(st);
-      var nm  =req.patientName||'---';
-      var init=_dpInit(nm);
-      var pt  =(typeof patients!=='undefined'&&Array.isArray(patients))
-                ?patients.find(function(p){return p.id===req.patientId;})||{}:{};
-      var age   =pt.ageDisplay||pt.age||'';
-      var gender=pt.gender==='female'?'أنثى':'ذكر';
-      var tc    =(req.tests||[]).length;
-      var sub   =(age?age+' — ':'')+gender+' — '+tc+' تحليل';
-      if(req.doctorName) sub+=' | د.'+req.doctorName;
-      var dateStr=(_dpTab==='all'&&req.date)?' ('+req.date+')':'';
-      var isActive=(_dpActiveId===req.id)?' dp-active':'';
-
-      // استخدام data-rid بدل onclick inline — يتجنب مشكلة الـ quotes
-      html+='<div class="dp-patient-card st-'+st+isActive+'" data-rid="'+_esc(req.id)+'">'
-        +'<div class="dp-pt-avatar st-'+st+'">'+_esc(init)+'</div>'
-        +'<div class="dp-pt-info">'
-        +'<div class="dp-pt-name">'+_esc(nm)+_esc(dateStr)+'</div>'
-        +'<div class="dp-pt-sub">'+_esc(sub)+'</div>'
-        +'</div>'
-        +'<span class="dp-pt-badge st-'+st+'">'+lbl+'</span>'
-        +'</div>';
-    });
-    listEl.innerHTML=html;
-
-    // event delegation — آمن مع أي reqId
-    listEl.onclick=function(e){
-      var card=e.target.closest?e.target.closest('.dp-patient-card'):null;
-      if(!card) return;
-      var rid=card.getAttribute('data-rid');
-      if(rid) window.dpSelectPt(rid);
-    };
-  }
-
-  // ══ اختيار مريض ══════════════════════════════════════════════════
-
-  window.dpSelectPt = function(reqId){
-    _dpActiveId=reqId;
-    _dpRenderList();
-    var req=_dpFindReq(reqId);
-    if(req) _dpShowReport(req);
-  };
-
-  // ══ عرض التقرير ══════════════════════════════════════════════════
-
-  function _dpShowReport(req){
-    var viewer=document.getElementById('dp-viewer');
-    if(!viewer) return;
-
-    if(req.status!=='done'){
-      viewer.innerHTML='';
-      viewer.appendChild(_dpWaitEl(req));
-      return;
+    if (AI.recognition) {
+      try { AI.recognition.abort(); } catch (_) {}
     }
 
-    viewer.innerHTML='<div class="dp-loading">'
-      +'<div style="font-size:32px">⏳</div>'
-      +'<div>جاري تحميل التقرير...</div></div>';
+    const rec = new SpeechRecognition();
+    rec.lang = 'ar-IQ'; // اللهجة العراقية — يُرجع للعربي العام تلقائياً
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 3;
 
-    setTimeout(function(){ _dpBuildPages(req,viewer); }, 30);
-  }
+    rec.onstart = () => {
+      AI.active = true;
+      AI.listening = true;
+      const btn = document.getElementById('ml-ai-btn');
+      if (btn) btn.classList.add('active');
+      setStatus('يستمع...', true);
+    };
 
-  // ══ بناء الصفحات ═════════════════════════════════════════════════
-
-  function _dpBuildPages(req, viewer){
-    var pages=[];
-    try{
-      var allTests=(req.tests||[]).map(function(tid){
-        return typeof tests!=='undefined'?tests.find(function(t){return t.id===tid;}):null;
-      }).filter(Boolean);
-
-      var regTests =allTests.filter(function(t){return !t.isSpecialExam&&!t.isCalc;});
-      var calcTests=allTests.filter(function(t){return t.isCalc&&req.results&&req.results[t.id];});
-      var spTests  =allTests.filter(function(t){return !!t.isSpecialExam;});
-
-      if(regTests.length>0&&typeof buildPrintHTML==='function'){
-        var h=buildPrintHTML(req);
-        if(h&&h.length>50) pages.push(h);
-      }
-      if(typeof buildCalcTestPrintHTML==='function'){
-        calcTests.forEach(function(ct){
-          var h=buildCalcTestPrintHTML(req,ct);
-          if(h&&h.length>50) pages.push(h);
-        });
-      }
-      if(typeof loadUARecords==='function') loadUARecords();
-      if(typeof loadStoolExamRecords==='function') loadStoolExamRecords();
-      if(typeof loadSemenRecords==='function') loadSemenRecords();
-
-      spTests.forEach(function(st){
-        var rec=null,h='';
-        if(st.isSpecialExam==='ua'){
-          rec=typeof uaRecords!=='undefined'?uaRecords.find(function(r){return r.reqId===req.id;}):null;
-          if(rec&&typeof _buildUAPrintHTML==='function') h=_buildUAPrintHTML(rec);
-        } else if(st.isSpecialExam==='stool'){
-          rec=typeof stoolExamRecords!=='undefined'?stoolExamRecords.find(function(r){return r.reqId===req.id;}):null;
-          if(rec&&typeof _buildStoolPrintHTML==='function') h=_buildStoolPrintHTML(rec);
-        } else if(st.isSpecialExam==='semen'){
-          rec=typeof semenRecords!=='undefined'?semenRecords.find(function(r){return r.reqId===req.id;}):null;
-          if(rec&&typeof _buildSemenPrintHTML==='function') h=_buildSemenPrintHTML(rec);
-        }
-        if(h&&h.length>50) pages.push(h);
-      });
-
-      if(typeof cultureRecords!=='undefined'&&Array.isArray(cultureRecords)){
-        cultureRecords.filter(function(c){return c.reqId===req.id;}).forEach(function(c){
-          if(typeof _buildCultureHTML==='function'){
-            var h=_buildCultureHTML(c.id);
-            if(h&&h.length>50) pages.push(h);
+    rec.onresult = (e) => {
+      let finalText = '';
+      let interimText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) {
+          // جمع كل البدائل لتحسين التعرف
+          for (let j = 0; j < r.length; j++) {
+            finalText += r[j].transcript + ' ';
           }
-        });
+        } else {
+          interimText += r[0].transcript;
+        }
       }
-    } catch(err){
-      console.warn('[DP]',err);
-    }
+      if (interimText) {
+        setStatus('🎙️ ' + interimText.substring(0, 50) + (interimText.length > 50 ? '...' : ''), true);
+      }
+      if (finalText.trim()) {
+        const cmd = finalText.trim().replace(/\s+/g, ' ');
+        setStatus('يعالج...', false);
+        addMsg(cmd, 'user');
+        processCommand(cmd);
+      }
+    };
 
-    if(pages.length===0){
-      viewer.innerHTML='';
-      viewer.appendChild(_dpWaitEl(req));
-      return;
-    }
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech') { /* تجاهل، يعيد الاستماع */ return; }
+      if (e.error === 'network') {
+        addMsg('⚠️ تحقق من الإنترنت — التعرف الصوتي يحتاج اتصالاً.', 'ai', 'warn');
+      }
+    };
 
-    viewer.innerHTML='';
-    _dpRenderPage(viewer, pages, 0);
+    rec.onend = () => {
+      AI.listening = false;
+      if (AI.active) {
+        // إعادة تشغيل تلقائية بعد 300ms للاستماع المستمر
+        AI.restartTimer = setTimeout(() => {
+          if (AI.active) {
+            try { rec.start(); AI.listening = true; } catch (_) {}
+          }
+        }, 300);
+      } else {
+        setStatus('متوقف', false);
+        const btn = document.getElementById('ml-ai-btn');
+        if (btn) btn.classList.remove('active');
+      }
+    };
+
+    AI.recognition = rec;
+    try { rec.start(); } catch (_) {}
   }
 
-  // ══ رسم صفحة واحدة بالـ iframe الصحيح ═══════════════════════════
-  // الحل الكامل لمشكلة Electron:
-  // 1. iframe بدون scrolling=no
-  // 2. الارتفاع يُحسب من document.documentElement بدل body فقط
-  // 3. محاولات متعددة مع فترات أطول (الـ init() داخل التقرير يحتاج وقت)
-  // 4. MutationObserver يراقب تغيير الـ DOM داخل الـ iframe
+  function stopListening() {
+    AI.active = false;
+    AI.listening = false;
+    clearTimeout(AI.restartTimer);
+    if (AI.recognition) {
+      try { AI.recognition.abort(); } catch (_) {}
+      AI.recognition = null;
+    }
+    const btn = document.getElementById('ml-ai-btn');
+    if (btn) btn.classList.remove('active');
+    setStatus('متوقف — اضغط الزر للتفعيل', false);
+  }
 
-  function _dpRenderPage(viewer, pages, idx){
-    if(idx>=pages.length) return;
+  // ══════════════════════════════════════════════════════
+  //  6. معالج الأوامر — القلب الذكي
+  // ══════════════════════════════════════════════════════
+  function processCommand(raw) {
+    const btn = document.getElementById('ml-ai-btn');
+    if (btn) { btn.classList.remove('active'); btn.classList.add('thinking'); }
 
-    if(idx>0){
-      var sep=document.createElement('div');
-      sep.style.cssText='height:8px;background:#c0c8d0;flex-shrink:0;';
-      viewer.appendChild(sep);
+    setTimeout(() => {
+      if (btn) { btn.classList.remove('thinking'); if (AI.active) btn.classList.add('active'); }
+      const txt = normalize(raw);
+      const result = route(txt, raw);
+      addMsg(result.msg, 'ai', result.cls || '');
+    }, 180);
+  }
+
+  // ── تطبيع النص ────────────────────────────────────────
+  function normalize(txt) {
+    return txt
+      .toLowerCase()
+      .replace(/[أإآا]/g, 'ا')
+      .replace(/[ةه]/g, 'ه')
+      .replace(/[يىئ]/g, 'ي')
+      .replace(/[ؤو]/g, 'و')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // ── توجيه الأمر ──────────────────────────────────────
+  function route(txt, raw) {
+    // ── تأكيد ─────────────────────────────
+    if (AI.pendingAction && /^(نعم|اه|اي|يس|تمام|صح|موافق|اكيد|yes|ok)/.test(txt)) {
+      confirmAction(); return { msg: '✅ تم التنفيذ', cls: 'success' };
+    }
+    if (AI.pendingAction && /^(لا|كلا|لأ|اوقف|خطا|الغ|no)/.test(txt)) {
+      cancelAction(); return { msg: '🚫 تم الإلغاء', cls: 'warn' };
     }
 
-    var html=pages[idx];
+    // ── تعليمات المساعد نفسه ──────────────
+    if (/توقف|ايقاف|صامت|سكت|stop/.test(txt)) { stopListening(); return { msg: '🔇 تم إيقاف الاستماع. اضغط الزر لإعادة التشغيل.', cls: 'warn' }; }
+    if (/مساعده|مساعدة|اوامر|ايش|شنو|كيف تشتغل/.test(txt)) { showHelp(); return { msg: '💡 عُرضت قائمة الأوامر المتاحة.', cls: '' }; }
 
-    // ── wrapper بارتفاع مبدئي كبير لمنع قطع المحتوى ──
-    var wrap=document.createElement('div');
-    wrap.style.cssText='background:#fff;width:100%;flex-shrink:0;';
+    // ── تنقل بين الصفحات ──────────────────
+    const navR = tryNav(txt);
+    if (navR) return navR;
 
-    var iframe=document.createElement('iframe');
-    // لا scrolling=no — نتركه يتمدد بحرية
-    iframe.style.cssText='width:100%;border:none;display:block;min-height:200px;height:800px;';
-
-    wrap.appendChild(iframe);
-    viewer.appendChild(wrap);
-
-    // ── كتابة المحتوى في الـ iframe ──
-    // srcdoc أولاً (الأفضل للـ Electron)
-    var written=false;
-    try{
-      iframe.srcdoc=html;
-      written=true;
-    } catch(e){}
-
-    if(!written){
-      try{
-        var d=iframe.contentDocument||iframe.contentWindow.document;
-        d.open(); d.write(html); d.close();
-      } catch(e2){}
+    // ── مريض جديد ────────────────────────
+    if (/مريض جديد|اضف مريض|اضافة مريض|سجل مريض|تسجيل مريض|فتح طلب|طلب جديد/.test(txt)) {
+      return doNewPatient(raw);
     }
 
-    // ── دالة قياس الارتفاع الصحيح ──
-    function measureHeight(){
-      try{
-        var d=iframe.contentDocument||iframe.contentWindow.document;
-        if(!d||!d.body) return 0;
-        // نأخذ أكبر قيمة من عدة مصادر
-        var h=Math.max(
-          d.body.scrollHeight        || 0,
-          d.body.offsetHeight        || 0,
-          d.documentElement.scrollHeight || 0,
-          d.documentElement.offsetHeight || 0,
-          d.body.getBoundingClientRect ? d.body.getBoundingClientRect().height : 0
-        );
-        return h;
-      } catch(e){ return 0; }
-    }
+    // ── بحث عن مريض ─────────────────────
+    const searchR = trySearchPatient(txt, raw);
+    if (searchR) return searchR;
 
-    function applyHeight(){
-      var h=measureHeight();
-      if(h>100){
-        iframe.style.height=(h+30)+'px';
-        wrap.style.minHeight=(h+30)+'px';
+    // ── حذف مريض ────────────────────────
+    const delR = tryDeletePatient(txt, raw);
+    if (delR) return delR;
+
+    // ── إدخال نتائج ─────────────────────
+    const resR = tryEnterResults(txt, raw);
+    if (resR) return resR;
+
+    // ── طباعة ────────────────────────────
+    const printR = tryPrint(txt);
+    if (printR) return printR;
+
+    // ── إحصائيات / تقارير ────────────────
+    const statR = tryStats(txt);
+    if (statR) return statR;
+
+    // ── أوامر متنوعة ─────────────────────
+    const miscR = tryMisc(txt);
+    if (miscR) return miscR;
+
+    return { msg: '🤔 لم أفهم الأمر. قل "أوامر" لعرض ما يمكنني فعله.', cls: 'warn' };
+  }
+
+  // ══════════════════════════════════════════════════════
+  //  7. وظائف التنفيذ
+  // ══════════════════════════════════════════════════════
+
+  // ── التنقل ───────────────────────────────────────────
+  function tryNav(txt) {
+    const routes = {
+      dashboard:   /لوحه التحكم|الرئيسيه|dashboard|هوم|الصفحه الرئيسيه/,
+      patients:    /المرضي|قائمه المرضي|ادارة المرضي|مرضي/,
+      requests:    /الطلبات|طلبات التحاليل|الطلبيات/,
+      results:     /النتائج|ادخال نتائج|نتائج التحاليل|النتيجه/,
+      print:       /طباعه|طباعة|print/,
+      invoices:    /الفواتير|فواتير|حسابات|ماليه/,
+      'tests-db':  /قاعدة التحاليل|التحاليل|اضف تحليل|تحاليل/,
+      doctors:     /الاطباء|اطباء|دكتور/,
+      inventory:   /المخزون|مخزون|مواد/,
+      settings:    /الاعدادات|اعدادات|settings/,
+      reports:     /التقارير|تقارير|reports/,
+      lis:         /ربط اجهزه|اجهزه lis|lis|جهاز/,
+      waitqueue:   /طابور الانتظار|طابور|انتظار/,
+      quality:     /ضبط الجوده|جوده|qc/,
+      culture:     /زرع|كلچر|culture/,
+    };
+    for (const [page, rx] of Object.entries(routes)) {
+      if (rx.test(txt)) {
+        if (typeof nav === 'function') nav(page);
+        return { msg: `✅ تم الانتقال إلى: ${pageName(page)}`, cls: 'success' };
       }
     }
+    return null;
+  }
 
-    // ── استراتيجية متعددة المحاولات لضمان القياس الصحيح ──
-    var attempts=[200, 500, 1000, 1800, 3000, 5000];
-    var appliedGoodHeight=false;
+  function pageName(p) {
+    const names = { dashboard: 'لوحة التحكم', patients: 'المرضى', requests: 'الطلبات',
+      results: 'النتائج', print: 'الطباعة', invoices: 'الفواتير', 'tests-db': 'التحاليل',
+      doctors: 'الأطباء', inventory: 'المخزون', settings: 'الإعدادات', reports: 'التقارير',
+      lis: 'ربط الأجهزة', waitqueue: 'طابور الانتظار', quality: 'ضبط الجودة', culture: 'الزرع' };
+    return names[p] || p;
+  }
 
-    function tryFit(attemptIdx){
-      if(attemptIdx>=attempts.length) return;
-      setTimeout(function(){
-        var h=measureHeight();
-        if(h>200){
-          iframe.style.height=(h+30)+'px';
-          wrap.style.minHeight=(h+30)+'px';
-          appliedGoodHeight=true;
-        }
-        tryFit(attemptIdx+1);
-      }, attempts[attemptIdx]);
+  // ── مريض جديد ─────────────────────────────────────────
+  function doNewPatient(raw) {
+    if (typeof startNewPatient === 'function') {
+      startNewPatient();
+      return { msg: '✅ تم فتح نافذة إضافة مريض جديد. أكمل البيانات.', cls: 'success' };
+    }
+    return { msg: '❌ لم أتمكن من فتح نافذة المريض الجديد.', cls: 'error' };
+  }
+
+  // ── بحث عن مريض ──────────────────────────────────────
+  function trySearchPatient(txt, raw) {
+    const m = txt.match(/(?:دور على|فتش عن|ابحث عن|بحث عن|ابحث|فتش|دور|اجيب|عرض|شوف مريض|ملف)\s+(.+)/);
+    if (!m) return null;
+    const name = m[1].trim();
+    if (name.length < 2) return { msg: '⚠️ اكتب اسماً أطول للبحث.', cls: 'warn' };
+
+    if (typeof nav === 'function') nav('patients');
+    setTimeout(() => {
+      const inp = document.getElementById('pt-srch');
+      if (inp) { inp.value = raw.match(/(?:دور على|فتش عن|ابحث عن|بحث عن|ابحث|فتش|دور|اجيب|عرض|شوف مريض|ملف)\s+(.+)/i)?.[1]?.trim() || name; if (typeof searchPatients === 'function') searchPatients(inp.value); }
+    }, 400);
+    return { msg: `🔍 جاري البحث عن "${name}" في قائمة المرضى...`, cls: '' };
+  }
+
+  // ── حذف مريض ─────────────────────────────────────────
+  function tryDeletePatient(txt, raw) {
+    const m = txt.match(/(?:احذف|امسح|اشيل|حذف|مسح)\s+(?:مريض\s+)?(.+)/);
+    if (!m || !/احذف|امسح|اشيل|حذف|مسح/.test(txt)) return null;
+    if (!/مريض/.test(txt) && !/احذف|امسح|اشيل/.test(txt)) return null;
+
+    const rawName = raw.match(/(?:احذف|امسح|اشيل|حذف|مسح)\s+(?:مريض\s+)?(.+)/i)?.[1]?.trim() || m[1].trim();
+    const found = (typeof patients !== 'undefined' ? patients : []).filter(p =>
+      p.name && p.name.toLowerCase().includes(rawName.toLowerCase())
+    );
+
+    if (found.length === 0) return { msg: `❌ لم أجد مريضاً باسم "${rawName}".`, cls: 'error' };
+    if (found.length > 1) {
+      const names = found.slice(0, 4).map(p => `${p.name} (${p.id})`).join(' / ');
+      return { msg: `⚠️ وجدت ${found.length} مرضى: ${names}. كن أكثر تحديداً.`, cls: 'warn' };
     }
 
-    // ── انتظار حدث load ──
-    iframe.addEventListener('load', function(){
-      // انتظر قليلاً بعد load لإتاحة init() داخل التقرير
-      setTimeout(applyHeight, 100);
-      setTimeout(applyHeight, 400);
-      setTimeout(applyHeight, 900);
-      setTimeout(applyHeight, 2000);
+    const pt = found[0];
+    showConfirm(`هل تريد حذف المريض "${pt.name}" (${pt.id}) نهائياً؟`, () => {
+      if (typeof deletePatient === 'function') deletePatient(pt.id);
+      addMsg(`🗑️ تم حذف المريض "${pt.name}" بنجاح.`, 'ai', 'success');
+    });
+    return { msg: `⚠️ سيتم حذف "${pt.name}" — هل أنت متأكد؟`, cls: 'warn' };
+  }
 
-      // MutationObserver يراقب تغييرات DOM داخل الـ iframe
-      // (يُطلق عندما ينتهي init() من بناء الصفحات)
-      try{
-        var d=iframe.contentDocument||iframe.contentWindow.document;
-        var container=d.getElementById('all-pages-container')||d.body;
-        if(container && window.MutationObserver){
-          var obs=new MutationObserver(function(){
-            setTimeout(applyHeight, 50);
-            setTimeout(applyHeight, 300);
-          });
-          obs.observe(container,{childList:true,subtree:true,attributes:false});
-          // فصل المراقب بعد 10 ثوانٍ
-          setTimeout(function(){ obs.disconnect(); },10000);
-        }
-      } catch(e){}
+  // ── إدخال نتائج ──────────────────────────────────────
+  function tryEnterResults(txt, raw) {
+    // كشف نمط: "ادخل نتائج [اسم/رقم] تي اس اتش 5.5 فيريتين 60"
+    const isResultCmd = /ادخل نتائج|سجل نتائج|نتائج|نتيجه/.test(txt);
+    if (!isResultCmd) return null;
 
-      // رسم الصفحة التالية بعد تأخير
-      setTimeout(function(){
-        _dpRenderPage(viewer, pages, idx+1);
-      }, 100);
+    // استخراج قيم التحاليل من النص
+    const parsed = parseTestValues(raw);
+    if (parsed.length === 0) {
+      // ربما فقط "انتقل لإدخال النتائج"
+      if (typeof nav === 'function') nav('results');
+      return { msg: '✅ تم الانتقال لصفحة إدخال النتائج. اختر الطلب أولاً.', cls: 'success' };
+    }
+
+    // محاولة تعبئة القيم في الحقول الحالية
+    const filled = fillResults(parsed);
+    if (filled.length > 0) {
+      return { msg: `✅ تم إدخال ${filled.length} نتيجة: ${filled.map(f => f.code + '=' + f.val).join(' | ')}`, cls: 'success' };
+    }
+    return { msg: `⚠️ استخرجت: ${parsed.map(p => p.code + '=' + p.val).join(', ')} — تأكد أنك في صفحة إدخال النتائج وطلب محدد.`, cls: 'warn' };
+  }
+
+  // ── استخراج قيم التحاليل من جملة ────────────────────
+  function parseTestValues(raw) {
+    const results = [];
+    // تحويل الأرقام العربية للإنجليزية
+    const text = raw
+      .replace(/٠/g,'0').replace(/١/g,'1').replace(/٢/g,'2').replace(/٣/g,'3')
+      .replace(/٤/g,'4').replace(/٥/g,'5').replace(/٦/g,'6').replace(/٧/g,'7')
+      .replace(/٨/g,'8').replace(/٩/g,'9');
+
+    // البحث عن أنماط: [اسم تحليل] [رقم]
+    // نقسّم على الأرقام ونستخرج الكود قبل كل رقم
+    const tokenRx = /([^\d\.،,]+?)\s*([\d]+(?:\.[\d]+)?)\s*/g;
+    let m;
+    while ((m = tokenRx.exec(text)) !== null) {
+      const label = normalize(m[1]);
+      const val = m[2];
+      const code = resolveTestCode(label);
+      if (code) results.push({ code, val, label: m[1].trim() });
+    }
+    return results;
+  }
+
+  // ── تحويل نص ← كود تحليل ────────────────────────────
+  function resolveTestCode(label) {
+    const n = normalize(label);
+    // بحث مباشر
+    if (TEST_MAP[n]) return TEST_MAP[n];
+    // بحث جزئي
+    for (const [key, val] of Object.entries(TEST_MAP)) {
+      if (n.includes(key) || key.includes(n)) return val;
+    }
+    // بحث في مصفوفة tests الفعلية للبرنامج
+    if (typeof tests !== 'undefined') {
+      const found = tests.find(t =>
+        normalize(t.nameEn).includes(n) ||
+        normalize(t.code).includes(n) ||
+        (t.nameShort && normalize(t.nameShort).includes(n))
+      );
+      if (found) return found.code;
+    }
+    return null;
+  }
+
+  // ── تعبئة حقول النتائج ──────────────────────────────
+  function fillResults(parsed) {
+    const filled = [];
+    if (typeof tests === 'undefined' || typeof requests === 'undefined') return filled;
+
+    // الطلب المحدد حالياً
+    const sel = document.getElementById('res-req-sel');
+    const reqId = sel ? sel.value : null;
+    if (!reqId) return filled;
+
+    const req = requests.find(r => r.id === reqId);
+    if (!req) return filled;
+
+    parsed.forEach(({ code, val }) => {
+      // إيجاد التحليل
+      const test = tests.find(t => t.code === code || t.id === code);
+      if (!test) return;
+      // إيجاد الحقل
+      const el = document.getElementById('rv-' + test.id) ||
+                 document.getElementById('rv-manual-' + test.id);
+      if (el) {
+        el.value = val;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        filled.push({ code, val });
+        // حفظ تلقائي
+        if (req.results) req.results[test.id] = val;
+      }
     });
 
-    // تشغيل المحاولات المتعددة بغض النظر عن load
-    tryFit(0);
+    if (filled.length > 0 && typeof save === 'function') {
+      save('requests', requests);
+    }
+    return filled;
   }
 
-  // ══ تحديث رسالة الانتظار ═════════════════════════════════════════
-
-  function _dpUpdateWait(req,viewer){
-    var old=viewer.querySelector('.dp-wait-wrap');
-    if(old) viewer.replaceChild(_dpWaitEl(req),old);
+  // ── طباعة ────────────────────────────────────────────
+  function tryPrint(txt) {
+    if (!/اطبع|طبع|طباعه|print/.test(txt)) return null;
+    const m = txt.match(/(?:اطبع|طبع|طباعه)\s+(?:نتائج\s+)?(.+)/);
+    if (m) {
+      const name = m[1].trim();
+      const req = (typeof requests !== 'undefined' ? requests : []).find(r =>
+        r.patientName && normalize(r.patientName).includes(normalize(name)) && r.status === 'done'
+      );
+      if (req) {
+        if (typeof goToPrint === 'function') goToPrint(req.id);
+        return { msg: `🖨️ جاري فتح طباعة نتائج "${req.patientName}"...`, cls: 'success' };
+      }
+      return { msg: `❌ لم أجد نتائج جاهزة للطباعة للمريض "${name}".`, cls: 'error' };
+    }
+    if (typeof nav === 'function') nav('print');
+    return { msg: '🖨️ تم الانتقال لصفحة الطباعة.', cls: 'success' };
   }
 
-  // ══ عنصر رسالة الانتظار ══════════════════════════════════════════
-
-  function _dpWaitEl(req){
-    var nm=req.patientName||'---';
-    var allT=(req.tests||[]).map(function(tid){
-      return typeof tests!=='undefined'?tests.find(function(t){return t.id===tid;}):null;
-    }).filter(Boolean);
-    var doneC=0;
-    if(req.results) allT.forEach(function(t){if(req.results[t.id]==='done') doneC++;});
-    var total=allT.length;
-    var pct=total>0?Math.round(doneC/total*100):0;
-    var isIP=req.status==='inprogress';
-    var col=isIP?'#00d4ff':'#ffcc00';
-    var icon=isIP?'🔬':'⏳';
-    var msg=isIP?'التحليل جارٍ...':'التحليل قيد الانتظار';
-
-    var rows=allT.map(function(t){
-      var d=req.results&&req.results[t.id]==='done';
-      return '<tr style="border-bottom:1px solid #f0f0f0;">'
-        +'<td style="padding:7px 14px;font-size:13px;font-family:Cairo,sans-serif;">'+_esc(t.nameEn||t.nameShort||t.code||'')+'</td>'
-        +'<td style="padding:7px 14px;text-align:center;">'
-        +(d?'<span style="color:#00b050;font-weight:900;font-size:15px;">✓</span>'
-           :'<span style="color:#cc9900;font-size:16px;">·</span>')
-        +'</td></tr>';
-    }).join('');
-
-    var div=document.createElement('div');
-    div.className='dp-wait-wrap';
-    div.innerHTML='<div class="dp-wait-top">'
-      +'<div style="font-size:48px;margin-bottom:8px;">'+icon+'</div>'
-      +'<div style="font-size:20px;font-weight:900;margin-bottom:4px;">'+_esc(nm)+'</div>'
-      +'<div style="font-size:14px;font-weight:700;color:'+col+';">'+msg+'</div>'
-      +'</div>'
-      +'<div class="dp-wait-body">'
-      +(total>0
-        ?'<div style="margin-bottom:12px;">'
-         +'<div style="display:flex;justify-content:space-between;font-size:12px;color:#555;margin-bottom:4px;font-family:Cairo,sans-serif;">'
-         +'<span>'+doneC+' من '+total+' تحليل</span><span>'+pct+'%</span></div>'
-         +'<div style="height:9px;background:#eee;border-radius:8px;overflow:hidden;">'
-         +'<div style="height:100%;background:linear-gradient(90deg,'+col+',#0099bb);width:'+pct+'%;min-width:3px;border-radius:8px;"></div></div></div>'
-         +'<table style="width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;">'
-         +'<thead><tr style="background:#003366;color:#fff;">'
-         +'<th style="padding:8px 14px;font-size:12px;text-align:right;font-family:Cairo,sans-serif;">التحليل</th>'
-         +'<th style="padding:8px 14px;font-size:12px;width:60px;font-family:Cairo,sans-serif;">الحالة</th>'
-         +'</tr></thead><tbody>'+rows+'</tbody></table>'
-        :'<p style="text-align:center;color:#888;font-family:Cairo,sans-serif;">لا توجد تحاليل مسجّلة</p>')
-      +'</div>';
-    return div;
+  // ── إحصائيات ─────────────────────────────────────────
+  function tryStats(txt) {
+    if (!/احصاء|احصائيه|كم مريض|كم طلب|كم نتيجه|عدد/.test(txt)) return null;
+    const pts = typeof patients !== 'undefined' ? patients.length : '?';
+    const reqs = typeof requests !== 'undefined' ? requests.length : '?';
+    const done = typeof requests !== 'undefined' ? requests.filter(r => r.status === 'done').length : '?';
+    const pending = typeof requests !== 'undefined' ? requests.filter(r => r.status === 'pending').length : '?';
+    return { msg: `📊 الإحصائيات:\n👥 المرضى: ${pts}\n📋 الطلبات: ${reqs}\n✅ مكتملة: ${done}\n⏳ معلقة: ${pending}`, cls: '' };
   }
 
-  // ══ LAN refresh ══════════════════════════════════════════════════
+  // ── أوامر متنوعة ──────────────────────────────────────
+  function tryMisc(txt) {
+    // حفظ
+    if (/احفظ|save|خزن/.test(txt)) {
+      if (typeof save === 'function' && typeof patients !== 'undefined') {
+        save('patients', patients); save('requests', requests);
+        return { msg: '💾 تم الحفظ.', cls: 'success' };
+      }
+    }
+    // تأكيد نتيجة
+    if (/اكمل|اتمم|تاكيد النتيجه|انهي النتيجه|حفظ النتيجه/.test(txt)) {
+      if (typeof finalizeResult === 'function') {
+        finalizeResult();
+        return { msg: '✅ تم تأكيد وحفظ النتائج.', cls: 'success' };
+      }
+    }
+    // حفظ مسودة
+    if (/مسوده|احفظ مسوده|draft/.test(txt)) {
+      if (typeof saveDraft === 'function') { saveDraft(); return { msg: '📝 تم حفظ المسودة.', cls: 'success' }; }
+    }
+    // تحديث
+    if (/تحديث|حدث|refresh/.test(txt)) {
+      if (typeof renderAll === 'function') renderAll();
+      return { msg: '🔄 تم تحديث البيانات.', cls: 'success' };
+    }
+    // تسجيل الخروج
+    if (/خروج|تسجيل خروج|logout/.test(txt)) {
+      if (typeof logoutUser === 'function') {
+        showConfirm('هل تريد تسجيل الخروج؟', logoutUser);
+        return { msg: '⚠️ تأكيد تسجيل الخروج?', cls: 'warn' };
+      }
+    }
+    // فتح طلب للنتائج
+    const selReqM = txt.match(/(?:افتح طلب|اختر طلب|فتح|طلب)\s+(rq-\d+|\d+)/i);
+    if (selReqM) {
+      let rid = selReqM[1].toUpperCase();
+      if (!rid.startsWith('RQ-')) rid = 'RQ-' + rid;
+      const sel = document.getElementById('res-req-sel');
+      if (sel) {
+        sel.value = rid;
+        if (typeof loadResultEntry === 'function') loadResultEntry();
+        if (typeof nav === 'function') nav('results');
+        return { msg: `✅ تم فتح الطلب ${rid} لإدخال النتائج.`, cls: 'success' };
+      }
+    }
+    return null;
+  }
 
-  document.addEventListener('dp:refresh',function(){
-    var el=document.getElementById('dp-modal-overlay');
-    if(el&&el.classList.contains('open')) dpRenderAll();
-  });
+  // ══════════════════════════════════════════════════════
+  //  8. شاشة المساعدة
+  // ══════════════════════════════════════════════════════
+  function showHelp() {
+    const panel = document.getElementById('ml-ai-panel');
+    if (panel) panel.classList.add('open');
+    const log = document.getElementById('ml-ai-log');
+    if (!log) return;
+    const help = document.createElement('div');
+    help.className = 'ml-msg ai';
+    help.style.cssText = 'max-width:100%;font-size:12px;line-height:1.8;background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.2)';
+    help.innerHTML = `
+      <b style="font-size:13px;">💡 أوامر المساعد الذكي</b><br><br>
+      <b>🧭 التنقل:</b><br>
+      • "روح للمرضى" / "افتح الفواتير" / "اعدادات"<br><br>
+      <b>👤 المرضى:</b><br>
+      • "مريض جديد" — فتح نافذة إضافة<br>
+      • "دور على محمد علي" — بحث بالاسم<br>
+      • "احذف مريض أحمد" — حذف مع تأكيد<br><br>
+      <b>🔬 النتائج:</b><br>
+      • "ادخل نتائج TSH 5.5 فيريتين 60"<br>
+      • "ادخل نتائج تي اس اتش 3.2 كولسترول 180"<br>
+      • "اتمم النتيجة" — تأكيد وحفظ<br>
+      • "احفظ مسودة"<br><br>
+      <b>🖨️ الطباعة:</b><br>
+      • "اطبع" / "اطبع نتائج محمد"<br><br>
+      <b>📊 إحصائيات:</b><br>
+      • "كم مريض عندنا" / "احصاء"<br><br>
+      <b>⚙️ أخرى:</b><br>
+      • "تحديث" / "توقف" / "تسجيل خروج"
+    `;
+    log.appendChild(help);
+    log.scrollTop = log.scrollHeight;
+  }
 
-}());
+  // ══════════════════════════════════════════════════════
+  //  9. تهيئة
+  // ══════════════════════════════════════════════════════
+  function init() {
+    buildUI();
+    // رسالة ترحيبية بعد التهيئة
+    setTimeout(() => {
+      addMsg('مرحباً! أنا مساعدك الذكي لـ MedLab Pro. اضغط الزر الدائري أو قل أمرك...', 'ai', 'success');
+    }, 800);
 
+    // اختصار لوحة المفاتيح: Ctrl+Shift+A
+    document.addEventListener('keydown', e => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'A') { e.preventDefault(); toggleAssistant(); }
+    });
+  }
+
+  // تشغيل بعد اكتمال DOM
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
 
 </script>
+
+</body>
+</html>
