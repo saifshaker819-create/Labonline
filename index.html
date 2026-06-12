@@ -2813,7 +2813,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       targetDev.connected = true;
       lisSaveState(); lisRenderDevices(); lisUpdateStats();
       lisAddLog('ok','✅ '+d.name+' متصل — '+( d.address||d.path||''));
-      showNotif('متصل ✓', d.name + ' متصل', 'success');
+      // إشعار الاتصال محذوف — لا نعرض Toast عند اتصال الجهاز
     });
   }
   if(typeof window.electronAPI.onDeviceDisconnected === 'function'){
@@ -14359,24 +14359,27 @@ function downloadPDF(){
 // فتح واتساب مباشرة في التطبيق — تجاوز الموقع في المتصفح
 // ============================================================
 function _openWhatsAppDirect(intPhone){
-  // الطريقة الأسرع: رابط whatsapp:// يفتح التطبيق مباشرة
-  // إذا لم يكن مثبتاً يرجع للموقع كـ fallback
-  const waLink = 'whatsapp://send?phone=' + intPhone;
+  const waLink  = 'whatsapp://send?phone=' + intPhone;
   const webLink = 'https://wa.me/' + intPhone;
 
-  // محاولة فتح تطبيق واتساب مباشرةً
+  // Electron: shell.openExternal يفتح تطبيق واتساب مباشرةً
+  // بدون أي نافذة Chrome أو متصفح
+  if(window.IS_ELECTRON && window.electronAPI && window.electronAPI.openExternal){
+    window.electronAPI.openExternal(waLink);
+    return;
+  }
+
+  // متصفح عادي: نفس الطريقة القديمة بـ iframe + fallback
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'display:none;width:0;height:0;border:none;position:fixed;left:-999px;top:0';
   iframe.src = waLink;
   document.body.appendChild(iframe);
 
-  // fallback بعد ثانية واحدة إذا لم يفتح التطبيق
   const timer = setTimeout(function(){
     try{ document.body.removeChild(iframe); }catch(e){}
     window.open(webLink, '_blank');
   }, 1200);
 
-  // إذا فتح التطبيق بنجاح → ألغِ الـ fallback
   window.addEventListener('blur', function _onBlur(){
     clearTimeout(timer);
     try{ document.body.removeChild(iframe); }catch(e){}
@@ -14397,7 +14400,6 @@ function shareWhatsApp(){
       const intPhone=_formatPhoneForWhatsApp(pt.phone, pt.phoneCC);
       // فتح واتساب مباشرة بعد حفظ الملف
       setTimeout(()=>{ _openWhatsAppDirect(intPhone); }, 400);
-      showNotif('✅ PDF محفوظ','افتح المحادثة وأرفق الملف 📎','success');
     }, ptName, ptId);
   });
 }
@@ -25900,6 +25902,48 @@ const LIS_DEFAULT_MAPPINGS=[
   {deviceCode:'25OHD',medlabCode:'VITD',name:'Vitamin D 25-OH',device:'all',note:''},
   {deviceCode:'B12',medlabCode:'VITB12',name:'Vitamin B12',device:'all',note:''},
   {deviceCode:'VB12',medlabCode:'VITB12',name:'Vitamin B12',device:'all',note:''},
+  // ── MAGLUMI 600 — أكواد التحاليل كما يرسلها الجهاز ──────────
+  {deviceCode:'VIT B12 III',medlabCode:'VITB12',name:'Vitamin B12 (MAGLUMI)',device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'VITB12III',  medlabCode:'VITB12',name:'Vitamin B12 (MAGLUMI)',device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'VIT B12',    medlabCode:'VITB12',name:'Vitamin B12',          device:'all',note:'MAGLUMI'},
+  {deviceCode:'ANA II',     medlabCode:'ANA',   name:'ANA (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'ANAII',      medlabCode:'ANA',   name:'ANA (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'TSH III',    medlabCode:'TSH',   name:'TSH (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'TSHIII',     medlabCode:'TSH',   name:'TSH (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'FT3 III',    medlabCode:'FT3',   name:'Free T3 (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'FT3III',     medlabCode:'FT3',   name:'Free T3 (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'FT4 III',    medlabCode:'FT4',   name:'Free T4 (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'FT4III',     medlabCode:'FT4',   name:'Free T4 (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'FSH III',    medlabCode:'FSH',   name:'FSH (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'FSHIII',     medlabCode:'FSH',   name:'FSH (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'LH III',     medlabCode:'LH',    name:'LH (MAGLUMI)',         device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'LHIII',      medlabCode:'LH',    name:'LH (MAGLUMI)',         device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'PRL III',    medlabCode:'PRL',   name:'Prolactin (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'PRLIII',     medlabCode:'PRL',   name:'Prolactin (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'PROG II',    medlabCode:'PROG',  name:'Progesterone (MAGLUMI)',device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'PROGII',     medlabCode:'PROG',  name:'Progesterone (MAGLUMI)',device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'E2 III',     medlabCode:'EST',   name:'Estradiol (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'E2III',      medlabCode:'EST',   name:'Estradiol (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'TESTO II',   medlabCode:'TEST',  name:'Testosterone (MAGLUMI)',device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'TESTOII',    medlabCode:'TEST',  name:'Testosterone (MAGLUMI)',device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'INS IRI',    medlabCode:'INSU',  name:'Insulin (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'INSIRI',     medlabCode:'INSU',  name:'Insulin (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'VIT D III',  medlabCode:'VITD',  name:'Vitamin D (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'VITDIII',    medlabCode:'VITD',  name:'Vitamin D (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'25-OH VIT D',medlabCode:'VITD',  name:'Vitamin D 25-OH',     device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'AFP III',    medlabCode:'AFP',   name:'AFP (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'AFPIII',     medlabCode:'AFP',   name:'AFP (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'PSA III',    medlabCode:'PSA',   name:'PSA (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'PSAIII',     medlabCode:'PSA',   name:'PSA (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'CEA III',    medlabCode:'CEA',   name:'CEA (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'CEAIII',     medlabCode:'CEA',   name:'CEA (MAGLUMI)',        device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'CA125 II',   medlabCode:'CA125', name:'CA-125 (MAGLUMI)',     device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'CA125II',    medlabCode:'CA125', name:'CA-125 (MAGLUMI)',     device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'BHCG III',   medlabCode:'BHCG',  name:'Beta-HCG (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'BHCGIII',    medlabCode:'BHCG',  name:'Beta-HCG (MAGLUMI)',  device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'CRP HS',     medlabCode:'CRP',   name:'hs-CRP (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  {deviceCode:'CRPHS',      medlabCode:'CRP',   name:'hs-CRP (MAGLUMI)',    device:'all',note:'MAGLUMI 600'},
+  // ─────────────────────────────────────────────────────────────
   {deviceCode:'FOLATE',medlabCode:'FOLATE',name:'Folate',device:'all',note:''},
   {deviceCode:'FERR',medlabCode:'FERR',name:'Ferritin',device:'all',note:''},
   {deviceCode:'IRON',medlabCode:'IRON',name:'Iron',device:'all',note:''},
@@ -26132,7 +26176,17 @@ function lisInit(){
   if(!_lisInited){
     _lisInited=true;
     lisLoadState();
-    if(!lisMappings.length) lisMappings=LIS_DEFAULT_MAPPINGS.map((m,i)=>({...m,id:'lm'+i}));
+    if(!lisMappings.length){
+    lisMappings=LIS_DEFAULT_MAPPINGS.map((m,i)=>({...m,id:'lm'+i}));
+  } else {
+    // إضافة أي mappings جديدة (مثل MAGLUMI) لم تكن موجودة سابقاً
+    let _added=0;
+    LIS_DEFAULT_MAPPINGS.forEach(function(dm,i){
+      const exists=lisMappings.some(function(m){ return m.deviceCode.toUpperCase()===dm.deviceCode.toUpperCase(); });
+      if(!exists){ lisMappings.push({...dm,id:'lm_auto_'+i}); _added++; }
+    });
+    if(_added>0) lisSaveState();
+  }
     lisAddLog('info','LIS Bridge جاهز — MedLab Pro v3');
     lisLoadSettingsUI();
   }
@@ -26160,6 +26214,11 @@ function lisLoadState(){
     _lisSettings=Object.assign({autoTransfer:true,sound:true,delay:2,linkMode:'localstorage'},
       JSON.parse(localStorage.getItem('lis_v3_settings')||'{}'));
   }catch(e){lisDevices=[];lisResults=[];lisMappings=[];_lisSettings={autoTransfer:true,sound:true,delay:2,linkMode:'localstorage'};}
+  // ── إعادة ضبط حالة الاتصال عند كل تشغيل ──────────────────
+  // الاتصالات الفعلية (TCP/Serial) لا تبقى بعد إغلاق البرنامج.
+  // لو حفظنا connected:true وأعدنا تحميله، تظهر الـ UI خضراء بدون
+  // اتصال حقيقي → المستخدم يعتقد أن الجهاز متصل وهو ليس كذلك.
+  lisDevices.forEach(d => { d.connected = false; });
 }
 
 // ═══════════════════════════════════════════════
@@ -26454,7 +26513,6 @@ async function lisConnectSerialDevice(dev){
       lisRenderDevices();
       lisUpdateStats();
       lisAddLog('ok','[Electron] Serial متصل: '+dev.name+' على '+portPath+' @ '+baud+' baud');
-      showNotif('متصل ✓',dev.name+' — '+portPath+' @ '+baud+' baud','success');
       // ⭐ الأحداث تصل عبر onDeviceData الموحد (مُسجَّل في تهيئة Electron أعلاه)
       // لا نحتاج window._electronSerialCB هنا — كل جهاز يُعالَج بـ deviceId مستقل
     }catch(e){
@@ -26478,7 +26536,6 @@ async function lisConnectSerialDevice(dev){
     dev.connected=true;
     lisSaveState();
     lisAddLog('ok','Serial متصل: '+dev.name+' @ '+baud+' baud');
-    showNotif('متصل ✓',dev.name+' — Serial متصل @ '+baud+' baud','success');
     lisReadSerialLoop(dev);
   }catch(e){
     if(e.name!=='NotFoundError'&&e.name!=='AbortError'){
@@ -26720,7 +26777,6 @@ async function lisConnectTCPDevice(dev){
     lisSaveState(); lisRenderDevices(); lisUpdateStats();
     _cbcInitIpcListeners();
     lisAddLog('ok','✅ [Legacy] متصل بـ '+ip+':'+port);
-    showNotif('متصل ✓','يتصل بـ '+ip+':'+port,'success');
     return;
   }
 
@@ -26777,7 +26833,6 @@ function lisConnectWSBridge(url,dev){
     _lisWS=new WebSocket(url);
     _lisWS.onopen=()=>{
       lisAddLog('ok','WebSocket متصل: '+url);
-      showNotif('متصل ✓','تم الاتصال بالجهاز','success');
       if(dev){dev.connected=true;lisSaveState();lisRenderDevices();lisUpdateStats();}
       if(_lisWsReconnTimer){clearTimeout(_lisWsReconnTimer);_lisWsReconnTimer=null;}
     };
@@ -26960,16 +27015,34 @@ function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   if(!sampleId) return;
   if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
   const buf=_cbcBuffer[sampleId];
-  // ── تنظيف القيمة قبل الحفظ: Mindray BC-5000 يرسل احياناً رقم+suffix مثل 3.63T او 171T او T فقط
+
+  // ── تنظيف القيمة: BC-5000 يرسل أحياناً رقم+suffix مثل 3.63T أو 171T أو T فقط ──
   const _rawV=String(value||'').trim();
   const _numV=_rawV.match(/([<>]?\s*\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
   const cleanValue=_numV?_numV[1].replace(/\s/g,''):_rawV;
   const _autoFlag=!_numV&&/[HL]$/.test(_rawV)?_rawV.slice(-1):'';
   const cleanFlag=flag||_autoFlag;
+
+  // ── فلترة OBX التعليقات: BC-5000 يرسل أسطر مثل "RBC ABNORMAL DISTRIBUTION" ──
+  // هذه الأسطر تطابق cbcIsParam بسبب startsWith("RBC") لكنها ليست قيم حقيقية.
+  // نتجاهلها إذا:
+  //   أ) الكود ليس exact match (يعني مطابقة بـ startsWith فقط)
+  //   ب) القيمة ليست رقمية (لا يوجد رقم في القيمة)
+  const _exactMatch = CBC_PARAM_KEYS.some(k => (code||'').toUpperCase().replace(/\s/g,'')===k);
+  if(!_exactMatch && !_numV){
+    // تعليق بحت (مثل RBC ABNORMAL DISTRIBUTION=T) — تجاهل تماماً
+    lisAddLog('astm','[CBC] تجاهل تعليق: '+(code||'')+'='+(value||''));
+    if(patName&&!buf.name) buf.name=patName;
+    if(buf.timer) clearTimeout(buf.timer);
+    buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+    return;
+  }
+
   buf.params[cbcNormalizeCode(code)]={value:cleanValue,unit,refRange,flag:cleanFlag};
   if(patName) buf.name=patName;
   if(buf.timer) clearTimeout(buf.timer);
-  buf.timer=setTimeout(function(){cbcFlush(sampleId);},600);
+  // رفع المؤقت إلى 2000ms لضمان وصول كل OBX قبل الإرسال
+  buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
 }
 // سجل آخر flush لكل sampleId — يمنع تكرار المعالجة لنفس المريض خلال 60 ثانية
 const _cbcFlushLog = {};
@@ -27075,36 +27148,60 @@ function lisParseHL7(raw,deviceName){
   segs.forEach(function(seg){
     const f=seg.split('|');
     if(f[0]==='PID'){
-      // BC-5000: PID غالباً فارغ — نحفظ الاسم فقط
       pid.name=(f[5]||'').replace(/\^/g,' ').trim();
-      // نحاول نقرأ ID من PID[3] إذا موجود
       const pidId=(f[3]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
       if(pidId) pid.id=pidId;
+
+    } else if(f[0]==='SPM'){
+      // ── MAGLUMI 600: Sample ID في SPM[2] مثل "100289^^" ──
+      // BC-5000 لا يُرسل SPM لذا هذا لا يؤثر عليه
+      const spmSid=(f[2]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
+      if(spmSid) pid.id=spmSid;
+
     } else if(f[0]==='OBR'){
-      // BC-5000 يضع Sample ID في OBR[3] (field index 3)
+      // BC-5000 يضع Sample ID في OBR[3]
       const obrSid=(f[3]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
       if(obrSid) pid.id=obrSid;
-      // تحقق إذا CBC
       const obrid=(f[4]||'').toUpperCase();
       if(obrid.includes('CBC')||obrid.includes('WBC')||obrid.includes('HGB')||obrid.includes('DIFF')||obrid.includes('COUNT')) isCBC=true;
+
     } else if(f[0]==='OBX'){
+      // ── استخراج كود التحليل ──
+      // MAGLUMI يرسل: OBX|1||Vit B12 III||442^|...
+      // f[3] = 'Vit B12 III' (بدون ^)  → codeRaw[0]='Vit B12 III', codeRaw[1]=undefined
+      // نحتفظ بنسختين: مع مسافات للمطابقة، وبدون للتخزين
       const codeRaw=(f[3]||'').split('^');
-      const code=(codeRaw[1]||codeRaw[0]||'').trim().toUpperCase().replace(/\s/g,'');
-      const rawVal=(f[5]||'').trim();
-      // ── تنظيف القيمة: BC-5000 يرسل أحياناً رقم + حرف وحدة مثل '4.50T' أو '4.5E12' ──
-      // استخرج الجزء الرقمي فقط (يشمل الإشارات < > والأعداد العشرية)
-      // استخراج الرقم من أي موضع في القيمة (3.63T او 171T او T)
+      const codeWithSpaces=(codeRaw[1]||codeRaw[0]||'').trim().toUpperCase();
+      const code=codeWithSpaces.replace(/\s+/g,'');  // للتخزين: 'VITB12III'
+
+      // ── تنظيف القيمة ──
+      // MAGLUMI يرسل: '442^' — نزيل ^ والأحرف غير الرقمية
+      // BC-5000 يرسل: '4.50T' أو '<0.5'
+      const rawVal=(f[5]||'').split('^')[0].trim(); // إزالة ^ وما بعده أولاً
       const _numMatch = rawVal.match(/([<>]?\s*\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
       const value = _numMatch ? _numMatch[1].replace(/\s/g,'') : rawVal;
+
       const unit=(f[6]||'').split('^')[0].trim().replace(/\*/g,'^');
       const range=(f[7]||'').trim();
-      const flag=(f[8]||'').split('~')[0].trim(); // BC-5000 يرسل H~N أو L~N
-      lisAddLog('astm','HL7 OBX: '+code+'='+rawVal+(value!==rawVal?' → '+value:'')+' '+unit);
+      const flag=(f[8]||'').split('~')[0].trim();
+
+      lisAddLog('astm','HL7 OBX: '+codeWithSpaces+'='+rawVal+(value!==rawVal?' → '+value:'')+' '+unit+' (SID:'+pid.id+')');
+
       if(cbcIsParam(code)||isCBC){
         isCBC=true;
         cbcAddParam(pid.id||'HL7',code,value,unit,range,flag,pid.name);
       } else {
-        lisIngestResult({id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),sampleId:pid.id||'HL7',patName:pid.name||'',deviceCode:code,medlabCode:lisResolveCode(code),value:value,unit:unit,refRange:range,flags:flag,status:'final',device:deviceName,protocol:'HL7',datetime:new Date().toISOString(),transferred:false});
+        // نستخدم codeWithSpaces للمطابقة مع lisResolveCode لأن الـ mappings تحتوي مسافات
+        lisIngestResult({
+          id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
+          sampleId:  pid.id||'HL7',
+          patName:   pid.name||'',
+          deviceCode:codeWithSpaces,          // مع مسافات: 'VIT B12 III'
+          medlabCode:lisResolveCode(codeWithSpaces)||lisResolveCode(code),
+          value, unit, refRange:range, flags:flag,
+          status:'final', device:deviceName, protocol:'HL7',
+          datetime:new Date().toISOString(), transferred:false,
+        });
       }
     }
   });
@@ -27145,8 +27242,18 @@ function lisParseCSV(raw,deviceName){
 // ═══════════════════════════════════════════════
 function lisResolveCode(deviceCode){
   const dc=(deviceCode||'').toUpperCase().trim();
+  // 1. بحث في lisMappings (الروابط المحفوظة)
   const m=lisMappings.find(x=>x.deviceCode.toUpperCase()===dc);
-  return m?m.medlabCode:dc;
+  if(m) return m.medlabCode;
+  // 2. fallback: بحث مرن في LIS_MEDLAB_TESTS بتجاهل الشرطات والمسافات والأرقام الرومانية
+  const dcNorm=dc.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
+  const lt=LIS_MEDLAB_TESTS.find(t=>{
+    const tn=(t.id||'').toUpperCase().replace(/[-\s]+/g,'');
+    const tname=(t.name||'').toUpperCase().replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
+    return tn===dcNorm||tname===dcNorm||dcNorm.startsWith(tn)||tn.startsWith(dcNorm);
+  });
+  if(lt) return lt.id;
+  return dc;
 }
 function lisRenderMappings(){
   const tbody=document.getElementById('lis-mapping-body');
@@ -27210,10 +27317,13 @@ function lisDeleteMapping(id){
   lisRenderMappings();
 }
 function lisLoadDefaultMappings(){
-  lisMappings=LIS_DEFAULT_MAPPINGS.map((m,i)=>({...m,id:'lm'+i}));
+  // دمج الافتراضية مع الموجودة — لا نحذف الروابط المخصصة
+  const existing=lisMappings.filter(m=>!LIS_DEFAULT_MAPPINGS.some(d=>d.deviceCode.toUpperCase()===m.deviceCode.toUpperCase()));
+  const defaults=LIS_DEFAULT_MAPPINGS.map((m,i)=>({...m,id:'lm'+i}));
+  lisMappings=[...defaults,...existing];
   lisSaveState();
   lisRenderMappings();
-  showNotif('تم','تم تحميل '+lisMappings.length+' ربط افتراضي','success');
+  showNotif('تم','تم تحميل '+lisMappings.length+' ربط (افتراضي + مخصص)','success');
 }
 
 // ═══════════════════════════════════════════════
@@ -27253,88 +27363,144 @@ function lisTransferAll(){
   if(!pending.length){showNotif('تنبيه','لا توجد نتائج معلقة للنقل','warning');return;}
   lisTransferToMedlabPro(pending);
 }
-function lisTransferToMedlabPro(list){
+
+// ── مساعد: مطابقة نتيجة جهاز مع طلب من القائمة ───────────────────────────
+function _lisMatchReqInList(reqs, res, ptsList){
+  return reqs.find(function(r){
+    const rId=String(r.id||'').trim();
+    const sid=String(res.sampleId||'').trim();
+    if(!sid) return false;
+    // مطابقة رقم الطلب مع SID
+    if(rId===sid||rId.endsWith(sid)||sid.endsWith(rId)) return true;
+    // مطابقة sampleId/sampleNum المخزون في الطلب
+    const rSid=String(r.sampleId||r.sampleNum||'').trim();
+    if(rSid&&(rSid===sid||rSid.endsWith(sid)||sid.endsWith(rSid))) return true;
+    // مطابقة باركود المريض — MAGLUMI يرسل رقم العينة = باركود المريض
+    const _pts=ptsList||(typeof patients!=='undefined'?patients:[]);
+    const pt2=_pts.find(function(p){return p.id===r.patientId;});
+    if(pt2&&pt2.barcode){
+      const bc=String(pt2.barcode).trim().toUpperCase();
+      const sidUp=sid.toUpperCase();
+      if(bc===sidUp||bc.endsWith(sidUp)||sidUp.endsWith(bc)) return true;
+    }
+    // مطابقة بـ patientId مباشرة مع SID (رقم المريض = رقم العينة)
+    const pid=String(r.patientId||'').replace(/[^0-9]/g,'');
+    const sidNum=sid.replace(/[^0-9]/g,'');
+    if(pid&&sidNum&&pid===sidNum) return true;
+    // مطابقة بالاسم فقط إذا كلاهما غير فارغ
+    if(r.patientName&&res.patName&&res.patName.trim()&&r.patientName.trim()&&r.patientName===res.patName&&r.status!=='done') return true;
+    return false;
+  });
+}
+
+// ── مساعد: تطبيق نتيجة على طلب وحفظه ────────────────────────────────────
+function _lisApplyResultToReq(req, res, reqs, idbKey){
+  const code=res.medlabCode||res.deviceCode;
+  if(!req.results) req.results={};
+  if(!req.resultDetails) req.resultDetails={};
+  const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+  const _codeUp=(code||'').toUpperCase();
+  const _codeNorm=_codeUp.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
+  const _matchedTest=_allTests.find(function(t){
+    const tc=(t.code||'').toUpperCase();
+    const tcNorm=tc.replace(/[-\s]+/g,'');
+    const tns=(t.nameShort||'').toUpperCase();
+    const tnsNorm=tns.replace(/[-\s]+/g,'');
+    const tne=(t.nameEn||'').toUpperCase();
+    const tneNorm=tne.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
+    return(tc===_codeUp||tcNorm===_codeNorm||tns===_codeUp||tnsNorm===_codeNorm||tneNorm===_codeNorm||_codeNorm.startsWith(tcNorm)||tcNorm.startsWith(_codeNorm));
+  });
+  const resultKey=_matchedTest?_matchedTest.id:code;
+  req.results[resultKey]=res.value;
+  req.resultDetails[resultKey]={value:res.value,unit:res.unit,refRange:res.refRange,flags:res.flags,fromDevice:res.device,datetime:res.datetime};
+  const allCodes=(req.tests||[]);
+  const allDone=allCodes.length>0&&allCodes.every(function(tc){return req.results&&req.results[tc];});
+  if(allDone) req.status='done';
+  else if(req.status==='pending') req.status='inprogress';
+
+  // حفظ في IDB (المصدر الحقيقي للبيانات) + تحديث _MC وmصفوفة requests
+  if(typeof IDB!=='undefined'&&idbKey){
+    IDB.set(idbKey, reqs).catch(function(e){console.warn('[LIS] IDB save error',e);});
+  }
+  if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
+  // تحديث مصفوفة requests العالمية في الذاكرة
+  if(typeof requests!=='undefined'&&Array.isArray(requests)){
+    const idx=requests.findIndex(function(x){return x.id===req.id;});
+    if(idx>=0) requests[idx]=req; else requests.push(req);
+  }
+  lisAddLog('ok','نُقلت: '+code+'='+res.value+' → طلب '+req.id+' (مريض: '+req.patientName+')');
+  return resultKey;
+}
+
+async function lisTransferToMedlabPro(list){
   let transferred=0;
   let notFound=0;
 
-  // ── البحث في بيانات MedLab Pro في نفس localStorage ──
-  // MedLab Pro يحفظ تحت مفتاح mlab2_{user}_requests
-  const mlabKeys=[];
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.includes('_requests')) mlabKeys.push(k);
+  // ── تحديد prefix المستخدم الحالي ──────────────────────────────
+  const _pfx=(typeof DB!=='undefined'&&typeof DB._pfx==='function')?DB._pfx():'mlab2_';
+  const _idbReqKey=_pfx+'requests';
+  const _idbPtKey =_pfx+'patients';
+
+  // ── تحميل requests من IDB أولاً (هذا هو المصدر الحقيقي) ───────
+  // البيانات الكبيرة (patients/requests) تُحفظ في IDB فقط وتُمسح من localStorage
+  let idbReqs=null;
+  let idbPts=null;
+  try{
+    if(typeof IDB!=='undefined'){
+      idbReqs=await IDB.get(_idbReqKey);
+      idbPts =await IDB.get(_idbPtKey);
+    }
+  }catch(e){ console.warn('[LIS] IDB read error',e); }
+
+  // ── دمج: IDB + ذاكرة (_MC / requests العالمية) ─────────────────
+  // نعطي الأولوية للذاكرة (الأحدث) ثم IDB كـ fallback
+  let mergedReqs=[];
+  const _inMemReqs=(typeof requests!=='undefined'&&Array.isArray(requests)&&requests.length)?requests:
+                   (typeof _MC!=='undefined'&&_MC[_idbReqKey]?_MC[_idbReqKey]:[]);
+  if(_inMemReqs.length){
+    mergedReqs=_inMemReqs;
+    // دمج أي طلبات من IDB غير موجودة في الذاكرة
+    if(Array.isArray(idbReqs)){
+      const memIds=new Set(mergedReqs.map(function(r){return r.id;}));
+      idbReqs.forEach(function(r){ if(r&&r.id&&!memIds.has(r.id)) mergedReqs.push(r); });
+    }
+  } else if(Array.isArray(idbReqs)&&idbReqs.length){
+    mergedReqs=idbReqs;
   }
 
-  list.forEach(res=>{
-    let found=false;
+  // ── دمج قوائم المرضى ───────────────────────────────────────────
+  const mergedPts=(typeof patients!=='undefined'&&Array.isArray(patients)&&patients.length)?patients:
+                  (Array.isArray(idbPts)?idbPts:[]);
+  const _allPts=mergedPts;
+  if(Array.isArray(idbPts)){
+    const ptIds=new Set(_allPts.map(function(p){return p.id;}));
+    idbPts.forEach(function(p){ if(p&&p.id&&!ptIds.has(p.id)) _allPts.push(p); });
+  }
 
-    // حاول مطابقة Sample ID مع رقم الطلب في MedLab Pro
-    mlabKeys.forEach(key=>{
-      if(found) return;
-      try{
-        const reqs=JSON.parse(localStorage.getItem(key)||'[]');
-        // ابحث عن طلب له نفس Sample ID أو رقم قريب
-        const req=reqs.find(r=>{
-          const rId=String(r.id||'').trim();
-          const sid=String(res.sampleId||'').trim();
-          // مطابقة رقم الطلب
-          if(rId===sid || rId.endsWith(sid) || sid.endsWith(rId)) return true;
-          // مطابقة باركود المريض (pt.barcode)
-          const pt2=typeof patients!=='undefined'?patients.find(p=>p.id===r.patientId):null;
-          if(pt2?.barcode){
-            const bc=String(pt2.barcode).trim().toUpperCase();
-            const sidUp=sid.toUpperCase();
-            if(bc===sidUp||bc.endsWith(sidUp)||sidUp.endsWith(bc)) return true;
-          }
-          // مطابقة بالاسم إذا لم يوجد SID
-          if(r.patientName&&res.patName&&r.patientName===res.patName&&r.status!=='done') return true;
-          return false;
-        });
-        if(req){
-          found=true;
-          // ابحث عن التحليل في الطلب
-          const code=res.medlabCode||res.deviceCode;
-          if(!req.results) req.results={};
-          // البحث عن t.id الصحيح من قاعدة البيانات (النتائج تُخزَّن بـ t.id مثل h009 وليس بالكود مثل MCHC)
-          const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
-          const _matchedTest=_allTests.find(t=>(t.code||'').toUpperCase()===(code||'').toUpperCase()||(t.nameShort||'').toUpperCase()===(code||'').toUpperCase());
-          const resultKey=_matchedTest?_matchedTest.id:code;
-          req.results[resultKey]=res.value;
-          if(!req.resultDetails) req.resultDetails={};
-          req.resultDetails[resultKey]={
-            value:res.value,
-            unit:res.unit,
-            refRange:res.refRange,
-            flags:res.flags,
-            fromDevice:res.device,
-            datetime:res.datetime,
-          };
-          // تحديث حالة الطلب
-          const allCodes=(req.tests||[]);
-          const allDone=allCodes.length>0&&allCodes.every(tc=>req.results&&req.results[tc]);
-          if(allDone) req.status='done';
-          else if(req.status==='pending') req.status='inprogress';
-          // حفظ التحديث
-          localStorage.setItem(key,JSON.stringify(reqs));
-          transferred++;
-          lisAddLog('ok','نُقلت: '+code+'='+res.value+' → طلب '+req.id);
-        }
-      }catch(e){}
-    });
+  if(!mergedReqs.length){
+    lisAddLog('warn','[LIS] لا توجد طلبات في IDB أو الذاكرة — تأكد من تسجيل الدخول');
+  }
 
-    if(!found){
-      // حفظ في قائمة انتظار للربط اليدوي لاحقاً
+  // ── معالجة كل نتيجة ───────────────────────────────────────────
+  for(const res of list){
+    const req=_lisMatchReqInList(mergedReqs, res, _allPts);
+    if(req){
+      _lisApplyResultToReq(req, res, mergedReqs, _idbReqKey);
+      res.transferred=true;
+      transferred++;
+    } else {
+      // حفظ في قائمة الانتظار للربط اليدوي لاحقاً
       try{
         const qKey='lis_pending_'+res.sampleId;
         const q=JSON.parse(localStorage.getItem(qKey)||'[]');
         q.push(res);
         localStorage.setItem(qKey,JSON.stringify(q));
-        notFound++;
-        lisAddLog('warn','SID '+res.sampleId+' غير موجود في MedLab Pro — تم الحفظ في الانتظار');
       }catch(e){}
+      res.transferred=true;
+      notFound++;
+      lisAddLog('warn','SID '+res.sampleId+' غير موجود (IDB+ذاكرة) — تم الحفظ في الانتظار');
     }
-    res.transferred=true;
-  });
+  }
 
   lisSaveState();
   lisRenderResults();
@@ -27342,6 +27508,7 @@ function lisTransferToMedlabPro(list){
   lisUpdateNbBadge();
 
   // Refresh MedLab Pro UI if visible
+  if(typeof renderRequestTable==='function') try{renderRequestTable();}catch(e){}
   if(typeof loadData==='function') try{loadData();renderAll();updateDashboard();}catch(e){}
 
   let msg='تم نقل '+transferred+' نتيجة ✓';
@@ -28122,27 +28289,75 @@ async function confirmImport(){
   try{
     showNotif('جارٍ الاسترداد...','⏳ يتم استيراد البيانات — انتظر من فضلك','info');
 
-    // ── 1. استيراد localStorage ────────────────────────────
+    const currentPfx = DB._pfx();
+    const backupPfx  = parsed._userPrefix || '';
+
+    // ── دالة: تحويل مفتاح النسخة إلى مفتاح المستخدم الحالي ──
+    function _remapKey(k){
+      if(backupPfx && k.startsWith(backupPfx)) return currentPfx + k.slice(backupPfx.length);
+      var m = k.match(/^mlab2_[^_]*_(.+)$/) || k.match(/^mlab2__(.+)$/);
+      if(m) return currentPfx + m[1];
+      return k;
+    }
+
+    // ── دالة: حذف بادئة MR من باركود المرضى فقط ──
+    function _fixMrBarcode(val, rawKey){
+      if(rawKey !== 'patients' || !Array.isArray(val)) return val;
+      return val.map(function(p){
+        if(!p) return p;
+        var pt = Object.assign({}, p);
+        if(pt.barcode && /^MR/i.test(String(pt.barcode)))
+          pt.barcode = String(pt.barcode).replace(/^MR/i, '');
+        return pt;
+      });
+    }
+
+    // ── 1. امسح localStorage القديم للمستخدم الحالي ──────
+    var _KEEP = new Set(['medlab_session_bk','medlab_admin_users','medlab_device_id',SESSION_KEY,ADMIN_KEY]);
+    var _lsDel = [];
+    for(var _i=0; _i<localStorage.length; _i++){
+      var _k = localStorage.key(_i);
+      if(_k && _k.startsWith(currentPfx) && !_KEEP.has(_k)) _lsDel.push(_k);
+    }
+    _lsDel.forEach(function(k){ localStorage.removeItem(k); });
+
+    // ── 2. استيراد localStorage من النسخة (كل البيانات والإعدادات) ──
     const data = parsed.data || {};
-    Object.keys(data).forEach(k => {
-      if(data[k] !== null && data[k] !== undefined){
-        try{ localStorage.setItem(k, data[k]); }catch(e){}
-      }
+    Object.keys(data).forEach(function(k){
+      if(data[k]===null || data[k]===undefined) return;
+      try{
+        var nk = _remapKey(k);
+        if(_KEEP.has(nk)) return;
+        localStorage.setItem(nk, data[k]);
+      }catch(e){}
     });
 
-    // ── 2. استيراد IDB (البيانات الكبيرة) ─────────────────
+    // ── 3. امسح IDB القديم للمستخدم الحالي ───────────────
+    var _IDB_DATA_KEYS = ['patients','requests','invoices','doctors','packages',
+      'inventory','qc','tests','testGroups','billing',
+      'cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+    await Promise.all(_IDB_DATA_KEYS.map(function(k){ return IDB.del(currentPfx+k).catch(function(){}); }));
+
+    // ── 4. امسح كاش الذاكرة بالكامل ─────────────────────
+    if(typeof _MC !== 'undefined') Object.keys(_MC).forEach(function(k){ delete _MC[k]; });
+
+    // ── 5. استيراد IDB مع تصحيح prefix + حذف MR من الباركود ──
     const idbData = parsed.idbData || {};
-    const idbPromises = Object.keys(idbData).map(async k => {
+    const idbPromises = Object.keys(idbData).map(async function(k){
       try{
-        const val = JSON.parse(idbData[k]);
-        await IDB.set(k, val);
+        var val = JSON.parse(idbData[k]);
+        var finalKey = _remapKey(k);
+        var rawKey = finalKey.startsWith(currentPfx) ? finalKey.slice(currentPfx.length) : k;
+        val = _fixMrBarcode(val, rawKey);
+        await IDB.set(finalKey, val);
+        if(typeof _MC !== 'undefined') delete _MC[finalKey];
       }catch(e){ console.warn('[Import] IDB key failed:', k, e); }
     });
     await Promise.all(idbPromises);
 
-    // ── 3. إعادة تحميل التطبيق لتطبيق البيانات الجديدة ───
+    // ── 6. إعادة تحميل التطبيق ───────────────────────────
     showNotif('تم الاسترداد','✅ تم استيراد جميع البيانات بنجاح — سيتم إعادة التشغيل...','success');
-    setTimeout(()=>{ location.reload(); }, 1800);
+    setTimeout(function(){ location.reload(); }, 1800);
 
   }catch(err){
     showNotif('خطأ','فشل استيراد البيانات: '+err.message,'error');
@@ -32776,10 +32991,10 @@ function _lanUpdateStatus(){
 function lanBroadcast(key, data){
   var msg = JSON.stringify({type:'sync', key:key, data:data, ts:Date.now()});
   if(_lanMode==='server'){
-    // السيرفير يبث للعملاء
-    _lanClients.forEach(function(ws){
-      try{ if(ws.readyState===1) ws.send(msg); }catch(e){}
-    });
+    // السيرفير يبث للعملاء عبر Electron IPC (main process يملك WebSocket clients الحقيقية)
+    if(window.electronAPI && window.electronAPI.lanBroadcast){
+      window.electronAPI.lanBroadcast(msg);
+    }
   } else if(_lanMode==='client' && _lanWS && _lanWS.readyState===1){
     // العميل يرسل للسيرفير
     try{ _lanWS.send(msg); }catch(e){}
