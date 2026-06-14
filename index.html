@@ -3489,16 +3489,22 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               </select>
             </div>
             <button class="btn btn-d btn-sm" onclick="abnExportReport()" id="abn-export-btn" style="display:none;align-self:flex-end">📥 تصدير التقرير</button>
-            <div id="abn-wa-wrap" style="display:none;align-items:center;gap:6px;align-self:flex-end">
+            <div id="abn-wa-wrap" style="display:none;align-items:center;gap:6px;align-self:flex-end;flex-wrap:wrap">
               <div style="position:relative;display:flex;align-items:center">
                 <span style="position:absolute;right:8px;font-size:12px;color:var(--text2);pointer-events:none">📞</span>
                 <input id="abn-wa-phone" type="tel" lang="en" inputmode="tel" placeholder="07xxxxxxxxx"
-                  style="padding:7px 28px 7px 10px;border-radius:8px;border:1px solid rgba(37,211,102,0.4);background:rgba(37,211,102,0.06);color:var(--text);font-size:12px;font-family:'Cairo',sans-serif;width:155px;outline:none"
+                  style="padding:7px 28px 7px 10px;border-radius:8px;border:1px solid rgba(37,211,102,0.4);background:rgba(37,211,102,0.06);color:var(--text);font-size:12px;font-family:'Cairo',sans-serif;width:150px;outline:none"
                   oninput="this.style.borderColor=this.value.length>6?'rgba(37,211,102,0.7)':'rgba(37,211,102,0.4)'">
               </div>
               <button class="btn btn-sm" onclick="abnShareAllViaWhatsApp()"
-                style="background:rgba(37,211,102,0.15);border:1px solid rgba(37,211,102,0.45);color:#25d366;align-self:stretch;white-space:nowrap">
-                <span style="font-size:13px">📲</span> مشاركة الكل واتساب
+                style="background:rgba(37,211,102,0.12);border:1px solid rgba(37,211,102,0.4);color:#25d366;white-space:nowrap;font-size:11px"
+                title="إرسال قائمة نصية بالنتائج غير الطبيعية">
+                📲 واتساب (نص)
+              </button>
+              <button class="btn btn-sm" onclick="abnShareAllPDFsViaWhatsApp()" id="abn-pdf-wa-btn"
+                style="background:rgba(0,212,255,0.12);border:1px solid rgba(0,212,255,0.4);color:var(--primary);white-space:nowrap;font-size:11px"
+                title="إرسال تقرير PDF كامل لكل مريض عبر واتساب">
+                📄 PDF كامل لكل مريض
               </button>
             </div>
           </div>
@@ -24797,6 +24803,193 @@ function abnShareAllViaWhatsApp(){
     window.open(url,'_blank');
   }
 }
+
+// ─── إرسال PDF كامل لكل مريض abnormal عبر واتساب ──────────────────────────
+function abnShareAllPDFsViaWhatsApp(){
+  if(!_abnSelTest){ showNotif('تنبيه','اختر تحليلاً أولاً','error'); return; }
+  var rawPhone=(document.getElementById('abn-wa-phone')||{}).value||'';
+  rawPhone=rawPhone.replace(/\D/g,'');
+  if(!rawPhone||rawPhone.length<7){ showNotif('تنبيه','أدخل رقم هاتف صحيح','error'); return; }
+  var e164=rawPhone;
+  if(e164.startsWith('07')) e164='964'+e164.slice(1);
+  else if(e164.startsWith('7')&&e164.length===10) e164='964'+e164;
+
+  var t=_abnSelTest;
+  var filterType=document.getElementById('abn-filter-type').value;
+  var matchedReqs=[];
+  requests.forEach(function(req){
+    if(req.status!=='done') return;
+    if(!req.tests||req.tests.indexOf(t.id)<0) return;
+    var val=req.results&&req.results[t.id];
+    if(val===undefined||val===''||val===null) return;
+    var num=parseFloat(val); if(isNaN(num)) return;
+    var isHigh=num>t.maxVal, isLow=num<t.minVal;
+    if(!isHigh&&!isLow) return;
+    if(filterType==='high'&&!isHigh) return;
+    if(filterType==='low'&&!isLow) return;
+    matchedReqs.push(req);
+  });
+  if(!matchedReqs.length){ showNotif('تنبيه','لا توجد نتائج للإرسال','warning'); return; }
+
+  var progOverlay=document.createElement('div');
+  progOverlay.style.cssText='position:fixed;inset:0;z-index:999999;background:rgba(4,8,15,0.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;font-family:Cairo,sans-serif;direction:rtl';
+  var progTitle=document.createElement('div'); progTitle.style.cssText='color:#00d4ff;font-size:16px;font-weight:800'; progTitle.textContent='جاري تحضير ملفات PDF...';
+  var progBar=document.createElement('div'); progBar.style.cssText='width:340px;height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden';
+  var progFill=document.createElement('div'); progFill.style.cssText='height:100%;width:0%;background:linear-gradient(90deg,#00d4ff,#00ff9d);border-radius:4px;transition:width 0.3s';
+  progBar.appendChild(progFill);
+  var progSub=document.createElement('div'); progSub.style.cssText='color:rgba(255,255,255,0.55);font-size:13px'; progSub.textContent='';
+  var progCancel=document.createElement('button'); progCancel.textContent='الغاء'; progCancel.style.cssText='margin-top:8px;padding:6px 22px;border-radius:8px;border:1px solid rgba(255,34,68,0.4);background:rgba(255,34,68,0.1);color:#ff4466;font-size:13px;cursor:pointer;font-family:Cairo,sans-serif';
+  var _cancelled=false;
+  progCancel.onclick=function(){ _cancelled=true; progOverlay.remove(); };
+  progOverlay.appendChild(progTitle); progOverlay.appendChild(progBar); progOverlay.appendChild(progSub); progOverlay.appendChild(progCancel);
+  document.body.appendChild(progOverlay);
+
+  var total=matchedReqs.length;
+  var pdfBlobs=[];
+
+  function _genOnePDF(req){
+    return new Promise(function(resolve,reject){
+      var savedReqId=currentReqId;
+      currentReqId=req.id;
+      var allTests=req.tests.map(function(tid){return tests.find(function(x){return x.id===tid;});}).filter(Boolean);
+      var regularTests=allTests.filter(function(x){return !x.isSpecialExam&&!x.isCalc;});
+      var calcTests=allTests.filter(function(x){return x.isCalc&&req.results&&req.results[x.id];});
+      var pageHTMLs=[];
+      if(regularTests.length>0) pageHTMLs.push(buildPrintHTML(req));
+      calcTests.forEach(function(ct){ pageHTMLs.push(buildCalcTestPrintHTML(req,ct)); });
+      if(pageHTMLs.length===0) pageHTMLs.push(buildPrintHTML(req));
+      var pt=patients.find(function(p){return p.id===req.patientId;})||{};
+      var ptName=(pt.name||req.patientName||'Unknown').replace(/[\\/:*?"<>|]/g,'_').trim();
+      var fileName=req.id+'_'+ptName+'.pdf';
+      var printCSS='.print-prev,.pp-tbl,.pp-section{background:#fff!important;color:#111!important;}.pp-hdr-default{background:linear-gradient(135deg,#003d7a,#0055aa)!important;color:#fff!important;}.pp-tbl th{background:#003366!important;color:#fff!important;}.pp-tbl td{color:#111!important;background:#fff!important;}.pp-tbl tr:nth-child(even) td{background:#f5f8ff!important;}.ab{color:#cc0000!important;font-weight:800!important;}.nm{color:#006600!important;}.pp-pt{background:#f0f7ff!important;}*{font-family:Cairo,sans-serif!important;}';
+      var doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+      var pageW=210,pageH=297;
+
+      function _renderOnePage(htmlStr,isFirst,onDone,onErr){
+        var iframe=document.createElement('iframe');
+        iframe.style.cssText='position:fixed;top:0;left:-9999px;width:794px;height:1123px;border:none;background:#fff;';
+        document.body.appendChild(iframe);
+        var iDoc=iframe.contentDocument||iframe.contentWindow.document;
+        var fontLink='<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">';
+        var fullHTML;
+        if(/<\s*html[\s>]/i.test(htmlStr)){
+          fullHTML=htmlStr.replace(/<head([^>]*)>/i,'<head$1>'+fontLink).replace(/<\/head>/i,'<style>'+printCSS+'</style></head>');
+        } else {
+          fullHTML='<!DOCTYPE html><html><head><meta charset="utf-8">'+fontLink+'<style>html,body{margin:0;padding:0;background:#fff;font-family:Cairo,sans-serif;}'+printCSS+'</style></head><body>'+htmlStr+'</body></html>';
+        }
+        iDoc.open(); iDoc.write(fullHTML); iDoc.close();
+        function _cap(){
+          var wf=(iDoc.fonts&&iDoc.fonts.ready)?iDoc.fonts.ready:Promise.resolve();
+          wf.then(function(){
+            setTimeout(function(){
+              var body=iDoc.body;
+              if(!body){try{document.body.removeChild(iframe);}catch(e){}return onErr(new Error('no body'));}
+              var reportPages=iDoc.querySelectorAll('.report-page');
+              var printFooter=iDoc.getElementById('print-footer');
+              var usePageBoundaries=false,pageBoundaries=[];
+              if(reportPages.length>0&&printFooter){
+                var fhtml=printFooter.outerHTML; printFooter.style.display='none';
+                reportPages.forEach(function(pg){
+                  var sp=pg.querySelector('.page-footer-spacer'); if(sp) sp.remove();
+                  var fd=iDoc.createElement('div'); fd.innerHTML=fhtml; var fe=fd.firstElementChild;
+                  if(fe){fe.style.position='absolute';fe.style.bottom='0';fe.style.left='0';fe.style.right='0';fe.style.zIndex='auto';fe.style.display='block';fe.id='';pg.appendChild(fe);}
+                  pg.style.position='relative';pg.style.height='1123px';pg.style.minHeight='1123px';pg.style.maxHeight='1123px';pg.style.boxSizing='border-box';pg.style.overflow='hidden';pg.style.margin='0';pg.style.padding=pg.style.padding||'1mm 3mm 0 3mm';
+                });
+                body.style.margin='0';body.style.padding='0';
+                usePageBoundaries=true; void body.offsetHeight;
+                iDoc.querySelectorAll('.report-page').forEach(function(pg){pageBoundaries.push({top:pg.offsetTop,bottom:pg.offsetTop+pg.offsetHeight});});
+              }
+              var realH=Math.max(body.scrollHeight,body.offsetHeight,100);
+              iframe.style.height=realH+'px';
+              html2canvas(body,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,allowTaint:true,letterRendering:true,width:794,height:realH,windowWidth:794,windowHeight:realH}).then(function(canvas){
+                try{document.body.removeChild(iframe);}catch(e){}
+                if(!canvas||!canvas.width||!canvas.height) return onErr(new Error('canvas empty'));
+                if(usePageBoundaries&&pageBoundaries.length>0){
+                  var cs=canvas.width/794;
+                  for(var i=0;i<pageBoundaries.length;i++){
+                    var pb=pageBoundaries[i],srcY=Math.round(pb.top*cs),srcEnd=Math.round(pb.bottom*cs),sliceH=Math.max(1,srcEnd-srcY);
+                    if(!(isFirst&&i===0)) doc.addPage();
+                    var pc=document.createElement('canvas'),cx=pc.getContext('2d');pc.width=canvas.width;pc.height=sliceH;cx.fillStyle='#fff';cx.fillRect(0,0,pc.width,pc.height);cx.drawImage(canvas,0,srcY,canvas.width,sliceH,0,0,canvas.width,sliceH);
+                    doc.addImage(pc.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,pageH);
+                  }
+                  return onDone();
+                }
+                var imgData=canvas.toDataURL('image/jpeg',0.95),imgH=(canvas.height*pageW)/canvas.width;
+                if(!isFinite(imgH)||imgH<=0) return onErr(new Error('bad dims'));
+                if(!isFirst) doc.addPage();
+                if(imgH<=pageH){doc.addImage(imgData,'JPEG',0,0,pageW,imgH);}
+                else{
+                  var pgc=document.createElement('canvas'),gx=pgc.getContext('2d'),sf=canvas.width/pageW,phPx=Math.round(pageH*sf),sy=0,fst=true;
+                  while(sy<canvas.height){if(!fst)doc.addPage();var sh=Math.min(phPx,canvas.height-sy);pgc.width=canvas.width;pgc.height=phPx;gx.fillStyle='#fff';gx.fillRect(0,0,pgc.width,pgc.height);gx.drawImage(canvas,0,sy,canvas.width,sh,0,0,canvas.width,sh);doc.addImage(pgc.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,pageH);sy+=phPx;fst=false;}
+                }
+                onDone();
+              }).catch(function(err){try{document.body.removeChild(iframe);}catch(e){}onErr(err);});
+            },900);
+          }).catch(function(){setTimeout(function(){if(iframe.parentNode)_cap();},900);});
+        }
+        if(iDoc.readyState==='complete') _cap(); else {iframe.onload=_cap; setTimeout(function(){if(iframe.parentNode)_cap();},3000);}
+      }
+
+      function _procPages(idx){
+        if(idx>=pageHTMLs.length){
+          currentReqId=savedReqId;
+          resolve({blob:doc.output('blob'),fileName:fileName,ptName:ptName});
+          return;
+        }
+        _renderOnePage(pageHTMLs[idx],idx===0,function(){_procPages(idx+1);},function(err){currentReqId=savedReqId;reject(err);});
+      }
+      _procPages(0);
+    });
+  }
+
+  var idx=0;
+  function _processNext(){
+    if(_cancelled) return;
+    if(idx>=total){
+      progOverlay.remove();
+      _abnTriggerDownloadsAndWhatsApp(pdfBlobs,e164,t);
+      return;
+    }
+    var req=matchedReqs[idx];
+    var pt2=patients.find(function(p){return p.id===req.patientId;})||{};
+    progSub.textContent='('+(idx+1)+'/'+total+') '+(pt2.name||req.patientName||'');
+    progFill.style.width=Math.round((idx/total)*100)+'%';
+    _genOnePDF(req).then(function(result){
+      pdfBlobs.push(result); idx++; _processNext();
+    }).catch(function(err){
+      console.warn('[ABN PDF]',err); idx++; _processNext();
+    });
+  }
+  _processNext();
+}
+
+function _abnTriggerDownloadsAndWhatsApp(pdfBlobs,e164,t){
+  if(!pdfBlobs.length){ showNotif('تنبيه','لم يتم توليد اي PDF','warning'); return; }
+  var labName=settings.labName||'MedLab Pro';
+  pdfBlobs.forEach(function(item){
+    if(window.IS_ELECTRON&&window.electronAPI&&window.electronAPI.savePDF){
+      item.blob.arrayBuffer().then(function(ab){
+        window.electronAPI.savePDF({pdfBuffer:Array.from(new Uint8Array(ab)),fileName:item.fileName,patientName:item.ptName,patientId:''});
+      });
+    } else {
+      var burl=URL.createObjectURL(item.blob);
+      var a=document.createElement('a'); a.href=burl; a.download=item.fileName; a.style.display='none';
+      document.body.appendChild(a); a.click();
+      setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(burl);},2000);
+    }
+  });
+  var today=new Date().toLocaleDateString('ar-IQ');
+  var msg='🏥 *'+labName+'*\n📋 *تقارير PDF — '+t.nameEn+' ('+t.code+')*\n📅 '+today+'\n─────────────────────\nتم ارسال *'+pdfBlobs.length+'* تقرير PDF:\n\n';
+  pdfBlobs.forEach(function(item,i){ msg+=(i+1)+'. 📄 '+item.ptName+'\n'; });
+  msg+='\n─────────────────────\n🔬 نظام MedLab Pro';
+  setTimeout(function(){
+    var url='https://wa.me/'+e164+'?text='+encodeURIComponent(msg);
+    if(window.electronAPI&&window.electronAPI.openExternal){ window.electronAPI.openExternal(url); }
+    else { window.open(url,'_blank'); }
+    showNotif('تم','تم تحضير '+pdfBlobs.length+' PDF وفتح واتساب','success');
+  },1200);
+}
+
 function phcInit(){
   // reset search when re-entering reports section
   const inp=document.getElementById('phc-patient-search');
