@@ -13410,26 +13410,51 @@ function buildPrintHTML(req, opts){
   const totalFooterHVal = totalFooterH;
 
   // CSS الإضافي للصفحات المتعددة
-  // ⭐ كل .report-page بارتفاع ورقة A4 ثابت (مطروحاً منه الهامش السفلي للذيل)
+  // ⭐ إصلاح الورقة الزائدة (محرك طباعة Chromium في Electron):
+  //   السبب: ارتفاع الصفحة يلامس تماماً حد المساحة القابلة للطباعة فيفيض بنقطة
+  //          واحدة وينتج ورقة فيزيائية فارغة بعد كل صفحة.
+  //   الحل:
+  //     1) ارتفاع كل صفحة أصغر بهامش أمان (SAFE_MM) من المساحة القابلة للطباعة.
+  //     2) فاصل الصفحات فقط بين الصفحات المتجاورة (لا قبل الأولى ولا بعد الأخيرة).
+  //     3) منع أي تدفق سفلي زائد من الحاوية/body.
+  const _safeMm = 6; // هامش أمان لمنع الفيضان الحدّي (mm)
+  const _pageHmm = (_ftrMm ? (297 - _ftrMm) : 297) - _safeMm;
   const multiPageCss = `
+    html,body{height:auto;overflow:visible;margin:0;padding:0;}
+    #all-pages-container{display:block;margin:0;padding:0;}
     .report-page{
       background:#ffffff;
       width:100%;
       position:relative;
       box-sizing:border-box;
       overflow:hidden;
+      height:${_pageHmm}mm;
+      max-height:${_pageHmm}mm;
     }
+    /* فاصل صفحة فقط قبل كل صفحة عدا الأولى */
     .report-page+.report-page{page-break-before:always;break-before:page;}
-    .report-page:last-child{page-break-after:avoid;break-after:avoid;}
+    /* لا فاصل بعد آخر صفحة — يمنع الورقة الفارغة في النهاية */
+    .report-page:last-child{
+      page-break-after:avoid;break-after:avoid;
+      height:auto;max-height:${_pageHmm}mm;
+    }
     .page-footer-spacer{display:block;}
     @media print{
+      html,body{height:auto !important;overflow:visible !important;margin:0 !important;padding:0 !important;}
+      #all-pages-container{margin:0 !important;padding:0 !important;}
       .report-page{
         page-break-inside:auto;
-        height:${_ftrMm ? (297 - _ftrMm) : 297}mm;
+        height:${_pageHmm}mm;
+        max-height:${_pageHmm}mm;
         overflow:hidden;
       }
       .report-page+.report-page{page-break-before:always;break-before:page;}
-      .report-page:last-child{page-break-after:avoid;break-after:avoid;}
+      .report-page:last-child{
+        height:auto !important;
+        max-height:${_pageHmm}mm !important;
+        page-break-after:avoid !important;
+        break-after:avoid !important;
+      }
       #print-footer{position:fixed;bottom:0;left:0;right:0;background:#ffffff;z-index:9999;line-height:0;}
     }
   `;
@@ -13461,18 +13486,20 @@ function buildPrintHTML(req, opts){
       var A4_H_MM = 297;
       var DPI_RATIO = 96 / 25.4; // px per mm
       var PAGE_H_PX = Math.round(A4_H_MM * DPI_RATIO); // ~1122px
-      var TOP_MARGIN_PX = Math.round(1 * DPI_RATIO);   // 1mm هامش body (مُقلَّص ليبدأ التقرير من بداية الورقة)
-      var BOT_MARGIN_PX = Math.round(1 * DPI_RATIO);   // 1mm هامش سفلي مُقلَّص
-      // الذيل + هامش أمان فوقه
-      // ⭐ المسافة المحجوزة للذيل = ارتفاع الذيل الفعلي + هامش بسيط فوقه (SAFE_GAP)
-      //   هذا يضمن:
-      //   1) لا تدخل التحاليل خلف الذيل أبداً
-      //   2) وجود "حد فوق الذيل بمسافة بسيطة" يعبر عنده التحليل للورقة التالية
-      //   3) المسافة بسيطة لكي نستفيد من أقصى مساحة من الورقة
-      var SAFE_GAP = 14; // هامش بسيط جداً فوق الذيل (px) — حد العبور للورقة التالية
-      var FOOTER_RESERVED = TOTAL_FOOTER_H + SAFE_GAP;
-      if(FOOTER_RESERVED < 40) FOOTER_RESERVED = 40; // حد أدنى للأمان (حتى بدون ذيل)
-      var USABLE_H = PAGE_H_PX - TOP_MARGIN_PX - BOT_MARGIN_PX - FOOTER_RESERVED;
+      var TOP_MARGIN_PX = Math.round(1 * DPI_RATIO);   // 1mm هامش body
+      // ⭐ القيم القادمة من باني التقرير لضمان التطابق التام مع CSS وحدود الورقة:
+      //   FTR_MM   = الهامش السفلي لـ @page (ارتفاع الذيل + احتياطي)
+      //   SAFE_MM  = هامش أمان إضافي مطروح من ارتفاع الصفحة (يمنع الورقة الزائدة)
+      //   PAGE_H_MM = الارتفاع الفعلي المسموح لمحتوى الصفحة = 297 - FTR_MM - SAFE_MM
+      var FTR_MM = ${_ftrMm};
+      var SAFE_MM = ${_safeMm};
+      var PAGE_CONTENT_H_PX = Math.round((297 - FTR_MM - SAFE_MM) * DPI_RATIO);
+      // الذيل + هامش أمان فوقه — حد العبور للورقة التالية (فوق الذيل بمسافة بسيطة)
+      var SAFE_GAP = 14; // px فوق الذيل
+      // ⭐ USABLE_H = ارتفاع محتوى الصفحة الفعلي ناقص الهامش العلوي وهامش العبور
+      //   هذا متطابق تماماً مع الحد الفيزيائي للورقة فلا يفيض المحتوى ولا تُنشأ ورقة زائدة
+      var USABLE_H = PAGE_CONTENT_H_PX - TOP_MARGIN_PX - SAFE_GAP;
+      if(USABLE_H < 200) USABLE_H = 200; // حد أدنى للأمان
 
       // مقاس probe ثابت بـ px يعادل 210mm A4 = ~793.7px (نطرح هامش 3mm من كل جانب = 22.7px)
       var PROBE_W_PX = Math.round(210 * DPI_RATIO) - Math.round(6 * DPI_RATIO); // عرض المحتوى الفعلي
@@ -13498,7 +13525,7 @@ function buildPrintHTML(req, opts){
         // الملاحظات تظهر في آخر صفحة فقط
         if(isLast && NOTES_HTML) html += NOTES_HTML;
         // spacer يمنع المحتوى من الاختباء خلف الـ footer الثابت
-        html += '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+40)+'px"></div>';
+        html += '<div class="page-footer-spacer" style="height:8px"></div>';
         div.innerHTML = html;
         return div;
       }
@@ -13524,7 +13551,7 @@ function buildPrintHTML(req, opts){
           p.className = 'report-page';
           p.style.padding = '1mm 3mm 0 3mm';
           p.innerHTML = HDR_HTML + COL_HDR_HTML +
-            '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+40)+'px"></div>';
+            '<div class="page-footer-spacer" style="height:8px"></div>';
           container.appendChild(p);
           return;
         }
@@ -13720,7 +13747,7 @@ function buildPrintHTML(req, opts){
               }
             }
             if(NOTES_HTML) fhtml += NOTES_HTML;
-            fhtml += '<div class="page-footer-spacer" style="height:'+(TOTAL_FOOTER_H+40)+'px"></div>';
+            fhtml += '<div class="page-footer-spacer" style="height:8px"></div>';
             fp.innerHTML = fhtml;
             container.appendChild(fp);
           }
