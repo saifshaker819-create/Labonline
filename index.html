@@ -4159,6 +4159,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <option value="3">📊 النموذج 3 — مُجمَّع بمجموعات (WBC / RBC / PLT)</option>
                   <option value="4">🔵 النموذج 4 — أحادي اللون بحواف دائرية</option>
                   <option value="5">⚡ النموذج 5 — مدمج وسريع (خط واحد لكل مُعامل)</option>
+                  <option value="6">✨ النموذج 6 — عصري ببطاقات ناعمة وتدرّج لوني</option>
+                  <option value="7">📈 النموذج 7 — مرئي بأشرطة موضع القيمة ضمن المدى</option>
+                  <option value="8">🎯 النموذج 8 — أنيق مينيمال بإبراز ذكي للقيم الشاذة</option>
                 </select>
                 <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
               </div>
@@ -7429,6 +7432,7 @@ const ALL_TESTS=[
 {id:'im017',code:'ANTI-SCL70',nameEn:'Anti-Scl-70',nameShort:'Anti-Scl-70',cat:'Immunology',subCat:'Autoimmunity',unit:'U/mL',minVal:0,maxVal:20,minF:0,maxF:20,ref:'< 20',time:'1 day',price:190,notes:'Scleroderma'},
 {id:'im018',code:'ANTI-Jo1',nameEn:'Anti-Jo-1',nameShort:'Anti-Jo-1',cat:'Immunology',subCat:'Autoimmunity',unit:'U/mL',minVal:0,maxVal:20,minF:0,maxF:20,ref:'< 20',time:'1 day',price:190,notes:'Myositis'},
 {id:'im019',code:'tTG-IgA',nameEn:'Anti-tTG IgA',nameShort:'Anti-tTG IgA',cat:'Immunology',subCat:'Autoimmunity',unit:'U/mL',minVal:0,maxVal:20,minF:0,maxF:20,ref:'< 20',time:'1 day',price:150,notes:'Celiac disease'},
+{id:'im019g',code:'tTG-IgG',nameEn:'Anti-tTG IgG',nameShort:'Anti-tTG IgG',cat:'Immunology',subCat:'Autoimmunity',unit:'U/mL',minVal:0,maxVal:20,minF:0,maxF:20,ref:'< 20',time:'1 day',price:150,notes:'Celiac disease — IgG isotype'},
 {id:'im020',code:'ANTI-GBM',nameEn:'Anti-GBM',nameShort:'Anti-GBM',cat:'Immunology',subCat:'Autoimmunity',unit:'qualitative',minVal:null,maxVal:null,minF:null,maxF:null,ref:'Negative',time:'1 day',price:200,notes:"Goodpasture's"},
 {id:'im022',code:'CARDIO-Ab',nameEn:'Anticardiolipin IgG/IgM',nameShort:'aCL',cat:'Immunology',subCat:'Autoimmunity',unit:'GPL U/mL',minVal:0,maxVal:12,minF:0,maxF:12,ref:'< 12',time:'1 day',price:200,notes:'Antiphospholipid'},
 {id:'im021',code:'BETA2-GP',nameEn:'Anti-β2GPI IgG/IgM',nameShort:'β2GPI',cat:'Immunology',subCat:'Autoimmunity',unit:'U/mL',minVal:0,maxVal:20,minF:0,maxF:20,ref:'< 20',time:'1 day',price:220,notes:'Antiphospholipid'},
@@ -8963,8 +8967,9 @@ function renderWizStep(){
             <input class="fc" id="wp-age-d" lang="en" inputmode="numeric" placeholder="يوم" type="number" min="0" max="30" value="${wizPatient.ageD||''}" oninput="calcAgeCompound()" style="width:75px;text-align:center;font-size:17px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
             <span style="color:var(--text2);font-size:15px;font-weight:700">ي</span>
           </div>
-          <span style="color:var(--text2);font-size:15px">أو تاريخ ميلاد:</span>
-          <input class="fc" type="date" id="wp-dob" value="${wizPatient.dob||''}" oninput="calcAgeFromDob()" style="flex:1;min-width:140px;font-size:16px;font-family:'Cairo',sans-serif;color:inherit">
+          <span style="color:var(--text2);font-size:15px">أو سنة الميلاد:</span>
+          <input class="fc" id="wp-birthyear" lang="en" inputmode="numeric" type="number" min="1900" max="2100" placeholder="مثال 2000" value="${wizPatient.birthYear||''}" oninput="calcAgeFromBirthYear()" style="width:120px;text-align:center;font-size:16px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
+          <input type="hidden" id="wp-dob" value="${wizPatient.dob||''}">
         </div>
         <div id="age-display" style="font-size:15px;color:var(--primary);margin-top:5px;font-weight:700">${wizPatient.ageDisplay||''}</div>
       </div>
@@ -9306,7 +9311,8 @@ async function selectExistingPatient(pid){
   wizPatient={...p};
   document.getElementById('pt-suggest-box').style.display='none';
   document.getElementById('wp-name').value=p.name;
-  if(p.dob){ document.getElementById('wp-dob').value=p.dob; calcAgeFromDob(); }
+  if(p.birthYear){ const byEl=document.getElementById('wp-birthyear'); if(byEl){ byEl.value=p.birthYear; calcAgeFromBirthYear(); } }
+  else if(p.dob){ document.getElementById('wp-dob').value=p.dob; calcAgeFromDob(); }
   else {
     const yEl=document.getElementById('wp-age-y');
     const mEl=document.getElementById('wp-age-m');
@@ -9335,6 +9341,9 @@ function calcAgeCompound(){
   const display=document.getElementById('age-display');
   const dobEl=document.getElementById('wp-dob');
   if(dobEl) dobEl.value='';
+  const byEl=document.getElementById('wp-birthyear');
+  if(byEl) byEl.value='';
+  wizPatient.birthYear='';
 
   let txt='';
   if(y>0){
@@ -9384,6 +9393,32 @@ function calcAgeFromDob(){
   wizPatient.ageVal=totalDays/365.25;
   wizPatient.ageUnit='year';
   ['wp-age-y','wp-age-m','wp-age-d'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+}
+
+// حساب العمر من سنة الميلاد فقط — سنوات صحيحة بدون كسور
+function calcAgeFromBirthYear(){
+  const byEl=document.getElementById('wp-birthyear');
+  const display=document.getElementById('age-display');
+  if(!display||!byEl) return;
+  const by=parseInt(byEl.value);
+  if(!by||by<1900||by>2100){
+    // قيمة غير صالحة — لا تحسب
+    return;
+  }
+  const years=(new Date().getFullYear())-by;
+  if(years<0) return;
+  const txt=years+' year';
+  display.textContent=txt;
+  // نخزن أول يناير من سنة الميلاد كـ dob لأغراض التوافق
+  wizPatient.dob=by+'-01-01';
+  wizPatient.birthYear=by;
+  wizPatient.ageDisplay=txt;
+  wizPatient.ageVal=years;
+  wizPatient.ageY=years; wizPatient.ageM=0; wizPatient.ageD=0;
+  wizPatient.ageUnit='year';
+  // مسح حقول السنة/الشهر/اليوم اليدوية
+  ['wp-age-y','wp-age-m','wp-age-d'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const dobEl=document.getElementById('wp-dob'); if(dobEl) dobEl.value=wizPatient.dob;
 }
 
 function addDoctorInline(){
@@ -9584,14 +9619,20 @@ function wizNext(){
   }
 
   const dobVal = document.getElementById('wp-dob').value;
-  const ageY=parseInt(document.getElementById('wp-age-y')?.value)||0;
-  const ageM=parseInt(document.getElementById('wp-age-m')?.value)||0;
-  const ageD=parseInt(document.getElementById('wp-age-d')?.value)||0;
+  const birthYearVal = parseInt(document.getElementById('wp-birthyear')?.value)||0;
+  let ageY=parseInt(document.getElementById('wp-age-y')?.value)||0;
+  let ageM=parseInt(document.getElementById('wp-age-m')?.value)||0;
+  let ageD=parseInt(document.getElementById('wp-age-d')?.value)||0;
   let ageDisplay = document.getElementById('age-display')?.textContent || '';
   let ageVal = wizPatient.ageVal || 0;
 
+  // إذا أُدخلت سنة الميلاد — اعتمد القيم المحسوبة في wizPatient
+  if(birthYearVal && !ageY && !ageM && !ageD){
+    ageY=wizPatient.ageY||0; ageM=wizPatient.ageM||0; ageD=wizPatient.ageD||0;
+  }
+
   // التحقق من العمر (مطلوب)
-  if(!dobVal && !ageY && !ageM && !ageD && !ageDisplay){
+  if(!dobVal && !birthYearVal && !ageY && !ageM && !ageD && !ageDisplay){
     showNotif('⚠️ العمر مطلوب','يرجى إدخال عمر المريض أو تاريخ الميلاد','error');
     const ageEl=document.getElementById('wp-age-y')||document.getElementById('wp-dob');
     if(ageEl){
@@ -9620,7 +9661,7 @@ function wizNext(){
   const dr=doctors.find(d=>d.id===did);
   const gender=(document.getElementById('wp-gender')||{}).value||wizPatient.gender||'male';
 
-  wizPatient={...wizPatient,name,dob:dobVal,ageVal,ageY,ageM,ageD,ageDisplay,
+  wizPatient={...wizPatient,name,dob:dobVal,birthYear:birthYearVal||wizPatient.birthYear||'',ageVal,ageY,ageM,ageD,ageDisplay,
     ageUnit:'year',
     gender,
     title:wizPatient.title||'',
@@ -9833,36 +9874,72 @@ function clearSingleInvoice(id){
 let filteredPatients=[];
 let _dateFilter = ''; // فلتر التاريخ المحدد
 
+let _ptRenderLimit=200; // عدد الصفوف المعروضة دفعة واحدة
 function renderPatients(filter='all',srch='',_overridePts=null){
   const today=new Date().toISOString().split('T')[0];
   const _src=_overridePts||patients;
+  const _srchLower = srch ? srch.toLowerCase() : '';
   filteredPatients=_src.filter(p=>{
     if(_dateFilter){
-      // فلتر بيوم معين — المرضى الذين زاروا في هذا اليوم
       const visited=(p.lastVisit===_dateFilter||p.registered===_dateFilter);
       if(!visited) return false;
     }
     if(filter==='today') return p.lastVisit===today||p.registered===today;
-    if(srch) return(p.name+p.phone+(p.id||'')).toLowerCase().includes(srch.toLowerCase());
+    if(_srchLower) return((p.name||'')+(p.phone||'')+(p.id||'')).toLowerCase().includes(_srchLower);
     return true;
   });
-  document.getElementById('pts-count-lbl').textContent=filteredPatients.length+' مريض';
-  document.getElementById('nb-patients').textContent=patients.length;
+  const _countLbl=document.getElementById('pts-count-lbl'); if(_countLbl) _countLbl.textContent=filteredPatients.length+' مريض';
+  const _nb=document.getElementById('nb-patients'); if(_nb) _nb.textContent=patients.length;
   const tbody=document.getElementById('patients-body');
+  if(!tbody) return;
   if(!filteredPatients.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text2)">لا يوجد مرضى' +(_dateFilter?' في '+_dateFilter:'')+' !</td></tr>';return;}
-  tbody.innerHTML=filteredPatients.map(p=>`<tr>
+
+  // ⭐ فهرسة الطلبات المكتملة مرة واحدة (بدل requests.some لكل صف) — تسريع كبير O(n+m) بدل O(n×m)
+  const _doneSet=new Set();
+  for(let i=0;i<requests.length;i++){ const r=requests[i]; if(r.status==='done') _doneSet.add(r.patientId); }
+
+  // ⭐ عرض محدود (أول _ptRenderLimit) لتفادي تجميد الواجهة مع آلاف المرضى
+  // الترتيب: الأحدث زيارةً أولاً
+  const _sorted=filteredPatients;
+  const _shown=_sorted.slice(0,_ptRenderLimit);
+
+  const _rows=new Array(_shown.length);
+  for(let i=0;i<_shown.length;i++){
+    const p=_shown[i];
+    const ageTxt=p.ageDisplay||calcAgeFromInput(p.dob,p.age);
+    const waBtn=_doneSet.has(p.id)?`<button class="btn btn-sm" style="background:linear-gradient(135deg,#25d366,#1a9e4a);border:1.5px solid rgba(37,211,102,0.6);color:#fff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(37,211,102,0.25)" onclick="openPatientPortalByPatient('${p.id}')">📲 إرسال للمريض</button>`:'';
+    _rows[i]=`<tr>
     <td><span class="bdg bdg-p">${p.id}</span></td>
     <td><b style="color:var(--color-name,var(--primary))">${p.name}</b></td>
-    <td>${p.ageDisplay||calcAgeFromInput(p.dob,p.age)}</td>
+    <td>${ageTxt}</td>
     <td>${p.phone||'-'}</td>
     <td>${p.lastVisit||p.registered||'-'}</td>
     <td>${getBdg(p.status||'active')}</td>
     <td><div style="display:flex;gap:5px">
       <button class="btn btn-sm btn-p" onclick="viewPatientFullModal('${p.id}')">📋 ملف</button>
-      ${_ptHasDoneReq(p.id)?`<button class="btn btn-sm" style="background:linear-gradient(135deg,#25d366,#1a9e4a);border:1.5px solid rgba(37,211,102,0.6);color:#fff;font-size:10px;font-weight:800;padding:4px 10px;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(37,211,102,0.25)" onclick="openPatientPortalByPatient('${p.id}')">📲 إرسال للمريض</button>`:''}
+      ${waBtn}
       <button class="btn btn-sm btn-d" onclick="deletePatient('${p.id}')">🗑️</button>
     </div></td>
-  </tr>`).join('');
+  </tr>`;
+  }
+  let _html=_rows.join('');
+  // صف "عرض المزيد" إذا بقيت صفوف غير معروضة
+  if(_sorted.length>_ptRenderLimit){
+    const _remaining=_sorted.length-_ptRenderLimit;
+    _html+=`<tr><td colspan="7" style="text-align:center;padding:14px">
+      <button class="btn btn-s" onclick="_showMorePatients()" style="font-weight:800">⬇️ عرض المزيد (${_remaining} مريض متبقٍ)</button>
+    </td></tr>`;
+  }
+  tbody.innerHTML=_html;
+}
+// عرض دفعة إضافية من المرضى
+function _showMorePatients(){
+  _ptRenderLimit+=200;
+  // إعادة الرسم بنفس الفلتر/البحث الحاليين
+  const srchEl=document.getElementById('pts-srch-inp');
+  const activeTab=document.querySelector('.tabs .tab.active');
+  const f=(activeTab&&activeTab.textContent.trim()==='اليوم')?'today':'all';
+  renderPatients(f,(srchEl&&srchEl.value)||'',window._idbSearchTemp?[...patients,...window._idbSearchTemp]:null);
 }
 function _ptHasDoneReq(patientId){
   return requests.some(r=>r.patientId===patientId&&r.status==='done');
@@ -9874,9 +9951,10 @@ function openPatientPortalByPatient(patientId){
   if(!done.length){showNotif('تنبيه','لا يوجد طلب مكتمل لهذا المريض','error');return;}
   openPatientPortal(done[0].id);
 }
-function filterPatients(f,el){document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPatients(f);}
+function filterPatients(f,el){_ptRenderLimit=200;document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderPatients(f);}
 function searchPatients(v){
   if(window._spTimer)clearTimeout(window._spTimer);
+  _ptRenderLimit=200; // إعادة ضبط حد العرض عند كل بحث جديد
   // رسم فوري من الذاكرة أولاً (بدون تأخير)
   renderPatients('all',v);
   if(!v||v.length<2){ window._idbSearchTemp=null; return; }
@@ -13332,13 +13410,26 @@ function buildPrintHTML(req, opts){
   const totalFooterHVal = totalFooterH;
 
   // CSS الإضافي للصفحات المتعددة
+  // ⭐ كل .report-page بارتفاع ورقة A4 ثابت (مطروحاً منه الهامش السفلي للذيل)
   const multiPageCss = `
-    .report-page{background:#ffffff;width:100%;position:relative;box-sizing:border-box;}
+    .report-page{
+      background:#ffffff;
+      width:100%;
+      position:relative;
+      box-sizing:border-box;
+      overflow:hidden;
+    }
     .report-page+.report-page{page-break-before:always;break-before:page;}
+    .report-page:last-child{page-break-after:avoid;break-after:avoid;}
     .page-footer-spacer{display:block;}
     @media print{
-      .report-page{page-break-inside:auto;}
+      .report-page{
+        page-break-inside:auto;
+        height:${_ftrMm ? (297 - _ftrMm) : 297}mm;
+        overflow:hidden;
+      }
       .report-page+.report-page{page-break-before:always;break-before:page;}
+      .report-page:last-child{page-break-after:avoid;break-after:avoid;}
       #print-footer{position:fixed;bottom:0;left:0;right:0;background:#ffffff;z-index:9999;line-height:0;}
     }
   `;
@@ -13372,13 +13463,15 @@ function buildPrintHTML(req, opts){
       var PAGE_H_PX = Math.round(A4_H_MM * DPI_RATIO); // ~1122px
       var TOP_MARGIN_PX = Math.round(1 * DPI_RATIO);   // 1mm هامش body (مُقلَّص ليبدأ التقرير من بداية الورقة)
       var BOT_MARGIN_PX = Math.round(1 * DPI_RATIO);   // 1mm هامش سفلي مُقلَّص
-      // الذيل + هامش أمان مُصغَّر — لأن الذيل نزل للأسفل أكثر، يمكن الآن استيعاب تحاليل إضافية
-      // قُلِّل من 25 إلى 12 لاستيعاب أكبر عدد من التحاليل قبل الذيل
-      // ⭐ تقليل الهامش المحجوز للذيل
-      // قياس chunkHeights متحفظ (يجمع margins/padding بدون collapse الفعلي)
-      // لذا نطرح -25 (سالب) ليعوّض الفرق ويسمح بتحاليل أكثر قبل الانتقال للورقة التالية
-      var FOOTER_RESERVED = TOTAL_FOOTER_H - 25;
-      if(FOOTER_RESERVED < 30) FOOTER_RESERVED = 30; // حد أدنى للأمان
+      // الذيل + هامش أمان فوقه
+      // ⭐ المسافة المحجوزة للذيل = ارتفاع الذيل الفعلي + هامش بسيط فوقه (SAFE_GAP)
+      //   هذا يضمن:
+      //   1) لا تدخل التحاليل خلف الذيل أبداً
+      //   2) وجود "حد فوق الذيل بمسافة بسيطة" يعبر عنده التحليل للورقة التالية
+      //   3) المسافة بسيطة لكي نستفيد من أقصى مساحة من الورقة
+      var SAFE_GAP = 14; // هامش بسيط جداً فوق الذيل (px) — حد العبور للورقة التالية
+      var FOOTER_RESERVED = TOTAL_FOOTER_H + SAFE_GAP;
+      if(FOOTER_RESERVED < 40) FOOTER_RESERVED = 40; // حد أدنى للأمان (حتى بدون ذيل)
       var USABLE_H = PAGE_H_PX - TOP_MARGIN_PX - BOT_MARGIN_PX - FOOTER_RESERVED;
 
       // مقاس probe ثابت بـ px يعادل 210mm A4 = ~793.7px (نطرح هامش 3mm من كل جانب = 22.7px)
@@ -16067,7 +16160,7 @@ function addTestToReq(tid){
 
 function removeTestFromReq(tid, id){
   const req = requests.find(r=>r.id===id); if(!req) return;
-  if(req.printed){ showNotif('تنبيه','لا يمكن تعديل طلب مطبوع','warning'); return; }
+  // يُسمح بالتعديل حتى بعد الطباعة (إزالة قفل الطباعة)
   if(req.tests.length<=1){ showNotif('خطأ','يجب أن يحتوي الطلب على تحليل واحد على الأقل','error'); return; }
   if(!confirm('حذف هذا التحليل من الطلب؟')) return;
   req.tests = req.tests.filter(x=>x!==tid);
@@ -23406,6 +23499,190 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
     return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-strip"><div class="pt-main"><div class="pt-r"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:14px">'+ptFullName+'</span></div><div class="pt-r"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-r"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div></div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div><div class="idc">WB-CBC+DIFF</div></div></div><div class="cols"><div><div class="col-hdr" style="background:#1565c0">WBC Differential</div>'+buildCol(half1,'#1565c0')+'</div><div><div class="col-hdr" style="background:#b71c1c">RBC / PLT Indices</div>'+buildCol(half2,'#b71c1c')+'</div></div><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
+  // ══════════════════════════════════════════════════════════
+  // النموذج 6 — عصري ببطاقات ناعمة وتدرّج لوني (Modern Soft Cards)
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='6'){
+    const ac=tableColor;
+    let rows='',rowNum=1;
+    ORDERED.forEach(function(key){
+      const p=cbcParams[key];
+      if(!p&&!(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])) return;
+      const {val,flag,flagColor,ref,unit}=getParam(key);
+      const isAbn=flag&&flag!=='N';
+      const sec=(key==='WBC'||key==='RBC'||key==='PLT');
+      if(sec){
+        const secName=key==='WBC'?'WBC Differential':key==='RBC'?'Red Cell Indices':'Platelet Indices';
+        rows+='<tr><td colspan="6" style="padding:6px 12px 3px;font-size:10px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:'+ac+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+ac+';margin-right:6px;vertical-align:middle"></span>'+secName+'</td></tr>';
+      }
+      rows+='<tr style="background:'+(isAbn?(flagColor+'0c'):'#ffffff')+'">'
+        +'<td style="padding:5px 8px;text-align:center;font-size:10px;color:#aab;font-weight:700">'+rowNum+'</td>'
+        +'<td style="padding:5px 12px;font-size:12px;font-weight:700;color:#243042">'+(LABELS[key]||key)+'</td>'
+        +'<td style="padding:5px 8px;text-align:center"><span style="font-size:15px;font-weight:900;color:'+flagColor+'">'+val+'</span></td>'
+        +'<td style="padding:5px 6px;text-align:center">'+(isAbn?'<span style="display:inline-block;background:'+flagColor+';color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px">'+flag+'</span>':'<span style="color:#43c463;font-size:11px;font-weight:800">●</span>')+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;font-size:10px;color:#000;font-weight:600">'+unit+'</td>'
+        +'<td style="padding:5px 12px;text-align:center;font-size:10px;color:#000;font-weight:600">'+ref+'</td>'
+        +'</tr>';
+      rowNum++;
+    });
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI","Cairo",Arial,sans-serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.ttl{text-align:center;font-size:14px;font-weight:900;color:#fff;background:linear-gradient(135deg,'+ac+','+ac+'cc);padding:7px;margin:5px 0;border-radius:10px;letter-spacing:0.5px;box-shadow:0 3px 10px '+ac+'44;}'
+      +'.pt-card{display:flex;justify-content:space-between;gap:10px;background:linear-gradient(135deg,'+ac+'0a,'+ac+'04);border:1px solid '+ac+'22;border-radius:12px;padding:10px 16px;margin:6px 0;}'
+      +'.pt-l{display:flex;flex-direction:column;gap:5px;flex:1}'
+      +'.pt-row{display:flex;gap:8px;align-items:center}'
+      +'.pt-k{font-size:9px;color:#8893a5;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;min-width:54px}'
+      +'.pt-v{font-size:12px;font-weight:800;color:#1f2b3d}'
+      +'.pt-chips{display:flex;flex-direction:column;gap:5px;justify-content:center;align-items:flex-end}'
+      +'.chip{background:'+ac+';color:#fff;font-size:10px;font-weight:800;padding:3px 12px;border-radius:20px;text-align:center;box-shadow:0 2px 6px '+ac+'33}'
+      +'.tbl-wrap{border:1px solid #eef1f5;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.05);margin-top:5px}'
+      +'table{width:100%;border-collapse:collapse}'
+      +'thead th{background:#f6f8fb;color:'+ac+';padding:6px 8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;text-align:center}'
+      +'thead th.l{text-align:left;padding-left:12px}'
+      +'tbody tr{border-bottom:1px solid #f3f5f8}'
+      +'.foot{display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:6px 14px;background:#f6f8fb;border-radius:10px;font-size:10px;color:#7a8699;font-weight:600}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div>'
+      +'<div class="pt-card"><div class="pt-l">'
+      +'<div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div>'
+      +'</div><div class="pt-chips"><div class="chip">ID: '+barcodeId+'</div><div class="chip">WB-CBC+DIFF</div></div></div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th style="width:30px">#</th><th class="l">Parameter</th><th>Result</th><th style="width:52px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
+      +'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // النموذج 7 — مرئي بأشرطة موضع القيمة ضمن المدى (Visual Range Bars)
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='7'){
+    const ac=tableColor;
+    // دالة تحسب موضع القيمة ضمن المدى لرسم مؤشر بصري
+    function _pos(key){
+      const pm=(typeof CBC_PARAMS_MAP!=='undefined')?CBC_PARAMS_MAP[key]:null;
+      const p=cbcParams[key]||{};
+      // المدى يأتي كنص مثل "4.0-10.0" من refRange أو refM — نحلله
+      const refStr=((p&&p.refRange)||(pm&&pm.refM)||'')+'';
+      const nums=refStr.replace(/[^0-9.\- ]/g,' ').match(/\d+(?:\.\d+)?/g);
+      const lo=nums&&nums.length>=2?parseFloat(nums[0]):NaN;
+      const hi=nums&&nums.length>=2?parseFloat(nums[nums.length-1]):NaN;
+      const v=parseFloat((getParam(key).val+'').replace(/[<>]/g,''));
+      if(isNaN(lo)||isNaN(hi)||isNaN(v)||hi<=lo) return null;
+      // نطاق العرض: من lo-0.6*span إلى hi+0.6*span لإظهار المريض داخل/خارج المدى
+      const span=hi-lo, dmin=lo-span*0.6, dmax=hi+span*0.6;
+      let pct=((v-dmin)/(dmax-dmin))*100; if(pct<2)pct=2; if(pct>98)pct=98;
+      const loPct=((lo-dmin)/(dmax-dmin))*100, hiPct=((hi-dmin)/(dmax-dmin))*100;
+      return {pct:pct.toFixed(1),loPct:loPct.toFixed(1),hiPct:hiPct.toFixed(1)};
+    }
+    let rows='',rowNum=1;
+    ORDERED.forEach(function(key){
+      const p=cbcParams[key];
+      if(!p&&!(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])) return;
+      const {val,flag,flagColor,ref,unit}=getParam(key);
+      const isAbn=flag&&flag!=='N';
+      const pos=_pos(key);
+      let bar='<span style="font-size:9px;color:#bbb">—</span>';
+      if(pos){
+        bar='<div style="position:relative;height:8px;background:#eef1f5;border-radius:5px;overflow:visible">'
+          +'<div style="position:absolute;left:'+pos.loPct+'%;width:'+(pos.hiPct-pos.loPct)+'%;top:0;bottom:0;background:'+ac+'2e;border-radius:5px"></div>'
+          +'<div style="position:absolute;left:'+pos.pct+'%;top:-2px;width:3px;height:12px;background:'+flagColor+';border-radius:2px;transform:translateX(-50%)"></div>'
+          +'</div>';
+      }
+      const sec=(key==='WBC'||key==='RBC'||key==='PLT');
+      if(sec){
+        const secName=key==='WBC'?'WBC Differential':key==='RBC'?'Red Cell Indices':'Platelet Indices';
+        rows+='<tr><td colspan="6" style="padding:5px 10px 2px;font-size:10px;font-weight:900;letter-spacing:1px;color:'+ac+';border-top:1.5px solid '+ac+'33">'+secName+'</td></tr>';
+      }
+      rows+='<tr style="background:'+(rowNum%2===0?'#fafbfd':'#fff')+'">'
+        +'<td style="padding:4px 10px;font-size:12px;font-weight:700;color:#243042;width:24%">'+(LABELS[key]||key)+'</td>'
+        +'<td style="padding:4px 6px;text-align:center;font-size:14px;font-weight:900;color:'+flagColor+';width:11%">'+val+'</td>'
+        +'<td style="padding:4px 6px;text-align:center;width:8%">'+(isAbn?'<span style="color:'+flagColor+';font-weight:800;font-size:11px">'+flag+'</span>':'<span style="color:#43c463;font-size:10px">●</span>')+'</td>'
+        +'<td style="padding:4px 10px;width:33%">'+bar+'</td>'
+        +'<td style="padding:4px 6px;text-align:center;font-size:9px;color:#000;font-weight:600;width:10%">'+unit+'</td>'
+        +'<td style="padding:4px 8px;text-align:center;font-size:9px;color:#000;font-weight:600;width:14%">'+ref+'</td>'
+        +'</tr>';
+      rowNum++;
+    });
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI","Cairo",Arial,sans-serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.ttl{text-align:center;font-size:13px;font-weight:900;color:'+ac+';padding:5px 0;margin:4px 0;border-top:3px solid '+ac+';border-bottom:1px solid '+ac+'44;letter-spacing:1px;text-transform:uppercase}'
+      +'.pt-strip{display:flex;justify-content:space-between;align-items:center;border:1px solid '+ac+'33;border-left:5px solid '+ac+';border-radius:0 8px 8px 0;padding:8px 14px;margin:5px 0;background:'+ac+'06}'
+      +'.pt-l{display:flex;flex-direction:column;gap:4px}.pt-row{display:flex;gap:8px;font-size:11px}.pt-k{color:#8893a5;font-weight:700;min-width:52px}.pt-v{font-weight:800;color:#1f2b3d}'
+      +'.pt-ids{display:flex;flex-direction:column;gap:4px;align-items:flex-end}.idc{background:'+ac+';color:#fff;font-size:10px;font-weight:800;padding:2px 10px;border-radius:4px}'
+      +'.lgnd{display:flex;justify-content:flex-end;gap:14px;font-size:8px;color:#8893a5;margin:3px 4px;font-weight:600}'
+      +'table{width:100%;border-collapse:collapse;margin-top:3px}thead th{background:'+ac+';color:#fff;padding:5px 8px;font-size:10px;font-weight:700;text-align:center}thead th.l{text-align:left;padding-left:10px}'
+      +'.foot{border-top:2px solid '+ac+';margin-top:7px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#7a8699;font-weight:600}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div>'
+      +'<div class="pt-strip"><div class="pt-l">'
+      +'<div class="pt-row"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:14px">'+ptFullName+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div>'
+      +'</div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div></div></div>'
+      +'<div class="lgnd"><span>▮ Normal range</span><span>▏ Patient value</span></div>'
+      +'<table><thead><tr><th class="l">Parameter</th><th>Result</th><th>Flag</th><th>Range Position</th><th>Unit</th><th>Ref.</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // النموذج 8 — أنيق مينيمال بإبراز ذكي للقيم الشاذة (Elegant Minimal)
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='8'){
+    const ac=tableColor;
+    let rows='',rowNum=1;
+    ORDERED.forEach(function(key){
+      const p=cbcParams[key];
+      if(!p&&!(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])) return;
+      const {val,flag,flagColor,ref,unit}=getParam(key);
+      const isAbn=flag&&flag!=='N';
+      const sec=(key==='WBC'||key==='RBC'||key==='PLT');
+      if(sec){
+        const secName=key==='WBC'?'WBC DIFFERENTIAL':key==='RBC'?'RED CELL INDICES':'PLATELET INDICES';
+        rows+='<tr><td colspan="6" style="padding:8px 4px 3px;font-size:9px;font-weight:900;letter-spacing:2px;color:#9aa5b5;border-bottom:1px solid #edf0f4">'+secName+'</td></tr>';
+      }
+      const arrow=isAbn?(flag.indexOf('H')>-1?'▲':flag.indexOf('L')>-1?'▼':''):'';
+      rows+='<tr>'
+        +'<td style="padding:6px 4px;font-size:12px;font-weight:600;color:#2a3340;border-bottom:1px solid #f4f6f9">'+(LABELS[key]||key)+'</td>'
+        +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #f4f6f9"><span style="font-size:16px;font-weight:800;color:'+(isAbn?flagColor:'#1a2230')+'">'+val+'</span> '+(arrow?'<span style="color:'+flagColor+';font-size:11px;font-weight:900">'+arrow+'</span>':'')+'</td>'
+        +'<td style="padding:6px 6px;text-align:center;border-bottom:1px solid #f4f6f9">'+(isAbn?'<span style="font-size:9px;font-weight:900;letter-spacing:1px;color:'+flagColor+';border:1px solid '+flagColor+';padding:1px 6px;border-radius:3px">'+flag+'</span>':'')+'</td>'
+        +'<td style="padding:6px 8px;text-align:center;font-size:10px;color:#000;font-weight:600;border-bottom:1px solid #f4f6f9">'+unit+'</td>'
+        +'<td style="padding:6px 4px;text-align:right;font-size:10px;color:#000;font-weight:600;border-bottom:1px solid #f4f6f9">'+ref+'</td>'
+        +'</tr>';
+      rowNum++;
+    });
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI","Cairo",Georgia,Arial,serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 4mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.ttl{text-align:center;font-size:15px;font-weight:300;color:#1a2230;letter-spacing:3px;margin:8px 0 3px;text-transform:uppercase}'
+      +'.subttl{text-align:center;font-size:9px;color:#9aa5b5;letter-spacing:2px;margin-bottom:8px;text-transform:uppercase}'
+      +'.rule{height:2px;background:'+ac+';width:60px;margin:4px auto 10px}'
+      +'.pt-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 24px;padding:10px 6px;border-top:1px solid #edf0f4;border-bottom:1px solid #edf0f4;margin-bottom:8px}'
+      +'.pt-item{display:flex;justify-content:space-between;font-size:11px;padding:2px 0}'
+      +'.pt-k{color:#9aa5b5;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;font-size:9px}'
+      +'.pt-v{font-weight:800;color:#1f2b3d}'
+      +'table{width:100%;border-collapse:collapse;margin-top:2px}'
+      +'thead th{padding:5px 4px;font-size:9px;font-weight:700;color:#9aa5b5;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #1a2230}'
+      +'thead th.l{text-align:left}thead th.r{text-align:right}'
+      +'.foot{margin-top:10px;padding-top:5px;border-top:1px solid #edf0f4;display:flex;justify-content:space-between;font-size:9px;color:#9aa5b5;letter-spacing:0.5px}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl">Hematology Report</div>'
+      +'<div class="subttl">Complete Blood Count — WB-CBC+DIFF</div>'
+      +'<div class="rule"></div>'
+      +'<div class="pt-grid">'
+      +'<div class="pt-item"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+'">'+ptFullName+'</span></div>'
+      +'<div class="pt-item"><span class="pt-k">ID</span><span class="pt-v">'+barcodeId+'</span></div>'
+      +'<div class="pt-item"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div>'
+      +'<div class="pt-item"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div>'
+      +'<div class="pt-item"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div>'
+      +'<div class="pt-item"><span class="pt-k">Operator</span><span class="pt-v">'+operator+'</span></div>'
+      +'</div>'
+      +'<table><thead><tr><th class="l">Parameter</th><th class="r">Result</th><th>Flag</th><th>Unit</th><th class="r">Reference</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div class="foot"><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+  }
+
   // fallback → النموذج 1
   return _buildCBCReportHTML(cbcParams,pt,req,'1');
 }
@@ -26326,6 +26603,10 @@ const LIS_MEDLAB_TESTS=[
   {id:'CKMB',name:'CK-MB',cat:'Cardiac'},{id:'LDH',name:'LDH',cat:'Cardiac'},
   {id:'BNP',name:'BNP/NT-proBNP',cat:'Cardiac'},{id:'CRP',name:'CRP',cat:'Cardiac'},
   {id:'ESR',name:'ESR',cat:'Cardiac'},
+  // Celiac (MAGLUMI) — أنواع مناعية منفصلة
+  {id:'tTG-IgA',name:'Anti-tTG IgA',cat:'Autoimmunity'},
+  {id:'tTG-IgG',name:'Anti-tTG IgG',cat:'Autoimmunity'},
+  {id:'tTG-IgM',name:'Anti-tTG IgM',cat:'Autoimmunity'},
 ];
 
 // ═══════════════════════════════════════════════
@@ -26464,6 +26745,22 @@ const LIS_DEFAULT_MAPPINGS=[
   {deviceCode:'TNTI',medlabCode:'TROP',name:'Troponin I',device:'all',note:''},
   {deviceCode:'CK',medlabCode:'CK',name:'CK Total',device:'all',note:''},
   {deviceCode:'CKMB',medlabCode:'CKMB',name:'CK-MB',device:'all',note:''},
+  // ── MAGLUMI 600 — أجسام الاضطرابات الهضمية (Celiac) — يجب التمييز بين IgA و IgG و IgM ──
+  // الجهاز قد يرسل الكود بصيغ مختلفة: 'tTG IgA' / 'TTG-IGA' / 'Anti-tTG IgA' ... إلخ
+  // نُعرّف كل الصيغ صراحةً حتى لا تُختزل إلى 'tTG' فقط فتتساوى النتائج.
+  {deviceCode:'tTG IgA',   medlabCode:'tTG-IgA',name:'Anti-tTG IgA (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'tTG-IgA',   medlabCode:'tTG-IgA',name:'Anti-tTG IgA (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'TTGIGA',    medlabCode:'tTG-IgA',name:'Anti-tTG IgA (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'Anti-tTG IgA',medlabCode:'tTG-IgA',name:'Anti-tTG IgA (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'ANTI TTG IGA',medlabCode:'tTG-IgA',name:'Anti-tTG IgA (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'tTG IgG',   medlabCode:'tTG-IgG',name:'Anti-tTG IgG (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'tTG-IgG',   medlabCode:'tTG-IgG',name:'Anti-tTG IgG (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'TTGIGG',    medlabCode:'tTG-IgG',name:'Anti-tTG IgG (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'Anti-tTG IgG',medlabCode:'tTG-IgG',name:'Anti-tTG IgG (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'ANTI TTG IGG',medlabCode:'tTG-IgG',name:'Anti-tTG IgG (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'tTG IgM',   medlabCode:'tTG-IgM',name:'Anti-tTG IgM (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'tTG-IgM',   medlabCode:'tTG-IgM',name:'Anti-tTG IgM (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
+  {deviceCode:'TTGIGM',    medlabCode:'tTG-IgM',name:'Anti-tTG IgM (MAGLUMI)',device:'all',note:'MAGLUMI 600 — Celiac'},
 ];
 
 // ═══════════════════════════════════════════════
@@ -27404,12 +27701,27 @@ function lisParseASTM(raw,deviceName){
       }
       case 'P':{
         // BC-5000: P|1||SampleID|||PatientName|...
+        // MAGLUMI: قد يكون P|1 فقط بدون Sample ID — يأتي في O record
         const sid=(fields[3]||fields[2]||'').trim();
         const name=(fields[5]||fields[6]||'').trim().replace(/\^/g,' ');
         const dob=(fields[7]||'').trim();
         const gender=(fields[8]||'').trim();
         currentPatient={sampleId:sid,patName:name,dob,gender};
-        lisAddLog('astm','P-مريض: SID='+sid+' الاسم='+name);
+        lisAddLog('astm','P-مريض: SID='+(sid||'(فارغ — ننتظر O)')+' الاسم='+name);
+        break;
+      }
+      case 'O':{
+        // O record (Order): O|seq|SampleID|InstrSpecimenID|^^^TestCode|...
+        // MAGLUMI يضع Sample ID الحقيقي هنا في fields[2]
+        // مثال: O|1|100426||^^^Anti-GAD II
+        const oSid=(fields[2]||'').trim();
+        const oSpecimen=(fields[3]||'').trim();
+        const realSid=oSid||oSpecimen;
+        if(realSid){
+          if(!currentPatient) currentPatient={sampleId:realSid,patName:'',dob:'',gender:''};
+          else currentPatient.sampleId=realSid; // O يكتب فوق P الفارغ
+          lisAddLog('astm','O-طلب: SID='+realSid);
+        }
         break;
       }
       case 'R':{
@@ -27424,7 +27736,11 @@ function lisParseASTM(raw,deviceName){
         const flags=(fields[6]||'').trim();
         const status=(fields[8]||'').trim();
         const dt=(fields[12]||'').trim();
-        const sid=currentPatient?.sampleId||lisExtractSid(fields);
+        // ── Sample ID: من O/P record فقط — لا نستخدم lisExtractSid هنا ──────
+        // السبب: R record يحتوي timestamp طويل (مثل 20260615173942) في الحقل
+        // الأخير، و lisExtractSid قد يلتقطه خطأً كـ Sample ID. لذا نعتمد فقط
+        // على Sample ID المُستخرج مسبقاً من O record (الأدق) أو P record.
+        const sid=currentPatient?.sampleId||'';
         lisAddLog('astm','R: '+testCode+'='+rawVal+(value!==rawVal?' → '+value:'')+' '+unit+' ['+flags+']');
 
         // إذا باراميتر CBC → جمّعه في buffer
@@ -27810,15 +28126,50 @@ function lisParseCSV(raw,deviceName){
 // ═══════════════════════════════════════════════
 function lisResolveCode(deviceCode){
   const dc=(deviceCode||'').toUpperCase().trim();
-  // 1. بحث في lisMappings (الروابط المحفوظة)
+  // 1. بحث في lisMappings (الروابط المحفوظة) — تطابق كامل
   const m=lisMappings.find(x=>x.deviceCode.toUpperCase()===dc);
   if(m) return m.medlabCode;
-  // 2. fallback: بحث مرن في LIS_MEDLAB_TESTS بتجاهل الشرطات والمسافات والأرقام الرومانية
+
+  // ⭐ استخراج لاحقة النوع المناعي (isotype) من الكود الوارد إن وُجدت
+  // هذا يمنع اختزال 'tTG IgA' / 'tTG IgG' إلى 'tTG' فيتساوى الاثنان بنفس الرقم
+  function _isotype(s){
+    const u=(s||'').toUpperCase().replace(/[-\s.]+/g,'');
+    if(/IGA(?![A-Z])/.test(u)||u.endsWith('IGA')) return 'IGA';
+    if(/IGG(?![A-Z])/.test(u)||u.endsWith('IGG')) return 'IGG';
+    if(/IGM(?![A-Z])/.test(u)||u.endsWith('IGM')) return 'IGM';
+    if(/IGE(?![A-Z])/.test(u)||u.endsWith('IGE')) return 'IGE';
+    return '';
+  }
+  const dcIsotype=_isotype(dc);
+
+  // 2. بحث ثانٍ في lisMappings بعد تطبيع المسافات/الشرطات — مع احترام النوع المناعي
+  const dcCompact=dc.replace(/[-\s.]+/g,'');
+  const m2=lisMappings.find(x=>{
+    const xc=x.deviceCode.toUpperCase().replace(/[-\s.]+/g,'');
+    if(xc!==dcCompact) return false;
+    // إن كان للكود الوارد isotype، يجب أن يطابق isotype التعيين
+    return _isotype(x.deviceCode)===dcIsotype;
+  });
+  if(m2) return m2.medlabCode;
+
+  // 3. fallback: بحث مرن في LIS_MEDLAB_TESTS
+  //    ⭐ نُبقي لاحقة isotype أثناء التطبيع (لا نحذفها) لمنع التطابق الخاطئ
   const dcNorm=dc.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
   const lt=LIS_MEDLAB_TESTS.find(t=>{
     const tn=(t.id||'').toUpperCase().replace(/[-\s]+/g,'');
     const tname=(t.name||'').toUpperCase().replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
-    return tn===dcNorm||tname===dcNorm||dcNorm.startsWith(tn)||tn.startsWith(dcNorm);
+    // تطابق كامل بعد التطبيع
+    if(tn===dcNorm||tname===dcNorm) return true;
+    // تطابق جزئي (startsWith) — لكن فقط إذا تطابق النوع المناعي (أو لا يوجد isotype أصلاً)
+    const tnIsotype=_isotype(tn)||_isotype(tname);
+    const isotypeOk = (!dcIsotype && !tnIsotype) || (dcIsotype===tnIsotype && dcIsotype!=='');
+    if(!isotypeOk) {
+      // إذا اختلف النوع المناعي صراحةً — لا تطابق جزئي
+      if(dcIsotype && tnIsotype && dcIsotype!==tnIsotype) return false;
+      // إذا أحدهما له isotype والآخر لا — امنع التطابق الجزئي لتفادي الاختزال
+      if(dcIsotype!==tnIsotype) return false;
+    }
+    return dcNorm.startsWith(tn)||tn.startsWith(dcNorm);
   });
   if(lt) return lt.id;
   return dc;
@@ -28008,6 +28359,16 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
   const _codeUp=(code||'').toUpperCase();
   const _codeNorm=_codeUp.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
+  // ⭐ استخراج النوع المناعي (isotype) لمنع خلط IgA/IgG/IgM (مثل tTG IgA مقابل tTG IgG)
+  function _iso(s){
+    const u=(s||'').toUpperCase().replace(/[-\s.]+/g,'');
+    if(u.endsWith('IGA')||/IGA(?![A-Z])/.test(u)) return 'IGA';
+    if(u.endsWith('IGG')||/IGG(?![A-Z])/.test(u)) return 'IGG';
+    if(u.endsWith('IGM')||/IGM(?![A-Z])/.test(u)) return 'IGM';
+    if(u.endsWith('IGE')||/IGE(?![A-Z])/.test(u)) return 'IGE';
+    return '';
+  }
+  const _codeIso=_iso(_codeUp);
   const _matchedTest=_allTests.find(function(t){
     const tc=(t.code||'').toUpperCase();
     const tcNorm=tc.replace(/[-\s]+/g,'');
@@ -28015,7 +28376,12 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
     const tnsNorm=tns.replace(/[-\s]+/g,'');
     const tne=(t.nameEn||'').toUpperCase();
     const tneNorm=tne.replace(/[-\s]+/g,'').replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
-    return(tc===_codeUp||tcNorm===_codeNorm||tns===_codeUp||tnsNorm===_codeNorm||tneNorm===_codeNorm||_codeNorm.startsWith(tcNorm)||tcNorm.startsWith(_codeNorm));
+    // تطابق كامل دائماً مقبول
+    if(tc===_codeUp||tcNorm===_codeNorm||tns===_codeUp||tnsNorm===_codeNorm||tneNorm===_codeNorm) return true;
+    // تطابق جزئي — لكن فقط إذا تطابق النوع المناعي (أو غاب من الطرفين)
+    const _tIso=_iso(tc)||_iso(tns)||_iso(tne);
+    if(_codeIso!==_tIso) return false; // اختلاف isotype (أو أحدهما يحمله) → امنع التطابق الجزئي
+    return(_codeNorm.startsWith(tcNorm)||tcNorm.startsWith(_codeNorm));
   });
   // ── تحديد resultKey بدقة ────────────────────────────────────
   // المشكلة: إذا كان resultKey لا يطابق بالضبط الكود في req.tests
