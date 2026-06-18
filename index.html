@@ -31918,7 +31918,39 @@ function initNeonBanners() {
   const prev = document.getElementById('admin-neon-preview');
   if (inp)  inp.value = saved;
   if (prev) prev.textContent = saved;
+
+  /* ⭐ الاشتراك في Firebase لمزامنة النص بين كل الحسابات */
+  _subscribeNeonBanner();
 }
+
+/* ── الاستماع لتغييرات النص من Firebase وتطبيقها فوراً على هذا الحساب ── */
+function _subscribeNeonBanner() {
+  if (_neonFbListenerSet) return; // منع تكرار الاشتراك
+  if (typeof fbReady === 'undefined' || !fbReady || typeof fbDb === 'undefined' || !fbDb) {
+    // Firebase غير جاهز بعد — أعد المحاولة لاحقاً
+    setTimeout(_subscribeNeonBanner, 1500);
+    return;
+  }
+  _neonFbListenerSet = true;
+  fbDb.ref(NEON_BANNER_FB_PATH).on('value', function(snap){
+    const data = snap.val();
+    if (!data || !data.text) return;
+    const val = String(data.text).trim();
+    if (!val) return;
+    // خزّن محلياً كنسخة احتياطية، وطبّق النص حياً
+    localStorage.setItem(NEON_BANNER_KEY, val);
+    _wnbRebuild('wnb-hdr-text-el', val);
+    // حدّث حقل الأدمن والمعاينة إن كانا ظاهرين
+    const inp  = document.getElementById('admin-neon-text-inp');
+    const prev = document.getElementById('admin-neon-preview');
+    if (inp && document.activeElement !== inp) inp.value = val;
+    if (prev) prev.textContent = val;
+  });
+}
+
+/* ── مفتاح Firebase المشترك للافتة (عام لكل الحسابات) ── */
+const NEON_BANNER_FB_PATH = 'settings/neonBanner';
+let _neonFbListenerSet = false;
 
 /* ── حفظ النص الجديد من لوحة الأدمن ── */
 function saveNeonBannerText() {
@@ -31929,13 +31961,21 @@ function saveNeonBannerText() {
 
   localStorage.setItem(NEON_BANNER_KEY, val);
 
-  /* تطبيق فوري على البانرَين */
+  /* ⭐ كتابة النص إلى Firebase ليُطبَّق على كل الحسابات المفتوحة فوراً */
+  if (typeof fbReady !== 'undefined' && fbReady && typeof fbDb !== 'undefined' && fbDb) {
+    fbDb.ref(NEON_BANNER_FB_PATH).set({ text: val, ts: Date.now() })
+      .then(()=>{ showNotif('✅ تم','تم تطبيق النص على جميع الحسابات','success'); })
+      .catch(()=>{ showNotif('⚠️ تنبيه','حُفظ محلياً — تعذّرت المزامنة عبر الشبكة','warning'); });
+  } else {
+    showNotif('⚠️ تنبيه','حُفظ على هذا الجهاز فقط — لا يوجد اتصال بالشبكة','warning');
+  }
+
+  /* تطبيق فوري على البانر محلياً */
   _wnbRebuild('wnb-hdr-text-el', val);
 
   /* رسالة النجاح */
   const msg = document.getElementById('admin-neon-save-msg');
   if (msg) { msg.style.display='block'; setTimeout(()=>msg.style.display='none', 3000); }
-  showNotif('✅ تم','تم تطبيق النص الجديد على بانر الترحيب','success');
 }
 
 /* ── إعادة النص الافتراضي ── */
@@ -31946,6 +31986,12 @@ function resetNeonBannerText() {
   if (inp)  inp.value = NEON_BANNER_DEFAULT;
   if (prev) prev.textContent = NEON_BANNER_DEFAULT;
   _wnbRebuild('wnb-hdr-text-el', NEON_BANNER_DEFAULT);
+
+  /* ⭐ كتابة الافتراضي إلى Firebase ليُطبَّق على كل الحسابات */
+  if (typeof fbReady !== 'undefined' && fbReady && typeof fbDb !== 'undefined' && fbDb) {
+    fbDb.ref(NEON_BANNER_FB_PATH).set({ text: NEON_BANNER_DEFAULT, ts: Date.now() }).catch(()=>{});
+  }
+
   showNotif('↩ تمت الإعادة','تم استعادة النص الافتراضي','success');
 }
 
