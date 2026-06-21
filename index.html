@@ -25110,6 +25110,35 @@ function _buildUTModalBody(r){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">`;
     sec.fields.forEach(f=>{
       const val=r?r[f.id]||f.normal||'':f.normal||'';
+      // ── حقل Others: اختيار متعدد + كتابة يدوية ─────────────────────────
+      if(f.id==='ut_others'){
+        // القيمة محفوظة كنص مفصول بفواصل (مثلاً: "Bacteria (+), Yeast (+), خلية حرة")
+        const savedParts=(val||'').split(',').map(s=>s.trim()).filter(s=>s&&s!=='Nil');
+        // الخيارات الجاهزة (بدون Nil — Nil يعني لا شيء مختار)
+        const presetOpts=f.options.filter(o=>o!=='Nil');
+        // أي أجزاء محفوظة ليست من الخيارات الجاهزة = يدوية
+        const manualParts=savedParts.filter(p=>!presetOpts.includes(p));
+        html+=`<div class="fg" style="margin-bottom:0;grid-column:1/-1">
+          <label class="fl" style="font-size:11px">${f.label} <span style="font-size:9px;color:var(--text2)">(اختر واحد أو أكثر · أو اكتب يدوياً)</span></label>
+          <div id="ut-others-wrap" style="border:1px solid var(--border);border-radius:8px;padding:8px;background:rgba(0,0,0,0.02)">
+            <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
+              ${presetOpts.map(o=>{
+                const on=savedParts.includes(o);
+                return `<button type="button" data-opt="${o.replace(/"/g,'&quot;')}" onclick="utToggleOther(this)" class="btn btn-sm ${on?'btn-p':'btn-s'}" style="font-size:11px;padding:4px 9px;font-family:'Cairo',sans-serif">${on?'✓ ':''}${o}</button>`;
+              }).join('')}
+            </div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input id="ut-others-manual" class="fc" placeholder="إضافة يدوية ثم Enter..." style="font-size:11px;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();utAddOtherManual();}">
+              <button type="button" onclick="utAddOtherManual()" class="btn btn-sm btn-ok" style="font-size:11px;padding:4px 10px">➕ إضافة</button>
+            </div>
+            <div id="ut-others-manual-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
+              ${manualParts.map(p=>`<span class="ut-other-tag" data-val="${p.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#000;border-radius:12px;padding:3px 9px;font-size:11px;font-weight:800">${p}<span onclick="this.parentElement.remove();utSyncOthers()" style="cursor:pointer;font-weight:900">✕</span></span>`).join('')}
+            </div>
+            <input type="hidden" id="utf-${f.id}" value="${(val||'Nil').replace(/"/g,'&quot;')}">
+          </div>
+        </div>`;
+        return;
+      }
       const isAbn=val&&f.normal&&val!==f.normal;
       const hlStyle=isAbn?'border-color:var(--danger);background:rgba(255,34,68,0.04)':'';
       html+=`<div class="fg" style="margin-bottom:0">
@@ -25169,6 +25198,49 @@ function utHighlight(fid,normal){
   const isAbn=el.value&&el.value!==normal;
   el.style.borderColor=isAbn?'var(--danger)':'';
   el.style.background=isAbn?'rgba(255,34,68,0.04)':'';
+}
+// ── حقل Others (اختيار متعدد + يدوي) ─────────────────────────────────────
+// يجمع كل الأزرار المفعّلة + الوسوم اليدوية في الحقل المخفي utf-ut_others
+function utSyncOthers(){
+  const wrap=document.getElementById('ut-others-wrap'); if(!wrap) return;
+  const parts=[];
+  // الأزرار المفعّلة (btn-p)
+  wrap.querySelectorAll('button[data-opt]').forEach(b=>{
+    if(b.classList.contains('btn-p')) parts.push(b.getAttribute('data-opt'));
+  });
+  // الوسوم اليدوية
+  wrap.querySelectorAll('.ut-other-tag').forEach(t=>{
+    const v=t.getAttribute('data-val'); if(v) parts.push(v);
+  });
+  const hidden=document.getElementById('utf-ut_others');
+  if(hidden) hidden.value = parts.length ? parts.join(', ') : 'Nil';
+}
+function utToggleOther(btn){
+  const on=btn.classList.contains('btn-p');
+  btn.classList.remove('btn-p','btn-s');
+  btn.classList.add(on?'btn-s':'btn-p');
+  const opt=btn.getAttribute('data-opt');
+  btn.textContent=(on?'':'✓ ')+opt;
+  utSyncOthers();
+}
+function utAddOtherManual(){
+  const inp=document.getElementById('ut-others-manual'); if(!inp) return;
+  const v=(inp.value||'').trim(); if(!v) return;
+  const box=document.getElementById('ut-others-manual-tags'); if(!box) return;
+  // تفادي التكرار
+  let dup=false;
+  box.querySelectorAll('.ut-other-tag').forEach(t=>{ if((t.getAttribute('data-val')||'')===v) dup=true; });
+  if(!dup){
+    const span=document.createElement('span');
+    span.className='ut-other-tag';
+    span.setAttribute('data-val',v);
+    span.style.cssText='display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#000;border-radius:12px;padding:3px 9px;font-size:11px;font-weight:800';
+    span.innerHTML=v.replace(/</g,'&lt;')+'<span style="cursor:pointer;font-weight:900">✕</span>';
+    span.querySelector('span').onclick=function(){ span.remove(); utSyncOthers(); };
+    box.appendChild(span);
+  }
+  inp.value='';
+  utSyncOthers();
 }
 function utSearchPatient(q){
   const box=document.getElementById('ut-pt-suggest'); if(!box)return;
@@ -30769,7 +30841,27 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
       return tcUp===_codeUp||tcNorm===_codeNorm||
              (_matchedTest&&tcUp===(_matchedTest.id||'').toUpperCase());
     });
-    if(exactMatch) resultKey=exactMatch;
+    if(exactMatch){
+      resultKey=exactMatch;
+    } else {
+      // ── fallback ذكي: الكود القادم من الجهاز (مثل 'Cortisol') قد يطابق
+      // تحليلاً في قاعدة البيانات لكن طلب المريض يحتوي variant مختلف
+      // (مثل AM-CORT=sp003 أو PM-CORT=sp004). نبحث في تحاليل الطلب عن
+      // أي تحليل يطابق الكود القادم بالاسم/الكود جزئياً (بادئة كاملة).
+      const matchInReq=req.tests.find(function(tid){
+        const t=_allTests.find(function(x){return x.id===tid;});
+        if(!t) return false;
+        const tc=(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+        const tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+        const tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+        const _tIso=_iso(tc)||_iso(tns)||_iso(tne);
+        if(_codeIso!==_tIso) return false;
+        return tc.startsWith(_codeNorm)||_codeNorm.startsWith(tc)||
+               tns.startsWith(_codeNorm)||_codeNorm.startsWith(tns)||
+               tne.startsWith(_codeNorm)||_codeNorm.startsWith(tne);
+      });
+      if(matchInReq) resultKey=matchInReq;
+    }
   }
 
   req.results[resultKey]=res.value;
