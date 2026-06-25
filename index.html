@@ -2811,6 +2811,15 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       targetDev.rxCount = (targetDev.rxCount||0) + (d.data||'').length;
     });
   }
+  // ── HL7 Host Query (Mindray CL-900i يطلب تحاليل المريض) ──────────────────
+  // ⭐ مُسجَّل هنا في التهيئة العامة ليعمل دائماً — مستقل عن اتصال BC-5000.
+  // الجهاز يرسل QRY بـ Sample ID → نبحث في الطلبات → نرد بالتحاليل.
+  if(typeof window.electronAPI.onHl7Query === 'function'){
+    window.electronAPI.onHl7Query((info) => {
+      // info = { queryId, deviceId, sampleId, name, client }
+      lisHandleHl7Query(info);
+    });
+  }
   if(typeof window.electronAPI.onDeviceConnected === 'function'){
     window.electronAPI.onDeviceConnected((d) => {
       const targetDev = lisDevices.find(x => x.id === d.deviceId);
@@ -3105,6 +3114,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;align-items:center">
               <button class="btn btn-s" onclick="editPatientFromResults()">✏️ تعديل بيانات المريض</button>
               <button class="btn btn-ok btn-lg" onclick="finalizeResult()">✅ تأكيد النتائج</button>
+              <button class="btn btn-p btn-lg" style="background:linear-gradient(135deg,#00b4ff,#0066ff);border:none" onclick="pushResultsToDevice()" title="إرسال التحاليل المحددة إلى الجهاز">📤 إرسال للجهاز</button>
               <button class="btn btn-p btn-lg" onclick="openGroupingModalFromInput()">📑 تجميع</button>
               <button class="btn btn-p btn-lg" onclick="finalizeAndPrint()">🖨️ حفظ وطباعة</button>
               <button class="btn btn-ok btn-lg" onclick="downloadPDF()">📄 تحميل PDF</button>
@@ -3135,22 +3145,6 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div id="culture-list-body">
             <div class="empty"><div class="empty-ic">🦠</div><p>لا توجد نتائج زرع بعد</p></div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- URINE+TEST SECTION -->
-    <div class="sec" id="sec-ut">
-      <div class="gc" style="max-width:1100px;margin:0 auto">
-        <div class="gc-hdr">
-          <div class="gc-title">🧪 Urine+Test</div>
-          <button class="btn btn-p btn-sm" onclick="openNewUTModal()">➕ إدخال نتيجة جديدة</button>
-        </div>
-        <div class="gc-body">
-          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
-            <div class="srch-box" style="flex:1;min-width:200px"><span class="srch-ic">🔍</span><input class="srch-inp" id="ut-srch" lang="ar" dir="rtl" placeholder="ابحث باسم المريض أو رقمه..." oninput="renderUTList()"></div>
-          </div>
-          <div id="ut-list-body"><div class="empty"><div class="empty-ic">🧪</div><p>لا توجد نتائج بعد</p></div></div>
         </div>
       </div>
     </div>
@@ -3203,7 +3197,39 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       </div>
     </div>
 
-    <!-- DNA FRAGMENTATION -->
+    <div class="sec" id="sec-ut">
+      <div class="gc" style="max-width:1100px;margin:0 auto">
+        <div class="gc-hdr">
+          <div class="gc-title">🧪 Urine+Test</div>
+          <button class="btn btn-p btn-sm" onclick="openNewUTModal()">➕ إدخال نتيجة جديدة</button>
+        </div>
+        <div class="gc-body">
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="srch-box" style="flex:1;min-width:200px"><span class="srch-ic">🔍</span><input class="srch-inp" id="ut-srch" lang="ar" dir="rtl" placeholder="ابحث باسم المريض أو رقمه..." oninput="renderUTList()"></div>
+          </div>
+          <div id="ut-list-body"><div class="empty"><div class="empty-ic">🧪</div><p>لا توجد نتائج بعد</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- URINALYSIS (GUE) -->
+    <div class="sec" id="sec-ua">
+      <div class="gc" style="max-width:1000px;margin:0 auto">
+        <div class="gc-hdr">
+          <div class="gc-title">💧 Urine Examination (GUE)</div>
+          <button class="btn btn-p btn-sm" onclick="openNewUAModal()">➕ إدخال نتيجة جديدة</button>
+        </div>
+        <div class="gc-body">
+          <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+            <div class="srch-box" style="flex:1;min-width:200px"><span class="srch-ic">🔍</span><input class="srch-inp" id="ua-srch" lang="ar" dir="rtl" placeholder="ابحث باسم المريض أو رقمه..." oninput="renderUAList()"></div>
+          </div>
+          <div id="ua-list-body"><div class="empty"><div class="empty-ic">💧</div><p>لا توجد نتائج بعد</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STOOL ANALYSIS -->
+
     <div class="sec" id="sec-dnafrag">
       <div class="gc" style="max-width:1000px;margin:0 auto">
         <div class="gc-hdr">
@@ -3234,6 +3260,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         </div>
       </div>
     </div>
+
+    <!-- PRINT -->
 
     <!-- PRINT -->
     <div class="sec" id="sec-print">
@@ -3788,6 +3816,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div class="tabs" style="margin-bottom:16px">
             <div class="tab active" id="lis-tab-results" onclick="lisNavTab('results',this)">📥 النتائج الواردة</div>
             <div class="tab" id="lis-tab-mapping" onclick="lisNavTab('mapping',this)">🔗 ربط التحاليل</div>
+            <div class="tab" id="lis-tab-push" onclick="lisNavTab('push',this)">📤 إرسال التحاليل</div>
             <div class="tab" id="lis-tab-log" onclick="lisNavTab('log',this)">📋 السجل الكامل</div>
             <div class="tab" id="lis-tab-settings" onclick="lisNavTab('settings',this)">⚙️ إعدادات</div>
           </div>
@@ -3843,13 +3872,39 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                     <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">رمز الجهاز</th>
                     <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">رمز MedLab Pro</th>
                     <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">اسم التحليل</th>
+                    <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">كود رقمي (Mindray)</th>
                     <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">الجهاز</th>
-                    <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">ملاحظة</th>
                     <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">حذف</th>
                   </tr></thead>
                   <tbody id="lis-mapping-body"></tbody>
                 </table>
               </div>
+            </div>
+          </div>
+
+          <!-- Tab: Push Tests (إرسال التحاليل) -->
+          <div id="lis-sec-push" style="display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+              <div style="font-size:12px;color:var(--text2)">حدّد لكل تحليل <b style="color:var(--success)">الجهاز</b> الذي تُرسَل إليه التحاليل عند الضغط على "إرسال للجهاز" في شاشة النتائج</div>
+              <button class="btn btn-s btn-sm" onclick="lisRenderPushTargets()">🔄 تحديث</button>
+            </div>
+            <div class="gc">
+              <div class="gc-body" style="overflow-x:auto;padding:0">
+                <table class="tbl" style="width:100%;border-collapse:collapse">
+                  <thead><tr style="background:rgba(0,212,255,0.08)">
+                    <th style="padding:10px;text-align:right;font-size:12px">رمز MedLab</th>
+                    <th style="padding:10px;text-align:right;font-size:12px">اسم التحليل</th>
+                    <th style="padding:10px;text-align:center;font-size:12px">رقم القناة</th>
+                    <th style="padding:10px;text-align:center;font-size:12px">الجهاز الهدف</th>
+                  </tr></thead>
+                  <tbody id="lis-push-body">
+                    <tr><td colspan="4" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا توجد روابط — أضف ربطاً من تبويب "ربط التحاليل" أولاً</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div style="margin-top:10px;font-size:11px;color:var(--text2);background:rgba(255,200,0,0.06);border:1px solid rgba(255,200,0,0.2);border-radius:8px;padding:10px">
+              ℹ️ ملاحظة: يجب أن يكون رقم القناة مطابقاً للرقم في الجهاز حتى يتعرّف الجهاز على التحليل. التحاليل بدون جهاز هدف لن تُرسَل.
             </div>
           </div>
 
@@ -5550,20 +5605,6 @@ body.light-mode .dp-viewer{background:#d8dde3;}
   </div>
 </div>
 
-<!-- URINE+TEST ENTRY MODAL -->
-<div class="moverlay" id="m-ut">
-  <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
-    <div class="mhdr"><div class="mtitle" id="ut-modal-title">🧪 Urine+Test</div><button class="mclose" onclick="closeModal('m-ut')">✕</button></div>
-    <div class="mbody" id="ut-modal-body"></div>
-    <div class="mftr">
-      <button class="btn btn-s" onclick="closeModal('m-ut')">إلغاء</button>
-      <button class="btn btn-ok btn-lg" onclick="saveAndPrintUT()">🖨️ حفظ وطباعة</button>
-      <button class="btn btn-p btn-lg" onclick="saveUTEntry()">💾 حفظ النتيجة</button>
-      <button class="btn btn-w btn-lg" onclick="saveAndShareUTWhatsApp()">📱 واتساب</button>
-    </div>
-  </div>
-</div>
-
 <!-- STOOL ENTRY MODAL -->
 <div class="moverlay" id="m-stool-exam">
   <div class="modal" style="max-width:860px;max-height:92vh;overflow-y:auto">
@@ -5587,6 +5628,21 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       <button class="btn btn-s" onclick="closeModal('m-semen-exam')">إلغاء</button>
       <button class="btn btn-p btn-lg" onclick="saveSemenEntry(false)">💾 حفظ فقط</button>
       <button class="btn btn-ok btn-lg" onclick="saveSemenEntry(true)">💾🖨️ حفظ وطباعة</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- URINE+TEST ENTRY MODAL -->
+<div class="moverlay" id="m-ut">
+  <div class="modal" style="max-width:900px;max-height:92vh;overflow-y:auto">
+    <div class="mhdr"><div class="mtitle" id="ut-modal-title">🧪 Urine+Test</div><button class="mclose" onclick="closeModal('m-ut')">✕</button></div>
+    <div class="mbody" id="ut-modal-body"></div>
+    <div class="mftr">
+      <button class="btn btn-s" onclick="closeModal('m-ut')">إلغاء</button>
+      <button class="btn btn-ok btn-lg" onclick="saveAndPrintUT()">🖨️ حفظ وطباعة</button>
+      <button class="btn btn-p btn-lg" onclick="saveUTEntry()">💾 حفظ النتيجة</button>
+      <button class="btn btn-w btn-lg" onclick="saveAndShareUTWhatsApp()">📱 واتساب</button>
     </div>
   </div>
 </div>
@@ -5617,7 +5673,6 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     </div>
   </div>
 </div>
-
 
 <div class="moverlay" id="m-culture">
   <div class="modal" style="max-width:820px;max-height:90vh;overflow-y:auto">
@@ -8273,6 +8328,11 @@ function startApp(){
     if(wmImg){
       settings.wmImg = wmImg;
     }
+    // watermark
+    const wmOpS=document.getElementById('st-wm-opacity'); if(wmOpS&&typeof settings.wmOpacity==='number') wmOpS.value=settings.wmOpacity; const wmVl=document.getElementById('wm-opacity-val'); if(wmVl) wmVl.textContent=(settings.wmOpacity||15)+'%';
+    const wmWS=document.getElementById('st-wm-w'); if(wmWS&&settings.wmW) wmWS.value=settings.wmW;
+    const wmHS=document.getElementById('st-wm-h'); if(wmHS&&settings.wmH) wmHS.value=settings.wmH;
+    if(settings.wmImg){const ws=document.getElementById('wm-img-show');const wp=document.getElementById('wm-img-preview');if(ws)ws.src=settings.wmImg;if(wp)wp.style.display='block';}
     // 1.5) ارتفاع رأس/تذييل التقرير (في الذاكرة فقط — تُقرأ من IDB)
     const hH = getBigCached('hdrImgH');
     settings.hdrImgH = (typeof hH==='number' && hH>=HDR_FTR_H_MIN && hH<=HDR_FTR_H_MAX) ? hH : HDR_IMG_H_DEFAULT;
@@ -8281,11 +8341,6 @@ function startApp(){
 
     const fH = getBigCached('ftrImgH');
     settings.ftrImgH = (typeof fH==='number' && fH>=FTR_H_MIN && fH<=FTR_H_MAX) ? fH : FTR_IMG_H_DEFAULT;
-    // watermark
-    const wmOpS=document.getElementById('st-wm-opacity'); if(wmOpS&&typeof settings.wmOpacity==='number') wmOpS.value=settings.wmOpacity; const wmVl=document.getElementById('wm-opacity-val'); if(wmVl) wmVl.textContent=(settings.wmOpacity||15)+'%';
-    const wmWS=document.getElementById('st-wm-w'); if(wmWS&&settings.wmW) wmWS.value=settings.wmW;
-    const wmHS=document.getElementById('st-wm-h'); if(wmHS&&settings.wmH) wmHS.value=settings.wmH;
-    if(settings.wmImg){const ws=document.getElementById('wm-img-show');const wp=document.getElementById('wm-img-preview');if(ws)ws.src=settings.wmImg;if(wp)wp.style.display='block';}
     const inpFH = document.getElementById('st-ftr-img-h');
     if(inpFH) inpFH.value = settings.ftrImgH;
 
@@ -8777,10 +8832,6 @@ function nav(p){
     const s2=document.getElementById('sec-stool-exam'); if(s2) s2.classList.add('active');
   } else if(p==='semen'){
     const s3=document.getElementById('sec-semen-exam'); if(s3) s3.classList.add('active');
-  } else if(p==='dnafrag'){
-    const s4=document.getElementById('sec-dnafrag'); if(s4) s4.classList.add('active');
-  } else if(p==='iui'){
-    const s5=document.getElementById('sec-iui'); if(s5) s5.classList.add('active');
   } else {
     const s=document.getElementById('sec-'+p); if(s) s.classList.add('active');
   }
@@ -8815,8 +8866,8 @@ function nav(p){
   if(p==='database'){resetDbAuth();updateDbStats();setTimeout(loadAutoBackupUI,120);if(typeof _fsaUpdateIndicator==='function') setTimeout(()=>_fsaUpdateIndicator(!!_fsaDirHandle),150);}
   if(p==='culture') renderCultureList();
   if(p==='ua') renderUAList();
-  if(p==='ut') renderUTList();
   if(p==='stool') renderStoolList();
+  if(p==='ut') renderUTList();
   if(p==='semen') renderSemenList();
   if(p==='dnafrag') renderDNAFragList();
   if(p==='iui') renderIUIList();
@@ -24224,8 +24275,6 @@ function _mrtSave(){
 }
 
 // ============================================================
-// SEMEN ANALYSIS — تحليل السائل المنوي الكامل
-// ============================================================
 const SEMEN_FIELDS = {
   specimen: {
     label: '🧪 معلومات العينة',
@@ -24942,7 +24991,7 @@ function shareSemenPDFWhatsApp(id){
   },900);
 }
 
-// ============================================================
+
 // ===== ADDED FROM index2: UT / IUI / DNA FRAGMENTATION ======
 // ============================================================
 
@@ -25110,35 +25159,6 @@ function _buildUTModalBody(r){
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">`;
     sec.fields.forEach(f=>{
       const val=r?r[f.id]||f.normal||'':f.normal||'';
-      // ── حقل Others: اختيار متعدد + كتابة يدوية ─────────────────────────
-      if(f.id==='ut_others'){
-        // القيمة محفوظة كنص مفصول بفواصل (مثلاً: "Bacteria (+), Yeast (+), خلية حرة")
-        const savedParts=(val||'').split(',').map(s=>s.trim()).filter(s=>s&&s!=='Nil');
-        // الخيارات الجاهزة (بدون Nil — Nil يعني لا شيء مختار)
-        const presetOpts=f.options.filter(o=>o!=='Nil');
-        // أي أجزاء محفوظة ليست من الخيارات الجاهزة = يدوية
-        const manualParts=savedParts.filter(p=>!presetOpts.includes(p));
-        html+=`<div class="fg" style="margin-bottom:0;grid-column:1/-1">
-          <label class="fl" style="font-size:11px">${f.label} <span style="font-size:9px;color:var(--text2)">(اختر واحد أو أكثر · أو اكتب يدوياً)</span></label>
-          <div id="ut-others-wrap" style="border:1px solid var(--border);border-radius:8px;padding:8px;background:rgba(0,0,0,0.02)">
-            <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">
-              ${presetOpts.map(o=>{
-                const on=savedParts.includes(o);
-                return `<button type="button" data-opt="${o.replace(/"/g,'&quot;')}" onclick="utToggleOther(this)" class="btn btn-sm ${on?'btn-p':'btn-s'}" style="font-size:11px;padding:4px 9px;font-family:'Cairo',sans-serif">${on?'✓ ':''}${o}</button>`;
-              }).join('')}
-            </div>
-            <div style="display:flex;gap:6px;align-items:center">
-              <input id="ut-others-manual" class="fc" placeholder="إضافة يدوية ثم Enter..." style="font-size:11px;flex:1" onkeydown="if(event.key==='Enter'){event.preventDefault();utAddOtherManual();}">
-              <button type="button" onclick="utAddOtherManual()" class="btn btn-sm btn-ok" style="font-size:11px;padding:4px 10px">➕ إضافة</button>
-            </div>
-            <div id="ut-others-manual-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">
-              ${manualParts.map(p=>`<span class="ut-other-tag" data-val="${p.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#000;border-radius:12px;padding:3px 9px;font-size:11px;font-weight:800">${p}<span onclick="this.parentElement.remove();utSyncOthers()" style="cursor:pointer;font-weight:900">✕</span></span>`).join('')}
-            </div>
-            <input type="hidden" id="utf-${f.id}" value="${(val||'Nil').replace(/"/g,'&quot;')}">
-          </div>
-        </div>`;
-        return;
-      }
       const isAbn=val&&f.normal&&val!==f.normal;
       const hlStyle=isAbn?'border-color:var(--danger);background:rgba(255,34,68,0.04)':'';
       html+=`<div class="fg" style="margin-bottom:0">
@@ -25198,49 +25218,6 @@ function utHighlight(fid,normal){
   const isAbn=el.value&&el.value!==normal;
   el.style.borderColor=isAbn?'var(--danger)':'';
   el.style.background=isAbn?'rgba(255,34,68,0.04)':'';
-}
-// ── حقل Others (اختيار متعدد + يدوي) ─────────────────────────────────────
-// يجمع كل الأزرار المفعّلة + الوسوم اليدوية في الحقل المخفي utf-ut_others
-function utSyncOthers(){
-  const wrap=document.getElementById('ut-others-wrap'); if(!wrap) return;
-  const parts=[];
-  // الأزرار المفعّلة (btn-p)
-  wrap.querySelectorAll('button[data-opt]').forEach(b=>{
-    if(b.classList.contains('btn-p')) parts.push(b.getAttribute('data-opt'));
-  });
-  // الوسوم اليدوية
-  wrap.querySelectorAll('.ut-other-tag').forEach(t=>{
-    const v=t.getAttribute('data-val'); if(v) parts.push(v);
-  });
-  const hidden=document.getElementById('utf-ut_others');
-  if(hidden) hidden.value = parts.length ? parts.join(', ') : 'Nil';
-}
-function utToggleOther(btn){
-  const on=btn.classList.contains('btn-p');
-  btn.classList.remove('btn-p','btn-s');
-  btn.classList.add(on?'btn-s':'btn-p');
-  const opt=btn.getAttribute('data-opt');
-  btn.textContent=(on?'':'✓ ')+opt;
-  utSyncOthers();
-}
-function utAddOtherManual(){
-  const inp=document.getElementById('ut-others-manual'); if(!inp) return;
-  const v=(inp.value||'').trim(); if(!v) return;
-  const box=document.getElementById('ut-others-manual-tags'); if(!box) return;
-  // تفادي التكرار
-  let dup=false;
-  box.querySelectorAll('.ut-other-tag').forEach(t=>{ if((t.getAttribute('data-val')||'')===v) dup=true; });
-  if(!dup){
-    const span=document.createElement('span');
-    span.className='ut-other-tag';
-    span.setAttribute('data-val',v);
-    span.style.cssText='display:inline-flex;align-items:center;gap:4px;background:var(--primary);color:#000;border-radius:12px;padding:3px 9px;font-size:11px;font-weight:800';
-    span.innerHTML=v.replace(/</g,'&lt;')+'<span style="cursor:pointer;font-weight:900">✕</span>';
-    span.querySelector('span').onclick=function(){ span.remove(); utSyncOthers(); };
-    box.appendChild(span);
-  }
-  inp.value='';
-  utSyncOthers();
 }
 function utSearchPatient(q){
   const box=document.getElementById('ut-pt-suggest'); if(!box)return;
@@ -29430,14 +29407,119 @@ function lisUpdateNbBadge(){
 // NAVIGATION TABS
 // ═══════════════════════════════════════════════
 function lisNavTab(name,btn){
-  ['results','mapping','log','settings'].forEach(t=>{
+  ['results','mapping','push','log','settings'].forEach(t=>{
     const s=document.getElementById('lis-sec-'+t);
     const b=document.getElementById('lis-tab-'+t);
     if(s) s.style.display=t===name?'block':'none';
     if(b) b.classList.toggle('active',t===name);
   });
   if(name==='mapping') lisRenderMappings();
+  if(name==='push') lisRenderPushTargets();
   if(name==='log') lisRenderFullLog();
+}
+
+// ═══════════════════════════════════════════════
+// إرسال نتائج/تحاليل الطلب الحالي إلى الأجهزة (Push من شاشة النتائج)
+// ═══════════════════════════════════════════════
+async function pushResultsToDevice(){
+  const sel=document.getElementById('res-req-sel');
+  const id=sel?sel.value:'';
+  if(!id){ alert('اختر طلب التحاليل أولاً'); return; }
+  const req=requests.find(r=>r.id===id);
+  if(!req){ alert('الطلب غير موجود'); return; }
+  const pt=patients.find(p=>p.id===req.patientId)||{};
+
+  // بيانات المريض (نفس صيغة الاستعلام: name/gender/birth)
+  const _pid={
+    name:(pt.name||'').replace(/\|/g,' ').replace(/\^/g,' '),
+    gender:(pt.gender==='أنثى'||/^f/i.test(pt.gender||''))?'F':((pt.gender==='ذكر'||/^m/i.test(pt.gender||''))?'M':''),
+    birth:(pt.birthDate||pt.dob||'').replace(/[-/]/g,'')
+  };
+  // ⭐ نرسل id المريض (patientId) — نفس الرقم الذي يتعرّف به الجهاز على
+  //    المريض عند الاستقبال (يُطابَق عبر r.patientId). إن لم يوجد نسقط
+  //    احتياطاً على الباركود ثم sampleId. لا نستخدم req.id (رقم RQ).
+  const sampleId=req.patientId||req.barcode||req.sampleId||'';
+
+  // اجمع تحاليل الطلب، وجمّعها حسب الجهاز الهدف (pushDevice في الـ mapping)
+  const reqTests=(req.tests||[]).map(tid=>tests.find(t=>t.id===tid||t.code===tid)).filter(Boolean);
+  if(!reqTests.length){ alert('لا توجد تحاليل في هذا الطلب'); return; }
+
+  const byDevice={}; // deviceId → [ {code,name,channel,_pid}, ... ]
+  const noTarget=[];
+  reqTests.forEach(t=>{
+    if(t.isSpecialExam) return; // الفحوص الخاصة (بول/براز/سائل) لا تُرسل
+    const mapping=(lisMappings||[]).find(m=>
+      m.medlabCode && t.code && m.medlabCode.toUpperCase()===String(t.code).toUpperCase()
+    );
+    if(!mapping || !mapping.pushDevice){ noTarget.push(t.code||t.name); return; }
+    let devCode=mapping.deviceCode||t.code||t.name||'';
+    let channel=mapping.channel?String(mapping.channel).trim():'';
+    (byDevice[mapping.pushDevice]=byDevice[mapping.pushDevice]||[]).push({
+      code:devCode, name:t.name||devCode, channel:channel, _pid:_pid
+    });
+  });
+
+  const targetIds=Object.keys(byDevice);
+  if(!targetIds.length){
+    alert('لا يوجد أي تحليل معيَّن له جهاز.\nاذهب إلى: ربط الأجهزة → إرسال التحاليل، وحدّد جهازاً لكل تحليل.');
+    return;
+  }
+
+  if(!window.electronAPI || !window.electronAPI.hl7PushSample){
+    lisAddLog('err','❌ hl7PushSample غير متاح في preload! أضِف السطر المطلوب في preload.js');
+    alert('خاصية الإرسال غير مفعّلة. راجع ملف preload.js (راجع التعليمات).');
+    return;
+  }
+
+  let okCount=0, failMsgs=[];
+  for(const devId of targetIds){
+    const devName=((lisDevices||[]).find(d=>d.id===devId)||{}).name||devId;
+    lisAddLog('info','📤 إرسال '+byDevice[devId].length+' تحليل إلى '+devName+' (عينة '+sampleId+')');
+    try{
+      const res=await window.electronAPI.hl7PushSample({
+        deviceId:devId, sampleId:sampleId, tests:byDevice[devId], patient:_pid
+      });
+      if(res&&res.ok){ okCount++; lisAddLog('astm','✅ تم الإرسال إلى '+devName+(res.waited?' (بعد انتظار الاتصال)':'')); }
+      else { failMsgs.push(devName+': '+((res&&res.error)||'فشل')); lisAddLog('err','❌ '+devName+': '+((res&&res.error)||'فشل')); }
+    }catch(e){ failMsgs.push(devName+': '+e.message); lisAddLog('err','❌ '+devName+': '+e.message); }
+  }
+
+  let msg='تم إرسال التحاليل إلى '+okCount+' جهاز.';
+  if(noTarget.length) msg+='\n\n⚠️ تحاليل بدون جهاز هدف (لم تُرسَل): '+noTarget.join(', ');
+  if(failMsgs.length) msg+='\n\n❌ فشل:\n'+failMsgs.join('\n');
+  alert(msg);
+}
+
+// ═══════════════════════════════════════════════
+// إرسال التحاليل (Push) — تعيين تحليل → جهاز
+// ═══════════════════════════════════════════════
+// يُخزَّن الهدف في حقل pushDevice داخل كل mapping (يُحفظ مع lisMappings).
+function lisRenderPushTargets(){
+  const tb=document.getElementById('lis-push-body');
+  if(!tb) return;
+  if(!lisMappings || !lisMappings.length){
+    tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا توجد روابط — أضف ربطاً من تبويب "ربط التحاليل" أولاً</td></tr>';
+    return;
+  }
+  const devs=(typeof lisDevices!=='undefined'?lisDevices:[]).filter(d=>d&&d.id);
+  tb.innerHTML=lisMappings.map((m,idx)=>{
+    const opts=['<option value="">— لا يُرسَل —</option>'].concat(
+      devs.map(d=>'<option value="'+d.id+'"'+((m.pushDevice===d.id)?' selected':'')+'>'+(d.name||d.id)+'</option>')
+    ).join('');
+    return '<tr style="border-bottom:1px solid var(--border)">'
+      +'<td style="padding:8px;text-align:right;font-weight:800;color:var(--success);font-size:12px">'+(m.medlabCode||'-')+'</td>'
+      +'<td style="padding:8px;text-align:right;font-size:12px">'+(m.name||m.deviceCode||'-')+'</td>'
+      +'<td style="padding:8px;text-align:center;font-size:12px;color:var(--warning);font-weight:800">'+(m.channel||'-')+'</td>'
+      +'<td style="padding:8px;text-align:center"><select class="fc" style="font-size:12px;padding:5px;min-width:150px" onchange="lisSetPushTarget('+idx+',this.value)">'+opts+'</select></td>'
+      +'</tr>';
+  }).join('');
+}
+
+function lisSetPushTarget(idx,deviceId){
+  if(!lisMappings[idx]) return;
+  lisMappings[idx].pushDevice=deviceId||'';
+  if(typeof lisSaveState==='function') lisSaveState();
+  lisAddLog('info','📤 تعيين جهاز الإرسال: '+(lisMappings[idx].medlabCode||'')+' → '+(deviceId||'(بدون)'));
 }
 
 // ═══════════════════════════════════════════════
@@ -29924,15 +30006,7 @@ function _cbcInitIpcListeners(){
     });
   }
 
-  // ── HL7 Host Query (Mindray CL-900i يطلب تحاليل المريض) ──────────────────
-  // الجهاز يرسل QRY/QBP بـ Sample ID → نبحث في الطلبات → نرد بالتحاليل المطلوبة
-  // معزول تماماً: لا يؤثر على BC-5000 أو MAGLUMI.
-  if(window.electronAPI.onHl7Query){
-    window.electronAPI.onHl7Query(function(info){
-      // info = { queryId, deviceId, sampleId, name, client }
-      lisHandleHl7Query(info);
-    });
-  }
+  // ── HL7 Host Query: انتقل للتهيئة العامة (مستقل عن BC-5000) ──────────────
 }
 
 // البحث عن تحاليل المريض بالـ Sample ID والرد على الجهاز
@@ -29942,42 +30016,66 @@ async function lisHandleHl7Query(info){
 
   let testsToSend = [];
   try {
+    // تشخيص: كم عدد المرضى والطلبات المحمّلة في الذاكرة
+    const _np=(typeof patients!=='undefined'?patients.length:0);
+    const _nr=(typeof requests!=='undefined'?requests.length:0);
+    const _nt=(typeof tests!=='undefined'?tests.length:0);
+    lisAddLog('info','🔎 مرضى='+_np+' طلبات='+_nr+' تحاليل='+_nt);
+
+    // مطابقة مرنة: قص المسافات + تجاهل أصفار بادئة محتملة
+    const _norm = v => String(v||'').trim();
+    const _match = (a,b) => { a=_norm(a); b=_norm(b); return a!==''&&(a===b); };
+
     // ابحث عن المريض بالـ barcode أو id
     const pt = (typeof patients!=='undefined'?patients:[]).find(p =>
-      String(p.barcode||'')===sid || String(p.id||'')===sid
+      _match(p.barcode,sid) || _match(p.id,sid)
     );
+    if(pt) lisAddLog('info','👤 المريض: '+(pt.name||pt.id)+' (id='+pt.id+', barcode='+(pt.barcode||'-')+')');
+    else   lisAddLog('warn','⚠️ لا مريض بـ SID='+sid);
+
     // ابحث عن الطلب المرتبط
     let req = null;
     if(typeof requests!=='undefined' && requests.length){
       if(pt){
-        // أحدث طلب لهذا المريض
-        const ptReqs = requests.filter(r => String(r.patientId||r.ptId||'')===String(pt.id));
-        req = ptReqs.sort((a,b)=>(b.date||0)-(a.date||0))[0] || null;
+        const ptReqs = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
+        req = ptReqs.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] || null;
+        if(ptReqs.length) lisAddLog('info','📋 طلبات المريض: '+ptReqs.length);
       }
-      // إن لم نجد بالمريض، جرّب مطابقة barcode/sampleId مباشرة على الطلب
       if(!req){
-        req = requests.find(r =>
-          String(r.barcode||'')===sid || String(r.id||'')===sid || String(r.sampleId||'')===sid
-        );
+        req = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
       }
     }
+    if(req) lisAddLog('info','📋 الطلب: '+(req.id||'-')+' تحاليل='+((req.tests||[]).length));
+    else    lisAddLog('warn','⚠️ لا طلب للعينة '+sid);
 
     if(req && req.tests && req.tests.length){
-      // حوّل test IDs إلى أكواد الجهاز
+      // بيانات المريض للـ PID (اسم/جنس/ميلاد)
+      const _pid = pt ? {
+        name:  (pt.name||'').replace(/\|/g,' ').replace(/\^/g,' '),
+        gender:(pt.gender==='أنثى'||/^f/i.test(pt.gender||''))?'F':((pt.gender==='ذكر'||/^m/i.test(pt.gender||''))?'M':''),
+        birth: (pt.birthDate||pt.dob||'').replace(/[-/]/g,'')
+      } : {};
       req.tests.forEach(tid => {
-        const t = (typeof tests!=='undefined'?tests:[]).find(x=>x.id===tid);
-        if(!t) return;
-        // ابحث عن كود الجهاز المقابل في mappings (إن وجد)، وإلا استخدم اسم/كود التحليل
+        const t = (typeof tests!=='undefined'?tests:[]).find(x=>x.id===tid||x.code===tid);
+        if(!t){ lisAddLog('warn','⚠️ تحليل مفقود: '+tid); return; }
         let devCode = t.code || t.name || '';
+        let channel = '';
         const mapping = (typeof lisMappings!=='undefined'?lisMappings:[]).find(m =>
           m.medlabCode && t.code && m.medlabCode.toUpperCase()===String(t.code).toUpperCase()
         );
-        if(mapping && mapping.deviceCode) devCode = mapping.deviceCode;
-        testsToSend.push({ code: devCode, name: t.name||devCode });
+        if(mapping){
+          if(mapping.deviceCode) devCode = mapping.deviceCode;
+          // ⭐ الكود الرقمي (channel) من Mindray — مخزّن في الـ mapping
+          if(mapping.channel) channel = String(mapping.channel).trim();
+          lisAddLog('info','🔗 '+(t.code||t.name)+' → ربط موجود: deviceCode='+(mapping.deviceCode||'-')+' channel='+(channel||'(فارغ!)'));
+        } else {
+          lisAddLog('warn','⚠️ '+(t.code||t.name)+' → لا يوجد ربط (mapping) → سيُرسل بالاسم بلا كود رقمي');
+        }
+        testsToSend.push({ code: devCode, name: t.name||devCode, channel: channel, _pid: _pid });
       });
     }
   } catch(e){
-    lisAddLog('err','خطأ في البحث عن التحاليل: '+e.message);
+    lisAddLog('err','خطأ في البحث: '+e.message);
   }
 
   // رد على الجهاز (حتى لو فارغ → الجهاز يفهم NF)
@@ -29987,10 +30085,12 @@ async function lisHandleHl7Query(info){
       tests:   testsToSend,
     });
     if(testsToSend.length){
-      lisAddLog('ok','✅ أُرسلت '+testsToSend.length+' تحاليل للجهاز — SID:'+sid+' ('+testsToSend.map(t=>t.code).join(', ')+')');
+      lisAddLog('ok','✅ أُرسلت '+testsToSend.length+' تحاليل — SID:'+sid+' ('+testsToSend.map(t=>t.code).join(', ')+')');
     } else {
-      lisAddLog('warn','⚠️ لا توجد تحاليل للعينة '+sid+' — رُدّ بـ NF');
+      lisAddLog('warn','⚠️ لا تحاليل للعينة '+sid+' — رُدّ NF');
     }
+  } else {
+    lisAddLog('err','❌ hl7QueryResponse غير متاح في preload!');
   }
 }
 
@@ -30572,6 +30672,18 @@ function lisParseCSV(raw,deviceName){
 // ═══════════════════════════════════════════════
 function lisResolveCode(deviceCode){
   const dc=(deviceCode||'').toUpperCase().trim();
+
+  // ⭐ تحويل رقم القناة (Channel No.) → كود التحليل ─────────────────────
+  // عند ترقيم التحاليل في الجهاز (Routine Channel No.)، يُرسل الجهاز النتيجة
+  // برقم القناة بدل الاسم (مثال OBX-3 = "2"). نطابق الرقم مع حقل channel في
+  // الـ mappings لإيجاد كود التحليل الصحيح. هذا يجعل الاتجاهين يعملان معاً:
+  // استقبال النتائج (بالرقم) + Host Query (بالرقم) — دون كسر المطابقة بالاسم.
+  // يُطبَّق فقط إذا كان الكود الوارد رقماً صرفاً (قناة)، فلا يؤثر على الأسماء.
+  if(/^[0-9]+$/.test(dc)){
+    const byChannel = lisMappings.find(x => x.channel && String(x.channel).trim() === dc);
+    if(byChannel) return byChannel.medlabCode;
+  }
+
   // 1. بحث في lisMappings (الروابط المحفوظة) — تطابق كامل
   const m=lisMappings.find(x=>x.deviceCode.toUpperCase()===dc);
   if(m) return m.medlabCode;
@@ -30632,10 +30744,21 @@ function lisRenderMappings(){
       <td style="padding:8px 12px"><code style="color:var(--warning);font-size:11px">${m.deviceCode}</code></td>
       <td style="padding:8px 12px"><code style="color:var(--success);font-size:11px">${m.medlabCode}</code></td>
       <td style="padding:8px 12px;font-size:11px;color:var(--text)">${m.name||''}</td>
+      <td style="padding:8px 12px">
+        <input type="text" value="${m.channel||''}" placeholder="رقم"
+          onchange="lisSetMappingChannel('${m.id}', this.value)"
+          style="width:70px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.3);border-radius:6px;color:var(--primary);font-size:11px;padding:3px 6px;text-align:center;font-weight:700">
+      </td>
       <td style="padding:8px 12px"><span style="background:rgba(0,212,255,0.12);color:var(--primary);border:1px solid rgba(0,212,255,0.3);border-radius:12px;padding:2px 8px;font-size:10px;font-weight:700">${m.device==='all'?'كل الأجهزة':m.device}</span></td>
-      <td style="padding:8px 12px;font-size:10px;color:var(--text2)">${m.note||''}</td>
       <td style="padding:8px 12px"><button class="btn btn-s btn-sm" style="color:var(--danger);border-color:rgba(255,34,68,0.3);padding:3px 8px;font-size:10px" onclick="lisDeleteMapping('${m.id}')">🗑️</button></td>
     </tr>`).join('');
+}
+// ⭐ حفظ الكود الرقمي (Mindray channel) للتحليل من الجدول مباشرة
+function lisSetMappingChannel(id, val){
+  const m=lisMappings.find(x=>x.id===id);
+  if(!m) return;
+  m.channel=String(val||'').trim();
+  lisSaveState();
 }
 function lisAddMapping(){
   lisPopulateMappingDropdown();
@@ -30845,15 +30968,18 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
       resultKey=exactMatch;
     } else {
       // ── fallback ذكي: الكود القادم من الجهاز (مثل 'Cortisol') قد يطابق
-      // تحليلاً في قاعدة البيانات لكن طلب المريض يحتوي variant مختلف
-      // (مثل AM-CORT=sp003 أو PM-CORT=sp004). نبحث في تحاليل الطلب عن
-      // أي تحليل يطابق الكود القادم بالاسم/الكود جزئياً (بادئة كاملة).
+      // تحليلاً في قاعدة البيانات (hr008) لكن طلب المريض يحتوي variant مختلف
+      // (مثل AM-CORT=sp003 أو PM-CORT=sp004). في هذه الحالة نبحث في
+      // تحاليل الطلب عن أي تحليل يطابق الكود القادم بالاسم/الكود جزئياً.
+      // ─────────────────────────────────────────────────────────────────
       const matchInReq=req.tests.find(function(tid){
         const t=_allTests.find(function(x){return x.id===tid;});
         if(!t) return false;
         const tc=(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
         const tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
         const tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+        // تطابق جزئي بين الكود القادم وأي حقل من التحليل المطلوب
+        // (مع حماية isotype لمنع الخلط بين IgG/IgM)
         const _tIso=_iso(tc)||_iso(tns)||_iso(tne);
         if(_codeIso!==_tIso) return false;
         return tc.startsWith(_codeNorm)||_codeNorm.startsWith(tc)||
@@ -36243,7 +36369,7 @@ function _hookSaveForSync() {
   var _gMap = {
     patients:'patients', requests:'requests', invoices:'invoices',
     doctors:'doctors', packages:'packages', inventory:'inventory',
-    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
+    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords', utRecords:'utRecords',
     stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
     billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'
   };
