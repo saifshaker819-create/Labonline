@@ -23692,55 +23692,79 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   // ══════════════════════════════════════════════════════════
   // كشف نمط 3-DIFF (ثلاثي التفاضل) تلقائياً — Mindray BC-5000 وغيره
   // ══════════════════════════════════════════════════════════
-  // في نمط 3diff يُرسل الجهاز: WBC + Lym(#/%) فقط من سلسلة WBC،
-  // ولا يُرسل Neu/Mon/Eos/Bas (تصل فارغة "---"). أما 5diff فيُرسلها كلها.
-  // القاعدة: 3diff = يوجد WBC و(Lym% أو Lym#) بقيمة رقمية، وتغيب كل
-  // Neu#/Mon#/Eos#/Bas# و Neu%/Mon%/Eos%/Bas% (لا قيمة رقمية لأي منها).
-  // لا يمسّ هذا الكشفُ 5diff ولا الأجهزة الأخرى إطلاقاً.
+  // ══════════════════════════════════════════════════════════
+  // كشف نمط 3-DIFF (ثلاثي التفاضل) — Mindray BC-5000 وغيره
+  // ══════════════════════════════════════════════════════════
+  // في نمط 3diff يرسل الجهاز سلسلة WBC كـ: WBC + Lym + Mid + Gran
+  //   (بالعدد #/بالنسبة %) — أكواد Mindray: 10027..10030 بأسماء Lym/Mid/Gran.
+  //   ولا يرسل التفاضل الخماسي (Neu/Mon/Eos/Bas).
+  // أما 5diff فيرسل Neu/Mon/Eos/Bas ولا يرسل Gran/Mid.
+  // القاعدة (أمتن نسخة): 3diff = يوجد WBC، ويوجد Gran أو Mid (علامة العدّاد
+  //   الثلاثي القاطعة)، وتغيب سلسلة الخماسي. نستخدم قيم الجهاز الحقيقية إن
+  //   وصلت، ونشتقّ الناقص فقط عند غيابه. لا يمسّ هذا 5diff ولا الأجهزة الأخرى.
   function _numOf(key){
     const p=cbcParams&&cbcParams[key];
     if(!p) return NaN;
-    const n=parseFloat(String(p.value==null?'':p.value).replace(/[<>]/g,''));
-    return n;
+    return parseFloat(String(p.value==null?'':p.value).replace(/[<>]/g,''));
   }
   function _has(key){ return !isNaN(_numOf(key)); }
   const _five=['NEU#','MON#','EOS#','BAS#','NEU%','MON%','EOS%','BAS%'];
   const _fiveAbsent=_five.every(function(k){ return !_has(k); });
   const _wbcPresent=_has('WBC');
   const _lymPresent=_has('LYM%')||_has('LYM#');
-  const is3Diff = _wbcPresent && _lymPresent && _fiveAbsent;
+  const _granOrMid=_has('GRAN%')||_has('GRAN#')||_has('MID%')||_has('MID#');
+  // 3diff إذا: (وصل Gran/Mid من الجهاز صراحةً) أو (WBC+Lym موجودان والخماسي غائب)
+  const is3Diff = _wbcPresent && (_granOrMid || (_lymPresent && _fiveAbsent));
 
-  // في نمط 3diff نشتقّ المجموعتين المتبقيتين (Mid + Gran) علمياً من WBC و Lym
-  // لعرض تفاضل ثلاثي صحيح: Lymphocyte / Mid(Mono+Eos+Bas) مدمجة / Granulocyte.
-  // ملاحظة: الجهاز في 3diff لا يفرّق Mid عن Gran، لذا نعرض «Gran» كمجموعة
-  // الخلايا المحبَّبة (تشمل Neutrophils) و«Mid» كالخلايا المتوسطة إن توفّرت،
-  // وإلا ندمجها ضمن Gran# = WBC − Lym. هذا هو التمثيل القياسي للعدّاد الثلاثي.
   if(is3Diff){
     cbcParams=Object.assign({}, cbcParams); // نسخة معزولة — لا نغيّر بيانات الجهاز الأصلية
     const wbc=_numOf('WBC');
-    let lymPct=_numOf('LYM%');
-    let lymAbs=_numOf('LYM#');
-    // أكمل الناقص من النسبة/العدد إن أمكن
+    // ── Lym: استخدم قيمة الجهاز، وأكمل الناقص (%↔#) عند الحاجة ──
+    let lymPct=_numOf('LYM%'), lymAbs=_numOf('LYM#');
     if(isNaN(lymAbs)&&!isNaN(lymPct)&&!isNaN(wbc)) lymAbs=+(wbc*lymPct/100).toFixed(2);
     if(isNaN(lymPct)&&!isNaN(lymAbs)&&!isNaN(wbc)&&wbc>0) lymPct=+(lymAbs/wbc*100).toFixed(1);
-    // Gran (الخلايا المحبَّبة) = WBC − Lym
-    let granAbs=(!isNaN(wbc)&&!isNaN(lymAbs))?+(wbc-lymAbs).toFixed(2):NaN;
-    let granPct=(!isNaN(lymPct))?+(100-lymPct).toFixed(1):NaN;
-    if(!isNaN(granAbs)) cbcParams['GRAN#']={value:String(granAbs),unit:'10^9/L',refRange:'2.0-7.0',flag:''};
-    if(!isNaN(granPct)) cbcParams['GRAN%']={value:String(granPct),unit:'%',refRange:'50-70',flag:''};
-    // تأكيد إدراج قيم Lym المشتقة إن كانت ناقصة
-    if(isNaN(_numOf('LYM#'))&&!isNaN(lymAbs)) cbcParams['LYM#']={value:String(lymAbs),unit:'10^9/L',refRange:'0.8-4.0',flag:''};
-    if(isNaN(_numOf('LYM%'))&&!isNaN(lymPct)) cbcParams['LYM%']={value:String(lymPct),unit:'%',refRange:'20-40',flag:''};
+    if(!_has('LYM#')&&!isNaN(lymAbs)) cbcParams['LYM#']={value:String(lymAbs),unit:'10^9/L',refRange:'0.8-4.0',flag:''};
+    if(!_has('LYM%')&&!isNaN(lymPct)) cbcParams['LYM%']={value:String(lymPct),unit:'%',refRange:'20-40',flag:''};
+    // ── Mid: إن أرسله الجهاز نبقيه ونكمل الناقص من %↔# ──
+    const _hasMid=_has('MID%')||_has('MID#');
+    let midPct=_numOf('MID%'), midAbs=_numOf('MID#');
+    if(_hasMid){
+      if(isNaN(midAbs)&&!isNaN(midPct)&&!isNaN(wbc)) midAbs=+(wbc*midPct/100).toFixed(2);
+      if(isNaN(midPct)&&!isNaN(midAbs)&&!isNaN(wbc)&&wbc>0) midPct=+(midAbs/wbc*100).toFixed(1);
+      if(!_has('MID#')&&!isNaN(midAbs)) cbcParams['MID#']={value:String(midAbs),unit:'10^9/L',refRange:'0.10-1.50',flag:''};
+      if(!_has('MID%')&&!isNaN(midPct)) cbcParams['MID%']={value:String(midPct),unit:'%',refRange:'3-15',flag:''};
+    }
+    // ── Gran: استخدم قيمة الجهاز إن وصلت، وإلا اشتقّها ──
+    //   إن توفّر Mid: Gran = WBC − Lym − Mid ، وإلا Gran = WBC − Lym.
+    let granPct=_numOf('GRAN%'), granAbs=_numOf('GRAN#');
+    if(isNaN(granAbs)){
+      if(!isNaN(wbc)&&!isNaN(lymAbs)) granAbs=+(wbc-lymAbs-(_hasMid&&!isNaN(midAbs)?midAbs:0)).toFixed(2);
+    }
+    if(isNaN(granPct)){
+      if(!isNaN(lymPct)) granPct=+(100-lymPct-(_hasMid&&!isNaN(midPct)?midPct:0)).toFixed(1);
+    } else if(isNaN(granPct)===false){ /* قيمة الجهاز مُحترمة */ }
+    if(isNaN(granAbs)===false && !_has('GRAN#')) cbcParams['GRAN#']={value:String(granAbs),unit:'10^9/L',refRange:'2.0-7.0',flag:''};
+    if(isNaN(granPct)===false && !_has('GRAN%')) cbcParams['GRAN%']={value:String(granPct),unit:'%',refRange:'50-70',flag:''};
   }
 
+  // هل أرسل الجهاز مجموعة Mid المتوسطة؟ (يحدّد الترتيب: ثلاثي كامل أم مبسّط)
+  const _midShown = is3Diff && (_has('MID%')||_has('MID#'));
+
   // الترتيب والتسميات — ديناميكي حسب النمط (3diff مقابل 5diff)
-  const ORDERED_5=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
-  const ORDERED_3=['WBC','LYM#','GRAN#','LYM%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
-  const ORDERED= is3Diff ? ORDERED_3 : ORDERED_5;
-  const LABELS={'WBC':'WBC','NEU#':'Neu#','LYM#':'Lym#','MON#':'Mon#','EOS#':'Eos#','BAS#':'Bas#','NEU%':'Neu%','LYM%':'Lym%','MON%':'Mon%','EOS%':'Eos%','BAS%':'Bas%','GRAN#':'Gran#','GRAN%':'Gran%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT'};
+  const ORDERED_5=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  const ORDERED_3= _midShown
+    ? ['WBC','LYM#','MID#','GRAN#','LYM%','MID%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC']
+    : ['WBC','LYM#','GRAN#','LYM%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  const _ORDERED_BASE= is3Diff ? ORDERED_3 : ORDERED_5;
+  // ── أظهر فقط الحقول التي أرسلها الجهاز فعلاً (قيمة رقمية) ──
+  // أي حقل لم يرسله الجهاز لا يظهر إطلاقاً — لا باسمه ولا بـ "---".
+  // نُبقي دائماً الأساسيات (حتى لو غابت نادراً) لضمان بنية تقرير متماسكة.
+  const _ALWAYS=['WBC','RBC','HGB','HCT','PLT'];
+  const ORDERED=_ORDERED_BASE.filter(function(k){ return _has(k) || _ALWAYS.indexOf(k)>=0; });
+  const LABELS={'WBC':'WBC','NEU#':'Neu#','LYM#':'Lym#','MON#':'Mon#','EOS#':'Eos#','BAS#':'Bas#','NEU%':'Neu%','LYM%':'Lym%','MON%':'Mon%','EOS%':'Eos%','BAS%':'Bas%','MID#':'Mid#','GRAN#':'Gran#','MID%':'Mid%','GRAN%':'Gran%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT','P-LCR':'P-LCR','P-LCC':'P-LCC'};
 
   // مرجع القيم للمشتقّات في 3diff (لتلوين تلقائي صحيح)
-  const _REF3={'GRAN#':'2.0-7.0','GRAN%':'50-70'};
+  const _REF3={'GRAN#':'2.0-7.0','GRAN%':'50-70','MID#':'0.10-1.50','MID%':'3-15'};
 
   // عنوان التقرير — يوضّح النمط
   const _reportModeTitle = is3Diff ? 'WB-CBC+3DIFF' : 'WB-CBC+DIFF';
@@ -23783,7 +23807,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
     const val=p?p.value:'---';
     const numVal=parseFloat(val);
     const ref=(p&&p.refRange)||info.refM||_REF3[key]||'';
-    const unit=(p&&p.unit)||info.unit||(key==='GRAN%'?'%':(key==='GRAN#'?'10^9/L':''));
+    const unit=(p&&p.unit)||info.unit||((key==='GRAN%'||key==='MID%')?'%':((key==='GRAN#'||key==='MID#')?'10^9/L':''));
     let flag=(p&&p.flag)||'';
     let flagColor='#000';
     const _fRaw=(flag||'').toUpperCase().trim();
@@ -23846,9 +23870,9 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   // ══════════════════════════════════════════════════════════
   if(tpl==='3'){
     const GROUPS=[
-      {title:(is3Diff?'White Blood Cells — 3-Part Differential':'White Blood Cells — WBC Panel'),color:'#1565c0',keys:(is3Diff?['WBC','LYM#','GRAN#','LYM%','GRAN%']:['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%'])},
+      {title:(is3Diff?'White Blood Cells — 3-Part Differential':'White Blood Cells — WBC Panel'),color:'#1565c0',keys:(is3Diff?ORDERED_3.filter(function(k){return ['WBC','LYM#','MID#','GRAN#','LYM%','MID%','GRAN%'].indexOf(k)>=0;}):['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%'])},
       {title:'Red Blood Cells — RBC Panel',color:'#b71c1c',keys:['RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD']},
-      {title:'Platelets — PLT Panel',color:'#6a1b9a',keys:['PLT','MPV','PDW','PCT']}
+      {title:'Platelets — PLT Panel',color:'#6a1b9a',keys:['PLT','MPV','PDW','PCT','P-LCR','P-LCC']}
     ];
     let groupsHTML='';
     GROUPS.forEach(function(g){
@@ -23890,8 +23914,8 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   // النموذج 5 — مدمج وسريع بعمودين جنبًا إلى جنب
   // ══════════════════════════════════════════════════════════
   if(tpl==='5'){
-    const half1=is3Diff?['WBC','LYM#','GRAN#','LYM%','GRAN%']:['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%'];
-    const half2=['RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
+    const half1=is3Diff?ORDERED_3.filter(function(k){return ['WBC','LYM#','MID#','GRAN#','LYM%','MID%','GRAN%'].indexOf(k)>=0;}):['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%'];
+    const half2=['RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'].filter(function(k){return _has(k)||['RBC','HGB','HCT','PLT'].indexOf(k)>=0;});
     function buildCol(keys,hdrColor){
       let r='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="background:'+hdrColor+';color:#fff;padding:4px 7px;font-size:11px;text-align:left">Parameter</th><th style="background:'+hdrColor+';color:#fff;padding:4px 7px;font-size:11px;text-align:center">Result</th><th style="background:'+hdrColor+';color:#fff;padding:4px 5px;font-size:10px;text-align:center">F</th><th style="background:'+hdrColor+';color:#fff;padding:4px 5px;font-size:10px;text-align:center">Unit</th><th style="background:'+hdrColor+';color:#fff;padding:4px 5px;font-size:10px;text-align:center">Ref</th></tr></thead><tbody>';
       keys.forEach(function(key,i){
@@ -30662,6 +30686,12 @@ const CBC_PARAMS_MAP = {
   'MON%':   {ar:'Mon% الوحيدات نسبة',         unit:'%',       refM:'3-12',      order:9},
   'EOS%':   {ar:'Eos% الحمضات نسبة',          unit:'%',       refM:'0.5-5.0',   order:10},
   'BAS%':   {ar:'Bas% القعيدات نسبة',         unit:'%',       refM:'0-1',       order:11},
+  // ── معاملات العدّاد الثلاثي (3-Diff) — Mindray وغيره يرسلها مباشرة ──
+  // Mid = الخلايا المتوسطة (Mono+Eos+Baso مدمجة) · Gran = الخلايا المحبَّبة (Neutrophils أساساً)
+  'MID#':   {ar:'Mid# الخلايا المتوسطة عدد',  unit:'10^9/L',  refM:'0.10-1.50', order:11.3},
+  'GRAN#':  {ar:'Gran# الخلايا المحبَّبة عدد', unit:'10^9/L',  refM:'2.0-7.0',   order:11.5},
+  'MID%':   {ar:'Mid% الخلايا المتوسطة نسبة', unit:'%',       refM:'3-15',      order:11.7},
+  'GRAN%':  {ar:'Gran% الخلايا المحبَّبة نسبة',unit:'%',       refM:'50-70',     order:11.9},
   // RBC Series
   'RBC':    {ar:'RBC  خلايا الدم الحمراء',    unit:'10^12/L', refM:'3.50-5.50', order:12},
   'HGB':    {ar:'HGB  الهيموغلوبين',          unit:'g/dL',    refM:'11.0-17.5', order:13},
@@ -30676,10 +30706,23 @@ const CBC_PARAMS_MAP = {
   'MPV':    {ar:'MPV  متوسط حجم الصفيحة',     unit:'fL',      refM:'7-11',      order:21},
   'PDW':    {ar:'PDW  توزيع الصفائح',         unit:'',        refM:'9-17',      order:22},
   'PCT':    {ar:'PCT  كمية الصفائح',          unit:'mL/L',    refM:'1.08-2.82', order:23},
+  'P-LCR':  {ar:'P-LCR نسبة الصفائح الكبيرة',  unit:'%',       refM:'11-45',     order:24},
+  'P-LCC':  {ar:'P-LCC عدد الصفائح الكبيرة',   unit:'10^9/L',  refM:'30-90',     order:25},
 };
 const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
-function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
-function cbcNormalizeCode(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+// ── مرادفات أكواد العدّاد الثلاثي (تختلف تسميتها بين الأجهزة) ──
+// Sysmex: MXD=Mid ، GR/GRAN=Gran · بعض Mindray: GR% ، LY=Lym.
+// نطبّع هذه الأسماء البديلة إلى المفاتيح القياسية دون المساس ببقية المنطق.
+const _CBC_ALIASES={
+  'MXD#':'MID#','MXD%':'MID%','MID':'MID#',
+  'GR#':'GRAN#','GR%':'GRAN%','GRA#':'GRAN#','GRA%':'GRAN%','GRAN':'GRAN#','GRAN-P':'GRAN%','GRANP':'GRAN%',
+  'GRANULOCYTE#':'GRAN#','GRANULOCYTE%':'GRAN%',
+  'LY#':'LYM#','LY%':'LYM%',
+  'PLCR':'P-LCR','PLCR%':'P-LCR','P_LCR':'P-LCR','PLCC':'P-LCC','P_LCC':'P-LCC'
+};
+function _cbcAlias(c){ return _CBC_ALIASES[c]||c; }
+function cbcIsParam(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
+function cbcNormalizeCode(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
 function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   if(!sampleId) return;
   if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
