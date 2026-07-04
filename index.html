@@ -5577,9 +5577,11 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       <div class="fg"><label class="fl">رمز الجهاز (Device Code) *</label><input class="fc" id="lis-map-device-code" placeholder="مثال: TSH, T3F, GLU"></div>
       <div class="fg">
         <label class="fl">رمز MedLab Pro *</label>
-        <select class="fc" id="lis-map-medlab-code">
+        <input class="fc" id="lis-map-medlab-search" placeholder="🔍 ابحث باسم التحليل أو رمزه... (مثال: toxo, cmv, tsh)" style="margin-bottom:6px" oninput="lisFilterMappingDropdown(this.value)" autocomplete="off">
+        <select class="fc" id="lis-map-medlab-code" size="8" style="height:180px">
           <option value="">-- اختر التحليل --</option>
         </select>
+        <div id="lis-map-medlab-count" style="font-size:11px;color:var(--text2);margin-top:3px"></div>
       </div>
       <div class="fg">
         <label class="fl">الجهاز (اختياري)</label>
@@ -31123,15 +31125,47 @@ function lisAddMapping(){
   lisUpdateMappingDeviceSel();
   document.getElementById('lis-map-device-code').value='';
   document.getElementById('lis-map-medlab-code').value='';
+  const _searchEl=document.getElementById('lis-map-medlab-search');
+  if(_searchEl) _searchEl.value='';
   document.getElementById('lis-map-note').value='';
   openModal('lis-m-add-mapping');
+  // ركّز على حقل البحث لتسهيل الكتابة الفورية
+  setTimeout(function(){ if(_searchEl) _searchEl.focus(); }, 60);
 }
 function lisPopulateMappingDropdown(){
   const sel=document.getElementById('lis-map-medlab-code');
   if(!sel) return;
-  const cats=[...new Set(LIS_MEDLAB_TESTS.map(t=>t.cat))];
-  sel.innerHTML='<option value="">-- اختر التحليل --</option>'+
-    cats.map(cat=>`<optgroup label="— ${cat} —">${LIS_MEDLAB_TESTS.filter(t=>t.cat===cat).map(t=>`<option value="${t.id}">${t.id} — ${t.name}</option>`).join('')}</optgroup>`).join('');
+  // ⭐ المصدر الصحيح: ALL_TESTS (قاعدة التحاليل الكاملة للبرنامج — 400+ تحليل)
+  // بدل LIS_MEDLAB_TESTS القديمة (76 تحليلاً فقط) التي كانت تُخفي تحاليل مثل
+  // Toxoplasma وCMV وغيرها عن نافذة الربط. القيمة المخزَّنة هي t.code لأن هذا
+  // هو الحقل الذي تقارنه كل دوال المطابقة الفعلية (lisResolveCode وغيرها).
+  window._lisAllTestsForMapping = (typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]).slice()
+    .sort((a,b)=>(a.cat||'').localeCompare(b.cat||'')||(a.nameEn||'').localeCompare(b.nameEn||''));
+  lisFilterMappingDropdown('');
+}
+function lisFilterMappingDropdown(query){
+  const sel=document.getElementById('lis-map-medlab-code');
+  const countEl=document.getElementById('lis-map-medlab-count');
+  if(!sel) return;
+  const all=window._lisAllTestsForMapping||[];
+  const q=(query||'').trim().toUpperCase();
+  const filtered = q ? all.filter(t=>
+    String(t.code||'').toUpperCase().includes(q) ||
+    String(t.nameEn||'').toUpperCase().includes(q) ||
+    String(t.nameShort||'').toUpperCase().includes(q) ||
+    String(t.cat||'').toUpperCase().includes(q)
+  ) : all;
+  const cats=[...new Set(filtered.map(t=>t.cat||'أخرى'))];
+  const prevVal=sel.value;
+  sel.innerHTML = (q?'':'<option value="">-- اختر التحليل --</option>') +
+    cats.map(cat=>'<optgroup label="— '+cat+' —">'+
+      filtered.filter(t=>(t.cat||'أخرى')===cat)
+        .map(t=>'<option value="'+t.code+'">'+t.code+' — '+(t.nameEn||t.nameShort||'')+'</option>')
+        .join('')
+    +'</optgroup>').join('');
+  // حافظ على الاختيار الحالي إن ظلّ ضمن النتائج المُفلترة
+  if(prevVal && filtered.some(t=>t.code===prevVal)) sel.value=prevVal;
+  if(countEl) countEl.textContent = q ? ('نتائج البحث: '+filtered.length) : ('إجمالي التحاليل: '+filtered.length);
 }
 function lisUpdateMappingDeviceSel(){
   const sel=document.getElementById('lis-map-device-sel');
@@ -31143,12 +31177,15 @@ function lisSaveMappingItem(){
   const dc=document.getElementById('lis-map-device-code').value.trim().toUpperCase();
   const mc=document.getElementById('lis-map-medlab-code').value;
   if(!dc||!mc){showNotif('تنبيه','أدخل رمز الجهاز والتحليل','warning');return;}
-  const t=LIS_MEDLAB_TESTS.find(x=>x.id===mc);
+  // ⭐ البحث في ALL_TESTS (قاعدة التحاليل الكاملة) بمطابقة code — هذا هو
+  // المصدر الصحيح المستخدم في كل نافذة الربط الآن بدل LIS_MEDLAB_TESTS الناقصة.
+  const allTests=(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+  const t=allTests.find(x=>String(x.code||'').toUpperCase()===mc.toUpperCase());
   lisMappings.push({
     id:'lm'+Date.now(),
     deviceCode:dc,
     medlabCode:mc,
-    name:t?t.name:'',
+    name:t?(t.nameEn||t.nameShort||''):'',
     device:document.getElementById('lis-map-device-sel').value,
     note:document.getElementById('lis-map-note').value,
   });
