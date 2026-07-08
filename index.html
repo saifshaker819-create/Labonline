@@ -591,6 +591,43 @@ body.light-mode #req-float-btn { box-shadow: 0 4px 20px rgba(0,95,153,0.35), 0 2
 .req-pill-inprogress.active { background: rgba(139,63,255,0.16); border-color: var(--secondary); box-shadow: 0 0 0 3px rgba(139,63,255,0.18), 0 6px 20px rgba(139,63,255,0.25); }
 .req-pill-done.active    { background: rgba(0,232,122,0.14);  border-color: var(--success);    box-shadow: 0 0 0 3px rgba(0,232,122,0.18), 0 6px 20px rgba(0,232,122,0.2); }
 
+/* ═══ وميض زر "نتائج الأجهزة" عند وجود مرضى (المتطلب ٣) ═══
+   حركة جميلة وجذّابة تلفت الانتباه، وتسكن تماماً عند الفراغ.
+   الأداء: transform/opacity/box-shadow فقط (GPU) — لا reflow، لا JS في الحلقة. */
+@keyframes reqDevnewFlash {
+  0%,100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgba(255,34,68,0.55), 0 4px 14px rgba(255,34,68,0.25);
+    border-color: var(--danger,#ff2244);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.06);
+    box-shadow: 0 0 0 7px rgba(255,34,68,0), 0 8px 26px rgba(255,34,68,0.45);
+    border-color: #ff6a86;
+  }
+}
+@keyframes reqDevnewGlow {
+  0%,100% { color: var(--danger,#ff2244); }
+  50%     { color: #ff8aa0; }
+}
+.req-pill.req-devnew-flash {
+  animation: reqDevnewFlash 1.05s ease-in-out infinite;
+  background: linear-gradient(135deg, rgba(255,34,68,0.16), rgba(255,106,134,0.10));
+  border-color: var(--danger,#ff2244);
+  will-change: transform, box-shadow;
+}
+.req-pill.req-devnew-flash .req-pill-ic {
+  animation: reqDevnewGlow 1.05s ease-in-out infinite;
+  display: inline-block;
+}
+.req-pill.req-devnew-flash .req-pill-lbl { color: var(--danger,#ff2244); font-weight: 900; }
+/* عند الفراغ: لا يوجد class → لا أي حركة (ساكن تماماً) */
+@media (prefers-reduced-motion: reduce) {
+  .req-pill.req-devnew-flash,
+  .req-pill.req-devnew-flash .req-pill-ic { animation: none; }
+  .req-pill.req-devnew-flash { box-shadow: 0 0 0 3px rgba(255,34,68,0.25); }
+}
+
 /* مستطيل البحث العائم */
 .req-srch-pill {
   display: flex;
@@ -3055,7 +3092,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <button class="req-pill req-pill-pending" data-filter="pending" onclick="filterReq('pending',this)"><span class="req-pill-ic">⏳</span><span class="req-pill-lbl">معلقة</span></button>
           <button class="req-pill req-pill-inprogress" data-filter="inprogress" onclick="filterReq('inprogress',this)"><span class="req-pill-ic">⚡</span><span class="req-pill-lbl">جارية</span></button>
           <button class="req-pill req-pill-done" data-filter="done" onclick="filterReq('done',this)"><span class="req-pill-ic">✅</span><span class="req-pill-lbl">مكتملة</span></button>
-          <button class="req-pill req-pill-inprogress" data-filter="device" onclick="filterReq('device',this)" title="مرضى وصلت نتائجهم من الأجهزة ولم تُطبع بعد"><span class="req-pill-ic">📥</span><span class="req-pill-lbl">نتائج الأجهزة</span><span id="req-device-badge" style="display:none;margin-right:5px;background:var(--danger,#ff2244);color:#fff;font-size:10px;font-weight:900;min-width:17px;height:17px;line-height:17px;border-radius:9px;padding:0 4px;text-align:center"></span></button>
+          <button id="req-devnew-btn" class="req-pill req-pill-inprogress" data-filter="devnew" onclick="filterReq('devnew',this)" title="مرضى وصلت نتائجهم من الأجهزة المرتبطة ولم تُطبع بعد"><span class="req-pill-ic">📥</span><span class="req-pill-lbl">نتائج الأجهزة</span><span id="req-devnew-badge" style="display:none;margin-right:5px;background:var(--danger,#ff2244);color:#fff;font-size:10px;font-weight:900;min-width:17px;height:17px;line-height:17px;border-radius:9px;padding:0 4px;text-align:center"></span></button>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
           <div class="req-srch-pill"><span class="req-srch-pill-ic">🔍</span><input class="req-srch-pill-inp" id="req-srch-inp" lang="ar" dir="rtl" placeholder="بحث..." oninput="searchReq(this.value)"><button type="button" class="req-srch-pill-ltb lang-toggle-btn" id="req-srch-ltb" onclick="toggleInputLang('req-srch-inp','req-srch-ltb')" title="تبديل لغة الإدخال">ع</button></div>
@@ -10495,18 +10532,23 @@ function getTubeColors(testIds){
 // REQUESTS
 // ============================================================
 // ══════════════════════════════════════════════════════════
-// 📥 هل يحوي الطلب نتائج مستلمة من جهاز متصل؟ (fromDevice)
-// يُستخدم لزر "نتائج الأجهزة" في واجهة الطلبات (المتطلب ٣)
+// 📥 زر "نتائج الأجهزة" — قواعد الظهور الصارمة (المتطلب ٢)
+// ──────────────────────────────────────────────────────────
+// القاعدة الموحّدة للظهور:
+//   يظهر المريض فقط إذا (لم يُطبع) و(يملك نتيجة تحليل واحدة على الأقل
+//   قادمة فعلاً من جهاز مرتبط، وليست CBC، وليست تحليلاً خاصاً).
+//   • CBC القادم من الجهاز لا يُظهر المريض إطلاقاً (يُتجاهل دائماً).
+//   • النتائج اليدوية (بدون fromDevice) لا تُظهر المريض.
+//   • المريض بلا أي نتيجة (لم تُدخل بعد) لا يظهر.
+//   • بعد الطباعة (printed) يختفي كلياً.
+// هذا يحقق الحالات الخمس:
+//   ١) تحاليل بلا نتائج جهاز → لا يظهر.
+//   ٢) CBC فقط من الجهاز → لا يظهر.
+//   ٣) CBC من الجهاز + تحاليل يدوية غير قادمة من جهاز → لا يظهر.
+//   ٤) CBC من الجهاز + تحاليل قادمة من الأجهزة → يظهر الاسم (بدون CBC)،
+//      وعند الطباعة يختفي.
+//   ٥) لا CBC من الجهاز + تحاليل قادمة من الأجهزة → يظهر، وعند الطباعة يختفي.
 // ══════════════════════════════════════════════════════════
-function _reqHasDeviceResults(r){
-  if(!r||!r.resultDetails) return false;
-  var d=r.resultDetails;
-  for(var k in d){
-    if(!Object.prototype.hasOwnProperty.call(d,k)) continue;
-    if(d[k]&&d[k].fromDevice) return true;
-  }
-  return false;
-}
 // هل المفتاح خاص بـ CBC؟ (CBC له معاملة خاصة: لا يُظهر المريض في هذا الزر إطلاقاً)
 function _isCbcKey(k){
   var u=String(k||'').toUpperCase().replace(/\s+/g,'');
@@ -10532,44 +10574,49 @@ function _isSpecialExamKey(key){
   var t=_findTestForKey(key);
   return !!(t&&t.isSpecialExam);
 }
-// ⭐ قاعدة ظهور المريض في زر "نتائج الأجهزة" (صارمة):
-//   يظهر فقط إذا كان غير مطبوع ويملك نتيجة واحدة على الأقل:
-//     • مصدرها جهاز فعلاً (fromDevice يحمل اسم جهاز غير فارغ)، و
-//     • ليست CBC، و
-//     • ليست تحليلاً خاصاً (خروج/إدرار/سائل منوي).
-//   أي مريض بلا نتيجة جهاز حقيقية (حتى لو لديه CBC فقط) لا يظهر إطلاقاً.
-//   وبعد الطباعة يختفي كلياً.
+// ⭐ القاعدة الموحّدة: هل يظهر المريض في زر "نتائج الأجهزة"؟
 function _reqShowsInDevicePanel(r){
   if(!r||!r.resultDetails) return false;
-  if(r.printed) return false;               // طُبع → يختفي كلياً
+  if(r.printed) return false;               // طُبع → يختفي كلياً (الحالتان ٤ و ٥)
   var d=r.resultDetails;
   for(var k in d){
     if(!Object.prototype.hasOwnProperty.call(d,k)) continue;
     var det=d[k];
     if(!det) continue;
-    // fromDevice يجب أن يكون قيمة حقيقية (اسم جهاز) وليس false/فارغ
+    // fromDevice يجب أن يكون قيمة حقيقية (اسم جهاز مرتبط) وليس false/فارغ
     var fd=det.fromDevice;
     var isReal=(fd===true)||(typeof fd==='string'&&fd.trim().length>0);
-    if(!isReal) continue;
-    if(_isCbcKey(k)) continue;              // CBC لا يُظهر المريض
-    if(_isSpecialExamKey(k)) continue;      // خروج/إدرار/سائل منوي لا تأتي من جهاز
-    return true;                            // نتيجة جهاز حقيقية غير CBC وغير خاصة
+    if(!isReal) continue;                    // نتيجة يدوية → لا تُظهر (الحالة ٣)
+    if(_isCbcKey(k)) continue;               // CBC لا يُظهر المريض (الحالتان ٢ و ٤)
+    if(_isSpecialExamKey(k)) continue;       // خروج/إدرار/سائل منوي لا تأتي من جهاز
+    return true;                             // نتيجة جهاز حقيقية غير CBC → يظهر (٤ و ٥)
   }
-  return false;
+  return false;                              // لا نتيجة جهاز حقيقية (الحالة ١)
 }
-// تحديث شارة العدد على زر "نتائج الأجهزة" (المرضى غير المطبوعين)
-function _updateDeviceReqBadge(){
-  var badge=document.getElementById('req-device-badge');
-  if(!badge) return;
-  var today=new Date().toISOString().split('T')[0];
+// عدّ المرضى الظاهرين حالياً في الزر
+function _countDeviceReqPatients(){
   var cnt=0;
   if(typeof requests!=='undefined'&&Array.isArray(requests)){
-    requests.forEach(function(r){
-      if(_reqShowsInDevicePanel(r)) cnt++;
-    });
+    for(var i=0;i<requests.length;i++){ if(_reqShowsInDevicePanel(requests[i])) cnt++; }
   }
-  if(cnt>0){ badge.textContent=cnt; badge.style.display='inline-block'; }
-  else{ badge.style.display='none'; }
+  return cnt;
+}
+// تحديث شارة العدد + وميض الزر (المتطلبان ٢ و ٣)
+// خفيف جداً: قراءة فقط دون إعادة بناء أي جدول — آمن للاستدعاء المتكرر.
+function _updateDeviceReqBadge(){
+  var badge=document.getElementById('req-devnew-badge');
+  var btn=document.getElementById('req-devnew-btn');
+  var cnt=_countDeviceReqPatients();
+  if(badge){
+    if(cnt>0){ badge.textContent=cnt; badge.style.display='inline-block'; }
+    else{ badge.style.display='none'; }
+  }
+  // الوميض: يعمل فقط عند وجود مريض واحد على الأقل، ويسكن تماماً عند الفراغ
+  // (المتطلب ٣ — دون التأثير على الأداء: مجرد إضافة/إزالة class، والحركة عبر CSS)
+  if(btn){
+    if(cnt>0) btn.classList.add('req-devnew-flash');
+    else btn.classList.remove('req-devnew-flash');
+  }
 }
 function renderRequestsFiltered(filter='today',srch=''){
   const today=new Date().toISOString().split('T')[0];
@@ -10580,10 +10627,10 @@ function renderRequestsFiltered(filter='today',srch=''){
   else if(filter==='pending') list=list.filter(r=>r.status==='pending'&&r.date===today);
   else if(filter==='inprogress') list=list.filter(r=>r.status==='inprogress'&&r.date===today);
   else if(filter==='done') list=list.filter(r=>r.status==='done'&&r.date===today);
-  else if(filter==='device') list=list.filter(r=>_reqShowsInDevicePanel(r));
+  else if(filter==='devnew') list=list.filter(r=>_reqShowsInDevicePanel(r));
   if(srch){const q=srch.trim().toLowerCase();list=list.filter(r=>(r.patientName||'').toLowerCase().includes(q)||(r.id||'').toLowerCase().includes(q));}
   if(!list.length){
-    const _emptyMsg=filter==='device'
+    const _emptyMsg=filter==='devnew'
       ? 'لا يوجد مرضى بنتائج أجهزة بانتظار الطباعة'
       : 'لا توجد طلبات اليوم في هذه الحالة';
     tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text2)">${_emptyMsg}</td></tr>`;
@@ -28633,18 +28680,18 @@ function cbcFlush(sampleId){
     if(_otherDone) targetReq.status='done';
     // إذا كان هناك تحاليل أخرى لم تُكمَل — يبقى status pending
     if(typeof save==='function') save('requests',requests);
-    // تحديث شارة "نتائج الأجهزة" فور وصول CBC دون تغيير التبويب المعروض (المتطلب ٣)
+    // تحديث شارة "نتائج الأجهزة" فور وصول CBC دون تغيير التبويب المعروض (المتطلبان ٢ و ٣)
     if(typeof _updateDeviceReqBadge==='function'){ try{ _updateDeviceReqBadge(); }catch(_){} }
     // إن كان المستخدم يعرض تبويب "نتائج الأجهزة" الآن، حدّث القائمة بنفس الفلتر
     try{
       var _actPill=document.querySelector('#sec-requests .req-pill[data-filter].active');
-      if(_actPill && _actPill.getAttribute('data-filter')==='device' && typeof renderRequestsFiltered==='function'){
-        renderRequestsFiltered('device');
+      if(_actPill && _actPill.getAttribute('data-filter')==='devnew' && typeof renderRequestsFiltered==='function'){
+        renderRequestsFiltered('devnew');
       }
     }catch(_){}
     lisAddLog('ok','CBC نُقل للمريض: '+(targetPatient?targetPatient.name:sid));
-    showNotif('CBC مكتمل','تم إدخال نتائج CBC للمريض: '+(targetPatient?targetPatient.name:sid),'success');
-    if(typeof renderRequestTable==='function') renderRequestTable();
+    // المتطلب ٤: إزالة الإشعار المرئي الثقيل عند استلام CBC — نُبقي صوت التنبيه فقط
+    if(typeof lisPlayBeep==='function'){ try{ lisPlayBeep(); }catch(_){} }
     // تحديث قائمة CBC التاريخية إذا كان المريض المعروض حالياً هو نفسه
     if(currentReqId===targetReq.id && typeof updateCbcHistorySel==='function'){
       updateCbcHistorySel(targetReq.id);
@@ -29051,16 +29098,23 @@ function lisLoadDefaultMappings(){
 // ═══════════════════════════════════════════════
 // RESULT INGESTION & AUTO-TRANSFER
 // ═══════════════════════════════════════════════
+// المتطلب ٤: كل سطر نتيجة (OBX) كان يُطلق حفظاً كاملاً + إعادة بناء الجداول
+// + إشعاراً مرئياً — عند وصول عشرات النتائج دفعةً واحدة يتجمّد البرنامج.
+// الحل: تجميع (coalesce) الحفظ والرسم بمؤقت خفيف، وإبقاء صوت التنبيه فقط.
+var _lisIngestFlushTimer=null;
+function _lisIngestFlush(){
+  _lisIngestFlushTimer=null;
+  try{ lisSaveState(); }catch(_){}
+  try{ lisUpdateStats(); }catch(_){}
+  try{ lisUpdateNbBadge(); }catch(_){}
+  try{ lisRenderResults(); }catch(_){}
+  try{ lisRenderMiniLog(); }catch(_){}
+}
 function lisIngestResult(result){
   lisResults.unshift(result);
-  lisSaveState();
-  lisUpdateStats();
-  lisUpdateNbBadge();
-  lisRenderResults();
-  lisRenderMiniLog();
   lisAddLog('ok','نتيجة: '+result.deviceCode+'='+result.value+' | SID:'+result.sampleId);
 
-  // Sound
+  // Sound — نبقيه للتنبيه (المتطلب ٤)
   if(_lisSettings.sound) lisPlayBeep();
 
   // Auto transfer
@@ -29069,7 +29123,11 @@ function lisIngestResult(result){
     setTimeout(()=>lisTransferResult(result.id),delay);
   }
 
-  showNotif('نتيجة جديدة 📥',result.deviceCode+'='+result.value+' '+result.unit+'\n'+result.device,'success');
+  // تجميع الحفظ + إعادة الرسم: يُنفَّذ مرة واحدة بعد توقف تدفق النتائج (120ms)
+  // بدل تنفيذه لكل سطر — يحافظ على استجابة الواجهة أثناء الاستلام الكثيف.
+  if(_lisIngestFlushTimer) clearTimeout(_lisIngestFlushTimer);
+  _lisIngestFlushTimer=setTimeout(_lisIngestFlush,120);
+  // المتطلب ٤: إزالة الإشعار المرئي الثقيل — صوت التنبيه أعلاه يكفي.
 }
 
 // ═══════════════════════════════════════════════
@@ -29322,13 +29380,44 @@ async function lisTransferToMedlabPro(list){
   lisUpdateStats();
   lisUpdateNbBadge();
 
-  // Refresh MedLab Pro UI if visible
-  if(typeof renderRequestTable==='function') try{renderRequestTable();}catch(e){}
-  if(typeof loadData==='function') try{loadData();renderAll();updateDashboard();}catch(e){}
+  // ── المتطلب ٤: تحديث واجهة MedLab Pro بشكل خفيف بدل إعادة بناء كل شيء ──
+  // القديم كان يستدعي renderAll()+updateDashboard() (إعادة بناء ١٢ جدولاً)
+  // مع كل دفعة نقل — يُجمّد البرنامج. نكتفي بتحديث ما يظهر فعلاً + الشارة.
+  _lisRefreshMedlabUiLight();
 
-  let msg='تم نقل '+transferred+' نتيجة ✓';
-  if(notFound) msg+='\n⚠️ '+notFound+' نتيجة بانتظار الربط اليدوي';
-  showNotif('نقل النتائج',msg,transferred>0?'success':'warning');
+  // إشعار النقل: نُبقيه فقط في السجل (log) — نُزيل الإشعار المرئي الثقيل.
+  let msg='تم نقل '+transferred+' نتيجة';
+  if(notFound) msg+=' — '+notFound+' بانتظار الربط اليدوي';
+  lisAddLog(transferred>0?'ok':'warn', msg);
+}
+
+// تحديث خفيف ومُجمَّع لواجهة MedLab Pro بعد نقل نتائج الأجهزة (المتطلب ٤)
+var _lisUiRefreshTimer=null;
+function _lisRefreshMedlabUiLight(){
+  if(_lisUiRefreshTimer) clearTimeout(_lisUiRefreshTimer);
+  _lisUiRefreshTimer=setTimeout(function(){
+    _lisUiRefreshTimer=null;
+    try{
+      // حدّث شارة/وميض زر "نتائج الأجهزة" دائماً (خفيف جداً — قراءة فقط)
+      if(typeof _updateDeviceReqBadge==='function') _updateDeviceReqBadge();
+      // أعد رسم جدول الطلبات فقط إذا كان قسم الطلبات ظاهراً الآن
+      var reqSec=document.getElementById('sec-requests');
+      var reqVisible=reqSec && (reqSec.classList.contains('active') ||
+                     (reqSec.offsetParent!==null));
+      if(reqVisible && typeof renderRequestsFiltered==='function'){
+        var actPill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+        var f=(actPill && actPill.getAttribute('data-filter'))||'today';
+        var srchEl=document.getElementById('req-srch-inp');
+        renderRequestsFiltered(f, srchEl?srchEl.value:'');
+      }
+      // حدّث لوحة المعلومات فقط إذا كانت ظاهرة (updateDashboard ثقيلة)
+      var dashSec=document.getElementById('sec-dashboard');
+      if(dashSec && (dashSec.classList.contains('active')||dashSec.offsetParent!==null)
+         && typeof updateDashboard==='function'){
+        try{ updateDashboard(); }catch(_){}
+      }
+    }catch(_){}
+  }, 150);
 }
 
 function lisCheckMedlabConn(){
