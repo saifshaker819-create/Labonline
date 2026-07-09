@@ -5085,6 +5085,12 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <button class="btn btn-s" style="flex:1" onclick="diagnoseBarcodes()">🔍 فحص</button>
                   <button class="btn btn-ok" style="flex:1" onclick="forceRepairBarcodes()">🛠️ إصلاح الآن</button>
                 </div>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px dashed rgba(255,180,0,0.35)">
+                  <div style="font-size:11px;color:var(--text2);line-height:1.9;margin-bottom:8px">
+                    <b style="color:#ff6b6b">إعادة ترقيم شاملة:</b> يمنح كل مريض قديم رقماً جديداً أصلياً (يبدأ من ١٠٠٠٠١) ويحدّث باركوده وكل طلباته وفواتيره ونتائجه المرتبطة تلقائياً، دون أي تداخل. مفيد للتخلّص نهائياً من الأرقام القديمة. <b>يُنصح بأخذ نسخة احتياطية أولاً.</b>
+                  </div>
+                  <button class="btn btn-d" style="width:100%" onclick="renumberAllPatients()">🔄 إعادة ترقيم كل المرضى بأرقام جديدة</button>
+                </div>
                 <div id="barcode-diag-out" style="display:none;margin-top:12px;background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;font-size:11px;font-family:'Courier New',monospace;color:var(--text);max-height:260px;overflow:auto;direction:ltr;text-align:left;white-space:pre-wrap"></div>
               </div>
             </div>
@@ -8137,6 +8143,123 @@ async function forceRepairBarcodes(){
     if(typeof showNotif==='function') showNotif('إصلاح الباركود','تم إصلاح '+fixed+' مريض','success');
   }catch(e){
     if(out){ out.style.display='block'; out.textContent='خطأ في الإصلاح: '+e.message; }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 🔄 إعادة ترقيم كل المرضى بأرقام جديدة أصلية (تبدأ من 100001)
+//    يحدّث id + barcode لكل مريض، ويحدّث كل المراجع (patientId) في
+//    الطلبات والفواتير والفوترة والزرع والإدرار والبراز والسائل المنوي،
+//    مع ضمان عدم تداخل أي رقم مع آخر. آمن ولا يفصل أي بيانات.
+// ══════════════════════════════════════════════════════════════════
+async function renumberAllPatients(){
+  var out=document.getElementById('barcode-diag-out');
+  function _show(t){ if(out){ out.style.display='block'; out.textContent=t; } }
+  // تأكيد مزدوج قبل التنفيذ (عملية كبيرة)
+  if(!confirm('سيتم منح كل مريض رقماً جديداً أصلياً (يبدأ من 100001) وتحديث كل طلباته وفواتيره ونتائجه المرتبطة.\n\nيُفضّل أخذ نسخة احتياطية أولاً.\n\nهل تريد المتابعة؟')) return;
+  if(!confirm('تأكيد أخير: هذه العملية تعيد ترقيم جميع المرضى. متابعة؟')) return;
+  try{
+    _show('⏳ جاري إعادة الترقيم... لا تغلق البرنامج.');
+    const pfx=DB._pfx();
+    // ① تحميل كل المجموعات المرتبطة من IDB
+    async function _load(k){ var v=await IDB.get(pfx+k); return Array.isArray(v)?v:[]; }
+    var _patients = await _load('patients');
+    if(!_patients.length){ _show('لا يوجد مرضى.'); return; }
+    var _requests       = await _load('requests');
+    var _invoices       = await _load('invoices');
+    var _billing        = await _load('billing');
+    var _cultureRecords = await _load('cultureRecords');
+    var _uaRecords      = await _load('uaRecords');
+    var _stoolRecords   = await _load('stoolExamRecords');
+    var _semenRecords   = await _load('semenRecords');
+
+    // ② بناء خريطة oldId → newId (أرقام متسلسلة فريدة تبدأ من 100001)
+    var startNum = 100001;
+    // احترام العدّاد الحالي إن كان أعلى (حتى لا نصطدم بأرقام ستُولَّد لاحقاً)
+    var curCounter = parseInt(localStorage.getItem('medlab_pt_counter')||'0',10)||0;
+    var counterBase = 100000 + curCounter; // آخر رقم أعطاه العدّاد
+    if(counterBase >= startNum) startNum = counterBase + 1;
+
+    var idMap = {};        // oldId(String) → newId(String)
+    var usedNew = {};      // لضمان عدم التكرار
+    var next = startNum;
+    var renamed = 0, samples = [];
+    _patients.forEach(function(p){
+      if(!p || p.id==null) return;
+      var oldId = String(p.id);
+      // ولّد رقماً جديداً فريداً
+      while(usedNew[String(next)]) next++;
+      var newId = String(next);
+      usedNew[newId] = 1;
+      next++;
+      idMap[oldId] = newId;
+      if(samples.length<8) samples.push(oldId+' → '+newId);
+      renamed++;
+    });
+
+    // ③ طبّق الأرقام الجديدة على المرضى (id + barcode = نفس الرقم)
+    _patients.forEach(function(p){
+      if(!p || p.id==null) return;
+      var nid = idMap[String(p.id)];
+      if(nid){ p.id = nid; p.barcode = nid; }
+    });
+
+    // ④ حدّث كل المراجع patientId في المجموعات المرتبطة
+    function _remap(list){
+      var c=0;
+      list.forEach(function(rec){
+        if(!rec) return;
+        if(rec.patientId!=null){
+          var nn=idMap[String(rec.patientId)];
+          if(nn){ rec.patientId=nn; c++; }
+        }
+      });
+      return c;
+    }
+    var cReq = _remap(_requests);
+    _remap(_invoices); _remap(_billing); _remap(_cultureRecords);
+    _remap(_uaRecords); _remap(_stoolRecords); _remap(_semenRecords);
+
+    // بعض الطلبات قد تخزّن الرقم في حقل pid/patientCode احتياطاً — لا نلمسها
+    // إلا إن كانت patientId (المفتاح الرسمي للربط) كما فعلنا أعلاه.
+
+    // ⑤ احفظ كل المجموعات المعدّلة في IDB + كاش الذاكرة
+    async function _save(k, v){
+      await IDB.set(pfx+k, v);
+      try{ _MC[pfx+k]=v; }catch(e){}
+    }
+    await _save('patients', _patients);
+    await _save('requests', _requests);
+    await _save('invoices', _invoices);
+    await _save('billing', _billing);
+    await _save('cultureRecords', _cultureRecords);
+    await _save('uaRecords', _uaRecords);
+    await _save('stoolExamRecords', _stoolRecords);
+    await _save('semenRecords', _semenRecords);
+
+    // ⑥ حدّث المتغيرات العامة المحمّلة في الذاكرة (لتظهر التغييرات فوراً)
+    try{ if(typeof patients!=='undefined') patients=_patients; }catch(e){}
+    try{ if(typeof requests!=='undefined') requests=_requests; }catch(e){}
+    try{ if(typeof invoices!=='undefined') invoices=_invoices; }catch(e){}
+    try{ if(typeof billingRecords!=='undefined') billingRecords=_billing; }catch(e){}
+
+    // ⑦ حدّث العدّاد ليكمل من آخر رقم مُعطى (حتى لا يتكرر مع الجدد)
+    var newCounter = next - 1 - 100000;
+    if(newCounter > curCounter) localStorage.setItem('medlab_pt_counter', String(newCounter));
+
+    // ⑧ حدّث الواجهة
+    try{ if(typeof renderPatients==='function') renderPatients(); }catch(e){}
+    try{ if(typeof renderRequests==='function') renderRequests(); }catch(e){}
+
+    var msg='✅ تمت إعادة ترقيم '+renamed+' مريض بنجاح.\n';
+    msg+='تم تحديث '+cReq+' طلب مرتبط + الفواتير والنتائج.\n';
+    msg+='الأرقام الجديدة تبدأ من '+startNum+'.\n\n';
+    if(samples.length) msg+='عيّنة:\n'+samples.join('\n');
+    _show(msg);
+    if(typeof showNotif==='function') showNotif('إعادة الترقيم','تمت إعادة ترقيم '+renamed+' مريض','success');
+  }catch(e){
+    _show('❌ خطأ في إعادة الترقيم: '+(e&&e.message||e)+'\n\nلم تُحفظ تغييرات جزئية إن حدث الخطأ قبل الحفظ.');
+    if(typeof showNotif==='function') showNotif('خطأ','فشلت إعادة الترقيم: '+(e&&e.message||e),'error');
   }
 }
 
