@@ -5074,6 +5074,19 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <button class="btn btn-d" style="flex:1" onclick="cancelImport()">❌ إلغاء</button>
                 </div>
               </div>
+
+              <!-- 🔧 تشخيص وإصلاح باركود المرضى القدماء -->
+              <div style="margin-top:14px;background:rgba(255,180,0,0.06);border:1px solid rgba(255,180,0,0.3);border-radius:10px;padding:14px">
+                <div style="font-size:13px;font-weight:800;color:#ffb400;margin-bottom:8px">🔧 إصلاح باركود المرضى القدماء</div>
+                <div style="font-size:11px;color:var(--text2);line-height:1.9;margin-bottom:10px">
+                  إذا كان باركود المرضى القدماء لا يُقرأ في القارئ، اضغط <b style="color:var(--text)">فحص</b> لعرض القيم المخزّنة، ثم <b style="color:var(--text)">إصلاح الآن</b> لجعل باركود كل مريض قديم مطابقاً لرقمه الحقيقي.
+                </div>
+                <div style="display:flex;gap:10px">
+                  <button class="btn btn-s" style="flex:1" onclick="diagnoseBarcodes()">🔍 فحص</button>
+                  <button class="btn btn-ok" style="flex:1" onclick="forceRepairBarcodes()">🛠️ إصلاح الآن</button>
+                </div>
+                <div id="barcode-diag-out" style="display:none;margin-top:12px;background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;font-size:11px;font-family:'Courier New',monospace;color:var(--text);max-height:260px;overflow:auto;direction:ltr;text-align:left;white-space:pre-wrap"></div>
+              </div>
             </div>
 
             <!-- النسخ الاحتياطي التلقائي -->
@@ -7980,8 +7993,151 @@ function initUserData(){
   // ③ نقل أي بيانات قديمة لا تزال في localStorage إلى IDB (مرة واحدة عند التشغيل)
   _migrateLegacyLS();
 
+  // ③.٥ إصلاح باركود المرضى القدماء (الوهمي MR-xxxx) في قاعدة مستوردة سابقاً — مرة واحدة
+  _repairLegacyBarcodesOnce();
+
   // ④ تحميل البيانات الكبيرة من IDB
   _mergeIDBInBackground();
+}
+
+// ── إصلاح لمرة واحدة: تصحيح باركود المرضى القدماء في قاعدة بيانات مستوردة سابقاً ──
+// يعالج الحالة التي استوردت فيها قاعدة قديمة وبقي فيها باركود وهمي (MR-xxxx أو -xxxx)
+// لا يُقرأ في قارئ الباركود. يجعل باركود كل مريض قديم مساوياً لرقمه الحقيقي (id)
+// تماماً مثل المرضى الجدد، فيصبح باركوداً حقيقياً يُقرأ ويطابق المريض.
+async function _repairLegacyBarcodesOnce(){
+  var FLAG_KEY = 'medlab_legacy_barcode_repaired_v1';
+  try{
+    if(localStorage.getItem(FLAG_KEY)==='1') return; // نُفّذ سابقاً
+    const pfx = DB._pfx();
+    const key = pfx+'patients';
+    let list = await IDB.get(key);
+    if(!Array.isArray(list) || list.length===0){
+      // لا يوجد مرضى في IDB بعد — علّم الإصلاح مؤجلاً (سيُعاد فحصه لاحقاً)
+      return;
+    }
+    let fixed = 0;
+    list = list.map(function(p){
+      if(!p) return p;
+      var bc = p.barcode != null ? String(p.barcode) : '';
+      // باركود وهمي/تالف: يبدأ بـ MR، أو يحتوي رموزاً غير أبجدرقمية، أو فارغ مع وجود id
+      var isLegacy = /^MR/i.test(bc) || /[^0-9A-Za-z]/.test(bc) || (bc==='' && p.id!=null);
+      if(!isLegacy) return p;
+      var realId = p.id != null ? String(p.id).replace(/[^0-9A-Za-z]/g,'') : '';
+      var newBc = realId || bc.replace(/^MR/i,'').replace(/[^0-9A-Za-z]/g,'');
+      if(newBc && newBc !== bc){
+        p.barcode = newBc;
+        fixed++;
+      }
+      return p;
+    });
+    if(fixed > 0){
+      await IDB.set(key, list);
+      // حدّث الكاش والمتغير العام إن كانا محمّلين
+      try{ if(typeof _MC!=='undefined') _MC[key] = list; }catch(e){}
+      try{ if(typeof patients!=='undefined' && Array.isArray(patients)) patients = list; }catch(e){}
+      console.log('[MedLab] تم تصحيح باركود '+fixed+' مريض قديم');
+    }
+    localStorage.setItem(FLAG_KEY, '1');
+  }catch(e){ console.warn('[MedLab] legacy barcode repair error', e); }
+}
+
+// ── فحص: عرض القيم الفعلية المخزّنة لباركود المرضى (للتشخيص) ──
+async function diagnoseBarcodes(){
+  var out=document.getElementById('barcode-diag-out');
+  function _hasArabicDigits(s){ return /[\u0660-\u0669\u06F0-\u06F9]/.test(String(s||'')); }
+  function _hasHidden(s){ return /[\u200B-\u200F\u202A-\u202E\uFEFF\u00A0]/.test(String(s||'')); }
+  function _codePoints(s){
+    // يُظهر كل محرف مع رمز يونيكود (للكشف عن الخفي/العربي)
+    return String(s||'').split('').map(function(ch){
+      var cp=ch.charCodeAt(0);
+      if(cp<32||cp===160||(cp>=0x200B&&cp<=0x202E)||cp===0xFEFF) return '[U+'+cp.toString(16).toUpperCase()+']';
+      if(cp>=0x0660&&cp<=0x0669) return ch+'(عربي)';
+      if(cp>=0x06F0&&cp<=0x06F9) return ch+'(فارسي)';
+      return ch;
+    }).join('');
+  }
+  try{
+    const pfx=DB._pfx();
+    let list=await IDB.get(pfx+'patients');
+    if(!Array.isArray(list)) list = (typeof patients!=='undefined'&&Array.isArray(patients))?patients:[];
+    if(!list.length){ if(out){out.style.display='block';out.textContent='لا يوجد مرضى في قاعدة البيانات.';} return; }
+    var lines=['العدد الكلي للمرضى: '+list.length,''];
+    var suspicious=0, arabicCount=0, hiddenCount=0;
+    list.forEach(function(p){
+      if(!p) return;
+      var idRaw=p.id!=null?String(p.id):'';
+      var bcRaw=p.barcode!=null?String(p.barcode):'';
+      var idClean=(typeof _bcCleanCode==='function')?_bcCleanCode(idRaw):idRaw.replace(/[^0-9A-Za-z]/g,'');
+      var bcClean=(typeof _bcCleanCode==='function')?_bcCleanCode(bcRaw):bcRaw.replace(/[^0-9A-Za-z]/g,'');
+      var flag='';
+      if(_hasArabicDigits(idRaw)||_hasArabicDigits(bcRaw)){ flag+=' ⚠️أرقام عربية'; arabicCount++; }
+      if(_hasHidden(idRaw)||_hasHidden(bcRaw)){ flag+=' ⚠️محرف خفي'; hiddenCount++; }
+      if(bcClean!==idClean){ flag+=' ⚠️barcode≠id'; }
+      if(flag){
+        suspicious++;
+        if(suspicious<=30){
+          lines.push('─────');
+          lines.push('id خام   = '+_codePoints(idRaw));
+          lines.push('barcode خام = '+_codePoints(bcRaw));
+          lines.push('المُشفّر فعلياً = "'+bcClean+'" (طول '+bcClean.length+')'+flag);
+        }
+      }
+    });
+    lines.push('');
+    lines.push('════════════════════');
+    lines.push('مرضى بأرقام عربية-هندية: '+arabicCount);
+    lines.push('مرضى بمحارف خفية: '+hiddenCount);
+    lines.push('إجمالي المشبوهين: '+suspicious);
+    if(suspicious===0) lines.push('✅ لا مشاكل — كل الباركودات نظيفة ومطابقة.');
+    else lines.push('👈 اضغط "إصلاح الآن" لتصحيحها جميعاً.');
+    if(out){ out.style.display='block'; out.textContent=lines.join('\n'); }
+  }catch(e){
+    if(out){ out.style.display='block'; out.textContent='خطأ في الفحص: '+e.message; }
+  }
+}
+
+// ── إصلاح يدوي فوري (يتجاهل علامة "نُفّذ سابقاً") ──
+async function forceRepairBarcodes(){
+  var out=document.getElementById('barcode-diag-out');
+  try{
+    const pfx=DB._pfx();
+    const key=pfx+'patients';
+    let list=await IDB.get(key);
+    if(!Array.isArray(list)) list=(typeof patients!=='undefined'&&Array.isArray(patients))?patients:[];
+    if(!list.length){ if(out){out.style.display='block';out.textContent='لا يوجد مرضى للإصلاح.';} return; }
+    let fixed=0, samples=[];
+    var _clean=(typeof _bcCleanCode==='function')?_bcCleanCode:function(v){return String(v||'').replace(/[^0-9A-Za-z]/g,'');};
+    list=list.map(function(p){
+      if(!p) return p;
+      // ملاحظة: لا نغيّر p.id إطلاقاً (مفتاح ربط الطلبات). نصلح الباركود فقط
+      // ونجعله = رقم المريض بعد تحويل الأرقام العربية-الهندية للاتينية وتنظيفه.
+      var idClean=_clean(p.id!=null?String(p.id):'');
+      var bc=p.barcode!=null?String(p.barcode):'';
+      var bcClean=_clean(bc);
+      var target=idClean||bcClean;
+      if(target && bc!==target){
+        if(samples.length<12) samples.push('"'+bc+'" → "'+target+'"');
+        p.barcode=target;
+        fixed++;
+      }
+      return p;
+    });
+    if(fixed>0){
+      await IDB.set(key,list);
+      try{ if(typeof _MC!=='undefined') _MC[key]=list; }catch(e){}
+      try{ if(typeof patients!=='undefined') patients=list; }catch(e){}
+      try{ save('patients',patients); }catch(e){}
+      try{ if(typeof renderPatients==='function') renderPatients(); }catch(e){}
+    }
+    localStorage.setItem('medlab_legacy_barcode_repaired_v1','1');
+    var msg='✅ تم إصلاح '+fixed+' مريض.\n\n';
+    if(samples.length) msg+='عيّنة من التغييرات:\n'+samples.join('\n');
+    if(fixed===0) msg='✅ لا يوجد ما يحتاج إصلاحاً — كل الباركودات مطابقة بالفعل.';
+    if(out){ out.style.display='block'; out.textContent=msg; }
+    if(typeof showNotif==='function') showNotif('إصلاح الباركود','تم إصلاح '+fixed+' مريض','success');
+  }catch(e){
+    if(out){ out.style.display='block'; out.textContent='خطأ في الإصلاح: '+e.message; }
+  }
 }
 
 // نقل البيانات القديمة من localStorage إلى IDB (للتوافق مع النسخ السابقة)
@@ -10270,22 +10426,31 @@ function closeLabelCopiesPopup(){
   var b=document.getElementById('_lblCopiesBd'); if(b) try{b.parentNode.removeChild(b);}catch(e){}
 }
 
-function printTubeLabel(reqId, copies){
-  var r=requests.find(function(x){return x.id===reqId;});
-  if(!r){showNotif('خطأ','الطلب غير موجود','error');return;}
-  var _lblCopies=Math.max(1,Math.min(50,parseInt(copies,10)||1));
-  var pt=patients.find(function(p){return p.id===r.patientId;})||{};
-  var barcodeId=String(pt.barcode||pt.id||r.id||'000000').replace(/[^0-9A-Za-z]/g,'');
-  if(!barcodeId) barcodeId='000000';
-  var ptName=r.patientName||pt.name||'—';
+// ══════════════════════════════════════════════════════════
+// 🔖 مولّد باركود موحّد (Code128B) — نسخة طبق الأصل من مولّد ورقة
+//    التحاليل الذي يُقرأ بنجاح. عرض الشريط ثابت (BAR_W) ولا يتمدّد أبداً
+//    مع طول الرقم، لذلك يُقرأ دائماً على الطابعة الحرارية. نستخدمه في الملصق
+//    أيضاً لضمان نفس القابلية للقراءة تماماً.
+// ══════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════
+// 🔢 تحويل الأرقام العربية-الهندية/الفارسية إلى لاتينية ثم تنظيفها.
+//    ضروري للباركود: التنظيف المباشر بـ [^0-9A-Za-z] يحذف الأرقام
+//    العربية-الهندية فيتغيّر الرقم المُشفّر. نحوّلها أولاً لتبقى صحيحة.
+// ══════════════════════════════════════════════════════════
+function _bcToLatinDigits(s){
+  return String(s==null?'':s)
+    .replace(/[\u0660-\u0669]/g, function(d){ return String(d.charCodeAt(0)-0x0660); })
+    .replace(/[\u06F0-\u06F9]/g, function(d){ return String(d.charCodeAt(0)-0x06F0); });
+}
+function _bcCleanCode(v){ return _bcToLatinDigits(v).replace(/[^0-9A-Za-z]/g,''); }
 
-  // حجم الملصق من الإعدادات
-  var _lw=parseFloat((typeof settings!=='undefined'&&settings.labelW)||57)||57;
-  var _lh=parseFloat((typeof settings!=='undefined'&&settings.labelH)||30)||30;
-
-  // ══ Code 128C للأرقام (أشرطة أعرض وأسهل قراءةً) ══
-  var C128widths=[
-    [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
+function _genBarcode128Global(text, opts){
+  opts = opts || {};
+  var BAR_W = opts.barW || 1.8;   // عرض الوحدة الثابت (نفس قيمة ورقة التحاليل)
+  var h     = opts.height || 38;  // ارتفاع الأشرطة
+  var PAD   = (opts.pad!=null) ? opts.pad : 4;
+  var C128chars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+  var C128widths=[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
     [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
     [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
     [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
@@ -10302,84 +10467,66 @@ function printTubeLabel(reqId, copies){
     [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
     [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
     [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
-    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]
-  ];
-  var STOP=[2,3,3,1,1,1,2];
-  var START_B=104, START_C=105;
-
-  // اختيار Code128C للأرقام (يضاعف عرض الشريط)
-  var isAllDigits=/^[0-9]+$/.test(barcodeId);
-  var encodeText=barcodeId;
-  var useC=false;
-  if(isAllDigits){
-    useC=true;
-    if(barcodeId.length%2!==0) encodeText='0'+barcodeId;
-  }
-
-  var codes=[], check=0;
-  if(useC){
-    codes.push(START_C); check=START_C;
-    for(var ci=0;ci<encodeText.length;ci+=2){
-      var pair=parseInt(encodeText.substr(ci,2),10);
-      codes.push(pair);
-      check+=((ci/2)+1)*pair;
-    }
-  } else {
-    var C128Bchars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
-    codes.push(START_B); check=START_B;
-    for(var bi=0;bi<barcodeId.length;bi++){
-      var bidx=C128Bchars.indexOf(barcodeId[bi]);
-      if(bidx<0) continue;
-      codes.push(bidx);
-      check+=(bi+1)*bidx;
-    }
+    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]];
+  var START_B=104, STOP=[2,3,3,1,1,1,2];
+  var codes=[START_B], check=START_B;
+  for(var i=0;i<text.length;i++){
+    var idx=C128chars.indexOf(text[i]);
+    if(idx<0) continue;
+    codes.push(idx);
+    check+=(i+1)*idx;
   }
   codes.push(check%103);
-
-  // بناء bars
   var bars=[];
-  codes.forEach(function(c){
-    if(!C128widths[c]) return;
-    C128widths[c].forEach(function(w,ei){ bars.push({w:w,d:ei%2===0}); });
-  });
-  STOP.forEach(function(w,ei){ bars.push({w:w,d:ei%2===0}); });
-  bars.push({w:2,d:false});
+  codes.forEach(function(c){ C128widths[c].forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); }); });
+  STOP.forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); });
+  bars.push({w:2,dark:false});
+  var totalW=bars.reduce(function(s,b){return s+b.w*BAR_W;},0)+PAD*2;
+  var x=PAD, rects='';
+  bars.forEach(function(b){ if(b.dark) rects+='<rect x="'+x+'" y="2" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>'; x+=b.w*BAR_W; });
+  var totalH=h+4;
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" preserveAspectRatio="xMidYMid meet" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'</svg>';
+}
 
-  // ══ حساب أبعاد الباركود بدقة (توسيط دقيق + وضوح لأي مقاس ملصق) ══
-  var totalUnits=bars.reduce(function(s,b){return s+b.w;},0);
-  var MM=3.7795;                       // بكسل لكل ملّيمتر
-  var DPMM=203/25.4;                    // نقاط الطابعة لكل ملّيمتر (203DPI ≈ 7.99)
-  // منطقة الهدوء (quiet zone) على كل جانب: 2mm أو 8% من العرض أيهما أصغر
-  var quietMM=Math.min(2, _lw*0.08);
-  var usableMM=_lw-(quietMM*2);         // العرض المتاح للأشرطة
-  // عرض الوحدة (module) ليملأ العرض المتاح، مثبّت على مضاعف صحيح لنقطة الطابعة (حدّة قصوى)
-  var moduleMM=usableMM/totalUnits;
-  var moduleDots=Math.max(2, Math.round(moduleMM*DPMM));
-  moduleMM=moduleDots/DPMM;
-  while(moduleMM*totalUnits>usableMM && moduleDots>2){ moduleDots--; moduleMM=moduleDots/DPMM; }
-  // ارتفاع الأشرطة ~55% من ارتفاع الملصق (يترك مكاناً للرقم والاسم)
-  var BHmm=Math.max(6, _lh*0.55);
+function printTubeLabel(reqId, copies){
+  var r=requests.find(function(x){return x.id===reqId;});
+  if(!r){showNotif('خطأ','الطلب غير موجود','error');return;}
+  var _lblCopies=Math.max(1,Math.min(50,parseInt(copies,10)||1));
+  var pt=patients.find(function(p){return p.id===r.patientId;})||{};
+  // ══ تحديد رقم الباركود (الحل الجذري للمرضى القدماء) ══════════
+  // السبب الجذري: باركود/رقم المريض القديم قد يحتوي أرقاماً عربية-هندية
+  // (٠١٢٣٤٥٦٧٨٩). التنظيف بـ [^0-9A-Za-z] كان يحذفها فيتغيّر الرقم المُشفّر
+  // ولا يُقرأ. الحل: نحوّلها للاتينية أولاً ثم ننظّف (عبر _bcCleanCode).
+  var _idClean = _bcCleanCode(pt.id||r.patientId||'');
+  var _bcClean = _bcCleanCode(pt.barcode||'');
+  var barcodeId = (_bcClean && _bcClean===_idClean) ? _bcClean
+                : (_idClean || _bcClean || _bcCleanCode(r.id||'000000'));
+  if(!barcodeId) barcodeId='000000';
+  var ptName=r.patientName||pt.name||'—';
 
-  // التحويل للبكسل
-  var BW=moduleMM*MM, BH=Math.round(BHmm*MM);
-  var barsW=totalUnits*BW;
-  // عرض الـ SVG = عرض الملصق كاملاً، والأشرطة متوسّطة أفقياً داخله تماماً
-  var svgFullW=_lw*MM;
-  var totalW=svgFullW;
-  var leftStart=(svgFullW-barsW)/2;
-  if(leftStart<0) leftStart=0;
-  var x=leftStart, rects='';
-  bars.forEach(function(b){
-    if(b.d) rects+='<rect x="'+x.toFixed(3)+'" y="0" width="'+(b.w*BW).toFixed(3)+'" height="'+BH+'" fill="#000"/>';
-    x+=b.w*BW;
-  });
-  var barcodeSvg='<svg xmlns="http://www.w3.org/2000/svg"'
-    +' width="'+svgFullW.toFixed(2)+'" height="'+BH+'"'
-    +' viewBox="0 0 '+svgFullW.toFixed(2)+' '+BH+'"'
-    +' preserveAspectRatio="xMidYMid meet"'
-    +' style="display:block;shape-rendering:crispEdges;background:#fff">'
-    +'<rect width="'+svgFullW.toFixed(2)+'" height="'+BH+'" fill="#fff"/>'
-    +rects+'</svg>';
+  // حجم الملصق من الإعدادات
+  var _lw=parseFloat((typeof settings!=='undefined'&&settings.labelW)||57)||57;
+  var _lh=parseFloat((typeof settings!=='undefined'&&settings.labelH)||30)||30;
+
+  // ══════════════════════════════════════════════════════════
+  // 🔖 الباركود: نستخدم المولّد الموحّد نفسه المستخدم في ورقة التقرير
+  //    (_genBarcode128Global) بعرض شريط ثابت لا يتمدّد مع طول الرقم.
+  //    هذا هو الحل الجذري: باركود الملصق أصبح مطابقاً تماماً لباركود التقرير
+  //    الذي يُقرأ بنجاح، لكل الأرقام قصيرها وطويلها (المرضى القدماء والجدد).
+  // ══════════════════════════════════════════════════════════
+  // ارتفاع الأشرطة بالبكسل (يتناسب مع ارتفاع الملصق، بحد أدنى واضح)
+  var _barPxH = Math.max(30, Math.round((parseFloat(_lh)||30) * 0.55 * 3.7795));
+  var barcodeSvg = _genBarcode128Global(barcodeId, { barW: 1.8, height: _barPxH, pad: 4 });
+  // ── تحديد العرض الحقيقي بالملّيمتر حتى يُطبع الباركود بحجمه الطبيعي (لا يتمدّد
+  //    ولا يُضغط). عرض SVG بالبكسل → ملّيمتر (÷3.7795). إن تجاوز عرض الملصق
+  //    المتاح، نقصّه للعرض المتاح مع الحفاظ على النسبة (نادر جداً للأرقام الطويلة).
+  var _svgWpxMatch = barcodeSvg.match(/width="([\d.]+)"/);
+  var _svgWpx = _svgWpxMatch ? parseFloat(_svgWpxMatch[1]) : 0;
+  var _bcWmm = _svgWpx>0 ? (_svgWpx/3.7795) : 0;
+  var _maxWmm = (parseFloat(_lw)||57) - 2; // نترك 1mm هامش على كل جانب
+  if(_bcWmm>0 && _bcWmm>_maxWmm) _bcWmm=_maxWmm;
+  // نُضمّن العرض بالملّيمتر داخل وسم الصورة عبر style عند الإدراج بالأسفل
+  var _bcStyleW = _bcWmm>0 ? ('width:'+_bcWmm.toFixed(2)+'mm;') : '';
 
   // HTML الملصق — عبر قالب يقبل شكل الباركود (SVG مضمّن أو صورة نقطية)
   function _buildLabelHTML(_bcMarkup){
@@ -10390,7 +10537,8 @@ function printTubeLabel(reqId, copies){
       +'body{width:'+_lw+'mm;height:'+_lh+'mm;background:#fff;overflow:hidden;'
       +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
       +'padding:0;gap:0.4mm;font-family:Arial,sans-serif}'
-      +'.bc-img{display:block;width:100%;max-width:100%;height:auto;margin:0 auto}'
+      +'.bc-wrap{display:block;margin:0 auto;text-align:center;'+_bcStyleW+'}'
+      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;width:100%;height:auto;margin:0 auto}'
       +'.bc-num{font-family:"Courier New",monospace;font-size:6pt;font-weight:900;'
       +'letter-spacing:1.5px;color:#000;margin-top:0.3mm;text-align:center;line-height:1}'
       +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
@@ -10398,7 +10546,7 @@ function printTubeLabel(reqId, copies){
       +'border-top:0.4pt solid #bbb;padding-top:0.4mm;margin-top:0.2mm}'
       +'@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}'
       +'</style></head><body>'
-      +_bcMarkup
+      +'<div class="bc-wrap">'+_bcMarkup+'</div>'
       +'<div class="bc-num">'+barcodeId+'</div>'
       +'<div class="pt-name">'+ptName+'</div>'
       +'</body></html>';
@@ -10550,9 +10698,32 @@ function getTubeColors(testIds){
 //   ٥) لا CBC من الجهاز + تحاليل قادمة من الأجهزة → يظهر، وعند الطباعة يختفي.
 // ══════════════════════════════════════════════════════════
 // هل المفتاح خاص بـ CBC؟ (CBC له معاملة خاصة: لا يُظهر المريض في هذا الزر إطلاقاً)
+// ⭐ يشمل: مفتاح CBC المجمّع، وأي معاملة من معاملات تعداد الدم القادمة من محلّل
+//   الدم (WBC, RBC, HGB, HCT, PLT, MCV, MCH, MCHC, RDW, وكل نسب الخلايا...)،
+//   سواء وصلت كمفتاح 'CBC' واحد أو كمعاملات منفصلة عبر المسار العام.
+var _CBC_PARAM_CODES = {
+  'CBC':1,'H001':1,'WBC':1,'RBC':1,'HGB':1,'HB':1,'HCT':1,'PLT':1,
+  'MCV':1,'MCH':1,'MCHC':1,'RDW':1,'RDW-CV':1,'RDW-SD':1,'MPV':1,'PDW':1,'PCT':1,
+  'NEUT':1,'NEUT%':1,'NEU%':1,'NEU#':1,'NEUT#':1,
+  'LYMPH':1,'LYMPH%':1,'LYM%':1,'LYM#':1,'LYMPH#':1,
+  'MONO':1,'MONO%':1,'MON%':1,'MON#':1,'MONO#':1,
+  'EOS':1,'EOS%':1,'EOS#':1,
+  'BASO':1,'BASO%':1,'BAS%':1,'BAS#':1,
+  'NRBC':1,'NRBC%':1,'NRBC#':1,'P-LCR':1,'P-LCC':1
+};
+function _cbcNorm(k){ return String(k||'').toUpperCase().replace(/\s+/g,''); }
 function _isCbcKey(k){
-  var u=String(k||'').toUpperCase().replace(/\s+/g,'');
-  return u==='CBC'||u==='H001';
+  var u=_cbcNorm(k);
+  if(_CBC_PARAM_CODES[u]) return true;
+  // مطابقة عبر تعريف التحليل: أي تحليل فئته الفرعية Haematology (معاملات CBC)
+  var t=_findTestForKey(k);
+  if(t){
+    var sub=String(t.subCat||'').toLowerCase();
+    if(sub==='haematology'||sub==='hematology') return true;
+    var code=_cbcNorm(t.code); var ns=_cbcNorm(t.nameShort);
+    if(_CBC_PARAM_CODES[code]||_CBC_PARAM_CODES[ns]) return true;
+  }
+  return false;
 }
 // إيجاد تعريف التحليل من مفتاح النتيجة (قد يكون id أو code أو nameShort)
 function _findTestForKey(key){
@@ -13268,7 +13439,12 @@ function buildPrintHTML(req, opts){
     return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'</svg>';
   }
 
-  const barcodeId = String(pt.barcode||pt.id||req.id||'000000');
+  // تنظيف الباركود من أي رموز غير أبجدرقمية (مثل "-" المتبقية من باركود قديم)
+  // لضمان تطابق الرقم المعروض مع أشرطة الباركود وقابليته للقراءة في القارئ.
+  let barcodeId = (typeof _bcCleanCode==='function'
+                    ? _bcCleanCode(pt.barcode||pt.id||req.id||'000000')
+                    : String(pt.barcode||pt.id||req.id||'000000').replace(/[^0-9A-Za-z]/g,''));
+  if(!barcodeId) barcodeId='000000';
   const barcodeSvg = genBarcode128(barcodeId);
 
   // ─── حقل المريض ───────────────────────────────────────
@@ -22442,7 +22618,7 @@ function _buildUAPrintHTML(r){
   const genderTxt   = (pt.gender||r.patientGender)==='female'?'Female':'Male';
   const ageTxt      = (pt.ageDisplay||r.patientAge||'—').replace(/سنة/g,'Year').replace(/شهر/g,'Month').replace(/يوم/g,'Day').replace(/ساعة/g,'Hour');
   const printTime   = new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const barcodeId   = String(pt.barcode||pt.id||r.patientId||'000000');
+  const barcodeId   = (String(pt.barcode||pt.id||r.patientId||'000000').replace(/[^0-9A-Za-z]/g,'')||'000000');
   function _uaBarcode128(text){
     const C128={chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,4,1,1],[2,1,4,2,1,1],[4,1,2,2,1,1],[4,1,1,1,4,1],[1,1,4,2,2,1],[2,1,1,1,4,2],[2,1,1,4,1,2],[2,4,1,2,1,1],[4,1,1,2,1,2],[1,2,4,1,1,2],[1,4,1,4,1,1],[2,2,1,4,1,1],[4,4,1,1,1,1],[1,1,2,3,2,2],[1,2,2,3,2,1],[2,2,2,3,1,1],[1,1,3,2,3,1],[2,1,1,4,2,1],[1,4,2,1,2,1],[2,1,4,1,1,3],[1,3,2,3,1,1],[2,1,1,1,1,5],[2,1,1,5,1,1],[5,1,1,2,1,1],[2,1,5,1,1,2],[2,1,3,1,3,1],[2,3,1,1,3,1],[1,3,1,3,2,1],[1,4,2,2,1,1],[1,2,2,4,1,1],[1,2,4,1,2,1],[1,4,1,2,2,1],[2,1,4,4,1,1],[3,1,2,1,1,3],[3,1,1,1,2,3],[3,3,1,1,2,1],[3,1,2,3,1,1],[2,1,1,3,3,1],[1,1,2,2,1,4],[1,2,1,1,4,2],[1,2,1,4,1,2],[1,4,1,1,2,2],[3,1,1,2,4,1],[1,3,2,1,4,1],[2,3,1,2,3,1],[1,4,2,1,1,3],[4,1,4,1,1,2],[2,1,1,1,3,4],[3,1,4,1,2,1],[1,1,4,2,1,3],[1,4,4,1,1,2],[3,3,1,2,1,2],[3,1,1,4,2,1],[2,1,2,2,4,1],[2,1,4,2,2,1],[4,2,1,2,1,2],[2,4,2,2,1,1],[1,3,4,1,1,2],[2,3,4,1,1,1],[1,2,4,2,2,1],[3,2,4,1,1,1],[4,2,4,1,1,1],[2,2,1,1,1,5],[2,1,1,2,1,5],[3,2,1,1,1,4],[2,2,1,2,3,2],[2,2,3,2,1,2],[2,2,1,1,4,2],[2,2,3,1,2,2],[2,1,4,1,3,1],[4,2,1,1,3,1],[1,1,2,4,2,2],[1,2,2,4,2,1],[1,2,4,4,1,1],[1,4,4,2,1,1],[4,2,2,1,1,2],[4,2,2,2,1,1],[4,1,2,1,2,2],[1,2,4,1,3,1],[4,1,2,2,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]};
     const START_B=104,STOP=[2,3,3,1,1,1,2];let codes=[START_B];let check=START_B;
@@ -22958,7 +23134,7 @@ function _buildStoolPrintHTML(r){
   const _sGenderTxt   = (pt.gender||r.patientGender)==='female'?'Female':'Male';
   const _sAgeTxt      = (pt.ageDisplay||r.patientAge||'—').replace(/سنة/g,'Year').replace(/شهر/g,'Month').replace(/يوم/g,'Day').replace(/ساعة/g,'Hour');
   const _sPrintTime   = new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const _sBarcodeId   = String(pt.barcode||pt.id||r.patientId||'000000');
+  const _sBarcodeId   = (String(pt.barcode||pt.id||r.patientId||'000000').replace(/[^0-9A-Za-z]/g,'')||'000000');
   function _stoolBarcode128(text){
     const C128={chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,4,1,1],[2,1,4,2,1,1],[4,1,2,2,1,1],[4,1,1,1,4,1],[1,1,4,2,2,1],[2,1,1,1,4,2],[2,1,1,4,1,2],[2,4,1,2,1,1],[4,1,1,2,1,2],[1,2,4,1,1,2],[1,4,1,4,1,1],[2,2,1,4,1,1],[4,4,1,1,1,1],[1,1,2,3,2,2],[1,2,2,3,2,1],[2,2,2,3,1,1],[1,1,3,2,3,1],[2,1,1,4,2,1],[1,4,2,1,2,1],[2,1,4,1,1,3],[1,3,2,3,1,1],[2,1,1,1,1,5],[2,1,1,5,1,1],[5,1,1,2,1,1],[2,1,5,1,1,2],[2,1,3,1,3,1],[2,3,1,1,3,1],[1,3,1,3,2,1],[1,4,2,2,1,1],[1,2,2,4,1,1],[1,2,4,1,2,1],[1,4,1,2,2,1],[2,1,4,4,1,1],[3,1,2,1,1,3],[3,1,1,1,2,3],[3,3,1,1,2,1],[3,1,2,3,1,1],[2,1,1,3,3,1],[1,1,2,2,1,4],[1,2,1,1,4,2],[1,2,1,4,1,2],[1,4,1,1,2,2],[3,1,1,2,4,1],[1,3,2,1,4,1],[2,3,1,2,3,1],[1,4,2,1,1,3],[4,1,4,1,1,2],[2,1,1,1,3,4],[3,1,4,1,2,1],[1,1,4,2,1,3],[1,4,4,1,1,2],[3,3,1,2,1,2],[3,1,1,4,2,1],[2,1,2,2,4,1],[2,1,4,2,2,1],[4,2,1,2,1,2],[2,4,2,2,1,1],[1,3,4,1,1,2],[2,3,4,1,1,1],[1,2,4,2,2,1],[3,2,4,1,1,1],[4,2,4,1,1,1],[2,2,1,1,1,5],[2,1,1,2,1,5],[3,2,1,1,1,4],[2,2,1,2,3,2],[2,2,3,2,1,2],[2,2,1,1,4,2],[2,2,3,1,2,2],[2,1,4,1,3,1],[4,2,1,1,3,1],[1,1,2,4,2,2],[1,2,2,4,2,1],[1,2,4,4,1,1],[1,4,4,2,1,1],[4,2,2,1,1,2],[4,2,2,2,1,1],[4,1,2,1,2,2],[1,2,4,1,3,1],[4,1,2,2,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]};
     const START_B=104,STOP=[2,3,3,1,1,1,2];let codes=[START_B];let check=START_B;
@@ -23694,7 +23870,7 @@ function _previewCBCTemplate(){
 function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   const tableColor=settings.tableColor||'#003366';
   const nameColor=settings.colorName||'#cc0011';
-  const barcodeId=String(pt.barcode||pt.id||'000000');
+  const barcodeId=(String(pt.barcode||pt.id||'000000').replace(/[^0-9A-Za-z]/g,'')||'000000');
   const today=new Date().toLocaleString('en-GB').replace(',','');
   const ptFullName=(pt.title?(pt.title+' / '):'')+(pt.name||'---');
   const gender=(pt.gender==='female')?'Female':'Male';
@@ -24659,7 +24835,7 @@ function _buildSemenPrintHTML(r){
   const _smPtFullName  = _smPtTitle ? _smPtTitle+' / '+(pt.name||r.patientName||'—') : (pt.name||r.patientName||'—');
   const _smAgeTxt      = (pt.ageDisplay||r.patientAge||'—').replace(/سنة/g,'Year').replace(/شهر/g,'Month').replace(/يوم/g,'Day').replace(/ساعة/g,'Hour');
   const _smPrintTime   = new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const _smBarcodeId   = String(pt.barcode||pt.id||r.patientId||'000000');
+  const _smBarcodeId   = (String(pt.barcode||pt.id||r.patientId||'000000').replace(/[^0-9A-Za-z]/g,'')||'000000');
   function _semenBarcode128(text){
     const C128={chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,4,1,1],[2,1,4,2,1,1],[4,1,2,2,1,1],[4,1,1,1,4,1],[1,1,4,2,2,1],[2,1,1,1,4,2],[2,1,1,4,1,2],[2,4,1,2,1,1],[4,1,1,2,1,2],[1,2,4,1,1,2],[1,4,1,4,1,1],[2,2,1,4,1,1],[4,4,1,1,1,1],[1,1,2,3,2,2],[1,2,2,3,2,1],[2,2,2,3,1,1],[1,1,3,2,3,1],[2,1,1,4,2,1],[1,4,2,1,2,1],[2,1,4,1,1,3],[1,3,2,3,1,1],[2,1,1,1,1,5],[2,1,1,5,1,1],[5,1,1,2,1,1],[2,1,5,1,1,2],[2,1,3,1,3,1],[2,3,1,1,3,1],[1,3,1,3,2,1],[1,4,2,2,1,1],[1,2,2,4,1,1],[1,2,4,1,2,1],[1,4,1,2,2,1],[2,1,4,4,1,1],[3,1,2,1,1,3],[3,1,1,1,2,3],[3,3,1,1,2,1],[3,1,2,3,1,1],[2,1,1,3,3,1],[1,1,2,2,1,4],[1,2,1,1,4,2],[1,2,1,4,1,2],[1,4,1,1,2,2],[3,1,1,2,4,1],[1,3,2,1,4,1],[2,3,1,2,3,1],[1,4,2,1,1,3],[4,1,4,1,1,2],[2,1,1,1,3,4],[3,1,4,1,2,1],[1,1,4,2,1,3],[1,4,4,1,1,2],[3,3,1,2,1,2],[3,1,1,4,2,1],[2,1,2,2,4,1],[2,1,4,2,2,1],[4,2,1,2,1,2],[2,4,2,2,1,1],[1,3,4,1,1,2],[2,3,4,1,1,1],[1,2,4,2,2,1],[3,2,4,1,1,1],[4,2,4,1,1,1],[2,2,1,1,1,5],[2,1,1,2,1,5],[3,2,1,1,1,4],[2,2,1,2,3,2],[2,2,3,2,1,2],[2,2,1,1,4,2],[2,2,3,1,2,2],[2,1,4,1,3,1],[4,2,1,1,3,1],[1,1,2,4,2,2],[1,2,2,4,2,1],[1,2,4,4,1,1],[1,4,4,2,1,1],[4,2,2,1,1,2],[4,2,2,2,1,1],[4,1,2,1,2,2],[1,2,4,1,3,1],[4,1,2,2,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]};
     const START_B=104,STOP=[2,3,3,1,1,1,2];let codes=[START_B];let check=START_B;
@@ -30204,14 +30380,30 @@ async function confirmImport(){
       return k;
     }
 
-    // ── دالة: حذف بادئة MR من باركود المرضى فقط ──
+    // ── دالة: تصحيح باركود المرضى القدماء (الوهمي) عند الاستيراد ──
+    // المشكلة: الباركود القديم كان بصيغة "MR-6558". حذف "MR" فقط كان يترك
+    // فاصلة "-" في البداية ("-6558") فيظهر الرقم صحيحاً لكن أشرطة الباركود
+    // لا تُقرأ أو لا تطابق رقم المريض. الحل: جعل الباركود مساوياً تماماً لرقم
+    // المريض (id) — تماماً كما يحدث للمرضى الجدد (barcode === id) — بعد تنظيفه
+    // من أي أحرف غير رقمية/أبجدية. هكذا يصبح باركوداً حقيقياً يُقرأ ويطابق المريض.
     function _fixMrBarcode(val, rawKey){
       if(rawKey !== 'patients' || !Array.isArray(val)) return val;
       return val.map(function(p){
         if(!p) return p;
         var pt = Object.assign({}, p);
-        if(pt.barcode && /^MR/i.test(String(pt.barcode)))
-          pt.barcode = String(pt.barcode).replace(/^MR/i, '');
+        var bc = pt.barcode != null ? String(pt.barcode) : '';
+        // هل الباركود وهمي/قديم؟ (يبدأ بـ MR أو يحتوي فاصلة/رموز غير أبجدرقمية)
+        var isLegacy = /^MR/i.test(bc) || /[^0-9A-Za-z]/.test(bc);
+        if(isLegacy){
+          // اجعله مطابقاً لرقم المريض الحقيقي (مثل المرضى الجدد)
+          var realId = pt.id != null ? String(pt.id).replace(/[^0-9A-Za-z]/g, '') : '';
+          if(realId){
+            pt.barcode = realId;
+          } else {
+            // احتياط: نظّف الباركود نفسه (أزل MR والفواصل)
+            pt.barcode = bc.replace(/^MR/i, '').replace(/[^0-9A-Za-z]/g, '');
+          }
+        }
         return pt;
       });
     }
