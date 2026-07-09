@@ -10509,24 +10509,14 @@ function printTubeLabel(reqId, copies){
   var _lh=parseFloat((typeof settings!=='undefined'&&settings.labelH)||30)||30;
 
   // ══════════════════════════════════════════════════════════
-  // 🔖 الباركود: نستخدم المولّد الموحّد نفسه المستخدم في ورقة التقرير
-  //    (_genBarcode128Global) بعرض شريط ثابت لا يتمدّد مع طول الرقم.
-  //    هذا هو الحل الجذري: باركود الملصق أصبح مطابقاً تماماً لباركود التقرير
-  //    الذي يُقرأ بنجاح، لكل الأرقام قصيرها وطويلها (المرضى القدماء والجدد).
+  // 🔖 الباركود: نفس مولّد ورقة التقرير الذي يُقرأ بنجاح، بعرض شريط ثابت.
+  //    ⚠️ لا نحسب عرضاً بالملّيمتر ولا نضعه في حاوية بعرض ثابت — فذلك كان
+  //    يمطّط الأشرطة بشكل مختلف حسب قيمة الرقم (أرقام كبيرة = أشرطة أعرض)
+  //    فيرفضها القارئ. نترك SVG بأبعاده الطبيعية تماماً مثل التقرير.
+  //    نتحكّم بالحجم فقط عبر ارتفاع ثابت + حد أقصى للعرض (لا تمطيط).
   // ══════════════════════════════════════════════════════════
-  // ارتفاع الأشرطة بالبكسل (يتناسب مع ارتفاع الملصق، بحد أدنى واضح)
-  var _barPxH = Math.max(30, Math.round((parseFloat(_lh)||30) * 0.55 * 3.7795));
+  var _barPxH = Math.max(34, Math.round((parseFloat(_lh)||30) * 0.55 * 3.7795));
   var barcodeSvg = _genBarcode128Global(barcodeId, { barW: 1.8, height: _barPxH, pad: 4 });
-  // ── تحديد العرض الحقيقي بالملّيمتر حتى يُطبع الباركود بحجمه الطبيعي (لا يتمدّد
-  //    ولا يُضغط). عرض SVG بالبكسل → ملّيمتر (÷3.7795). إن تجاوز عرض الملصق
-  //    المتاح، نقصّه للعرض المتاح مع الحفاظ على النسبة (نادر جداً للأرقام الطويلة).
-  var _svgWpxMatch = barcodeSvg.match(/width="([\d.]+)"/);
-  var _svgWpx = _svgWpxMatch ? parseFloat(_svgWpxMatch[1]) : 0;
-  var _bcWmm = _svgWpx>0 ? (_svgWpx/3.7795) : 0;
-  var _maxWmm = (parseFloat(_lw)||57) - 2; // نترك 1mm هامش على كل جانب
-  if(_bcWmm>0 && _bcWmm>_maxWmm) _bcWmm=_maxWmm;
-  // نُضمّن العرض بالملّيمتر داخل وسم الصورة عبر style عند الإدراج بالأسفل
-  var _bcStyleW = _bcWmm>0 ? ('width:'+_bcWmm.toFixed(2)+'mm;') : '';
 
   // HTML الملصق — عبر قالب يقبل شكل الباركود (SVG مضمّن أو صورة نقطية)
   function _buildLabelHTML(_bcMarkup){
@@ -10537,8 +10527,8 @@ function printTubeLabel(reqId, copies){
       +'body{width:'+_lw+'mm;height:'+_lh+'mm;background:#fff;overflow:hidden;'
       +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
       +'padding:0;gap:0.4mm;font-family:Arial,sans-serif}'
-      +'.bc-wrap{display:block;margin:0 auto;text-align:center;'+_bcStyleW+'}'
-      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;width:100%;height:auto;margin:0 auto}'
+      +'.bc-wrap{display:block;margin:0 auto;text-align:center;max-width:100%}'
+      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;height:auto;max-width:100%;margin:0 auto}'
       +'.bc-num{font-family:"Courier New",monospace;font-size:6pt;font-weight:900;'
       +'letter-spacing:1.5px;color:#000;margin-top:0.3mm;text-align:center;line-height:1}'
       +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
