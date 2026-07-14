@@ -36066,10 +36066,10 @@ if(window.electronAPI && window.electronAPI.isElectron){
 
 
 <!-- ╔══════════════════════════════════════════════════════════════════════╗ -->
-<!-- ║   MedLab Pro — المساعد الذكي (AI Assistant + Command API) — v2        ║ -->
-<!-- ║   يفهم أوامر: فتح / بحث / أضف / احذف — صوتاً ونصاً، وينفّذها فعلياً    ║ -->
-<!-- ║   وضع صوتي مستمر يُفعّل بكلمة «اي اي / ai» ولا ينقطع إلا بصمت 10 ثوانٍ ║ -->
-<!-- ║   البرنامج صاحب القرار — المساعد يقترح وينفّذ عبر Command API فقط      ║ -->
+<!-- ║   MedLab Pro — المساعد الذكي (AI Assistant + Command API) — v3        ║ -->
+<!-- ║   محرك فهم مرن يعتمد الكلمات المفتاحية لا القوالب — يفهم أي صياغة      ║ -->
+<!-- ║   كلمة النداء: «مساعد» تفتح المساعد وتُشغّل الاستماع المستمر           ║ -->
+<!-- ║   يملأ بيانات المريض صوتاً: اللقب، الاسم، العمر، الطبيب               ║ -->
 <!-- ╚══════════════════════════════════════════════════════════════════════╝ -->
 <script>
 (function(){
@@ -36077,7 +36077,7 @@ if(window.electronAPI && window.electronAPI.isElectron){
   if(window.MedLabAssistant) return;
 
   // ══════════════════════════════════════════════════════════════════════
-  //  0) أدوات مساعدة عامة
+  //  0) أدوات عامة
   // ══════════════════════════════════════════════════════════════════════
   function has(fn){ return typeof window[fn]==='function'; }
   function notify(t,m,ty){ if(has('showNotif')) window.showNotif(t,m,ty||'info'); }
@@ -36088,45 +36088,119 @@ if(window.electronAPI && window.electronAPI.isElectron){
     s=s.replace(/[إأآا]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي');
     s=s.replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
     s=s.replace(/\u200f|\u200e/g,'');
-    s=s.replace(/[.،,؟?!]/g,' ');
+    s=s.replace(/[.،,؛:؟?!]/g,' ');
     s=s.replace(/\s+/g,' ').trim();
     return s;
   }
-  // مصفوفات البرنامج مع وصول آمن (قد لا تكون معرّفة بعد)
+  function tokens(s){ return normAr(s).split(' ').filter(Boolean); }
   function T(){ return (typeof tests!=='undefined'&&Array.isArray(tests))?tests:[]; }
   function P(){ return (typeof patients!=='undefined'&&Array.isArray(patients))?patients:[]; }
   function R(){ return (typeof requests!=='undefined'&&Array.isArray(requests))?requests:[]; }
+  function D(){ return (typeof doctors!=='undefined'&&Array.isArray(doctors))?doctors:[]; }
+  function isOpen(id){ var e=document.getElementById(id); return !!(e&&e.classList.contains('open')); }
+  function wizardOpen(){ return isOpen('m-wizard'); }
+
+  // تحويل الأرقام العربية المنطوقة إلى أعداد (لدعم العمر صوتاً)
+  var NUMWORDS={ 'صفر':0,'واحد':1,'وحده':1,'اثنين':2,'اثنان':2,'ثنين':2,'ثلاثه':3,'ثلاث':3,'اربعه':4,'اربع':4,
+    'خمسه':5,'خمس':5,'سته':6,'ست':6,'سبعه':7,'سبع':7,'ثمانيه':8,'ثمان':8,'تسعه':9,'تسع':9,'عشره':10,'عشر':10,
+    'احد عشر':11,'اثنا عشر':12,'اثني عشر':12,'عشرين':20,'ثلاثين':30,'اربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'ثمانين':80,'تسعين':90,'مايه':100,'مئه':100 };
+  // يجمع فقط الكلمات الرقمية داخل عبارة (يتجاهل «العمر/عمره» وأي حشو)
+  function extractNum(phrase){
+    var q=normAr(phrase).trim();
+    var d=q.match(/\d+/); if(d) return parseInt(d[0],10);
+    var total=0, found=false;
+    q.split(/\s+/).map(p=>p.replace(/^و/,'')).forEach(function(p){ if(NUMWORDS[p]!==undefined){ total+=NUMWORDS[p]; found=true; } });
+    return found?total:null;
+  }
+  function wordToNum(str){
+    var q=normAr(str).trim();
+    if(/^\d+$/.test(q)) return parseInt(q,10);
+    var m0=q.match(/\d+/); if(m0) return parseInt(m0[0],10);
+    // «خمسه واربعين» / «خمسه و اربعين» = 45 — نفصل ونزيل و البادئة
+    var parts=q.split(/\s+/).map(p=>p.replace(/^و/,'')).filter(Boolean);
+    var total=0, found=false;
+    parts.forEach(function(p){ if(NUMWORDS[p]!==undefined){ total+=NUMWORDS[p]; found=true; } });
+    return found?total:null;
+  }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  1) الذاكرة السياقية
+  //  1) السياق
   // ══════════════════════════════════════════════════════════════════════
   var ctx={ pendingClarify:null, pendingConfirm:null, lastPatientId:null, lastReqId:null };
 
   // ══════════════════════════════════════════════════════════════════════
-  //  2) مطابقة التحاليل والمرضى والطلبات
+  //  2) قواميس المرادفات والكلمات المفتاحية
   // ══════════════════════════════════════════════════════════════════════
   var SYN={
-    'سي بي سي':'CBC','عد الدم':'CBC','صوره دم':'CBC','دم كامل':'CBC','فحص دم':'CBC',
-    'تي اس اج':'TSH','تي اس اش':'TSH','غده':'TSH','درقيه':'TSH','الغده':'TSH',
-    'سكر':'GLUCOSE','سكر صايم':'FBS','سكر صائم':'FBS','سكر عشوايي':'RBS','سكر عشوائي':'RBS',
-    'سكر تراكمي':'HBA1C','تراكمي':'HBA1C','هيموغلوبين سكري':'HBA1C',
+    'سي بي سي':'CBC','عد الدم':'CBC','صوره دم':'CBC','دم كامل':'CBC','فحص دم':'CBC','سيبيسي':'CBC',
+    'تي اس اج':'TSH','تي اس اش':'TSH','tsh':'TSH','غده':'TSH','درقيه':'TSH',
+    'سكر صايم':'FBS','سكر صائم':'FBS','صايم':'FBS','سكر عشوايي':'RBS','عشوايي':'RBS',
+    'سكر تراكمي':'HBA1C','تراكمي':'HBA1C','هيموغلوبين سكري':'HBA1C','a1c':'HBA1C',
     'دهون':'LIPID','دهنيات':'LIPID','كوليسترول':'CHOL',
-    'وظايف كبد':'LFT','وظايف كلي':'RFT',
+    'وظايف كبد':'LFT','كبد':'LFT','وظايف كلي':'RFT','كلي':'RFT','كلى':'RFT',
     'ادرار':'URINE','بول':'URINE','غايط':'STOOL','براز':'STOOL',
     'فيتامين د':'VITD','فيتامين دي':'VITD','حديد':'IRON','كالسيوم':'CA','كلس':'CA',
     'زمن نزف':'BT','زمن تخثر':'CT','سرعه ترسيب':'ESR','ترسيب':'ESR',
-    'حمل':'BHCG','فيروس':'CRP','التهاب':'CRP','بروستات':'PSA'
+    'التهاب':'CRP','بروستات':'PSA','فيروس':'CRP'
   };
+
+  // ألقاب المريض (كما في المعالج) — مطبّعة
+  var TITLES=[
+    {v:'السيد',g:'male',keys:['سيد','السيد']},
+    {v:'السيدة',g:'female',keys:['سيده','السيده']},
+    {v:'الآنسة',g:'female',keys:['انسه','الانسه']},
+    {v:'الحاج',g:'male',keys:['حاج','الحاج']},
+    {v:'الحاجة',g:'female',keys:['حاجه','الحاجه']},
+    {v:'الاستاذ',g:'male',keys:['استاذ','الاستاذ']},
+    {v:'الاستاذة',g:'female',keys:['استاذه','الاستاذه']},
+    {v:'الطفل',g:'male',keys:['طفل','الطفل']},
+    {v:'الطفلة',g:'female',keys:['طفله','الطفله']},
+    {v:'الدكتور',g:'male',keys:['دكتور','الدكتور']},
+    {v:'الدكتورة',g:'female',keys:['دكتوره','الدكتوره']}
+  ];
+
+  // أقسام البرنامج ← كلمات مفتاحية (أي كلمة تكفي)
+  var SECTIONS=[
+    {sec:'patients',  keys:['مرضى','مرضي','المرضى','المرضي']},
+    {sec:'requests',  keys:['طلبات','الطلبات','طلب']},
+    {sec:'culture',   keys:['زرع','الزرع','كلتشر','culture','مزرعه']},
+    {sec:'results',   keys:['نتايج','النتايج','نتيجه']},
+    {sec:'print',     keys:['طباعه','الطباعه']},
+    {sec:'invoices',  keys:['فواتير','فاتوره','محاسبه','حسابات']},
+    {sec:'lis',       keys:['اجهزه','جهاز','الاجهزه','lis','ربط']},
+    {sec:'reports',   keys:['تقارير','التقارير','تقرير']},
+    {sec:'doctors',   keys:['اطباء','دكاتره','الاطباء']},
+    {sec:'inventory', keys:['مخزن','المخزن','مستلزمات','مواد']},
+    {sec:'settings',  keys:['اعدادات','الاعدادات','ضبط']},
+    {sec:'dashboard', keys:['احصايات','احصائيات','لوحه','داشبورد','احصاء','رئيسيه']},
+    {sec:'waitqueue', keys:['انتظار','الانتظار']},
+    {sec:'semen',     keys:['منوي','المني','semen']},
+    {sec:'stool',     keys:['براز','غايط','stool']},
+    {sec:'ua',        keys:['ادرار','بول','urine']}
+  ];
+
+  // أفعال الأوامر ← نية
+  var VERBS={
+    open:    ['افتح','فتح','اعرض','روح','اذهب','انتقل','ورني','وريني','ادخل','شغل'],
+    search:  ['ابحث','بحث','دور','دوري','لكيلي','جيب','هات','ابي','اريد'],
+    add:     ['اضف','ضيف','زد','اضيف','ضع','حط','سجل'],
+    del:     ['احذف','شيل','امسح','الغي','ازل','خذف','حذف'],
+    save:    ['احفظ','خزن','ثبت','تم','خلص','كمل','حفظ','التالي','كامل'],
+    print:   ['اطبع','طباعه','طبع','برينت'],
+    approve: ['اعتمد','صدق','وافق','ثبت النتيجه'],
+    newpt:   ['مريض جديد','ملف جديد','سجل مريض','اضف مريض','مريض جديده']
+  };
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  3) مطابقة التحاليل / المرضى / الطلبات
+  // ══════════════════════════════════════════════════════════════════════
   function findTests(query){
     var list=T(); var q=normAr(query); if(!q) return [];
     var exact=list.filter(t=>normAr(t.code)===q||normAr(t.nameEn)===q);
     if(exact.length) return exact;
-    // مرادف كامل
     if(SYN[q]){ var bc=list.filter(t=>normAr(t.code)===normAr(SYN[q])); if(bc.length) return bc; }
-    // مرادف كجزء من النص (أطول تطابق)
     var synKey=Object.keys(SYN).filter(k=>q.indexOf(k)>-1).sort((a,b)=>b.length-a.length)[0];
     if(synKey){ var bc2=list.filter(t=>normAr(t.code)===normAr(SYN[synKey])); if(bc2.length) return bc2; }
-    // جزئي على الكود/الاسم
     var partial=list.filter(t=>{
       var hay=normAr((t.code||'')+' '+(t.nameEn||'')+' '+(t.nameAr||'')+' '+(t.nameShort||''));
       return hay.indexOf(q)>-1;
@@ -36138,9 +36212,12 @@ if(window.electronAPI && window.electronAPI.isElectron){
     var exact=list.filter(p=>normAr(p.name)===q);
     if(exact.length) return exact;
     var words=q.split(' ').filter(Boolean);
-    return list.filter(p=>{ var n=normAr(p.name); return words.every(w=>n.indexOf(w)>-1); }).slice(0,8);
+    // كل كلمات البحث موجودة في الاسم
+    var all=list.filter(p=>{ var n=normAr(p.name); return words.every(w=>n.indexOf(w)>-1); });
+    if(all.length) return all.slice(0,8);
+    // مطابقة جزئية بأي كلمة
+    return list.filter(p=>{ var n=normAr(p.name); return words.some(w=>w.length>1&&n.indexOf(w)>-1); }).slice(0,8);
   }
-  // إيجاد طلب مريض بالاسم (آخر طلب) — يعيد {req, patient} أو قائمة توضيح
   function findReqByPatientName(query){
     var pts=findPatients(query);
     if(!pts.length) return {none:true};
@@ -36150,404 +36227,459 @@ if(window.electronAPI && window.electronAPI.isElectron){
     if(!reqs.length) return {noReq:true, patient:pt};
     return {req:reqs[reqs.length-1], patient:pt};
   }
+  function findDoctor(query){
+    var q=normAr(query); if(!q) return null;
+    var list=D();
+    var exact=list.find(d=>normAr(d.name)===q);
+    if(exact) return exact;
+    var words=q.split(' ').filter(Boolean);
+    return list.find(d=>{ var n=normAr(d.name); return words.every(w=>n.indexOf(w)>-1); })
+        || list.find(d=>{ var n=normAr(d.name); return words.some(w=>w.length>1&&n.indexOf(w)>-1); });
+  }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  3) COMMAND API — الواجهة الداخلية الوحيدة بين المساعد والبرنامج
+  //  4) COMMAND API
   // ══════════════════════════════════════════════════════════════════════
-  var SENSITIVE={ DELETE_PATIENT:'حذف مريض', APPROVE_RESULT:'اعتماد نتيجة',
-                  SEND_RESULT:'إرسال نتيجة', RESEND_RESULT:'إعادة إرسال نتيجة' };
+  var SECTION_LABEL={ patients:'قائمة المرضى', requests:'الطلبات', results:'النتائج', culture:'نتائج الزرع',
+    print:'الطباعة', invoices:'الفواتير', reports:'التقارير', dashboard:'اللوحة', settings:'الإعدادات',
+    lis:'الأجهزة', doctors:'الأطباء', inventory:'المخزن', semen:'السائل المنوي', stool:'البراز',
+    ua:'الإدرار', waitqueue:'قائمة الانتظار' };
+  var SENSITIVE={ APPROVE_RESULT:'اعتماد نتيجة' };
 
   var API={
+    NAVIGATE:function(p){ if(!has('nav')) return {ok:false,msg:'التنقل غير متاح'}; window.nav(p);
+      return {ok:true, msg:'تم فتح '+(SECTION_LABEL[p]||'القسم')}; },
 
-    // فتح أي قسم (فتح قائمة المرضى / الطلبات / نتائج الزرع...)
-    NAVIGATE:function(p){
-      if(!has('nav')) return {ok:false,msg:'التنقل غير متاح'};
-      window.nav(p);
-      return {ok:true, msg:'تم فتح '+(SECTION_LABEL[p]||'القسم')};
+    NEW_PATIENT:function(){ if(!has('startNewPatient')) return {ok:false,msg:'غير متاح'};
+      window.startNewPatient(); guardWizard(true);
+      return {ok:true, msg:'فُتحت نافذة تسجيل مريض جديد. قل مثلاً: «اللقب السيد» ثم «الاسم أحمد علي حسن» ثم «العمر 30 سنة» ثم «الطبيب فلان» ثم «احفظ».'}; },
+
+    // ملء اللقب صوتاً
+    SET_TITLE:function(val){
+      if(!wizardOpen()) return {ok:false, msg:'افتح تسجيل مريض جديد أولاً.'};
+      var q=normAr(val);
+      var t=TITLES.find(x=>x.keys.some(k=>q.indexOf(k)>-1));
+      if(!t) return {ok:false, msg:'لم أفهم اللقب. الألقاب: السيد، السيدة، الآنسة، الحاج، الأستاذ، الطفل، الدكتور...'};
+      if(has('selectTitle')){ window.selectTitle(t.v, t.g); return {ok:true, msg:'اللقب: '+t.v}; }
+      return {ok:false, msg:'تعذّر ضبط اللقب'};
     },
 
-    NEW_PATIENT:function(){
-      if(!has('startNewPatient')) return {ok:false,msg:'إنشاء المريض غير متاح'};
-      window.startNewPatient();
-      guardWizard(true); // امنع إغلاق النافذة بالنقر الخارجي أثناء الإملاء الصوتي
-      return {ok:true, msg:'تم فتح نافذة تسجيل مريض جديد. أملِ البيانات، ولن تُغلق النافذة بالنقر بالخارج أثناء وضع المساعد.'};
+    // ملء الاسم صوتاً
+    SET_NAME:function(val){
+      if(!wizardOpen()) return {ok:false, msg:'افتح تسجيل مريض جديد أولاً.'};
+      var el=document.getElementById('wp-name'); if(!el) return {ok:false, msg:'حقل الاسم غير موجود'};
+      var name=String(val||'').trim();
+      el.value=name; if(typeof wizPatient!=='undefined') wizPatient.name=name;
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      var box=document.getElementById('pt-suggest-box'); if(box) box.style.display='none';
+      return {ok:true, msg:'الاسم: '+name};
     },
 
-    // بحث عن مريض في قائمة المرضى → يظهر ملفه
+    // ملء العمر صوتاً (سنة/شهر/يوم)
+    SET_AGE:function(payload){
+      if(!wizardOpen()) return {ok:false, msg:'افتح تسجيل مريض جديد أولاً.'};
+      var y=payload.y||0, m=payload.m||0, d=payload.d||0;
+      if(!y&&!m&&!d) return {ok:false, msg:'لم أفهم العمر. مثال: «العمر ثلاثين سنة».'};
+      var ey=document.getElementById('wp-age-y'), em=document.getElementById('wp-age-m'), ed=document.getElementById('wp-age-d');
+      if(ey){ ey.value=y||''; } if(em){ em.value=m||''; } if(ed){ ed.value=d||''; }
+      if(has('calcAgeCompound')) window.calcAgeCompound();
+      var parts=[]; if(y)parts.push(y+' سنة'); if(m)parts.push(m+' شهر'); if(d)parts.push(d+' يوم');
+      return {ok:true, msg:'العمر: '+parts.join(' و ')};
+    },
+
+    // اختيار الطبيب صوتاً
+    SET_DOCTOR:function(val){
+      if(!wizardOpen()) return {ok:false, msg:'افتح تسجيل مريض جديد أولاً.'};
+      var sel=document.getElementById('wp-doctor'); if(!sel) return {ok:false, msg:'قائمة الأطباء غير موجودة'};
+      var dr=findDoctor(val);
+      if(!dr) return {ok:false, msg:'لم أجد طبيباً باسم «'+val+'». الأطباء: '+D().slice(0,5).map(d=>d.name).join('، ')};
+      sel.value=dr.id; sel.dispatchEvent(new Event('change',{bubbles:true}));
+      if(typeof wizPatient!=='undefined'){ wizPatient.doctorId=dr.id; wizPatient.doctorName=dr.name; }
+      return {ok:true, msg:'الطبيب: '+dr.name};
+    },
+
     SEARCH_PATIENT:function(name){
       var m=findPatients(name);
       if(!m.length) return {ok:false, msg:'لا يوجد مريض باسم: '+name};
       if(has('nav')) window.nav('patients');
-      var box=document.getElementById('pts-srch-inp');
-      setTimeout(function(){
-        if(box){ box.value=name; if(has('searchPatients')) window.searchPatients(name); }
-      },60);
-      if(m.length===1){
-        ctx.lastPatientId=m[0].id;
-        setTimeout(function(){ if(has('viewPatientFullModal')){ try{window.viewPatientFullModal(m[0].id);}catch(e){} } },250);
-        return {ok:true, msg:'تم فتح ملف المريض: '+m[0].name};
-      }
-      return {ok:true, msg:'وجدت '+m.length+' مطابقة: '+m.slice(0,5).map(p=>p.name).join('، ')+'. عُرضت في قائمة المرضى.'};
+      setTimeout(function(){ var box=document.getElementById('pts-srch-inp'); if(box){ box.value=name; if(has('searchPatients')) window.searchPatients(name); } },60);
+      if(m.length===1){ ctx.lastPatientId=m[0].id;
+        setTimeout(function(){ if(has('viewPatientFullModal')){ try{window.viewPatientFullModal(m[0].id);}catch(e){} } },260);
+        return {ok:true, msg:'فُتح ملف المريض: '+m[0].name}; }
+      return {ok:true, msg:'وجدت '+m.length+' مطابقة: '+m.slice(0,5).map(p=>p.name).join('، ')};
     },
 
-    // بحث في الطلبات بالاسم → الدخول على الطلب مباشرة
     SEARCH_REQUEST:function(name){
       var res=findReqByPatientName(name);
       if(res.none) return {ok:false, msg:'لا يوجد مريض باسم: '+name};
       if(res.many) return {ok:false, needClarify:clarifyPatients('SEARCH_REQUEST', res.many, name)};
-      if(res.noReq) return {ok:false, msg:'المريض '+res.patient.name+' موجود لكن بلا طلبات.'};
+      if(res.noReq) return {ok:false, msg:res.patient.name+' موجود لكن بلا طلبات.'};
       ctx.lastPatientId=res.patient.id; ctx.lastReqId=res.req.id;
       if(has('goToResult')) window.goToResult(res.req.id);
       return {ok:true, msg:'دخلت على طلب '+res.req.id+' — '+res.patient.name};
     },
-
-    // فتح نتائج مريض (اسم) — نفس منطق الدخول على الطلب
     OPEN_PATIENT:function(name){ return API.SEARCH_REQUEST(name); },
 
-    // ── إضافة تحليل ────────────────────────────────────────────────────
-    // نمطان: (أ) داخل معالج تسجيل مفتوح  (ب) لمريض بالاسم في الطلبات
     ADD_TEST:function(payload){
-      // payload = {test, patient?}
-      var testMatches=findTests(payload.test);
-      if(!testMatches.length) return {ok:false, msg:'التحليل غير موجود: '+payload.test};
-      if(testMatches.length>1)
-        return {ok:false, needClarify:clarifyTests('ADD_TEST', testMatches, payload)};
-      var t=testMatches[0];
-
-      // (ب) إذا حُدّد اسم مريض → أضف لطلبه مباشرة في مصفوفة requests
+      var tm=findTests(payload.test);
+      if(!tm.length) return {ok:false, msg:'التحليل غير موجود: '+payload.test};
+      if(tm.length>1) return {ok:false, needClarify:clarifyTests('ADD_TEST', tm, payload)};
+      var t=tm[0];
       if(payload.patient){
         var res=findReqByPatientName(payload.patient);
         if(res.none) return {ok:false, msg:'لا يوجد مريض باسم: '+payload.patient};
         if(res.many) return {ok:false, needClarify:clarifyPatients('ADD_TEST', res.many, payload.patient, {test:t.id})};
-        if(res.noReq) return {ok:false, msg:res.patient.name+' بلا طلبات — لا يمكن إضافة تحليل.'};
+        if(res.noReq) return {ok:false, msg:res.patient.name+' بلا طلبات.'};
         return addTestToReq(res.req, t, res.patient);
       }
-
-      // (أ) معالج التسجيل مفتوح على خطوة التحاليل
-      var wizardOpen=isOpen('m-wizard');
-      if(wizardOpen && typeof wizStep!=='undefined'){
+      if(wizardOpen() && typeof wizStep!=='undefined'){
         if(wizStep===1) return {ok:false, msg:'أكمل بيانات المريض ثم قل «احفظ» للانتقال لاختيار التحاليل.'};
         if(typeof wizSelectedTests!=='undefined'){
           if(wizSelectedTests.find(x=>x.id===t.id)) return {ok:true, msg:t.code+' مضاف مسبقاً'};
           if(has('toggleWizTest')){ window.toggleWizTest(t.id); return {ok:true, msg:'أُضيف '+t.code+' ('+(t.nameEn||'')+')'}; }
         }
       }
-      // خلاف ذلك: استخدم آخر طلب في السياق إن وُجد
-      if(ctx.lastReqId){
-        var r=R().find(x=>x.id===ctx.lastReqId);
-        var pt=r?P().find(p=>p.id===r.patientId):null;
-        if(r) return addTestToReq(r, t, pt||{name:r.patientName});
-      }
-      return {ok:false, msg:'حدّد المريض: مثال «أضف TSH إلى سيف شاكر جاسم».'};
+      if(ctx.lastReqId){ var r=R().find(x=>x.id===ctx.lastReqId); var pt=r?P().find(p=>p.id===r.patientId):null; if(r) return addTestToReq(r,t,pt||{name:r.patientName}); }
+      return {ok:false, msg:'حدّد المريض: «أضف '+t.code+' إلى (اسم المريض)».'};
     },
 
-    // ── حذف تحليل ──────────────────────────────────────────────────────
     DELETE_TEST:function(payload){
-      var testMatches=findTests(payload.test);
-      if(!testMatches.length) return {ok:false, msg:'التحليل غير موجود: '+payload.test};
-
-      // مريض محدّد بالاسم
+      var tm=findTests(payload.test);
+      if(!tm.length) return {ok:false, msg:'التحليل غير موجود: '+payload.test};
       if(payload.patient){
         var res=findReqByPatientName(payload.patient);
         if(res.none) return {ok:false, msg:'لا يوجد مريض باسم: '+payload.patient};
         if(res.many) return {ok:false, needClarify:clarifyPatients('DELETE_TEST', res.many, payload.patient, {test:payload.test})};
         if(res.noReq) return {ok:false, msg:res.patient.name+' بلا طلبات.'};
-        return removeTestFromReq(res.req, testMatches, res.patient);
+        return removeTestFromReq(res.req, tm, res.patient);
       }
-      // داخل المعالج
-      if(isOpen('m-wizard') && typeof wizSelectedTests!=='undefined'){
-        var t0=testMatches[0];
-        if(wizSelectedTests.find(x=>x.id===t0.id) && has('toggleWizTest')){
-          window.toggleWizTest(t0.id); return {ok:true, msg:'حُذف '+t0.code+' من الاختيار'};
-        }
+      if(wizardOpen() && typeof wizSelectedTests!=='undefined'){
+        var t0=tm[0];
+        if(wizSelectedTests.find(x=>x.id===t0.id) && has('toggleWizTest')){ window.toggleWizTest(t0.id); return {ok:true, msg:'حُذف '+t0.code+' من الاختيار'}; }
       }
-      // آخر طلب في السياق
-      if(ctx.lastReqId){
-        var r=R().find(x=>x.id===ctx.lastReqId);
-        var pt=r?P().find(p=>p.id===r.patientId):null;
-        if(r) return removeTestFromReq(r, testMatches, pt||{name:r.patientName});
-      }
-      return {ok:false, msg:'حدّد المريض: مثال «احذف السكر التراكمي من سيف شاكر جاسم».'};
+      if(ctx.lastReqId){ var r=R().find(x=>x.id===ctx.lastReqId); var pt=r?P().find(p=>p.id===r.patientId):null; if(r) return removeTestFromReq(r,tm,pt||{name:r.patientName}); }
+      return {ok:false, msg:'حدّد المريض: «احذف '+tm[0].code+' من (اسم المريض)».'};
     },
 
     SAVE_PATIENT:function(){
-      if(!isOpen('m-wizard')) return {ok:false, msg:'لا يوجد معالج تسجيل مفتوح.'};
-      if(typeof wizStep!=='undefined' && wizStep===1 && has('wizNext')){
-        window.wizNext(); return {ok:true, msg:'حُفظت بيانات المريض — اختر التحاليل الآن.'};
-      }
+      if(!wizardOpen()) return {ok:false, msg:'لا يوجد معالج تسجيل مفتوح.'};
+      if(typeof wizStep!=='undefined' && wizStep===1 && has('wizNext')){ window.wizNext(); return {ok:true, msg:'حُفظت بيانات المريض — اختر التحاليل الآن (قل «أضف CBC»...).'}; }
       if(has('wizFinish')){ window.wizFinish(); guardWizard(false); return {ok:true, msg:'أُنشئ الطلب وحُفظ ✅'}; }
       return {ok:false, msg:'تعذّر الحفظ'};
     },
 
-    PRINT_LABEL:function(){
-      if(has('printLabelFromResults')){ try{ window.printLabelFromResults(); return {ok:true, msg:'أُرسل الملصق للطباعة'}; }catch(e){} }
-      if(has('openLabelCopiesPopup') && window.currentReqId){ try{ window.openLabelCopiesPopup(window.currentReqId); return {ok:true, msg:'فُتحت نافذة طباعة الملصق'}; }catch(e){} }
-      return {ok:false, msg:'افتح طلباً أولاً لطباعة ملصقه'};
-    },
-
-    OPEN_RESULTS:function(){
-      if(has('nav')){ window.nav('results'); if(has('loadResultsDropdown')) window.loadResultsDropdown(); return {ok:true, msg:'فُتحت شاشة إدخال النتائج'}; }
-      return {ok:false, msg:'غير متاح'};
-    },
-    PRINT_REPORT:function(){ if(has('nav')){ window.nav('print'); return {ok:true, msg:'فُتحت شاشة طباعة التقرير'}; } return {ok:false,msg:'غير متاح'}; },
-    APPROVE_RESULT:function(){ if(has('finalizeResult')){ try{ window.finalizeResult(); return {ok:true, msg:'اعتُمدت النتيجة'}; }catch(e){} } return {ok:false, msg:'افتح الطلب أولاً'}; },
-    SHOW_STATS:function(){ if(has('nav')){ window.nav('dashboard'); if(has('updateDashboard')) window.updateDashboard(); return {ok:true, msg:'فُتحت لوحة الإحصائيات'}; } return {ok:false,msg:'غير متاح'}; },
-    OPEN_SETTINGS:function(){ if(has('nav')){ window.nav('settings'); return {ok:true, msg:'فُتحت الإعدادات'}; } return {ok:false,msg:'غير متاح'}; },
-    OPEN_INVOICES:function(){ if(has('nav')){ window.nav('invoices'); return {ok:true, msg:'فُتح قسم الفواتير'}; } return {ok:false,msg:'غير متاح'}; }
+    PRINT_LABEL:function(){ if(has('printLabelFromResults')){ try{window.printLabelFromResults(); return {ok:true,msg:'أُرسل الملصق للطباعة'};}catch(e){} }
+      if(has('openLabelCopiesPopup')&&window.currentReqId){ try{window.openLabelCopiesPopup(window.currentReqId); return {ok:true,msg:'فُتحت نافذة الملصق'};}catch(e){} }
+      return {ok:false, msg:'افتح طلباً أولاً لطباعة ملصقه'}; },
+    OPEN_RESULTS:function(){ if(has('nav')){ window.nav('results'); if(has('loadResultsDropdown')) window.loadResultsDropdown(); return {ok:true,msg:'فُتحت شاشة النتائج'}; } return {ok:false,msg:'غير متاح'}; },
+    PRINT_REPORT:function(){ if(has('nav')){ window.nav('print'); return {ok:true,msg:'فُتحت شاشة الطباعة'}; } return {ok:false,msg:'غير متاح'}; },
+    APPROVE_RESULT:function(){ if(has('finalizeResult')){ try{window.finalizeResult(); return {ok:true,msg:'اعتُمدت النتيجة'};}catch(e){} } return {ok:false,msg:'افتح الطلب أولاً'}; },
+    SHOW_STATS:function(){ if(has('nav')){ window.nav('dashboard'); if(has('updateDashboard')) window.updateDashboard(); return {ok:true,msg:'فُتحت اللوحة'}; } return {ok:false,msg:'غير متاح'}; },
+    OPEN_SETTINGS:function(){ if(has('nav')){ window.nav('settings'); return {ok:true,msg:'فُتحت الإعدادات'}; } return {ok:false,msg:'غير متاح'}; },
+    OPEN_INVOICES:function(){ if(has('nav')){ window.nav('invoices'); return {ok:true,msg:'فُتح قسم الفواتير'}; } return {ok:false,msg:'غير متاح'}; }
   };
 
-  // ─── عمليات مباشرة على الطلب (بدون confirm() لئلا تقاطع الصوت) ──────────
-  function addTestToReq(r, t, pt){
+  // عمليات مباشرة على الطلب
+  function addTestToReq(r,t,pt){
     if(!r.tests) r.tests=[];
-    if(r.tests.includes(t.id)) return {ok:true, msg:t.code+' مضاف مسبقاً لطلب '+(pt&&pt.name||r.patientName)};
+    if(r.tests.includes(t.id)) return {ok:true, msg:t.code+' مضاف مسبقاً لـ'+(pt&&pt.name||r.patientName)};
     r.tests.push(t.id);
-    if(!r.testNames) r.testNames=[];
-    if(!r.testNames.includes(t.nameEn)) r.testNames.push(t.nameEn);
+    if(!r.testNames) r.testNames=[]; if(!r.testNames.includes(t.nameEn)) r.testNames.push(t.nameEn);
     if(!r.results) r.results={};
-    if(has('save')) window.save('requests', R());
-    syncReq(r);
-    refreshAfterReqEdit(r.id);
+    if(has('save')) window.save('requests', R()); syncReq(r); refreshAfterReqEdit(r.id);
     return {ok:true, msg:'أُضيف '+t.code+' ('+(t.nameEn||'')+') إلى '+(pt&&pt.name||r.patientName)+' — طلب '+r.id};
   }
-  function removeTestFromReq(r, testMatches, pt){
-    // اختر التحليل الموجود فعلاً في الطلب
-    var inReq=testMatches.filter(t=>r.tests&&r.tests.includes(t.id));
-    if(!inReq.length) return {ok:false, msg:'«'+testMatches[0].code+'» غير موجود في طلب '+(pt&&pt.name||r.patientName)};
-    if(inReq.length>1) return {ok:false, needClarify:clarifyTests('DELETE_TEST_INREQ', inReq, {patient:pt&&pt.name}, {reqId:r.id})};
+  function removeTestFromReq(r,tm,pt){
+    var inReq=tm.filter(t=>r.tests&&r.tests.includes(t.id));
+    if(!inReq.length) return {ok:false, msg:'«'+tm[0].code+'» غير موجود في طلب '+(pt&&pt.name||r.patientName)};
+    if(inReq.length>1) return {ok:false, needClarify:clarifyTests('DELETE_TEST', inReq, {patient:pt&&pt.name})};
     var t=inReq[0];
-    r.tests=r.tests.filter(x=>x!==t.id);
-    r.testNames=(r.testNames||[]).filter(n=>n!==t.nameEn);
+    r.tests=r.tests.filter(x=>x!==t.id); r.testNames=(r.testNames||[]).filter(n=>n!==t.nameEn);
     if(r.results) delete r.results[t.id];
-    if(has('save')) window.save('requests', R());
-    syncReq(r);
-    refreshAfterReqEdit(r.id);
+    if(has('save')) window.save('requests', R()); syncReq(r); refreshAfterReqEdit(r.id);
     return {ok:true, msg:'حُذف '+t.code+' من '+(pt&&pt.name||r.patientName)+' — طلب '+r.id};
   }
-  function syncReq(r){
-    try{ if(typeof SyncManager!=='undefined'&&SyncManager.isEnabled()) SyncManager.pushUpsert('requests', r).catch(function(){}); }catch(e){}
-  }
-  function refreshAfterReqEdit(rid){
-    try{
-      if(has('renderRequests')) window.renderRequests();
-      if(has('updateBadges')) window.updateBadges();
-      if(has('updateDashboard')) window.updateDashboard();
-      // لو نافذة عرض النتائج مفتوحة على نفس الطلب — أعد رسمها
-      if(isOpen('m-view-results') && window.currentReqId===rid && has('openViewResultsModal')) window.openViewResultsModal(rid);
-      // لو شاشة إدخال النتائج مفتوحة على نفس الطلب — أعد التحميل
-      if(window.currentReqId===rid && has('loadResultEntry')){
-        var sel=document.getElementById('res-req-sel');
-        if(sel && sel.value===rid) window.loadResultEntry();
-      }
-    }catch(e){}
-  }
+  function syncReq(r){ try{ if(typeof SyncManager!=='undefined'&&SyncManager.isEnabled()) SyncManager.pushUpsert('requests', r).catch(function(){}); }catch(e){} }
+  function refreshAfterReqEdit(rid){ try{
+    if(has('renderRequests')) window.renderRequests();
+    if(has('updateBadges')) window.updateBadges();
+    if(has('updateDashboard')) window.updateDashboard();
+    if(isOpen('m-view-results') && window.currentReqId===rid && has('openViewResultsModal')) window.openViewResultsModal(rid);
+    if(window.currentReqId===rid && has('loadResultEntry')){ var sel=document.getElementById('res-req-sel'); if(sel&&sel.value===rid) window.loadResultEntry(); }
+  }catch(e){} }
 
-  function isOpen(id){ var e=document.getElementById(id); return !!(e&&e.classList.contains('open')); }
-
-  var SECTION_LABEL={ patients:'قائمة المرضى', requests:'الطلبات', results:'النتائج', culture:'نتائج الزرع',
-    print:'الطباعة', invoices:'الفواتير', billing:'المحاسبة', reports:'التقارير', dashboard:'اللوحة',
-    settings:'الإعدادات', lis:'الأجهزة', doctors:'الأطباء', inventory:'المخزن', 'tests-db':'قاعدة التحاليل',
-    semen:'السائل المنوي', stool:'البراز', ua:'الإدرار', quality:'الجودة', waitqueue:'قائمة الانتظار' };
-
-  // ─── مولّدات أسئلة التوضيح ─────────────────────────────────────────────
-  function clarifyTests(kind, matches, payload, extra){
-    return { type:kind, question:'يوجد أكثر من تحليل مطابق، أيّهم تقصد؟',
-      options:matches.slice(0,6).map(t=>({label:t.code+' — '+(t.nameEn||''), value:t.id})),
-      payload:payload, extra:extra };
-  }
+  function clarifyTests(kind, matches, payload){
+    return { type:kind, question:'أيّ تحليل تقصد؟',
+      options:matches.slice(0,6).map(t=>({label:t.code+' — '+(t.nameEn||''), value:t.id})), payload:payload }; }
   function clarifyPatients(kind, matches, name, extra){
-    return { type:kind, question:'وجدت أكثر من مريض بالاسم «'+name+'»، أيّهم تقصد؟',
-      options:matches.map(p=>({label:p.name+' (ملف '+p.id+')', value:p.id})),
-      payload:{patient:name}, extra:extra };
-  }
+    return { type:kind, question:'أيّ مريض تقصد؟',
+      options:matches.map(p=>({label:p.name+' (ملف '+p.id+')', value:p.id})), payload:{patient:name}, extra:extra }; }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  4) محرك فهم الأوامر — عربي محلي
-  //     يستخرج: الفعل + التحليل + المريض (إن وُجد بعد «إلى/من/عند/لـ»)
+  //  5) محرك الفهم المرن — كلمات مفتاحية، يتحمّل أي صياغة
   // ══════════════════════════════════════════════════════════════════════
-  // كلمات الأقسام لأمر «فتح»
-  // ملاحظة: النصوص تمر عبر normAr قبل المطابقة، لذا كل الأنماط بحروف مطبّعة (ي، ه، ا)
-  var OPEN_MAP=[
-    {re:/مرضي|قايمه المرضي/, sec:'patients'},
-    {re:/طلبات/, sec:'requests'},
-    {re:/الزرع|زرع|كلتشر|culture/, sec:'culture'},
-    {re:/نتايج|ادخال النتايج/, sec:'results'},
-    {re:/طباعه|طباعه التقرير/, sec:'print'},
-    {re:/فواتير|فاتوره|محاسبه/, sec:'invoices'},
-    {re:/اجهزه|جهاز|lis/, sec:'lis'},
-    {re:/تقارير/, sec:'reports'},
-    {re:/اطباء|دكاتره/, sec:'doctors'},
-    {re:/مخزن|مستلزمات/, sec:'inventory'},
-    {re:/اعدادات|ضبط/, sec:'settings'},
-    {re:/احصايات|لوحه|داشبورد|احصاء/, sec:'dashboard'},
-    {re:/انتظار|قايمه الانتظار/, sec:'waitqueue'},
-    {re:/سايل منوي|المني|semen/, sec:'semen'},
-    {re:/براز|غايط|stool/, sec:'stool'},
-    {re:/ادرار|بول|urine/, sec:'ua'}
-  ];
-
-  // استخراج (تحليل، مريض) من نص أمر أضف/احذف
-  // الصيغ: «أضف تحليل X إلى/الى/لـ/عند NAME» ، «احذف X من NAME»
-  function splitTestPatient(rest){
-    rest=rest.replace(/^تحليل\s+|^فحص\s+/,'').trim();
-    var m=rest.match(/^(.*?)\s+(?:الي|لـ|ل|عند|للمريض|لمريض|من)\s+(.+)$/);
-    if(m){ return { test:m[1].trim(), patient:m[2].trim() }; }
-    return { test:rest.trim(), patient:null };
-  }
-
-  // كل الأنماط بحروف مطبّعة لأن النص يمر عبر normAr أولاً
-  var INTENTS=[
-    // مريض جديد — قبل «فتح» العام حتى لا تُلتقط كبحث
-    {action:'NEW_PATIENT',  re:/(?:مريض|ملف)\s*جديد|سجل\s*مريض|اضف\s*مريض\s*جديد|فتح\s*مريض\s*جديد/, arg:null},
-    // بحث في الطلبات / المرضى (قبل «فتح» و«بحث» العام)
-    {action:'SEARCH_REQUEST', re:/^(?:ابحث|بحث|دور)\s*(?:عن)?\s+(.+?)\s+(?:في|بـ|ب)\s*(?:ال)?طلبات$/, arg:1},
-    {action:'SEARCH_PATIENT', re:/^(?:ابحث|بحث|دور)\s*(?:عن)?\s+(.+?)\s+(?:في|بـ|ب)\s*(?:ال)?(?:مرضي|قايمه المرضي)$/, arg:1},
-    {action:'SEARCH_PATIENT', re:/^(?:ابحث|بحث|دور)\s*(?:عن)?\s+(.+)/, arg:1},
-    // فتح
-    {action:'OPEN_SECTION', re:/^(?:افتح|فتح|اعرض|روح|اذهب|انتقل)\s+(.+)/, handler:'open'},
-    // أضف / احذف
-    {action:'ADD_TEST',    re:/^(?:اضف|ضيف|زد|اضيف)\s+(.+)/, handler:'addtest'},
-    {action:'DELETE_TEST', re:/^(?:احذف|شيل|امسح|الغي|ازل)\s+(.+)/, handler:'deltest'},
-    // حفظ
-    {action:'SAVE_PATIENT', re:/^(?:احفظ|خزن|ثبت|تم|خلص|كمل)(?:\s+.*)?$/, arg:null},
-    // طباعة
-    {action:'PRINT_LABEL',  re:/اطبع?\s*(?:ال)?(?:ملصق|باركود|ستيكر|لصاقه|لاصقه)/, arg:null},
-    {action:'PRINT_REPORT', re:/اطبع?\s*(?:ال)?(?:تقرير|نتيجه|النتيجه)/, arg:null},
-    // نتائج / اعتماد
-    {action:'OPEN_RESULTS', re:/(?:افتح|اعرض)\s*(?:شاشه)?\s*(?:ادخال)?\s*(?:ال)?نتايج/, arg:null},
-    {action:'APPROVE_RESULT', re:/(?:اعتمد|صدق|وافق)\s*(?:ال)?(?:نتيجه|نتايج)/, arg:null}
-  ];
-
-  function interpretOne(text){
-    var t=normAr(text);
-    for(var i=0;i<INTENTS.length;i++){
-      var it=INTENTS[i]; var m=t.match(it.re);
-      if(!m) continue;
-      if(it.handler==='open'){
-        var rest=m[1];
-        var hit=OPEN_MAP.find(o=>o.re.test(rest));
-        // «افتح نتائج فلان» → دخول على طلب فلان
-        if(hit && hit.sec==='results'){
-          var after=rest.replace(hit.re,'').trim();
-          if(after) return {action:'SEARCH_REQUEST', arg:after};
-        }
-        if(hit) return {action:'NAVIGATE', arg:hit.sec};
-        // «افتح فلان» → بحث في الطلبات
-        return {action:'SEARCH_REQUEST', arg:rest.trim()};
+  function firstVerb(toks){
+    for(var k in VERBS){
+      for(var i=0;i<VERBS[k].length;i++){
+        var v=VERBS[k][i];
+        if(v.indexOf(' ')>-1){ if(normAr(toks.join(' ')).indexOf(v)>-1) return {kind:k, at:0, phrase:v}; }
+        else { var idx=toks.indexOf(v); if(idx>-1) return {kind:k, at:idx, phrase:v}; }
       }
-      if(it.handler==='addtest'){ var sp=splitTestPatient(m[1]); return {action:'ADD_TEST', payload:sp}; }
-      if(it.handler==='deltest'){ var sp2=splitTestPatient(m[1]); return {action:'DELETE_TEST', payload:sp2}; }
-      if(typeof it.arg==='number') return {action:it.action, arg:(m[it.arg]||'').trim()};
-      return {action:it.action, arg:null};
     }
     return null;
   }
 
-  // تقسيم أوامر متعددة عند «ثم» أو «و+فعل»
+  // يزيل كلمات الحشو/حروف الجر الشائعة من طرفَي العبارة
+  function strip(str){
+    var s=normAr(str);
+    // إزالة متكررة لكلمات البداية
+    var lead=/^(?:تحليل|فحص|ال|عن|على|علي|قسم|صفحه|شاشه|اسم|المريض|مريض|الى|الي|من|في|لي|لـ|ل|مال|حق|هاي|هذا|عايز|عاوز|بدي|ابي|اريد|جيب|هات)\s+/;
+    while(lead.test(s)) s=s.replace(lead,'').trim();
+    s=s.replace(/\s+(?:في|من|الى|الي|لـ)$/,'').trim();
+    return s;
+  }
+  // يفصل «لـ» أو «الى» الملتصقة ببداية اسم: «لسيف»→«سيف»
+  function unstickName(str){
+    var s=normAr(str).trim();
+    // إذا بدأت الكلمة الأولى بـ«ل» متبوعة باسم (وليست كلمة مستقلة) نزيلها
+    s=s.replace(/^ل(?=[ا-ي]{2,})/,'');
+    return s.trim();
+  }
+
+  // استخراج (تحليل، مريض) بمرونة عالية
+  function splitTestPatient(rest){
+    var q=normAr(rest).replace(/^(?:تحليل|فحص)\s+/,'').trim();
+    // 1) فاصل صريح: إلى/الى/لـ/عند/من/للمريض/مال/حق
+    var m=q.match(/^(.*?)\s+(?:الى|الي|لـ|عند|للمريض|لمريض|من|مال|حق)\s+(.+)$/);
+    if(m) return { test:m[1].trim(), patient:unstickName(m[2].trim()) };
+    // 2) «ل» ملتصقة باسم بعد التحليل: «تي اس اج لسيف شاكر»
+    var m2=q.match(/^(.*?)\s+(ل[ا-ي]{2,}.*)$/);
+    if(m2){
+      var maybeTest=m2[1].trim(), maybePatient=unstickName(m2[2].trim());
+      if(findTests(maybeTest).length && findPatients(maybePatient).length)
+        return { test:maybeTest, patient:maybePatient };
+    }
+    // 3) fallback ذكي: جرّب أطول بادئة تُطابق تحليلاً معروفاً، والباقي مريض
+    var words=q.split(' ');
+    for(var take=Math.min(words.length,4); take>=1; take--){
+      var cand=words.slice(0,take).join(' ');
+      var rem=words.slice(take).join(' ').trim();
+      if(rem && findTests(cand).length===1){
+        var pn=unstickName(rem.replace(/^(?:الى|الي|لـ|ل|عند|من|مال|حق|للمريض|لمريض)\s*/,''));
+        if(findPatients(pn).length) return { test:cand, patient:pn };
+      }
+    }
+    // 4) لا مريض — تحليل فقط (سيُطلب المريض لاحقاً أو يُستخدم السياق)
+    return { test:q, patient:null };
+  }
+
+  // فهم أمر ملء بيانات المريض داخل المعالج (بدون \b لأنها لا تعمل مع العربية)
+  function parsePatientField(t){
+    var tks=t.split(' ').filter(Boolean);
+
+    // ── الاسم: «الاسم ...» / «اسم ...» ──
+    var iName=tks.findIndex(w=>w==='اسم'||w==='الاسم');
+    if(iName>-1 && tks.length>iName+1) return {action:'SET_NAME', arg:tks.slice(iName+1).join(' ')};
+
+    // ── الطبيب: «الطبيب ...» / «دكتور ...» / «الطبيب المحول ...» ──
+    var iDoc=tks.findIndex(w=>w==='طبيب'||w==='الطبيب'||w==='دكتور'||w==='الدكتور');
+    if(iDoc>-1){
+      var docRest=tks.slice(iDoc+1);
+      if(docRest[0]==='المحول') docRest=docRest.slice(1);
+      if(docRest.length) return {action:'SET_DOCTOR', arg:docRest.join(' ')};
+    }
+
+    // ── اللقب: «اللقب X» أو ذكر لقب معروف مباشرة ──
+    var iTitle=tks.findIndex(w=>w==='لقب'||w==='اللقب');
+    if(iTitle>-1 && tks.length>iTitle+1) return {action:'SET_TITLE', arg:tks.slice(iTitle+1).join(' ')};
+    // لقب مذكور وحده (السيد/الطفل/الدكتور...) والجملة قصيرة
+    if(tks.length<=2){
+      var titleHit=TITLES.find(x=>x.keys.some(k=>tks.indexOf(k)>-1));
+      if(titleHit) return {action:'SET_TITLE', arg:t};
+    }
+
+    // ── العمر ──
+    var hasAgeWord = tks.some(w=>['عمر','العمر','السن','عمره','عمرها'].indexOf(w)>-1);
+    var hasUnit = /(سنه|سنوات|سنتين|شهر|شهرين|اشهر|شهور|يوم|يومين|ايام)/.test(t);
+    if(hasAgeWord || hasUnit){
+      var ay=0,am=0,ad=0;
+      // مثنى صريح
+      if(/سنتين/.test(t)) ay=2;
+      if(/شهرين/.test(t)) am=2;
+      if(/يومين/.test(t)) ad=2;
+      // «رقم (قد يكون عدة كلمات) + وحدة» — نلتقط كل الكلمات الرقمية قبل الوحدة
+      var my=t.match(/((?:[\u0600-\u06ff]+\s+){0,3}[\u0600-\u06ff]+|\d+)\s*(?:سنه|سنوات|سنة|عام|اعوام)/); if(my && !ay) ay=extractNum(my[1])||0;
+      var mm=t.match(/((?:[\u0600-\u06ff]+\s+){0,3}[\u0600-\u06ff]+|\d+)\s*(?:شهر|اشهر|شهور)/);           if(mm && !am) am=extractNum(mm[1])||0;
+      var md=t.match(/((?:[\u0600-\u06ff]+\s+){0,3}[\u0600-\u06ff]+|\d+)\s*(?:يوم|ايام)/);                if(md && !ad) ad=extractNum(md[1])||0;
+      // «العمر 30» بلا وحدة → اعتبره سنوات
+      if(!ay&&!am&&!ad){
+        var only=t; ['عمر','العمر','السن','عمره','عمرها'].forEach(w=>{ only=only.replace(w,' '); });
+        ay=wordToNum(only.trim())||0;
+      }
+      if(ay||am||ad) return {action:'SET_AGE', payload:{y:ay,m:am,d:ad}};
+    }
+    return null;
+  }
+
+  // المفسّر الرئيسي المرن لأمر واحد
+  function interpretOne(text){
+    var t=normAr(text);
+    var toks=t.split(' ').filter(Boolean);
+
+    // 0) مريض جديد
+    if(VERBS.newpt.some(v=>t.indexOf(v)>-1)) return {action:'NEW_PATIENT'};
+
+    // 1) داخل المعالج: أوامر ملء الحقول لها الأولوية
+    if(wizardOpen()){
+      var pf=parsePatientField(t);
+      if(pf) return pf;
+    }
+
+    var v=firstVerb(toks);
+    var rest = v ? toks.slice(v.at+1).join(' ').trim() : t;
+
+    // 2) حسب الفعل
+    if(v){
+      switch(v.kind){
+        case 'newpt': return {action:'NEW_PATIENT'};
+        case 'save':  return {action:'SAVE_PATIENT'};
+        case 'approve': return {action:'APPROVE_RESULT'};
+        case 'print':
+          if(/ملصق|باركود|ستيكر|لصاقه|لاصقه/.test(t)) return {action:'PRINT_LABEL'};
+          if(/تقرير|نتيجه/.test(t)) return {action:'PRINT_REPORT'};
+          return {action:'PRINT_LABEL'};
+        case 'add': { var sp=splitTestPatient(rest); return {action:'ADD_TEST', payload:sp}; }
+        case 'del': { var sp2=splitTestPatient(rest); return {action:'DELETE_TEST', payload:sp2}; }
+        case 'open': {
+          // أولاً: هل الباقي اسم قسم معروف؟ (نتائج الزرع، الطلبات...)
+          var secDirect=matchSection(rest);
+          if(secDirect) return {action:'NAVIGATE', arg:secDirect};
+          // «افتح نتائج فلان» → دخول على طلبه فقط إن كان الباقي اسم مريض
+          if(/نتايج|نتيجه/.test(rest)){
+            var afterN=strip(rest.replace(/النتايج|نتايج|نتيجه/,'').trim());
+            if(afterN && findPatients(afterN).length) return {action:'SEARCH_REQUEST', arg:afterN};
+            return {action:'NAVIGATE', arg:'results'};
+          }
+          var sec=matchSection(t);
+          if(sec) return {action:'NAVIGATE', arg:sec};
+          var nm2=strip(rest); if(nm2) return {action:'SEARCH_REQUEST', arg:nm2};
+          return null;
+        }
+        case 'search': {
+          // «... في الطلبات» → دخول على الطلب  |  «... في المرضى» → ملف المريض
+          if(/(?:في|بـ|ب)\s*(?:ال)?طلبات|بالطلبات/.test(t)){
+            var nmR=strip(rest.replace(/(?:في|ب)?\s*(?:ال)?طلبات/,'').trim());
+            return {action:'SEARCH_REQUEST', arg:nmR||rest};
+          }
+          if(/(?:في|بـ|ب)?\s*(?:ال)?(?:مرضى|مرضي)|بالمرضى/.test(t)){
+            var nmP=strip(rest.replace(/(?:في|ب)?\s*(?:قايمه\s*)?(?:ال)?(?:مرضى|مرضي)/,'').trim());
+            return {action:'SEARCH_PATIENT', arg:nmP||rest};
+          }
+          var nmG=strip(rest); if(nmG) return {action:'SEARCH_PATIENT', arg:nmG};
+          return null;
+        }
+      }
+    }
+
+    // 3) بلا فعل صريح: جملة تحتوي اسم قسم فقط → افتحه
+    var secOnly=matchSection(t);
+    if(secOnly && toks.length<=3) return {action:'NAVIGATE', arg:secOnly};
+
+    return null;
+  }
+
+  function matchSection(str){
+    var q=normAr(str); if(!q) return null;
+    var qtoks=q.split(' ').filter(Boolean);
+    for(var i=0;i<SECTIONS.length;i++){
+      if(SECTIONS[i].keys.some(k=> k.indexOf(' ')>-1 ? q.indexOf(k)>-1 : qtoksHas(qtoks,k) )) return SECTIONS[i].sec;
+    }
+    function qtoksHas(arr,k){ return arr.indexOf(k)>-1; }
+    // fallback: بحث بالاحتواء
+    for(var j=0;j<SECTIONS.length;j++){ if(SECTIONS[j].keys.some(k=>q.indexOf(k)>-1)) return SECTIONS[j].sec; }
+    return null;
+  }
+
   function splitCommands(text){
-    return normAr(text)
-      .split(/\s+ثم\s+|\s+و(?=اطبع|احفظ|اضف|ضيف|احذف|شيل|اعتمد|افتح|فتح|اعرض|ابحث|بحث|دور)/)
-      .map(s=>s.trim()).filter(Boolean);
+    return normAr(text).split(/\s+ثم\s+|\s+و(?=اطبع|احفظ|اضف|ضيف|احذف|شيل|اعتمد|افتح|فتح|اعرض|ابحث|بحث|دور)/)
+                       .map(s=>s.trim()).filter(Boolean);
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  5) المنفّذ + إدارة التوضيح/التأكيد
+  //  6) المنفّذ
   // ══════════════════════════════════════════════════════════════════════
   function runCommand(cmd){
     var fn=API[cmd.action]; if(!fn) return {ok:false, msg:'أمر غير معروف'};
     if(SENSITIVE[cmd.action] && !cmd._confirmed){
-      ctx.pendingConfirm={command:cmd, label:SENSITIVE[cmd.action]};
-      return {ok:false, needConfirm:true, msg:'⚠️ عملية حساسة: '+SENSITIVE[cmd.action]+'. قل «نعم» للتأكيد أو «لا» للإلغاء.'};
+      ctx.pendingConfirm={command:cmd}; 
+      return {ok:false, needConfirm:true, msg:'⚠️ '+SENSITIVE[cmd.action]+' — قل «نعم» للتأكيد أو «لا» للإلغاء.'};
     }
-    // مرّر payload أو arg
     return fn(cmd.payload!==undefined ? cmd.payload : cmd.arg);
   }
 
   function process(rawText){
     var text=String(rawText||'').trim(); if(!text) return;
     addMsg('user', text);
-
-    // نداء تفعيل الوضع المستمر بالصوت: «اي اي» أو «ai»
     var nt=normAr(text);
-    if(/^(اي اي|اي\s*اي|ay ay|ai|a i|hey ai|يا مساعد)$/i.test(text.trim()) || /^اي اي$/.test(nt)){
-      startContinuous();
-      return;
-    }
-    if(/^(توقف|اسكت|خلص الاستماع|اطفي|قف)$/.test(nt)){ stopContinuous(); addMsg('assistant','تم إيقاف الاستماع.','info'); return; }
 
-    // تأكيد عملية حساسة
+    // كلمة النداء «مساعد» → افتح اللوحة + شغّل الاستماع المستمر
+    if(/^(?:يا\s*)?مساعد$|^المساعد$/.test(nt)){
+      openPanel(); startContinuous(); return;
+    }
+    if(/^(?:توقف|اسكت|قف|خلص الاستماع|اطفي|خلص)$/.test(nt)){ stopContinuous(); addMsg('assistant','تم إيقاف الاستماع.','info'); return; }
+
+    // تأكيد
     if(ctx.pendingConfirm){
       var pc=ctx.pendingConfirm; ctx.pendingConfirm=null;
       if(/^(نعم|اي|ايه|اكيد|تمام|موافق|اوك|ok|yes)$/.test(nt)){ pc.command._confirmed=true; return reply(runCommand(pc.command)); }
       return reply({ok:true, msg:'أُلغيت العملية.'});
     }
 
-    // جواب سؤال توضيح
+    // توضيح
     if(ctx.pendingClarify){
-      var cl=ctx.pendingClarify;
-      var pick=matchClarify(text, cl.options);
+      var cl=ctx.pendingClarify; var pick=matchClarify(text, cl.options);
       if(pick){ ctx.pendingClarify=null; return reply(resolveClarify(cl, pick)); }
       return reply({ok:false, msg:'لم أفهم اختيارك — '+cl.question});
     }
 
-    // أوامر (قد تكون متعددة)
     var parts=splitCommands(text);
     var cmds=[]; parts.forEach(p=>{ var c=interpretOne(p); if(c) cmds.push(c); });
     if(!cmds.length){
-      return reply({ok:false, msg:'لم أفهم. أمثلة: «افتح قائمة المرضى» • «بحث عن سيف شاكر جاسم في الطلبات» • «أضف TSH إلى سيف شاكر» • «احذف السكر التراكمي من سيف».'});
+      return reply({ok:false, msg:'لم أفهم «'+text+'». جرّب: «افتح المرضى» • «ابحث عن (اسم) في الطلبات» • «أضف TSH إلى (اسم)» • «احذف السكر التراكمي من (اسم)» • داخل التسجيل: «اللقب السيد»، «الاسم أحمد علي»، «العمر 30 سنة»، «الطبيب فلان»، «احفظ».'});
     }
 
     (function chain(i){
       if(i>=cmds.length) return;
-      var r=runCommand(cmds[i]);
-      reply(r);
+      var r=runCommand(cmds[i]); reply(r);
       if(r.needClarify){ ctx.pendingClarify=r.needClarify; showClarify(r.needClarify); return; }
-      if(r.needConfirm){ return; }
+      if(r.needConfirm) return;
       setTimeout(function(){ chain(i+1); }, 300);
     })(0);
   }
 
-  // حلّ التوضيح حسب نوعه
   function resolveClarify(cl, pick){
     switch(cl.type){
-      case 'ADD_TEST':
-        if(cl.payload && cl.payload.patient) return API.ADD_TEST({test: labelToTestName(pick), patient: cl.payload.patient});
-        return API.ADD_TEST({test: labelToTestName(pick)});
-      case 'DELETE_TEST':
-      case 'DELETE_TEST_INREQ':
-        return API.DELETE_TEST({test: labelToTestName(pick), patient: cl.payload && cl.payload.patient});
-      case 'SEARCH_REQUEST': {
-        var pt=P().find(p=>p.id===pick.value);
-        return pt?API.SEARCH_REQUEST(pt.name):{ok:false,msg:'تعذّر'};
-      }
-      case 'SEARCH_PATIENT': {
-        var pt2=P().find(p=>p.id===pick.value);
-        return pt2?API.SEARCH_PATIENT(pt2.name):{ok:false,msg:'تعذّر'};
-      }
-      default: return {ok:false, msg:'تعذّر تنفيذ الاختيار'};
+      case 'ADD_TEST': return API.ADD_TEST({test: labelToTestCode(pick), patient: cl.payload && cl.payload.patient});
+      case 'DELETE_TEST': return API.DELETE_TEST({test: labelToTestCode(pick), patient: cl.payload && cl.payload.patient});
+      case 'SEARCH_REQUEST': { var pt=P().find(p=>p.id===pick.value); return pt?API.SEARCH_REQUEST(pt.name):{ok:false,msg:'تعذّر'}; }
+      case 'SEARCH_PATIENT': { var pt2=P().find(p=>p.id===pick.value); return pt2?API.SEARCH_PATIENT(pt2.name):{ok:false,msg:'تعذّر'}; }
+      default: return {ok:false, msg:'تعذّر'};
     }
   }
-  // عند التوضيح لتحليل: نحوّل الخيار المختار لكوده لضمان تطابق تام
-  function labelToTestName(pick){
-    var t=T().find(x=>x.id===pick.value);
-    return t?t.code:pick.label;
-  }
-
+  function labelToTestCode(pick){ var t=T().find(x=>x.id===pick.value); return t?t.code:pick.label; }
   function matchClarify(text, options){
     var q=normAr(text); var num=parseInt(q,10);
     if(!isNaN(num)&&num>=1&&num<=options.length) return options[num-1];
     return options.find(o=>normAr(o.label).indexOf(q)>-1 || (o.value&&q.indexOf(normAr(o.value))>-1));
   }
-
-  function reply(r){
-    if(!r) return;
+  function reply(r){ if(!r) return;
     var type=r.ok?'success':(r.needConfirm||r.needClarify?'info':'error');
     addMsg('assistant', r.msg, type);
     if(r.ok && !r.needClarify && !r.needConfirm) notify('🤖 المساعد', r.msg, 'success');
-    return r;
-  }
+    return r; }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  6) حارس نافذة المعالج — يمنع الإغلاق بالنقر الخارجي أثناء الوضع الصوتي
+  //  7) حارس نافذة المعالج
   // ══════════════════════════════════════════════════════════════════════
   var _wizardGuardOn=false, _captureHandler=null;
   function guardWizard(on){
@@ -36555,97 +36687,54 @@ if(window.electronAPI && window.electronAPI.isElectron){
     if(on && !_captureHandler){
       _captureHandler=function(e){
         if(!_wizardGuardOn && !continuous) return;
-        var w=document.getElementById('m-wizard');
-        if(!w||!w.classList.contains('open')) return;
-        // نقر على خلفية النافذة (overlay نفسه) → امنع الإغلاق
+        var w=document.getElementById('m-wizard'); if(!w||!w.classList.contains('open')) return;
         if(e.target===w){ e.stopPropagation(); e.preventDefault(); }
       };
-      // مرحلة الالتقاط: نعترض قبل مستمع البرنامج الأصلي
       document.addEventListener('click', _captureHandler, true);
       document.addEventListener('mousedown', _captureHandler, true);
     }
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  7) الصوت — وضع عادي (نقرة واحدة) + وضع مستمر (اي اي / صمت 10ث)
+  //  8) الصوت
   // ══════════════════════════════════════════════════════════════════════
-  var recognition=null, listening=false, continuous=false, silenceTimer=null;
-  var SILENCE_MS=10000;
-
+  var recognition=null, listening=false, continuous=false, silenceTimer=null, SILENCE_MS=10000;
   function initSpeech(cont){
-    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if(!SR) return null;
-    var r=new SR();
-    r.lang='ar-IQ';
-    r.continuous=!!cont;
-    r.interimResults=!!cont; // في الوضع المستمر نحتاج النتائج المؤقتة لضبط مؤقّت الصمت
-    r.maxAlternatives=1;
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR) return null;
+    var r=new SR(); r.lang='ar-IQ'; r.continuous=!!cont; r.interimResults=!!cont; r.maxAlternatives=1;
     r.onresult=function(e){
       var finalTxt='';
-      for(var i=e.resultIndex;i<e.results.length;i++){
-        if(e.results[i].isFinal) finalTxt+=e.results[i][0].transcript;
-      }
-      // أي كلام يعيد تشغيل مؤقّت الصمت في الوضع المستمر
+      for(var i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) finalTxt+=e.results[i][0].transcript; }
       if(continuous) armSilence();
       if(finalTxt.trim()) process(finalTxt.trim());
     };
     r.onerror=function(e){
-      if(e.error==='not-allowed'||e.error==='service-not-allowed'){
-        addMsg('assistant','تعذّر الوصول للميكروفون — امنح الإذن.','error');
-        stopContinuous(); listening=false; setMic(false);
-      } else if(e.error==='no-speech'){
-        // في الوضع المستمر نتجاهل ونكمل
-        if(!continuous){ listening=false; setMic(false); addMsg('assistant','لم أسمع شيئاً — حاول مجدداً.','info'); }
-      }
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'){ addMsg('assistant','تعذّر الوصول للميكروفون — امنح الإذن.','error'); stopContinuous(); listening=false; setMic(false); }
+      else if(e.error==='no-speech' && !continuous){ listening=false; setMic(false); addMsg('assistant','لم أسمع شيئاً — حاول مجدداً.','info'); }
     };
-    r.onend=function(){
-      listening=false;
-      if(continuous){
-        // أعد التشغيل تلقائياً ما دام الوضع المستمر فعّالاً (لم يُغلق بصمت)
-        try{ recognition.start(); listening=true; }catch(e){}
-      } else setMic(false);
-    };
+    r.onend=function(){ listening=false;
+      if(continuous){ try{ recognition.start(); listening=true; }catch(e){} } else setMic(false); };
     return r;
   }
-
-  function armSilence(){
-    if(silenceTimer) clearTimeout(silenceTimer);
-    silenceTimer=setTimeout(function(){
-      addMsg('assistant','⏸ انقطع الاستماع بعد صمت 10 ثوانٍ. قل «اي اي» لإعادة التشغيل.','info');
-      stopContinuous();
-    }, SILENCE_MS);
-  }
-
+  function armSilence(){ if(silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer=setTimeout(function(){ addMsg('assistant','⏸ توقّف الاستماع بعد صمت 10 ثوانٍ. قل «مساعد» لإعادة التشغيل.','info'); stopContinuous(); }, SILENCE_MS); }
   function startContinuous(){
     if(continuous) return;
     recognition=initSpeech(true);
     if(!recognition){ addMsg('assistant','الإدخال الصوتي غير مدعوم هنا — استخدم الكتابة.','error'); return; }
-    continuous=true;
-    guardWizard(true); // فعّل الحارس تلقائياً في الوضع المستمر
+    continuous=true; guardWizard(true);
     try{ recognition.start(); listening=true; }catch(e){}
-    setMic(true);
-    armSilence();
-    addMsg('assistant','🎙️ الوضع الصوتي المستمر يعمل — تكلّم بحرية. لن ينقطع إلا بعد صمت 10 ثوانٍ، ولن تُغلق نوافذ الإدخال بالنقر الخارجي.','success');
+    setMic(true); armSilence();
+    addMsg('assistant','🎙️ الاستماع المستمر يعمل — تكلّم بحرية. لن ينقطع إلا بعد صمت 10 ثوانٍ.','success');
   }
-
-  function stopContinuous(){
-    continuous=false;
-    if(silenceTimer){ clearTimeout(silenceTimer); silenceTimer=null; }
-    if(recognition){ try{ recognition.stop(); }catch(e){} }
-    listening=false; setMic(false);
-    _wizardGuardOn=false; // أوقف الحارس عند انتهاء الوضع الصوتي
-  }
-
-  // الوضع العادي: نقرة واحدة تلتقط جملة واحدة
+  function stopContinuous(){ continuous=false; if(silenceTimer){clearTimeout(silenceTimer);silenceTimer=null;}
+    if(recognition){ try{recognition.stop();}catch(e){} } listening=false; setMic(false); _wizardGuardOn=false; }
   function toggleMicOnce(){
     if(continuous){ stopContinuous(); return; }
     if(listening){ if(recognition){try{recognition.stop();}catch(e){}} listening=false; setMic(false); return; }
-    recognition=initSpeech(false);
-    if(!recognition){ addMsg('assistant','الإدخال الصوتي غير مدعوم هنا — استخدم الكتابة.','error'); return; }
-    try{ recognition.start(); listening=true; setMic(true); addMsg('assistant','🎤 أستمع... تكلّم.','info'); }
-    catch(e){ listening=false; setMic(false); }
+    // زر الميكروفون يشغّل الوضع المستمر مباشرة (أكثر عملية)
+    startContinuous();
   }
-
   function setMic(on){
     var m=document.getElementById('mla-mic'); if(m){ m.classList.toggle('on',on); m.textContent=continuous?'⏹️':'🎤'; }
     var f=document.getElementById('mla-fab'); if(f) f.classList.toggle('listening',on);
@@ -36653,7 +36742,7 @@ if(window.electronAPI && window.electronAPI.isElectron){
   }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  8) الواجهة
+  //  9) الواجهة
   // ══════════════════════════════════════════════════════════════════════
   function buildUI(){
     var style=document.createElement('style');
@@ -36661,13 +36750,13 @@ if(window.electronAPI && window.electronAPI.isElectron){
       +'#mla-fab{position:fixed;bottom:24px;left:24px;z-index:99998;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#0077ff);border:none;cursor:pointer;box-shadow:0 6px 22px rgba(0,150,255,.45);font-size:28px;color:#fff;display:flex;align-items:center;justify-content:center;transition:transform .15s}'
       +'#mla-fab:hover{transform:scale(1.08)}#mla-fab.listening{animation:mla-pulse 1.1s infinite}'
       +'@keyframes mla-pulse{0%{box-shadow:0 0 0 0 rgba(0,212,255,.6)}70%{box-shadow:0 0 0 18px rgba(0,212,255,0)}100%{box-shadow:0 0 0 0 rgba(0,212,255,0)}}'
-      +'#mla-panel{position:fixed;bottom:96px;left:24px;z-index:99998;width:350px;max-width:calc(100vw - 48px);height:480px;max-height:72vh;background:#0d1a2b;border:1px solid rgba(0,212,255,.35);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5);display:none;flex-direction:column;overflow:hidden;font-family:Cairo,sans-serif;direction:rtl}'
+      +'#mla-panel{position:fixed;bottom:96px;left:24px;z-index:99998;width:350px;max-width:calc(100vw - 48px);height:490px;max-height:74vh;background:#0d1a2b;border:1px solid rgba(0,212,255,.35);border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.5);display:none;flex-direction:column;overflow:hidden;font-family:Cairo,sans-serif;direction:rtl}'
       +'#mla-panel.open{display:flex}'
       +'#mla-head{padding:12px 16px;background:linear-gradient(135deg,#00d4ff,#0077ff);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:space-between}'
       +'#mla-head .t{font-size:15px}#mla-status{font-size:11px;font-weight:700;opacity:.95}'
       +'#mla-close{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1}'
       +'#mla-body{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px}'
-      +'.mla-msg{max-width:86%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.65;word-wrap:break-word;white-space:pre-wrap}'
+      +'.mla-msg{max-width:88%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.7;word-wrap:break-word;white-space:pre-wrap}'
       +'.mla-user{align-self:flex-start;background:#1c3a5e;color:#dff0ff;border-bottom-right-radius:3px}'
       +'.mla-assistant{align-self:flex-end;background:#14263d;color:#cfe;border-bottom-left-radius:3px}'
       +'.mla-assistant.error{background:#3a1520;color:#ffd0d8}.mla-assistant.success{background:#123024;color:#c7f5d8}'
@@ -36677,21 +36766,18 @@ if(window.electronAPI && window.electronAPI.isElectron){
       +'#mla-foot{padding:10px;border-top:1px solid rgba(255,255,255,.08);display:flex;gap:6px;align-items:center}'
       +'#mla-input{flex:1;background:#14263d;border:1px solid rgba(0,212,255,.25);color:#fff;border-radius:10px;padding:9px 12px;font-size:13px;font-family:Cairo,sans-serif;outline:none}'
       +'#mla-mic,#mla-send{background:#00a3d4;border:none;color:#fff;width:38px;height:38px;border-radius:10px;cursor:pointer;font-size:17px;flex-shrink:0}'
-      +'#mla-mic.on{background:#ff3b5c}'
-      +'#mla-hint{font-size:11px;color:#7fa8c9;padding:0 12px 8px}';
+      +'#mla-mic.on{background:#ff3b5c}#mla-hint{font-size:11px;color:#7fa8c9;padding:0 12px 8px}';
     document.head.appendChild(style);
 
-    var fab=document.createElement('button');
-    fab.id='mla-fab'; fab.title='المساعد الذكي'; fab.innerHTML='🤖'; fab.onclick=togglePanel;
+    var fab=document.createElement('button'); fab.id='mla-fab'; fab.title='المساعد الذكي (قل: مساعد)'; fab.innerHTML='🤖'; fab.onclick=togglePanel;
     document.body.appendChild(fab);
 
-    var panel=document.createElement('div');
-    panel.id='mla-panel';
+    var panel=document.createElement('div'); panel.id='mla-panel';
     panel.innerHTML=''
       +'<div id="mla-head"><span class="t">🤖 المساعد الذكي</span><span id="mla-status"></span><button id="mla-close">×</button></div>'
       +'<div id="mla-body"></div>'
-      +'<div id="mla-hint">قل «اي اي» لتشغيل الاستماع المستمر • «افتح قائمة المرضى» • «بحث عن … في الطلبات» • «أضف TSH إلى …» • «احذف السكر التراكمي من …»</div>'
-      +'<div id="mla-foot"><button id="mla-mic" title="إدخال صوتي">🎤</button><input id="mla-input" placeholder="اكتب أمرك هنا..." autocomplete="off"><button id="mla-send" title="إرسال">➤</button></div>';
+      +'<div id="mla-hint">قل «مساعد» لبدء الاستماع • «افتح المرضى» • «ابحث عن (اسم) في الطلبات» • «أضف TSH إلى (اسم)» • في التسجيل: «اللقب السيد»، «الاسم …»، «العمر 30 سنة»، «الطبيب …»، «احفظ»</div>'
+      +'<div id="mla-foot"><button id="mla-mic" title="استماع مستمر">🎤</button><input id="mla-input" placeholder="اكتب أمرك هنا..." autocomplete="off"><button id="mla-send" title="إرسال">➤</button></div>';
     document.body.appendChild(panel);
 
     document.getElementById('mla-close').onclick=togglePanel;
@@ -36699,26 +36785,20 @@ if(window.electronAPI && window.electronAPI.isElectron){
     document.getElementById('mla-mic').onclick=toggleMicOnce;
     document.getElementById('mla-input').addEventListener('keydown',function(e){ if(e.key==='Enter'){ e.preventDefault(); sendFromInput(); } });
 
-    addMsg('assistant','مرحباً 👋 قل «اي اي» لبدء الاستماع الصوتي المستمر، أو اكتب أمرك مباشرة.','success');
+    addMsg('assistant','مرحباً 👋 قل «مساعد» لبدء الاستماع الصوتي، أو اكتب أمرك. أفهم أوامر: فتح، بحث، أضف، احذف، وملء بيانات المريض صوتاً.','success');
   }
 
+  function openPanel(){ var p=document.getElementById('mla-panel'); if(p&&!p.classList.contains('open')){ p.classList.add('open'); } }
   function togglePanel(){ var p=document.getElementById('mla-panel'); p.classList.toggle('open'); if(p.classList.contains('open')) setTimeout(function(){var i=document.getElementById('mla-input');if(i)i.focus();},50); }
   function sendFromInput(){ var i=document.getElementById('mla-input'); var v=i.value.trim(); if(!v)return; i.value=''; process(v); }
   function addMsg(who,text,type){ var b=document.getElementById('mla-body'); if(!b)return; var d=document.createElement('div'); d.className='mla-msg '+(who==='user'?'mla-user':'mla-assistant')+(type?' '+type:''); d.textContent=text; b.appendChild(d); b.scrollTop=b.scrollHeight; }
   function showClarify(cl){ var b=document.getElementById('mla-body'); if(!b)return; var w=document.createElement('div'); w.className='mla-msg mla-assistant'; w.textContent=cl.question; var o=document.createElement('div'); o.className='mla-opts'; cl.options.forEach(function(op,idx){ var bt=document.createElement('button'); bt.className='mla-opt'; bt.textContent=(idx+1)+'. '+op.label; bt.onclick=function(){ process(String(idx+1)); }; o.appendChild(bt); }); w.appendChild(o); b.appendChild(w); b.scrollTop=b.scrollHeight; }
 
   // ══════════════════════════════════════════════════════════════════════
-  //  9) الواجهة العامة
+  // 10) الواجهة العامة
   // ══════════════════════════════════════════════════════════════════════
-  window.MedLabAssistant={
-    process:process,
-    execute:function(cmd){ return runCommand(cmd); },
-    api:API,
-    open:function(){ var p=document.getElementById('mla-panel'); if(p&&!p.classList.contains('open')) togglePanel(); },
-    startVoice:startContinuous,
-    stopVoice:stopContinuous,
-    _ctx:ctx
-  };
+  window.MedLabAssistant={ process:process, execute:function(cmd){ return runCommand(cmd); }, api:API,
+    open:openPanel, startVoice:startContinuous, stopVoice:stopContinuous, _ctx:ctx, _interpret:interpretOne };
 
   function boot(){ try{ buildUI(); }catch(e){ console.error('MedLabAssistant UI', e); } }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot); else boot();
