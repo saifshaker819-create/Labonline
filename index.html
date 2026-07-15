@@ -2536,7 +2536,11 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
    تحسينات الأداء - Performance Optimizations
 ══════════════════════════════════════════════ */
 *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-.sidebar,.modal,.moverlay,.hdr{will-change:transform;transform:translateZ(0)}
+/* ⭐ .sidebar مستثنى هنا عمداً: transform:translateZ(0) بلا media query كان
+   يتجاوز .sidebar{transform:translateX(100%)} و .sidebar.open في وضع الجوال
+   (نفس الـ specificity لكن لاحق بالترتيب) → القائمة تبقى ظاهرة وزر ☰ بلا أثر.
+   الـ sidebar يأخذ will-change:transform أصلاً في قاعدة الأداء أدناه. */
+.modal,.moverlay,.hdr{will-change:transform;transform:translateZ(0)}
 .tbl,.gc,.stats,.test-list{contain:layout style}
 .gc-body,.mbody,.chat-messages,.test-list,.wiz-panel-body{-webkit-overflow-scrolling:touch;scroll-behavior:auto}
 
@@ -33959,7 +33963,9 @@ setTimeout(function(){
     '}',
 
     /* GPU للعناصر الرئيسية */
-    '.main-content,.sec,.sidebar,.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
+    /* ⭐ .sidebar مستثنى: transform:translateZ(0) يتجاوز translateX(100%)/
+       .open في وضع الجوال فتتعطّل حركة القائمة وزر ☰. */
+    '.main-content,.sec,.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
 
     /* إخفاء الأقسام غير النشطة من render tree */
     '.sec:not(.active) { content-visibility:hidden; }',
