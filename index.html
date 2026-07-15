@@ -1873,6 +1873,24 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield;}
   /* ── المحتوى الرئيسي ── */
   .sec{padding:12px 8px!important;}
   .gc{padding:0!important;border-radius:12px!important;}
+
+  /* ⭐ شبكة أمان للتخطيط على الجوال ──────────────────────────────
+     1) لا يتجاوز أي عنصر عرض الشاشة (يمنع القصّ الجانبي).
+     2) الجداول تُمرَّر أفقياً داخل حاوياتها بدل أن تُقصّ.
+     3) الحاويات تسمح بالتمدد بدل حبس المحتوى. */
+  .main{max-width:100vw;overflow-x:hidden;}
+  .sec,.gc,.gc-body{max-width:100%;}
+  /* أي حاوية جدول (المستخدمة في كل الأقسام) تُمرَّر باللمس */
+  .gc-body>div[style*="overflow-x"],
+  .sec div[style*="overflow-x"]{
+    -webkit-overflow-scrolling:touch;
+    max-width:100%;
+  }
+  /* الجدول يأخذ عرضه الطبيعي داخل الحاوية المُمرَّرة (لا يُضغط ولا يُقصّ) */
+  .gc-body>div[style*="overflow-x"]>table,
+  .sec div[style*="overflow-x"]>table{
+    min-width:max-content;
+  }
   .gc-hdr{padding:12px 14px!important;flex-wrap:wrap;gap:8px;}
   .gc-body{padding:12px!important;}
   .mbody{padding:14px!important;}
@@ -1982,9 +2000,14 @@ body.light-mode .cmp-sign-btn:hover{
 /* ── تحسينات الأداء ─────────────────────────────────── */
 .sidebar{will-change:transform;contain:layout style;}
 .modal{will-change:transform,opacity;contain:layout style;}
-.sec{contain:layout style;}
-.tbl{contain:layout style;}
-.gc{contain:layout style;}
+/* ⭐ أُزيل contain:layout عن .sec/.tbl/.gc:
+   contain:layout يجعل العنصر صندوق احتواء مستقل لا يتمدّد لمحتواه، فتُقصّ
+   الجداول العريضة ويُلغى تمرير <div style="overflow-x:auto"> الملتفّ حولها،
+   مع body{overflow-x:hidden} → المحتوى مقطوع بلا أي تمرير على الجوال.
+   contain:style وحده آمن ولا يؤثر على التخطيط. */
+.sec{contain:style;}
+.tbl{contain:style;}
+.gc{contain:style;}
 *{-webkit-font-smoothing:antialiased;text-rendering:optimizeSpeed;}
 .moverlay{will-change:opacity;}
 .notif{will-change:transform,opacity;}
@@ -2105,9 +2128,10 @@ select.fc:focus{outline:none;}
 ══════════════════════════════════════════════════════ */
 
 /* تسريع قائمة التحاليل */
+/* ⭐ contain:layout + transform مُزالان: يمنعان الشبكة من إعادة التوزيع
+   (1fr 1fr على الجوال) ويقصّان البطاقات. */
 .test-list{
-  contain:layout style;
-  transform:translateZ(0);
+  contain:style;
 }
 .test-item{
   transition:all 0.12s ease !important;
@@ -2180,13 +2204,13 @@ select.fc:focus{outline:none;}
 ══════════════════════════════════════════════════════ */
 
 /* تسريع جدول النتائج */
+/* ⭐ أُزيل contain:layout + transform: كانا يقصّان جدول إدخال النتائج على
+   الجوال ويمنعان تمريره أفقياً. contain:style يبقى (آمن للتخطيط). */
 #sec-results .gc{
-  contain:layout style;
-  transform:translateZ(0);
+  contain:style;
 }
 #res-entry-tbody{
-  contain:layout style;
-  transform:translateZ(0);
+  contain:style;
 }
 #res-entry-tbody tr{
   transition:background 0.1s ease !important;
@@ -2541,7 +2565,9 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
    (نفس الـ specificity لكن لاحق بالترتيب) → القائمة تبقى ظاهرة وزر ☰ بلا أثر.
    الـ sidebar يأخذ will-change:transform أصلاً في قاعدة الأداء أدناه. */
 .modal,.moverlay,.hdr{will-change:transform;transform:translateZ(0)}
-.tbl,.gc,.stats,.test-list{contain:layout style}
+/* ⭐ contain:layout مُزال عن .tbl/.gc/.stats: كان يعيد كسر التخطيط الذي أُصلح
+   أعلاه (نفس الـ specificity لكن لاحق بالترتيب) → قصّ المحتوى على الجوال. */
+.tbl,.gc,.stats,.test-list{contain:style}
 .gc-body,.mbody,.chat-messages,.test-list,.wiz-panel-body{-webkit-overflow-scrolling:touch;scroll-behavior:auto}
 
 .modal{animation-duration:0.12s!important}
@@ -33964,8 +33990,11 @@ setTimeout(function(){
 
     /* GPU للعناصر الرئيسية */
     /* ⭐ .sidebar مستثنى: transform:translateZ(0) يتجاوز translateX(100%)/
-       .open في وضع الجوال فتتعطّل حركة القائمة وزر ☰. */
-    '.main-content,.sec,.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
+       .open في وضع الجوال فتتعطّل حركة القائمة وزر ☰.
+       ⭐ .sec مستثنى: transform يجعله containing block فيحبس المحتوى العريض
+       ويمنع تمرير الجداول أفقياً على الجوال.
+       (.main-content غير موجود في الـ DOM أصلاً — أُزيل.) */
+    '.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
 
     /* إخفاء الأقسام غير النشطة من render tree */
     '.sec:not(.active) { content-visibility:hidden; }',
