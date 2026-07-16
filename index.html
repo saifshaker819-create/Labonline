@@ -1873,36 +1873,6 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield;}
   /* ── المحتوى الرئيسي ── */
   .sec{padding:12px 8px!important;}
   .gc{padding:0!important;border-radius:12px!important;}
-
-  /* ⭐ شبكة أمان للتخطيط على الجوال ──────────────────────────────
-     1) لا يتجاوز أي عنصر عرض الشاشة (يمنع القصّ الجانبي).
-     2) الجداول تُمرَّر أفقياً داخل حاوياتها بدل أن تُقصّ.
-     3) الحاويات تسمح بالتمدد بدل حبس المحتوى. */
-  .main{max-width:100vw;overflow-x:hidden;}
-  .sec,.gc,.gc-body{max-width:100%;}
-  /* أي حاوية جدول (المستخدمة في كل الأقسام) تُمرَّر باللمس */
-  .gc-body>div[style*="overflow-x"],
-  .sec div[style*="overflow-x"]{
-    -webkit-overflow-scrolling:touch;
-    max-width:100%;
-  }
-  /* الجدول يأخذ عرضه الطبيعي داخل الحاوية المُمرَّرة (لا يُضغط ولا يُقصّ) */
-  .gc-body>div[style*="overflow-x"]>table,
-  .sec div[style*="overflow-x"]>table{
-    min-width:max-content;
-  }
-
-  /* ⭐ قسم ربط الأجهزة (LIS): شبكاته مكتوبة inline بأعمدة ثابتة
-     (repeat(4,1fr) و 280px 1fr) — الـ inline يتغلّب على CSS العادي،
-     لذا !important ضرورية. بدونها: 4 بطاقات + عمود 280px ثابت =
-     عرض أدنى ~700px → المحتوى مقطوع بلا تمرير على الجوال. */
-  .lis-stats-grid{
-    grid-template-columns:1fr 1fr!important;
-    gap:10px!important;
-  }
-  .lis-main-grid{
-    grid-template-columns:1fr!important;  /* عمود واحد: الأجهزة فوق، السجل تحت */
-  }
   .gc-hdr{padding:12px 14px!important;flex-wrap:wrap;gap:8px;}
   .gc-body{padding:12px!important;}
   .mbody{padding:14px!important;}
@@ -2012,14 +1982,9 @@ body.light-mode .cmp-sign-btn:hover{
 /* ── تحسينات الأداء ─────────────────────────────────── */
 .sidebar{will-change:transform;contain:layout style;}
 .modal{will-change:transform,opacity;contain:layout style;}
-/* ⭐ أُزيل contain:layout عن .sec/.tbl/.gc:
-   contain:layout يجعل العنصر صندوق احتواء مستقل لا يتمدّد لمحتواه، فتُقصّ
-   الجداول العريضة ويُلغى تمرير <div style="overflow-x:auto"> الملتفّ حولها،
-   مع body{overflow-x:hidden} → المحتوى مقطوع بلا أي تمرير على الجوال.
-   contain:style وحده آمن ولا يؤثر على التخطيط. */
-.sec{contain:style;}
-.tbl{contain:style;}
-.gc{contain:style;}
+.sec{contain:layout style;}
+.tbl{contain:layout style;}
+.gc{contain:layout style;}
 *{-webkit-font-smoothing:antialiased;text-rendering:optimizeSpeed;}
 .moverlay{will-change:opacity;}
 .notif{will-change:transform,opacity;}
@@ -2140,10 +2105,9 @@ select.fc:focus{outline:none;}
 ══════════════════════════════════════════════════════ */
 
 /* تسريع قائمة التحاليل */
-/* ⭐ contain:layout + transform مُزالان: يمنعان الشبكة من إعادة التوزيع
-   (1fr 1fr على الجوال) ويقصّان البطاقات. */
 .test-list{
-  contain:style;
+  contain:layout style;
+  transform:translateZ(0);
 }
 .test-item{
   transition:all 0.12s ease !important;
@@ -2216,13 +2180,13 @@ select.fc:focus{outline:none;}
 ══════════════════════════════════════════════════════ */
 
 /* تسريع جدول النتائج */
-/* ⭐ أُزيل contain:layout + transform: كانا يقصّان جدول إدخال النتائج على
-   الجوال ويمنعان تمريره أفقياً. contain:style يبقى (آمن للتخطيط). */
 #sec-results .gc{
-  contain:style;
+  contain:layout style;
+  transform:translateZ(0);
 }
 #res-entry-tbody{
-  contain:style;
+  contain:layout style;
+  transform:translateZ(0);
 }
 #res-entry-tbody tr{
   transition:background 0.1s ease !important;
@@ -2572,14 +2536,8 @@ body.light-mode .wnb-text .wnb-char.neon-trail {
    تحسينات الأداء - Performance Optimizations
 ══════════════════════════════════════════════ */
 *{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-/* ⭐ .sidebar مستثنى هنا عمداً: transform:translateZ(0) بلا media query كان
-   يتجاوز .sidebar{transform:translateX(100%)} و .sidebar.open في وضع الجوال
-   (نفس الـ specificity لكن لاحق بالترتيب) → القائمة تبقى ظاهرة وزر ☰ بلا أثر.
-   الـ sidebar يأخذ will-change:transform أصلاً في قاعدة الأداء أدناه. */
-.modal,.moverlay,.hdr{will-change:transform;transform:translateZ(0)}
-/* ⭐ contain:layout مُزال عن .tbl/.gc/.stats: كان يعيد كسر التخطيط الذي أُصلح
-   أعلاه (نفس الـ specificity لكن لاحق بالترتيب) → قصّ المحتوى على الجوال. */
-.tbl,.gc,.stats,.test-list{contain:style}
+.sidebar,.modal,.moverlay,.hdr{will-change:transform;transform:translateZ(0)}
+.tbl,.gc,.stats,.test-list{contain:layout style}
 .gc-body,.mbody,.chat-messages,.test-list,.wiz-panel-body{-webkit-overflow-scrolling:touch;scroll-behavior:auto}
 
 .modal{animation-duration:0.12s!important}
@@ -3781,7 +3739,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     <div class="sec" id="sec-lis">
 
       <!-- Stats Bar -->
-      <div class="lis-stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" id="lis-stats-row">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" id="lis-stats-row">
         <div class="scard" style="text-align:center;padding:16px">
           <div style="font-size:26px;font-weight:900;color:var(--primary)" id="lis-st-total">0</div>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;font-weight:600">إجمالي النتائج</div>
@@ -3800,7 +3758,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         </div>
       </div>
 
-      <div class="lis-main-grid" style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">
+      <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">
 
         <!-- Sidebar: Devices + Quick Log -->
         <div>
@@ -7248,7 +7206,15 @@ const DB={
 
 // load/save — نفس الواجهة القديمة بالضبط (لا يتغير باقي الكود)
 function load(k,def){return DB.get(k)||def;}
-function save(k,v){DB.set(k,v);}
+function save(k,v){
+  DB.set(k,v);
+  // ⭐ نقطة بثّ مركزية: الاستدعاءات داخل هذا الـ script block ترتبط
+  //    بتعريف save المحلي ولا تمرّ عبر window.save إطلاقاً، لذلك يجب
+  //    إطلاق الخطّاف من هنا لتُزامَن كل الأقسام (المنوي/الزرع/…)
+  try{ if(typeof window._lanOnSave === 'function') window._lanOnSave(k,v); }catch(e){}
+}
+window.save = save;
+window.load = load;
 
 // ══════════════════════════════════════════════════════════════
 // BIG settings on IDB (صور الرأس/التذييل + الحقول المخصصة لتحاليل الإدرار/البراز/المنوي)
@@ -25078,7 +25044,7 @@ function renderSemenList(){
     body.innerHTML='<div class="empty"><div class="empty-ic">🔬</div><p>لا توجد نتائج بعد</p></div>';
     return;
   }
-  body.innerHTML=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="tbl"><thead><tr>
+  body.innerHTML=`<table class="tbl"><thead><tr>
     <th>المريض</th><th>التاريخ</th><th>التشخيص</th><th>التركيز</th><th>الحركة PR</th><th>الأشكال الطبيعية</th><th>الإجراءات</th>
   </tr></thead><tbody>${list.map(r=>`<tr>
     <td>${r.patientName||'—'}<div style="font-size:10px;color:var(--text2)">${r.patientId||''}</div></td>
@@ -25093,7 +25059,7 @@ function renderSemenList(){
       <button class="btn btn-sm btn-w" onclick="shareSemenPDFWhatsApp('${r.id}')" title="مشاركة رابط PDF عبر واتساب">📱 PDF</button>
       <button class="btn btn-sm btn-d" onclick="deleteSemenRecord('${r.id}')">🗑️</button>
     </td>
-  </tr>`).join('')}</tbody></table></div>`;
+  </tr>`).join('')}</tbody></table>`;
 }
 
 function _buildSemenPrintHTML(r){
@@ -34001,12 +33967,7 @@ setTimeout(function(){
     '}',
 
     /* GPU للعناصر الرئيسية */
-    /* ⭐ .sidebar مستثنى: transform:translateZ(0) يتجاوز translateX(100%)/
-       .open في وضع الجوال فتتعطّل حركة القائمة وزر ☰.
-       ⭐ .sec مستثنى: transform يجعله containing block فيحبس المحتوى العريض
-       ويمنع تمرير الجداول أفقياً على الجوال.
-       (.main-content غير موجود في الـ DOM أصلاً — أُزيل.) */
-    '.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
+    '.main-content,.sec,.sidebar,.hdr { transform:translateZ(0); -webkit-transform:translateZ(0); }',
 
     /* إخفاء الأقسام غير النشطة من render tree */
     '.sec:not(.active) { content-visibility:hidden; }',
@@ -35679,7 +35640,176 @@ var _lanClients   = new Set(); // WebSocket clients (سيرفير)
 var _lanMode      = null;   // 'server' | 'client' | null
 var _lanHttpServer= null;
 var _LAN_PORT     = 8797;
-var _LAN_SYNC_KEYS= ['patients','requests','invoices','doctors'];
+// ⭐ مزامنة شاملة — كل أقسام البرنامج (وليس 4 مفاتيح فقط)
+var _LAN_SYNC_KEYS= ['patients','requests','invoices','doctors','testGroups',
+                     'packages','inventory','qc','billing','cultureRecords',
+                     'uaRecords','stoolExamRecords','semenRecords','phoneBook'];
+
+// ⭐ خريطة إعادة الرسم لكل مفتاح — تُستخدم بعد تطبيق أي تحديث وارد
+var _LAN_RENDER = {
+  patients:        function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },
+  requests:        function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },
+  invoices:        function(){ try{renderInvoices();}catch(e){} },
+  doctors:         function(){ try{renderDoctors();}catch(e){} },
+  testGroups:      function(){ try{renderTestsDB();}catch(e){} },
+  packages:        function(){ try{renderPackages();}catch(e){} },
+  inventory:       function(){ try{renderInventory();}catch(e){} },
+  qc:              function(){ try{renderQC();}catch(e){} },
+  billing:         function(){ try{renderAll();}catch(e){} },
+  cultureRecords:  function(){ try{renderAll();}catch(e){} },
+  uaRecords:       function(){ try{renderAll();}catch(e){} },
+  stoolExamRecords:function(){ try{renderAll();}catch(e){} },
+  semenRecords:    function(){ try{renderAll();}catch(e){} },
+  phoneBook:       function(){ try{renderAll();}catch(e){} }
+};
+function _lanRender(key){
+  var f = _LAN_RENDER[key];
+  if(f) setTimeout(f, 0);
+  try{ document.dispatchEvent(new CustomEvent('dp:refresh')); }catch(e){}
+}
+
+// ⭐ قراءة البيانات الحالية لأي مفتاح
+function _lanGetLocal(key){
+  try{ var v = load(key, []); return Array.isArray(v) ? v : []; }catch(e){ return []; }
+}
+
+// ⭐ بصمة الجهاز — لتمييز مصدر كل رسالة
+var _lanDeviceId = (function(){
+  try{
+    var id = localStorage.getItem('lis_lan_devid');
+    if(!id){ id = 'dev_'+Date.now()+'_'+Math.random().toString(36).slice(2,8);
+             localStorage.setItem('lis_lan_devid', id); }
+    return id;
+  }catch(e){ return 'dev_'+Math.random().toString(36).slice(2,8); }
+})();
+
+// ⭐ إحصاء البيانات المحلية لكل المفاتيح (لمقارنة "من يملك بيانات أكثر")
+function _lanLocalCounts(){
+  var c = {}, total = 0;
+  for(var i=0;i<_LAN_SYNC_KEYS.length;i++){
+    var k = _LAN_SYNC_KEYS[i];
+    var n = _lanGetLocal(k).length;
+    c[k] = n; total += n;
+  }
+  return { counts:c, total:total };
+}
+
+// ⭐ الدمج الذكي: يُبقي كل السجلات من الطرفين — لا يفقد أي شيء.
+//    عند تطابق المعرّف: يفوز الأحدث (updatedAt/ts/lastModified) وإلا يفوز الوارد.
+function _lanMergeArrays(localArr, incomingArr){
+  if(!Array.isArray(localArr))    localArr = [];
+  if(!Array.isArray(incomingArr)) incomingArr = [];
+  function _idOf(o, idx){
+    if(!o || typeof o !== 'object') return '__v_'+idx+'_'+String(o);
+    return o.id || o.reqId || o.patientId || o.invoiceId || o._id ||
+           ('__i_'+idx+'_'+JSON.stringify(o).slice(0,60));
+  }
+  function _tsOf(o){
+    if(!o || typeof o !== 'object') return 0;
+    var t = o.updatedAt || o.lastModified || o.ts || o.modifiedAt || o.createdAt || o.date || 0;
+    var n = (typeof t === 'number') ? t : Date.parse(t);
+    return isNaN(n) ? 0 : n;
+  }
+  var map = {}, order = [];
+  function _put(o, idx){
+    var id = _idOf(o, idx);
+    if(!(id in map)){ map[id] = o; order.push(id); return; }
+    // تعارض: رجّح الأحدث زمنياً
+    var cur = map[id];
+    if(_tsOf(o) >= _tsOf(cur)) map[id] = o;
+  }
+  localArr.forEach(_put);
+  incomingArr.forEach(_put);
+  return order.map(function(id){ return map[id]; });
+}
+
+// ⭐ تطبيق بيانات مفتاح محلياً بدون إعادة بث (منع الحلقة)
+function _lanApplyKey(key, data){
+  if(_LAN_SYNC_KEYS.indexOf(key) === -1) return;
+  if(!Array.isArray(data)) return;
+  _lanApplying = true;
+  try{
+    if(typeof window._smSetters === 'object' && window._smSetters[key]){
+      window._smSetters[key](data);
+    }
+    if(typeof save === 'function') save(key, data);
+    if(typeof _MC !== 'undefined') { try{ _MC[key] = data; }catch(e){} }
+  } finally { _lanApplying = false; }
+  _lanRender(key);
+}
+
+// ⭐ إرسال رسالة خام عبر LAN (سيرفير → عملاء، أو عميل → سيرفير)
+function _lanSendRaw(obj){
+  var msg = JSON.stringify(obj);
+  if(_lanMode === 'server'){
+    if(window.electronAPI && window.electronAPI.lanBroadcast) window.electronAPI.lanBroadcast(msg);
+  } else if(_lanMode === 'client' && _lanWS && _lanWS.readyState === 1){
+    try{ _lanWS.send(msg); }catch(e){}
+  }
+}
+
+// ⭐ بوابة المزامنة: تمنع بثّ أي تعديل محلي قبل اكتمال المصالحة الأولى.
+//    هذا هو سبب المشكلة "الحاسبة التي تعدّل تفرض بياناتها":
+//    كان أي save() يبثّ فوراً قبل أن تصل بيانات الجهاز الأغنى.
+var _lanSyncReady   = false; // هل اكتملت المصالحة الأولى؟
+var _lanPendingKeys = {};    // تعديلات محلية بانتظار اكتمال المصالحة
+var _lanNegTimer    = null;
+
+function _lanResetGate(){
+  _lanSyncReady = false;
+  _lanPendingKeys = {};
+  if(_lanNegTimer){ clearTimeout(_lanNegTimer); _lanNegTimer = null; }
+}
+
+// بعد اكتمال المصالحة: افتح البوابة وابثّ ما تأجّل
+function _lanOpenGate(){
+  if(_lanSyncReady) return;
+  _lanSyncReady = true;
+  if(_lanNegTimer){ clearTimeout(_lanNegTimer); _lanNegTimer = null; }
+  var keys = Object.keys(_lanPendingKeys);
+  _lanPendingKeys = {};
+  for(var i=0;i<keys.length;i++){
+    lanBroadcast(keys[i], _lanGetLocal(keys[i]));
+  }
+  if(keys.length) showNotif('🌐 LAN','تم بثّ التعديلات المؤجّلة ✓','info');
+}
+
+// ⭐ إعلان جردة البيانات — يُرسل عند الاتصال ليعرف الجميع من يملك الأكثر
+function _lanAnnounce(){
+  var s = _lanLocalCounts();
+  _lanSendRaw({ type:'inventory', from:_lanDeviceId, counts:s.counts, total:s.total, ts:Date.now() });
+  // إن لم يردّ أحد بجردة أعلى خلال 3 ثوانٍ → نحن الأغنى (أو وحيدون) → افتح البوابة
+  if(_lanNegTimer) clearTimeout(_lanNegTimer);
+  _lanNegTimer = setTimeout(function(){ _lanOpenGate(); }, 3000);
+}
+
+// ⭐ إرسال كامل البيانات (المصدر الأغنى يدفع نسخته للجميع)
+function _lanSendFullState(){
+  var payload = {};
+  for(var i=0;i<_LAN_SYNC_KEYS.length;i++){
+    var k = _LAN_SYNC_KEYS[i];
+    payload[k] = _lanGetLocal(k);
+  }
+  var s = _lanLocalCounts();
+  _lanSendRaw({ type:'fullstate', from:_lanDeviceId, total:s.total, data:payload, ts:Date.now() });
+}
+
+// ⭐ استقبال حالة كاملة → دمج شامل (لا يفقد بيانات الطرفين)
+function _lanApplyFullState(payload){
+  if(!payload || typeof payload !== 'object') return 0;
+  var changed = 0;
+  for(var i=0;i<_LAN_SYNC_KEYS.length;i++){
+    var k = _LAN_SYNC_KEYS[i];
+    if(!Array.isArray(payload[k])) continue;
+    var localArr = _lanGetLocal(k);
+    var merged   = _lanMergeArrays(localArr, payload[k]);
+    if(merged.length !== localArr.length || payload[k].length){
+      _lanApplyKey(k, merged);
+      changed += merged.length;
+    }
+  }
+  return changed;
+}
 
 // تحديث شريط حالة LAN
 function _lanUpdateStatus(){
@@ -35720,7 +35850,7 @@ function _lanUpdateStatus(){
 
 // بث التغيير لجميع الأجهزة المرتبطة
 function lanBroadcast(key, data){
-  var msg = JSON.stringify({type:'sync', key:key, data:data, ts:Date.now()});
+  var msg = JSON.stringify({type:'sync', key:key, data:data, from:_lanDeviceId, ts:Date.now()});
   if(_lanMode==='server'){
     // السيرفير يبث للعملاء عبر Electron IPC (main process يملك WebSocket clients الحقيقية)
     if(window.electronAPI && window.electronAPI.lanBroadcast){
@@ -35737,23 +35867,50 @@ function _lanHandleMessage(raw){
   try{
     var msg = JSON.parse(raw);
     if(msg.type==='sync' && _LAN_SYNC_KEYS.indexOf(msg.key)!==-1){
-      // تحديث البيانات محلياً بدون تبث (لمنع الحلقة اللانهائية)
-      _lanApplying = true;
-      try{
-        if(typeof window._smSetters === 'object' && window._smSetters[msg.key]){
-          window._smSetters[msg.key](msg.data);
-        }
-        if(typeof save==='function') save(msg.key, msg.data);
-      } finally { _lanApplying = false; }
-      // تحديث الواجهة
-      if(msg.key==='patients' && typeof renderPatients==='function') renderPatients();
-      if(msg.key==='requests' && typeof renderRequests==='function') renderRequests();
-      if(msg.key==='invoices' && typeof renderBilling==='function') renderBilling();
-      if(msg.key==='doctors' && typeof renderDoctors==='function') renderDoctors();
+      // ⭐ دمج بدل الاستبدال — لا تُفقد السجلات المحلية أبداً
+      if(msg.from && msg.from === _lanDeviceId) return; // تجاهل صدى رسائلنا
+      var _localArr = _lanGetLocal(msg.key);
+      var _merged   = _lanMergeArrays(_localArr, msg.data);
+      _lanApplyKey(msg.key, _merged);
       showNotif('🌐 LAN','تم استقبال تحديث: '+msg.key,'info');
-      // إشعار بوابة الطبيب بالتحديث
-      document.dispatchEvent(new CustomEvent('dp:refresh'));
-    } else if(msg.type==='cbc' && msg.reqId){
+    }
+    // ⭐ جردة واردة: قارن مَن يملك بيانات أكثر
+    else if(msg.type==='inventory' && msg.from !== _lanDeviceId){
+      // السيرفير مركز التوزيع: أعد إرسال الجردة لبقية العملاء
+      if(_lanMode === 'server' && !msg._relayed){
+        msg._relayed = 1; _lanSendRaw(msg);
+      }
+      var _mine = _lanLocalCounts();
+      if(_mine.total > (msg.total||0)){
+        // نحن الأغنى → ادفع نسختنا للجميع فوراً
+        _lanSendFullState();
+        _lanOpenGate();
+      } else if(_mine.total < (msg.total||0)){
+        // الطرف الآخر أغنى → ابقَ مغلقاً وانتظر نسخته
+        if(_lanNegTimer) clearTimeout(_lanNegTimer);
+        _lanNegTimer = setTimeout(function(){ _lanOpenGate(); }, 8000); // شبكة أمان
+        _lanSendRaw({ type:'request_state', from:_lanDeviceId, to:msg.from, ts:Date.now() });
+      } else {
+        _lanOpenGate(); // تساوٍ → لا حاجة للانتظار
+      }
+    }
+    // ⭐ طلب حالة كاملة موجّه لنا
+    else if(msg.type==='request_state'){
+      if(_lanMode === 'server' && msg.to !== _lanDeviceId && !msg._relayed){
+        msg._relayed = 1; _lanSendRaw(msg); // مرّره للعميل المقصود
+      }
+      if(msg.to === _lanDeviceId) _lanSendFullState();
+    }
+    // ⭐ حالة كاملة واردة → دمج شامل لكل الأقسام
+    else if(msg.type==='fullstate' && msg.from !== _lanDeviceId){
+      if(_lanMode === 'server' && !msg._relayed){
+        msg._relayed = 1; _lanSendRaw(msg); // وزّعها على بقية العملاء
+      }
+      var _n = _lanApplyFullState(msg.data);
+      _lanOpenGate(); // اكتملت المصالحة
+      if(_n) showNotif('🌐 LAN','تمت مزامنة كل الأقسام ✓','success');
+    }
+    else if(msg.type==='cbc' && msg.reqId){
       // نتيجة CBC وصلت من جهاز على حاسبة أخرى
       if(typeof lisCbcFromLAN==='function') lisCbcFromLAN(msg);
     }
@@ -35853,9 +36010,28 @@ function lisLanStartServer(){
     window.electronAPI.lanStartServer(_LAN_PORT).then(function(r){
       if(r && r.ok){
         _lanMode = 'server';
+        _lanResetGate(); // ⭐ ابدأ مغلقاً حتى تكتمل المصالحة مع أول جهاز
         window.electronAPI.onLanMessage(function(msg){
-          _lanHandleMessage(typeof msg==='string' ? msg : msg.data);
+          var _raw = (typeof msg==='string' ? msg : msg.data);
+          // ⭐ عند اتصال جهاز جديد: أعلن جردتنا ليبدأ التفاوض على الأغنى
+          try{
+            var _p = JSON.parse(_raw);
+            if(_p && _p.type==='client_connected'){
+              // ⭐ جهاز جديد دخل → أعِد التفاوض من جديد (الأغنى يفوز)
+              _lanResetGate();
+              setTimeout(function(){ _lanAnnounce(); }, 500);
+              _lanUpdateStatus();
+              return;
+            }
+            if(_p && _p.type==='client_disconnected'){
+              if(_p.count === 0) _lanOpenGate(); // لا أحد متصل → اعمل بحرية
+              _lanUpdateStatus();
+              return;
+            }
+          }catch(e){}
+          _lanHandleMessage(_raw);
         });
+        _lanOpenGate(); // لا عملاء بعد → اعمل بحرية؛ سيُعاد التفاوض عند أول اتصال
         _lanUpdateStatus();
         showNotif('🌐 LAN','✅ السيرفير نشط — بورت '+_LAN_PORT,'success');
         setInterval(function(){ if(_lanMode==='server') _lanUpdateStatus(); }, 4000);
@@ -35890,12 +36066,15 @@ function lisLanConnectClient(){
     _lanWS = new WebSocket(wsUrl);
     _lanWS.onopen = function(){
       _lanMode='client';
+      _lanResetGate(); // ⭐ ابقَ مغلقاً حتى نعرف مَن الأغنى
       _lanUpdateStatus();
       showNotif('🌐 LAN','متصل بالسيرفير: '+ip,'success');
+      // ⭐ أعلن جردة بياناتنا → الأغنى بالبيانات يفوز ويدفع نسخته للجميع
+      setTimeout(function(){ _lanAnnounce(); }, 400);
     };
     _lanWS.onmessage = function(e){ _lanHandleMessage(e.data); };
     _lanWS.onclose = function(){
-      _lanMode=null; _lanWS=null; _lanUpdateStatus();
+      _lanMode=null; _lanWS=null; _lanOpenGate(); _lanUpdateStatus();
       showNotif('LAN','انقطع الاتصال بالسيرفير','warning');
     };
     _lanWS.onerror = function(){
@@ -35912,7 +36091,7 @@ function lisLanDisconnect(){
   if(window.electronAPI && window.electronAPI.lanStopServer){
     window.electronAPI.lanStopServer().catch(function(){});
   }
-  _lanMode=null; _lanClients.clear(); _lanUpdateStatus();
+  _lanMode=null; _lanClients.clear(); _lanOpenGate(); _lanUpdateStatus();
   showNotif('LAN','تم قطع الشبكة المحلية ✓','info');
 }
 
@@ -35934,16 +36113,18 @@ function lisLanCheckStatus(){
 // يُفعَّل عند أول استخدام للـ LAN
 var _lanSaveHooked = false;
 var _lanApplying   = false; // مرفوعة أثناء تطبيق تحديث وارد لمنع إعادة البث (منع الحلقة)
+// ⭐ إصلاح جذري: الالتفاف حول window.save كان لا يعمل إطلاقاً.
+//    لأن save معرّفة بـ (function declaration) وكل مستدعييها داخل نفس
+//    الـ script block يرتبطون بالتعريف المحلي، فلا يمرّون عبر window.save.
+//    لذلك أصبح save() نفسه ينادي window._lanOnSave (نقطة مركزية).
 function _ensureLanSaveHook(){
   if(_lanSaveHooked) return;
-  if(typeof window.save !== 'function') return;
-  var _origSave = window.save;
-  window.save = function(key, data){
-    _origSave.apply(this, arguments);
+  window._lanOnSave = function(key, data){
     // لا تبثّ إذا كان الحفظ ناتجاً عن تطبيق تحديث وارد عبر LAN (منع الحلقة اللانهائية)
-    if(_lanMode && !_lanApplying && _LAN_SYNC_KEYS.indexOf(key) !== -1){
-      lanBroadcast(key, data);
-    }
+    if(!_lanMode || _lanApplying || _LAN_SYNC_KEYS.indexOf(key) === -1) return;
+    // ⭐ قبل اكتمال المصالحة: أجّل البثّ حتى لا تفرض الحاسبة الأقل بياناتها
+    if(!_lanSyncReady){ _lanPendingKeys[key] = 1; return; }
+    lanBroadcast(key, data);
   };
   _lanSaveHooked = true;
 }
