@@ -1891,6 +1891,18 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield;}
   .sec div[style*="overflow-x"]>table{
     min-width:max-content;
   }
+
+  /* ⭐ قسم ربط الأجهزة (LIS): شبكاته مكتوبة inline بأعمدة ثابتة
+     (repeat(4,1fr) و 280px 1fr) — الـ inline يتغلّب على CSS العادي،
+     لذا !important ضرورية. بدونها: 4 بطاقات + عمود 280px ثابت =
+     عرض أدنى ~700px → المحتوى مقطوع بلا تمرير على الجوال. */
+  .lis-stats-grid{
+    grid-template-columns:1fr 1fr!important;
+    gap:10px!important;
+  }
+  .lis-main-grid{
+    grid-template-columns:1fr!important;  /* عمود واحد: الأجهزة فوق، السجل تحت */
+  }
   .gc-hdr{padding:12px 14px!important;flex-wrap:wrap;gap:8px;}
   .gc-body{padding:12px!important;}
   .mbody{padding:14px!important;}
@@ -3769,7 +3781,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     <div class="sec" id="sec-lis">
 
       <!-- Stats Bar -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" id="lis-stats-row">
+      <div class="lis-stats-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px" id="lis-stats-row">
         <div class="scard" style="text-align:center;padding:16px">
           <div style="font-size:26px;font-weight:900;color:var(--primary)" id="lis-st-total">0</div>
           <div style="font-size:11px;color:var(--text2);margin-top:4px;font-weight:600">إجمالي النتائج</div>
@@ -3788,7 +3800,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">
+      <div class="lis-main-grid" style="display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start">
 
         <!-- Sidebar: Devices + Quick Log -->
         <div>
@@ -25066,7 +25078,7 @@ function renderSemenList(){
     body.innerHTML='<div class="empty"><div class="empty-ic">🔬</div><p>لا توجد نتائج بعد</p></div>';
     return;
   }
-  body.innerHTML=`<table class="tbl"><thead><tr>
+  body.innerHTML=`<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="tbl"><thead><tr>
     <th>المريض</th><th>التاريخ</th><th>التشخيص</th><th>التركيز</th><th>الحركة PR</th><th>الأشكال الطبيعية</th><th>الإجراءات</th>
   </tr></thead><tbody>${list.map(r=>`<tr>
     <td>${r.patientName||'—'}<div style="font-size:10px;color:var(--text2)">${r.patientId||''}</div></td>
@@ -25081,7 +25093,7 @@ function renderSemenList(){
       <button class="btn btn-sm btn-w" onclick="shareSemenPDFWhatsApp('${r.id}')" title="مشاركة رابط PDF عبر واتساب">📱 PDF</button>
       <button class="btn btn-sm btn-d" onclick="deleteSemenRecord('${r.id}')">🗑️</button>
     </td>
-  </tr>`).join('')}</tbody></table>`;
+  </tr>`).join('')}</tbody></table></div>`;
 }
 
 function _buildSemenPrintHTML(r){
