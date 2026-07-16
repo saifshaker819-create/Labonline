@@ -27467,6 +27467,670 @@ document.addEventListener('DOMContentLoaded', function(){
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     🎙️ المساعد الصوتي (Voice Assistant v4) — وحدة مستقلة
+     النطاق: الخطوة 1 (بيانات المريض) + الخطوة 2 (اختيار التحاليل) فقط.
+     لا يلمس أي منطق قائم — يستدعي دوال البرنامج الأصلية فقط:
+       selectTitle / calcAgeCompound / calcAgeFromBirthYear /
+       suggestPatients / toggleWizTest / wizNext / wizFinish
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="va-panel" style="display:none;position:fixed;bottom:20px;left:20px;z-index:99999;
+     width:330px;max-width:calc(100vw - 40px);
+     background:linear-gradient(160deg,#0a1628,#0d1f35);
+     border:2px solid rgba(0,212,255,0.45);border-radius:16px;
+     box-shadow:0 12px 44px rgba(0,0,0,0.6),0 0 0 1px rgba(0,212,255,0.15);
+     font-family:'Cairo',sans-serif;direction:rtl;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:9px;padding:11px 14px;
+       background:linear-gradient(135deg,rgba(0,212,255,0.16),rgba(139,63,255,0.16));
+       border-bottom:1px solid rgba(0,212,255,0.25)">
+    <div id="va-orb" style="width:11px;height:11px;border-radius:50%;background:#00e87a;flex-shrink:0"></div>
+    <div style="flex:1;font-size:13px;font-weight:900;color:#00d4ff">🎙️ المساعد الصوتي</div>
+    <div id="va-timer" style="font-size:10px;color:#7a8a9a;font-weight:700"></div>
+    <button onclick="vaStop()" style="background:transparent;border:none;color:#7a8a9a;
+        cursor:pointer;font-size:16px;padding:0 2px;line-height:1">✕</button>
+  </div>
+  <div style="padding:12px 14px">
+    <div id="va-heard" style="min-height:34px;font-size:13px;color:#e8f4ff;font-weight:700;
+         background:rgba(0,0,0,0.28);border-radius:8px;padding:8px 10px;line-height:1.6">…</div>
+    <div id="va-msg" style="margin-top:8px;font-size:11px;color:#00e87a;font-weight:700;line-height:1.6"></div>
+    <div id="va-hint" style="margin-top:7px;font-size:10px;color:#6a7a8a;line-height:1.7"></div>
+  </div>
+</div>
+
+<style>
+@keyframes va-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:0.45}}
+#va-orb.va-live{background:#ff2244!important;animation:va-pulse 1.1s ease-in-out infinite}
+#va-orb.va-work{background:#ffcc00!important}
+@media(max-width:768px){
+  #va-panel{left:10px;right:10px;bottom:10px;width:auto;max-width:none}
+}
+</style>
+
+<script>
+(function(){
+'use strict';
+// ═══════ الحالة ═══════
+var VA = {
+  rec:null, on:false, ctx:'idle', silence:null, tick:null,
+  last:0, SIL:10000, booted:false
+};
+var VA_TITLES=['السيد','السيدة','الآنسة','الحاج','الحاجة','الاستاذ','الاستاذة','الطفل','الطفلة','الدكتور','الدكتورة'];
+
+// ═══════ تطبيع عربي ═══════
+function vaNorm(s){
+  if(!s) return '';
+  return String(s)
+    .replace(/[\u064B-\u0652\u0670\u0640]/g,'')      // تشكيل وتطويل
+    .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي')
+    .replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ة/g,'ه')
+    .replace(/[٠-٩]/g,function(d){return '٠١٢٣٤٥٦٧٨٩'.indexOf(d);})
+    .replace(/[۰-۹]/g,function(d){return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d);})
+    .replace(/[^\u0621-\u064Aa-zA-Z0-9\s]/g,' ')
+    .replace(/\s+/g,' ').trim().toLowerCase();
+}
+function vaDigits(s){
+  return String(s||'').replace(/[٠-٩]/g,function(d){return '٠١٢٣٤٥٦٧٨٩'.indexOf(d);})
+                      .replace(/[۰-۹]/g,function(d){return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d);});
+}
+
+// ═══════ الأعداد العربية المنطوقة → رقم ═══════
+var VA_ONES={'صفر':0,'واحد':1,'احد':1,'اثنين':2,'اثنان':2,'ثنين':2,'ثلاثه':3,'ثلاث':3,'اربعه':4,'اربع':4,
+  'خمسه':5,'خمس':5,'سته':6,'ست':6,'سبعه':7,'سبع':7,'ثمانيه':8,'ثمان':8,'ثمانه':8,'تسعه':9,'تسع':9,'عشره':10,'عشر':10};
+var VA_TEENS={'احدعش':11,'احداعش':11,'حداعش':11,'اثناعش':12,'اطناعش':12,'ثنعش':12,'ثلثعش':13,'ثلاثتعش':13,
+  'اربعتعش':14,'خمستعش':15,'خمسطعش':15,'ستعش':16,'سبعتعش':17,'ثمنطعش':18,'تسعتعش':19};
+var VA_TENS={'عشرين':20,'ثلاثين':30,'اربعين':40,'خمسين':50,'ستين':60,'سبعين':70,'ثمانين':80,'تسعين':90};
+// ملاحظة: المفاتيح بعد vaNorm (ة→ه، أ→ا). "تسعمية"→"تسعميه" و"تسعمائة"→"تسعمايه"
+var VA_HUND={
+  'مئه':100,'مايه':100,'ميه':100,
+  'مئتين':200,'ميتين':200,'مايتين':200,'ميتان':200,
+  'ثلثمايه':300,'ثلاثمايه':300,'ثلاثميه':300,'ثلثميه':300,'ثلاثمئه':300,
+  'اربعمايه':400,'اربعميه':400,'اربعمئه':400,
+  'خمسمايه':500,'خمسميه':500,'خمسمئه':500,
+  'ستمايه':600,'ستميه':600,'ستمئه':600,
+  'سبعمايه':700,'سبعميه':700,'سبعمئه':700,
+  'ثمانمايه':800,'ثمنمايه':800,'ثمانميه':800,'ثمنميه':800,'ثمانمئه':800,
+  'تسعمايه':900,'تسعميه':900,'تسعمئه':900
+};
+
+// يحوّل عبارة عربية منطوقة إلى عدد
+// يدعم: "الف وتسعمية وثمانين" → 1980 · "خمسه وعشرين" → 25 · "الفين وخمسه" → 2005
+// ملاحظة: العربية تجمع بـ"و" (خمسة وعشرين = 5+20)، فكل الأجزاء تُجمع.
+function vaWordsToNum(txt){
+  var t=vaNorm(txt);
+  if(!t) return null;
+  var direct=t.replace(/\s/g,'');
+  if(/^\d+$/.test(direct)) return parseInt(direct,10);
+
+  // افصل "و" الملتصقة: وعشرين → و عشرين
+  t=t.replace(/(^|\s)و(?=[\u0621-\u064A])/g,'$1');
+  var toks=t.split(' ').filter(Boolean);
+  if(!toks.length) return null;
+
+  var total=0, seen=false;
+  for(var i=0;i<toks.length;i++){
+    var w=toks[i];
+    if(w==='و') continue;
+    if(/^\d+$/.test(w)){ total+=parseInt(w,10); seen=true; continue; }
+    // الآلاف
+    if(w==='الف'||w==='ألف'||w==='الاف'){ total+=1000; seen=true; continue; }
+    if(w==='الفين'||w==='ألفين'){ total+=2000; seen=true; continue; }
+    // المئات المركبة (تسعمايه…) قبل المفردات
+    if(VA_HUND[w]!=null){ total+=VA_HUND[w]; seen=true; continue; }
+    if(VA_TENS[w]!=null){ total+=VA_TENS[w]; seen=true; continue; }
+    if(VA_TEENS[w]!=null){ total+=VA_TEENS[w]; seen=true; continue; }
+    if(VA_ONES[w]!=null){ total+=VA_ONES[w]; seen=true; continue; }
+  }
+  return seen?total:null;
+}
+
+// استخراج سلسلة أرقام (للهاتف): يقبل أرقاماً منطوقة مفردة أو رقماً مكتوباً
+function vaExtractPhone(raw){
+  var t=vaDigits(raw);
+  var joined=t.replace(/[^\d]/g,'');
+  if(joined.length>=10) return joined;
+  var toks=vaNorm(raw).split(' '), out='';
+  for(var i=0;i<toks.length;i++){
+    var w=toks[i];
+    if(/^\d+$/.test(w)){ out+=w; continue; }
+    if(VA_ONES[w]!=null && VA_ONES[w]<10){ out+=VA_ONES[w]; continue; }
+    if(w==='صفر') out+='0';
+  }
+  return out.length>=10?out:(joined.length>=7?joined:'');
+}
+
+// ═══════ مرادفات التحاليل (لهجة عامية + إنجليزي منطوق) ═══════
+var VA_TEST_SYN={
+  'tsh':['تي اس اج','تي اس اتش','تي إس إتش','تي اس هاش','الغده','الغده الدرقيه','درقيه','تي اس اش'],
+  'rbs':['رندم بلد شكر','راندوم بلد شوكر','سكر عشوائي','السكر العشوائي','ار بي اس','شكر عشوائي','سكر'],
+  'fbs':['فاستنك بلد شكر','صائم','سكر صائم','اف بي اس','فاستينغ'],
+  'cbc':['سي بي سي','صوره دم','صورة الدم','دم كامل','سي بي سي كامل'],
+  'hba1c':['اج بي ايه ون سي','تراكمي','السكر التراكمي','هيموغلوبين تراكمي','اي وان سي'],
+  'gua':['حامض اليوريك','يوريك اسيد','حمض البوليك','يوريك'],
+  'cr':['كرياتينين','الكرياتين','كريتينين'],
+  'bun':['بولينا','يوريا','بي يو ان'],
+  'chol':['كولسترول','الكوليسترول','كليسترول'],
+  'tg':['دهون ثلاثيه','ترايكلسريد','دهون'],
+  'alt':['ايه ال تي','جي بي تي','انزيمات الكبد','الكبد'],
+  'ast':['ايه اس تي','جي او تي'],
+  'alp':['الكالين فوسفاتيز','ايه ال بي'],
+  'tbil':['بيليروبين','الصفار','صفراء'],
+  'ca':['كالسيوم','الكالسيوم'],
+  'na':['صوديوم','الصوديوم'],
+  'k':['بوتاسيوم','البوتاسيوم'],
+  'fe':['حديد','الحديد','ايرون'],
+  'ferr':['فيريتين','مخزون الحديد'],
+  'vitd':['فيتامين دي','فيتامين د'],
+  'vitb12':['فيتامين بي تعشر','بي تعشر','فيتامين ب ١٢'],
+  'psa':['بي اس ايه','البروستات','بروستات'],
+  'esr':['اي اس ار','سرعه الترسيب','ترسيب'],
+  'crp':['سي ار بي','التهاب'],
+  'ua':['ادرار','الادرار','بول','تحليل البول','جي يو اي'],
+  'stool':['براز','خرو','غائط','تحليل البراز'],
+  'hp':['اج بايلوري','جرثومه المعده','بايلوري','هيليكوباكتر'],
+  'preg':['حمل','فحص الحمل','بي اتش سي جي','حمل رقمي'],
+  'lh':['ال اج'],'fsh':['اف اس اج'],'prl':['برولاكتين','حليب'],
+  't3':['تي ثلاثه'],'t4':['تي اربعه'],
+  'hbsag':['التهاب الكبد بي','بي','اج بي اس ايه جي'],
+  'hcv':['التهاب الكبد سي','سي','اج سي في'],
+  'bg':['زمره','فصيله','زمره الدم','فصيلة الدم','بلد كروب']
+};
+
+function vaEditDist(a,b){
+  if(a===b) return 0;
+  var m=a.length,n=b.length;
+  if(!m) return n; if(!n) return m;
+  if(Math.abs(m-n)>3) return 99;
+  var prev=[],cur=[],i,j;
+  for(j=0;j<=n;j++) prev[j]=j;
+  for(i=1;i<=m;i++){
+    cur[0]=i;
+    for(j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    prev=cur.slice();
+  }
+  return prev[n];
+}
+
+// يبني فهرس التحاليل من tests الحقيقية + المرادفات
+function vaTestIndex(){
+  var idx=[];
+  if(typeof tests==='undefined' || !Array.isArray(tests)) return idx;
+  tests.forEach(function(t){
+    if(!t || !t.id) return;
+    var keys=[];
+    if(t.code) keys.push(vaNorm(t.code));
+    if(t.name) keys.push(vaNorm(t.name));
+    if(t.nameEn) keys.push(vaNorm(t.nameEn));
+    if(t.shortName) keys.push(vaNorm(t.shortName));
+    var codeL=String(t.code||'').toLowerCase().trim();
+    if(VA_TEST_SYN[codeL]) VA_TEST_SYN[codeL].forEach(function(s){keys.push(vaNorm(s));});
+    keys=keys.filter(function(k){return k && k.length>1;});
+    if(keys.length) idx.push({id:t.id, name:t.name||t.nameEn||t.code, keys:keys});
+  });
+  return idx;
+}
+
+// يطابق عبارة منطوقة → تحليل واحد (تطابق تام ثم احتواء ثم تقريبي)
+function vaMatchTest(phrase){
+  var p=vaNorm(phrase);
+  if(!p || p.length<2) return null;
+  var idx=vaTestIndex(), i, j, best=null, bestD=99;
+  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].keys.length;j++)
+    if(idx[i].keys[j]===p) return idx[i];
+  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].keys.length;j++){
+    var k=idx[i].keys[j];
+    if(k.length>=3 && (p.indexOf(k)>-1 || k.indexOf(p)>-1)){
+      var d=Math.abs(k.length-p.length);
+      if(d<bestD){ bestD=d; best=idx[i]; }
+    }
+  }
+  if(best) return best;
+  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].keys.length;j++){
+    var kk=idx[i].keys[j];
+    if(kk.length<3) continue;
+    var dd=vaEditDist(p,kk);
+    var lim=kk.length<=4?1:(kk.length<=7?2:3);
+    if(dd<=lim && dd<bestD){ bestD=dd; best=idx[i]; }
+  }
+  return best;
+}
+
+// ═══════ واجهة اللوحة ═══════
+function vaUI(heard,msg,hint){
+  var h=document.getElementById('va-heard');
+  var m=document.getElementById('va-msg');
+  var t=document.getElementById('va-hint');
+  if(h && heard!=null) h.textContent=heard||'…';
+  if(m && msg!=null) m.innerHTML=msg||'';
+  if(t && hint!=null) t.innerHTML=hint||'';
+}
+function vaOrb(cls){
+  var o=document.getElementById('va-orb');
+  if(o) o.className=cls||'';
+}
+function vaHintFor(ctx){
+  if(ctx==='patient') return 'قل: <b>السيد</b> · <b>سيف شاكر جاسم</b> · <b>٢٥</b> · <b>الف وتسعمية وثمانين</b> · <b>الطبيب فلان</b> · <b>٠٧٨٠…</b><br>ثم: <b>عدل الاسم الى…</b> · <b>التالي</b>';
+  if(ctx==='tests')   return 'قل اسم التحليل: <b>تي اس اج</b> · <b>رندم بلد شكر</b> · <b>صوره دم</b><br>ثم: <b>احذف …</b> · <b>حفظ</b>';
+  return 'قل <b>مساعد</b> للبدء';
+}
+
+// ═══════ كشف السياق من الشاشة الفعلية ═══════
+function vaCtx(){
+  var mw=document.getElementById('m-wizard');
+  var open=mw && (mw.classList.contains('open')||mw.classList.contains('show')||
+                  getComputedStyle(mw).display!=='none');
+  if(!open) return 'idle';
+  if(typeof wizStep!=='undefined' && wizStep===2) return 'tests';
+  if(document.getElementById('wp-name')) return 'patient';
+  return 'idle';
+}
+
+// ═══════ تشغيل / إيقاف ═══════
+function vaSupported(){
+  return !!(window.SpeechRecognition||window.webkitSpeechRecognition);
+}
+window.vaStart=function(){
+  if(!vaSupported()){
+    if(typeof showNotif==='function')
+      showNotif('🎙️ غير مدعوم','التعرف الصوتي غير متاح في هذه النسخة. استخدم Chrome/Edge أو نسخة Electron حديثة.','error');
+    return;
+  }
+  if(VA.on) return;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  VA.rec=new SR();
+  VA.rec.lang='ar-IQ';
+  VA.rec.continuous=true;
+  VA.rec.interimResults=true;
+  VA.rec.maxAlternatives=3;
+
+  VA.rec.onresult=function(e){
+    var interim='', finals=[];
+    for(var i=e.resultIndex;i<e.results.length;i++){
+      var r=e.results[i];
+      if(r.isFinal){
+        var alts=[];
+        for(var k=0;k<r.length;k++) alts.push(r[k].transcript);
+        finals.push(alts);
+      } else interim+=r[0].transcript;
+    }
+    if(interim){ vaUI(interim,null,null); vaBump(); }
+    finals.forEach(function(alts){
+      vaUI(alts[0],null,null); vaBump(); vaHandle(alts);
+    });
+  };
+  VA.rec.onerror=function(e){
+    if(e.error==='not-allowed'||e.error==='service-not-allowed'){
+      vaUI('','❌ الميكروفون مرفوض — اسمح بالوصول ثم أعد المحاولة',null);
+      vaStop(); return;
+    }
+    if(e.error==='no-speech') return; // طبيعي أثناء الصمت
+  };
+  VA.rec.onend=function(){
+    if(VA.on){ try{ VA.rec.start(); }catch(e){} }  // إعادة تشغيل تلقائية
+  };
+
+  VA.on=true;
+  try{ VA.rec.start(); }catch(e){}
+  var p=document.getElementById('va-panel'); if(p) p.style.display='block';
+  vaOrb('va-live');
+  VA.ctx=vaCtx();
+  vaUI('…','🎙️ أستمع… (يغلق بعد ١٠ ثوانٍ صمت)',vaHintFor(VA.ctx));
+  vaBump();
+  VA.tick=setInterval(vaTick,500);
+};
+window.vaStop=function(){
+  VA.on=false;
+  if(VA.rec){ try{ VA.rec.onend=null; VA.rec.stop(); }catch(e){} VA.rec=null; }
+  if(VA.tick){ clearInterval(VA.tick); VA.tick=null; }
+  var p=document.getElementById('va-panel'); if(p) p.style.display='none';
+  vaOrb('');
+};
+function vaBump(){ VA.last=Date.now(); }
+function vaTick(){
+  if(!VA.on) return;
+  var left=Math.max(0,VA.SIL-(Date.now()-VA.last));
+  var t=document.getElementById('va-timer');
+  if(t) t.textContent=Math.ceil(left/1000)+'ث';
+  if(left<=0){
+    vaUI('','⏹️ توقف تلقائياً بعد ١٠ ثوانٍ صمت',null);
+    setTimeout(window.vaStop,900);
+  }
+  var c=vaCtx();
+  if(c!==VA.ctx){ VA.ctx=c; vaUI(null,null,vaHintFor(c)); }
+}
+
+// ═══════ التوجيه ═══════
+function vaHandle(alts){
+  var ctx=vaCtx(); VA.ctx=ctx;
+  for(var i=0;i<alts.length;i++){
+    if(vaRoute(alts[i],ctx)) return;
+  }
+  vaUI(null,'❓ لم أفهم — أعد بصيغة أخرى',null);
+}
+function vaRoute(raw,ctx){
+  var t=vaNorm(raw);
+  if(!t) return false;
+  if(/^(توقف|اسكت|اغلق|انهي|خلاص)$/.test(t)){ vaUI(null,'⏹️ تم الإيقاف',null); setTimeout(window.vaStop,500); return true; }
+
+  // فتح شاشة مريض جديد
+  if(/(اضافه|اضف|فتح|افتح|جديد)/.test(t) && /(مريض|مراجع)/.test(t)){
+    if(typeof startNewPatient==='function'){
+      startNewPatient();
+      vaUI(null,'✅ فُتحت شاشة مريض جديد',vaHintFor('patient'));
+      return true;
+    }
+  }
+  if(ctx==='patient') return vaPatient(raw,t);
+  if(ctx==='tests')   return vaTests(raw,t);
+  return false;
+}
+
+// ═══════ الخطوة 1: بيانات المريض ═══════
+function vaSet(id,val,fire){
+  var el=document.getElementById(id);
+  if(!el) return false;
+  el.value=val;
+  if(fire!==false){
+    try{ el.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){}
+  }
+  el.style.transition='box-shadow .3s';
+  el.style.boxShadow='0 0 0 3px rgba(0,232,122,0.55)';
+  setTimeout(function(){ el.style.boxShadow=''; },1100);
+  return true;
+}
+
+function vaPatient(raw,t){
+  // ── التالي ──
+  if(/^(التالي|تالي|كمل|استمر|بعدين|اختيار التحاليل)$/.test(t)){
+    if(typeof wizNext==='function'){
+      wizNext();
+      setTimeout(function(){
+        VA.ctx=vaCtx();
+        vaUI(null, VA.ctx==='tests'?'✅ انتقلنا لاختيار التحاليل':'⚠️ أكمل الحقول الناقصة أولاً', vaHintFor(VA.ctx));
+      },260);
+      return true;
+    }
+  }
+
+  // ── تعديل صريح: عدل الاسم الى / عدل العمر الى ──
+  var mEdit=raw.match(/(?:عدل|غير|صحح|بدل)\s*(?:ال)?(اسم|عمر|هاتف|رقم|مواليد|سنه الميلاد|لقب|طبيب|دكتور)\s*(?:الى|إلى|ل|لـ)?\s*(.+)/i);
+  if(mEdit){
+    var fld=vaNorm(mEdit[1]), val=mEdit[2].trim();
+    if(/اسم/.test(fld))              return vaName(val,true);
+    if(/عمر/.test(fld))              return vaAge(val,true);
+    if(/(هاتف|رقم)/.test(fld))       return vaPhone(val,true);
+    if(/(مواليد|ميلاد)/.test(fld))   return vaBirth(val,true);
+    if(/لقب/.test(fld))              return vaTitle(val,true);
+    if(/(طبيب|دكتور)/.test(fld))     return vaDoctor(val,true);
+  }
+
+  // ── اللقب (كلمة مفردة) ──
+  for(var i=0;i<VA_TITLES.length;i++){
+    if(t===vaNorm(VA_TITLES[i])) return vaTitle(VA_TITLES[i],false);
+  }
+
+  // ── الطبيب ──
+  if(/^(الطبيب|طبيب|الدكتور|دكتور|دكتوره)\s+/.test(t)){
+    return vaDoctor(raw.replace(/^\s*(الطبيب|طبيب|الدكتور|دكتور|دكتوره)\s+/i,''),false);
+  }
+
+  // ── الهاتف: صريح أو سلسلة أرقام طويلة ──
+  if(/(هاتف|موبايل|تلفون|رقم)/.test(t)){
+    var pv=vaExtractPhone(raw.replace(/(هاتف|موبايل|تلفون|رقم|ال)/g,' '));
+    if(pv) return vaPhone(pv,false);
+  }
+  var bare=vaExtractPhone(raw);
+  if(bare.length>=10) return vaPhone(bare,false);
+
+  // ── العمر الصريح ──
+  if(/(عمر|عمره|العمر|سنه|سنين)/.test(t) && !/(ميلاد|مواليد)/.test(t)){
+    var av=vaWordsToNum(raw.replace(/(عمر|عمره|العمر|سنه|سنين|ال)/g,' '));
+    if(av!=null && av>0 && av<=150) return vaAge(av,false);
+  }
+  // ── المواليد الصريح ──
+  if(/(مواليد|ميلاد|تولد|مواليده)/.test(t)){
+    var bv=vaWordsToNum(raw.replace(/(مواليد|ميلاد|تولد|مواليده|سنه|ال)/g,' '));
+    if(bv!=null && bv>=1900 && bv<=2100) return vaBirth(bv,false);
+  }
+
+  // ── رقم مجرد: 1900..2100 = مواليد، 1..150 = عمر ──
+  var n=vaWordsToNum(raw);
+  if(n!=null){
+    if(n>=1900 && n<=2100) return vaBirth(n,false);
+    if(n>0 && n<=150)      return vaAge(n,false);
+  }
+
+  // ── وإلا: اسم (كلمتان فأكثر) ──
+  var words=raw.trim().split(/\s+/).filter(Boolean);
+  if(words.length>=2 && /[\u0621-\u064A]/.test(raw)) return vaName(raw.trim(),false);
+
+  return false;
+}
+
+function vaTitle(v,isEdit){
+  var norm=vaNorm(v), hit=null;
+  for(var i=0;i<VA_TITLES.length;i++){
+    if(vaNorm(VA_TITLES[i])===norm){ hit=VA_TITLES[i]; break; }
+  }
+  if(!hit) for(var j=0;j<VA_TITLES.length;j++){
+    if(vaEditDist(norm,vaNorm(VA_TITLES[j]))<=1){ hit=VA_TITLES[j]; break; }
+  }
+  if(!hit) return false;
+  var g=(hit==='السيدة'||hit==='الآنسة'||hit==='الحاجة'||hit==='الاستاذة'||hit==='الطفلة'||hit==='الدكتورة')?'female':'male';
+  if(typeof selectTitle==='function'){
+    selectTitle(hit,g);
+    vaUI(null,(isEdit?'✏️ عُدّل اللقب: ':'✅ اللقب: ')+hit,null);
+    return true;
+  }
+  return false;
+}
+
+function vaName(v,isEdit){
+  var clean=String(v).replace(/[.,،]/g,' ').replace(/\s+/g,' ').trim();
+  if(!clean) return false;
+  if(!vaSet('wp-name',clean)) return false;
+  if(typeof wizPatient!=='undefined') wizPatient.name=clean;
+  var parts=clean.split(/\s+/).filter(Boolean);
+  vaUI(null,(isEdit?'✏️ عُدّل الاسم: ':'✅ الاسم: ')+clean+
+      (parts.length<3?' <span style="color:#ffcc00">⚠️ الاسم الثلاثي مطلوب</span>':''),null);
+  // إخفاء صندوق الاقتراحات (يفتحه oninput)
+  setTimeout(function(){
+    var sb=document.getElementById('pt-suggest-box');
+    if(sb) sb.style.display='none';
+  },420);
+  return true;
+}
+
+function vaAge(v,isEdit){
+  var n=(typeof v==='number')?v:vaWordsToNum(v);
+  if(n==null||n<=0||n>150) return false;
+  // مسح المواليد لتفادي تعارض الحقلين
+  var by=document.getElementById('wp-birthyear'); if(by) by.value='';
+  vaSet('wp-age-y',n,false);
+  vaSet('wp-age-m','',false);
+  vaSet('wp-age-d','',false);
+  if(typeof calcAgeCompound==='function') calcAgeCompound();
+  vaUI(null,(isEdit?'✏️ عُدّل العمر: ':'✅ العمر: ')+n+' سنة',null);
+  return true;
+}
+
+function vaBirth(v,isEdit){
+  var n=(typeof v==='number')?v:vaWordsToNum(v);
+  if(n==null||n<1900||n>2100) return false;
+  ['wp-age-y','wp-age-m','wp-age-d'].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.value='';
+  });
+  vaSet('wp-birthyear',n,false);
+  if(typeof calcAgeFromBirthYear==='function') calcAgeFromBirthYear();
+  var d=document.getElementById('age-display');
+  vaUI(null,(isEdit?'✏️ عُدّلت المواليد: ':'✅ المواليد: ')+n+(d&&d.textContent?' ('+d.textContent+')':''),null);
+  return true;
+}
+
+function vaPhone(v,isEdit){
+  var p=(typeof v==='string'&&/^\d+$/.test(v))?v:vaExtractPhone(v);
+  if(!p||p.length<7) return false;
+  if(!vaSet('wp-phone',p,false)) return false;
+  if(typeof wizPatient!=='undefined') wizPatient.phone=p;
+  vaUI(null,(isEdit?'✏️ عُدّل الهاتف: ':'✅ الهاتف: ')+p,null);
+  return true;
+}
+
+function vaDoctor(v,isEdit){
+  var sel=document.getElementById('wp-doctor');
+  if(!sel) return false;
+  var q=vaNorm(v);
+  if(!q) return false;
+  var opts=sel.options, best=null, bestD=99;
+  for(var i=0;i<opts.length;i++){
+    var val=opts[i].value;
+    if(!val||val==='__add__') continue;
+    var label=vaNorm(opts[i].textContent);
+    if(label===q){ best=opts[i]; bestD=0; break; }
+    if(label.indexOf(q)>-1||q.indexOf(label)>-1){
+      var d=Math.abs(label.length-q.length);
+      if(d<bestD){ bestD=d; best=opts[i]; }
+    }
+  }
+  if(!best) for(var j=0;j<opts.length;j++){
+    var v2=opts[j].value;
+    if(!v2||v2==='__add__') continue;
+    var l2=vaNorm(opts[j].textContent);
+    var dd=vaEditDist(q,l2);
+    if(dd<=3 && dd<bestD){ bestD=dd; best=opts[j]; }
+  }
+  if(!best){ vaUI(null,'⚠️ لم أجد طبيباً باسم: '+v,null); return true; }
+  sel.value=best.value;
+  try{ sel.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
+  if(typeof wizPatient!=='undefined'){
+    wizPatient.doctorId=best.value;
+    wizPatient.doctorName=best.textContent.trim();
+  }
+  sel.style.boxShadow='0 0 0 3px rgba(0,232,122,0.55)';
+  setTimeout(function(){ sel.style.boxShadow=''; },1100);
+  vaUI(null,(isEdit?'✏️ عُدّل الطبيب: ':'✅ الطبيب: ')+best.textContent.trim(),null);
+  return true;
+}
+
+// ═══════ الخطوة 2: اختيار التحاليل ═══════
+function vaTests(raw,t){
+  // حفظ → ينهي دور المساعد
+  if(/^(حفظ|احفظ|خزن|تم|انهاء|انهي|سجل)$/.test(t)){
+    if(typeof wizFinish==='function'){
+      var n=(typeof wizSelectedTests!=='undefined')?wizSelectedTests.length:0;
+      if(!n){ vaUI(null,'⚠️ لم تختر أي تحليل بعد',null); return true; }
+      vaUI(null,'💾 جارٍ الحفظ…',null);
+      wizFinish();
+      setTimeout(function(){
+        vaUI(null,'✅ تم الحفظ — انتهى دور المساعد',null);
+        setTimeout(window.vaStop,1100);
+      },420);
+      return true;
+    }
+  }
+  if(/^(رجوع|ارجع|السابق)$/.test(t)){
+    if(typeof wizBack==='function'){ wizBack(); vaUI(null,'↩️ رجعنا لبيانات المريض',vaHintFor('patient')); return true; }
+  }
+
+  // حذف تحليل
+  var mDel=raw.match(/(?:احذف|امسح|شيل|الغي|الغاء)\s+(.+)/i);
+  if(mDel){
+    var dt=vaMatchTest(mDel[1]);
+    if(!dt){ vaUI(null,'❓ لم أعرف التحليل: '+mDel[1],null); return true; }
+    var sel=(typeof wizSelectedTests!=='undefined')&&wizSelectedTests.some(function(x){return x.id===dt.id;});
+    if(!sel){ vaUI(null,'ℹ️ '+dt.name+' غير مختار أصلاً',null); return true; }
+    if(typeof toggleWizTest==='function'){
+      toggleWizTest(dt.id);
+      vaUI(null,'🗑️ حُذف: '+dt.name+' — المجموع: '+wizSelectedTests.length,null);
+      return true;
+    }
+  }
+
+  // إضافة تحليل (مع دعم "و" لعدة تحاليل)
+  var phrase=raw.replace(/^\s*(اضف|ضيف|اضافه|زد)\s+/i,'').trim();
+  var chunks=phrase.split(/\s+و\s+|،|,/).map(function(x){return x.trim();}).filter(Boolean);
+  var added=[], unknown=[];
+  chunks.forEach(function(c){
+    var m=vaMatchTest(c);
+    if(!m){ unknown.push(c); return; }
+    var already=(typeof wizSelectedTests!=='undefined')&&wizSelectedTests.some(function(x){return x.id===m.id;});
+    if(already){ added.push(m.name+' (موجود)'); return; }
+    if(typeof toggleWizTest==='function'){ toggleWizTest(m.id); added.push(m.name); }
+  });
+  if(added.length){
+    var tot=(typeof wizSelectedTests!=='undefined')?wizSelectedTests.length:0;
+    vaUI(null,'✅ '+added.join(' · ')+' — المجموع: '+tot,null);
+    return true;
+  }
+  if(unknown.length && chunks.length===1) vaUI(null,'❓ لم أعرف: '+unknown[0],null);
+  return false;
+}
+
+// ═══════ كلمة الإيقاظ: "مساعد" ═══════
+function vaWake(){
+  if(!vaSupported() || VA.booted) return;
+  VA.booted=true;
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var w=null, dead=false;
+  function boot(){
+    if(dead) return;
+    try{ w=new SR(); }catch(e){ return; }
+    w.lang='ar-IQ'; w.continuous=true; w.interimResults=false; w.maxAlternatives=2;
+    w.onresult=function(e){
+      if(VA.on) return;
+      for(var i=e.resultIndex;i<e.results.length;i++){
+        for(var k=0;k<e.results[i].length;k++){
+          var s=vaNorm(e.results[i][k].transcript);
+          if(/(^|\s)(مساعد|المساعد|مساعده)(\s|$)/.test(s)){
+            try{ w.stop(); }catch(x){}
+            setTimeout(window.vaStart,220);
+            return;
+          }
+        }
+      }
+    };
+    w.onerror=function(e){
+      if(e.error==='not-allowed'||e.error==='service-not-allowed'){ dead=true; }
+    };
+    w.onend=function(){
+      if(dead) return;
+      setTimeout(function(){ if(!VA.on) boot(); },700);  // لا تنافس الجلسة النشطة
+    };
+    try{ w.start(); }catch(e){}
+  }
+  // لا نشغّل الإيقاظ إلا بعد أول تفاعل (سياسة الميكروفون)
+  var once=function(){
+    document.removeEventListener('click',once);
+    boot();
+  };
+  document.addEventListener('click',once);
+}
+
+// ═══════ زر عائم للتشغيل اليدوي ═══════
+function vaButton(){
+  if(document.getElementById('va-fab')) return;
+  var b=document.createElement('button');
+  b.id='va-fab';
+  b.title='المساعد الصوتي — أو قل: مساعد';
+  b.innerHTML='🎙️';
+  b.style.cssText='position:fixed;bottom:20px;left:20px;z-index:99998;width:52px;height:52px;'+
+    'border-radius:50%;border:2px solid rgba(0,212,255,0.5);cursor:pointer;font-size:22px;'+
+    'background:linear-gradient(135deg,#0a1628,#12243d);color:#00d4ff;'+
+    'box-shadow:0 6px 20px rgba(0,0,0,0.45);transition:transform .15s';
+  b.onmouseenter=function(){ b.style.transform='scale(1.08)'; };
+  b.onmouseleave=function(){ b.style.transform=''; };
+  b.onclick=function(){ VA.on?window.vaStop():window.vaStart(); };
+  document.body.appendChild(b);
+}
+
+function vaInit(){ vaButton(); vaWake(); }
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',vaInit);
+else vaInit();
+
+})();
+</script>
+
 </body>
 </html>
 
