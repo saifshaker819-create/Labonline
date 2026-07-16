@@ -28072,12 +28072,27 @@ function lisNavTab(name,btn){
 // ═══════════════════════════════════════════════
 // إرسال نتائج/تحاليل الطلب الحالي إلى الأجهزة (Push من شاشة النتائج)
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// 📤 إرسال للجهاز — نقطة الدخول من الزر
+// إن كنا عميل LAN (هاتف): أرسل أمراً للسيرفير ولا ننفّذ محلياً
+//    (الهاتف لا يملك serial/TCP إطلاقاً).
+// إن كنا سيرفير أو مستقلين: نفّذ محلياً كما كان تماماً.
+// ═══════════════════════════════════════════════════════════
 async function pushResultsToDevice(){
+  if(typeof _lanMode!=='undefined' && _lanMode==='client'){
+    return _lisPushViaLan();
+  }
+  return _pushResultsToDeviceLocal();
+}
+
+async function _pushResultsToDeviceLocal(_remote){
   const sel=document.getElementById('res-req-sel');
-  const id=sel?sel.value:'';
-  if(!id){ alert('اختر طلب التحاليل أولاً'); return; }
+  // ⭐ عند التنفيذ نيابةً عن الهاتف: يأتي reqId في _remote (لا يوجد اختيار في DOM)
+  const id=_remote&&_remote.reqId ? _remote.reqId : (sel?sel.value:'');
+  const _rep=(m)=>{ if(_remote&&_remote.reply) _remote.reply(m); else alert(m); };
+  if(!id){ _rep('اختر طلب التحاليل أولاً'); return {ok:false,error:'لا يوجد طلب'}; }
   const req=requests.find(r=>r.id===id);
-  if(!req){ alert('الطلب غير موجود'); return; }
+  if(!req){ _rep('الطلب غير موجود'); return {ok:false,error:'الطلب غير موجود على السيرفير'}; }
   const pt=patients.find(p=>p.id===req.patientId)||{};
 
   // بيانات المريض (نفس صيغة الاستعلام: name/gender/birth)
@@ -28093,7 +28108,7 @@ async function pushResultsToDevice(){
 
   // اجمع تحاليل الطلب، وجمّعها حسب الجهاز الهدف (pushDevice في الـ mapping)
   const reqTests=(req.tests||[]).map(tid=>tests.find(t=>t.id===tid||t.code===tid)).filter(Boolean);
-  if(!reqTests.length){ alert('لا توجد تحاليل في هذا الطلب'); return; }
+  if(!reqTests.length){ _rep('لا توجد تحاليل في هذا الطلب'); return {ok:false,error:'لا توجد تحاليل في هذا الطلب'}; }
 
   const byDevice={}; // deviceId → [ {code,name,channel,_pid}, ... ]
   const noTarget=[];
@@ -28112,8 +28127,8 @@ async function pushResultsToDevice(){
 
   const targetIds=Object.keys(byDevice);
   if(!targetIds.length){
-    alert('لا يوجد أي تحليل معيَّن له جهاز.\nاذهب إلى: ربط الأجهزة → إرسال التحاليل، وحدّد جهازاً لكل تحليل.');
-    return;
+    _rep('لا يوجد أي تحليل معيَّن له جهاز.\nاذهب إلى: ربط الأجهزة → إرسال التحاليل، وحدّد جهازاً لكل تحليل.');
+    return {ok:false,error:'لا يوجد أي تحليل معيَّن له جهاز'};
   }
 
   let okCount=0, failMsgs=[];
@@ -28166,7 +28181,97 @@ async function pushResultsToDevice(){
   let msg='تم إرسال التحاليل إلى '+okCount+' جهاز.';
   if(noTarget.length) msg+='\n\n⚠️ تحاليل بدون جهاز هدف (لم تُرسَل): '+noTarget.join(', ');
   if(failMsgs.length) msg+='\n\n❌ فشل:\n'+failMsgs.join('\n');
+  _rep(msg);
+  return { ok:okCount>0, okCount:okCount, msg:msg,
+           noTarget:noTarget, fails:failMsgs,
+           error:okCount?'':(failMsgs[0]||'لم يُرسَل أي تحليل') };
+}
+
+// ═══════════════════════════════════════════════════════════
+// 🌐 LIS Push عبر LAN — الهاتف (عميل) ← → الحاسبة (سيرفير)
+// الهاتف يرسل lis:pushRequest موجّهة للسيرفير فقط (لا تمر عبر
+// منطق البثّ/الترحيل، فلا ارتداد ولا حلقة).
+// السيرفير ينفّذ محلياً ثم يعيد lis:pushResult بنفس pushId.
+// ═══════════════════════════════════════════════════════════
+var _lisPushPending = {};   // pushId → {timer, btn, oldHtml}
+var _lisPushDone    = {};   // pushId → ts (حارس ضد التنفيذ المزدوج على السيرفير)
+var _LIS_PUSH_TIMEOUT = 20000;
+
+function _lisPushBtn(){
+  return document.querySelector('button[onclick="pushResultsToDevice()"]');
+}
+
+// ── الهاتف: أرسل الأمر وانتظر التأكيد ──
+function _lisPushViaLan(){
+  const sel=document.getElementById('res-req-sel');
+  const id=sel?sel.value:'';
+  if(!id){ alert('اختر طلب التحاليل أولاً'); return; }
+  if(!(_lanWS && _lanWS.readyState===1)){
+    alert('❌ لا يوجد اتصال بالحاسبة (السيرفير).');
+    return;
+  }
+  const pushId=_lanDeviceId+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,7);
+
+  // ⭐ عطّل الزر حتى يصل الرد (يمنع الإرسال المزدوج لجهاز طبي)
+  const btn=_lisPushBtn();
+  const oldHtml=btn?btn.innerHTML:'';
+  if(btn){ btn.disabled=true; btn.style.opacity='0.6'; btn.style.cursor='wait';
+           btn.innerHTML='⏳ جارٍ الإرسال عبر الحاسبة...'; }
+
+  const timer=setTimeout(function(){
+    _lisPushFinish(pushId,'⏱️ لا يوجد رد من الحاسبة خلال 20 ثانية.\nتحقق من أن السيرفير يعمل وأن الأجهزة متصلة.');
+  }, _LIS_PUSH_TIMEOUT);
+
+  _lisPushPending[pushId]={timer:timer, btn:btn, oldHtml:oldHtml};
+
+  try{
+    _lanWS.send(JSON.stringify({
+      type:'lis:pushRequest', pushId:pushId,
+      from:_lanDeviceId, reqId:id, ts:Date.now()
+    }));
+    if(typeof lisAddLog==='function') lisAddLog('info','📤 أُرسل أمر الإرسال إلى الحاسبة (طلب '+id+')');
+  }catch(e){
+    _lisPushFinish(pushId,'❌ فشل إرسال الأمر: '+e.message);
+  }
+}
+
+function _lisPushFinish(pushId,msg){
+  const p=_lisPushPending[pushId];
+  if(!p) return;                    // وصل رد مكرر أو متأخر → تجاهله
+  clearTimeout(p.timer);
+  delete _lisPushPending[pushId];
+  if(p.btn){ p.btn.disabled=false; p.btn.style.opacity=''; p.btn.style.cursor='';
+             p.btn.innerHTML=p.oldHtml; }
   alert(msg);
+}
+
+// ── السيرفير: نفّذ الأمر الوارد من الهاتف ثم أعد النتيجة ──
+async function _lisHandlePushRequest(msg){
+  if(_lanMode!=='server') return;               // ⭐ السيرفير وحده ينفّذ
+  if(!msg || !msg.pushId) return;
+  if(_lisPushDone[msg.pushId]) return;          // ⭐ حارس التنفيذ المزدوج
+  _lisPushDone[msg.pushId]=Date.now();
+
+  if(typeof lisAddLog==='function')
+    lisAddLog('info','📱 أمر إرسال وارد من الهاتف — الطلب '+msg.reqId);
+  if(typeof showNotif==='function')
+    showNotif('📱 LAN','أمر إرسال للأجهزة وارد من الهاتف','info');
+
+  var res;
+  try{
+    // reply:()=>{} ← لا نُظهر alert على الحاسبة (التأكيد يذهب للهاتف)
+    res=await _pushResultsToDeviceLocal({ reqId:msg.reqId, reply:function(){} });
+  }catch(e){
+    res={ ok:false, error:e.message, msg:'❌ خطأ على الحاسبة: '+e.message };
+  }
+  res=res||{ ok:false, error:'لا نتيجة', msg:'❌ فشل غير معروف' };
+
+  _lanSendRaw({
+    type:'lis:pushResult', pushId:msg.pushId, to:msg.from,
+    from:_lanDeviceId, ok:!!res.ok,
+    msg:res.msg||(res.ok?'✅ تم الإرسال':'❌ '+(res.error||'فشل')),
+    ts:Date.now()
+  });
 }
 
 // ═══════════════════════════════════════════════
@@ -36077,6 +36182,16 @@ function _lanHandleMessage(raw){
       var _n = _lanApplyFullState(msg.data);
       _lanOpenGate(); // اكتملت المصالحة
       if(_n) showNotif('🌐 LAN','تمت مزامنة كل الأقسام ✓','success');
+    }
+    // ⭐ أمر إرسال للأجهزة وارد من الهاتف → السيرفير وحده ينفّذه
+    //    (لا يُرحَّل ولا يُبثّ — فلا حلقة ولا ارتداد)
+    else if(msg.type==='lis:pushRequest'){
+      if(typeof _lisHandlePushRequest==='function') _lisHandlePushRequest(msg);
+    }
+    // ⭐ تأكيد نتيجة الإرسال عائد من السيرفير → للهاتف صاحب الطلب فقط
+    else if(msg.type==='lis:pushResult'){
+      if(msg.to === _lanDeviceId && typeof _lisPushFinish==='function')
+        _lisPushFinish(msg.pushId, msg.msg||(msg.ok?'✅ تم الإرسال':'❌ فشل الإرسال'));
     }
     else if(msg.type==='cbc' && msg.reqId){
       // نتيجة CBC وصلت من جهاز على حاسبة أخرى
