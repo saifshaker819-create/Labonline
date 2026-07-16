@@ -3180,6 +3180,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     </div>
     <div class="hdr-right" style="position:relative;z-index:1;">
 
+      <!-- 🎙️ المساعد الصوتي — بجانب الإشعارات -->
+      <button class="hbtn" id="va-fab" onclick="window.vaToggle&&window.vaToggle()" title="المساعد الصوتي — أو قل: مساعد">🎙️<div class="ndot" id="va-dot" style="display:none;background:#ff2244"></div></button>
+
       <div style="position:relative">
         <button class="hbtn" id="notif-bell-btn" onclick="toggleNotifPanel(event)">🔔<div class="ndot" id="notif-dot" style="display:none"></div></button>
         <div id="notif-panel" style="display:none;position:absolute;top:calc(100% + 8px);left:0;width:330px;background:#080f20;border:1px solid rgba(0,212,255,0.25);border-radius:14px;box-shadow:0 12px 45px rgba(0,0,0,0.8);z-index:999999;overflow:hidden">
@@ -27774,6 +27777,7 @@ window.vaStart=function(){
   try{ VA.rec.start(); }catch(e){}
   var p=document.getElementById('va-panel'); if(p) p.style.display='block';
   vaOrb('va-live');
+  vaBtnState(true);
   VA.ctx=vaCtx();
   vaUI('…','🎙️ أستمع… (يغلق بعد ١٠ ثوانٍ صمت)',vaHintFor(VA.ctx));
   vaBump();
@@ -27785,6 +27789,7 @@ window.vaStop=function(){
   if(VA.tick){ clearInterval(VA.tick); VA.tick=null; }
   var p=document.getElementById('va-panel'); if(p) p.style.display='none';
   vaOrb('');
+  vaBtnState(false);
 };
 function vaBump(){ VA.last=Date.now(); }
 function vaTick(){
@@ -28107,24 +28112,21 @@ function vaWake(){
   document.addEventListener('click',once);
 }
 
-// ═══════ زر عائم للتشغيل اليدوي ═══════
-function vaButton(){
-  if(document.getElementById('va-fab')) return;
-  var b=document.createElement('button');
-  b.id='va-fab';
-  b.title='المساعد الصوتي — أو قل: مساعد';
-  b.innerHTML='🎙️';
-  b.style.cssText='position:fixed;bottom:20px;left:20px;z-index:99998;width:52px;height:52px;'+
-    'border-radius:50%;border:2px solid rgba(0,212,255,0.5);cursor:pointer;font-size:22px;'+
-    'background:linear-gradient(135deg,#0a1628,#12243d);color:#00d4ff;'+
-    'box-shadow:0 6px 20px rgba(0,0,0,0.45);transition:transform .15s';
-  b.onmouseenter=function(){ b.style.transform='scale(1.08)'; };
-  b.onmouseleave=function(){ b.style.transform=''; };
-  b.onclick=function(){ VA.on?window.vaStop():window.vaStart(); };
-  document.body.appendChild(b);
+// ═══════ زر الهيدر (بجانب الإشعارات) ═══════
+window.vaToggle=function(){ VA.on?window.vaStop():window.vaStart(); };
+
+// يعكس حالة الاستماع على زر الهيدر (نقطة حمراء + توهج)
+function vaBtnState(live){
+  var b=document.getElementById('va-fab');
+  var d=document.getElementById('va-dot');
+  if(d) d.style.display=live?'block':'none';
+  if(b){
+    b.style.boxShadow=live?'0 0 0 2px rgba(255,34,68,0.65),0 0 14px rgba(255,34,68,0.5)':'';
+    b.style.borderColor=live?'rgba(255,34,68,0.7)':'';
+  }
 }
 
-function vaInit(){ vaButton(); vaWake(); }
+function vaInit(){ vaWake(); }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',vaInit);
 else vaInit();
 
