@@ -3013,13 +3013,6 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         if(typeof lisRenderRaw==='function') lisRenderRaw();
         return;
       }
-      // 🩸 Zybio Z3: نتجاوز التحليل المُسبق العام (parsed) لأن بنية Zybio مختلفة
-      //   (OBR-3 للرقم + LOINC في OBX-3) — الدرايفر الخاص يعالج الرسالة الخام.
-      if((targetDev.vendor||'')==='zybio'){
-        lisParseZybio(d.data, targetDev.name);
-        targetDev.rxCount = (targetDev.rxCount||0) + (d.data||'').length;
-        return;
-      }
       // إذا أرسل main.js بيانات محللة مسبقاً استخدمها مباشرةً
       // isCBC: يُوجّه للمسار الصحيح حتى لو كان patientId فارغاً
       if(d.parsed && (d.parsed.patientId || d.parsed.isCBC)){
@@ -5393,7 +5386,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <option value="siemens">Siemens (Dimension / Atellica)</option>
             <option value="sysmex">Sysmex (XN / XE)</option>
             <option value="mindray">Mindray (BC / BS)</option>
-            <option value="zybio">Zybio (Z3 — CBC)</option>
+            <option value="zybio">Zybio (Z60 / Z3)</option>
             <option value="biobase">Biobase</option>
             <option value="rayto">Rayto</option>
             <option value="other">أخرى</option>
@@ -5563,9 +5556,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div style="font-size:22px">💊</div><div style="font-weight:800;font-size:12px">MAGLUMI / Snibe</div>
               <div style="font-size:10px;color:var(--text2)">MAGLUMI 600/800 — هرمونات</div>
             </div>
-            <div class="wiz-card" onclick="lisWizSelectVendor('zybio','Zybio (Z3)','hl7')" data-v="zybio">
-              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z3</div>
-              <div style="font-size:10px;color:var(--text2)">Z3/Z31/Z51 — CBC (HL7 2.3.1)</div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('zybio','Zybio Z60','hl7')" data-v="zybio">
+              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z60 / Z3</div>
+              <div style="font-size:10px;color:var(--text2)">CBC — HL7 عبر الشبكة</div>
             </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('biobase','Biobase','astm')" data-v="biobase">
               <div style="font-size:22px">🔭</div><div style="font-weight:800;font-size:12px">Biobase</div>
@@ -5637,15 +5630,15 @@ body.light-mode .dp-viewer{background:#d8dde3;}
 
             <div class="wiz-conn-card" onclick="lisWizSelectConn('tcpserver')" id="wiz-conn-tcpserver">
               <div style="display:flex;align-items:center;gap:14px">
-                <div style="font-size:28px">🖧</div>
+                <div style="font-size:28px">🖥</div>
                 <div style="flex:1">
-                  <div style="font-weight:800;font-size:13px">شبكة LAN — البرنامج يستقبل (Server)</div>
-                  <div style="font-size:11px;color:var(--text2);margin-top:3px">الجهاز هو الذي يتصل بالبرنامج — نحدد منفذ استقبال فقط</div>
+                  <div style="font-weight:800;font-size:13px">شبكة LAN — الجهاز يتصل بالبرنامج (Server)</div>
+                  <div style="font-size:11px;color:var(--text2);margin-top:3px">البرنامج ينتظر والجهاز هو من يبدأ الاتصال</div>
                 </div>
                 <div id="wiz-conn-tcpserver-check" style="width:20px;height:20px;border-radius:50%;border:2px solid var(--border);flex-shrink:0"></div>
               </div>
-              <div style="margin-top:10px;padding:8px;background:rgba(255,77,109,0.06);border-radius:7px;font-size:10px;color:var(--text2)">
-                ✅ <b style="color:#ff4d6d">مطلوب لـ Zybio Z3</b> · الجهاز=Client والبرنامج=Server
+              <div style="margin-top:10px;padding:8px;background:rgba(0,212,255,0.05);border-radius:7px;font-size:10px;color:var(--text2)">
+                🩸 <b style="color:var(--primary)">مطلوب لـ Zybio Z60 / Z3</b> — الجهاز يتصل بالسيرفر تلقائياً حسب دليل الشركة
               </div>
             </div>
 
@@ -5740,33 +5733,29 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <span style="color:var(--primary)">Menu → Setup → System Setup → Communication</span><br>
               البروتوكول: HL7 · Port الافتراضي: 5100 · الجهاز=Server والبرنامج=Client
             </div>
-            <div id="wiz-zybio-wrongmode" style="display:none;margin-top:12px;background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.3);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
-              🩸 <b style="color:#ff4d6d">Zybio Z3 — وضع خاطئ</b> (دليل الشركة §2.1):<br>
-              الجهاز <b style="color:var(--text)">هو الذي يتصل بالبرنامج</b> (الجهاز=Client). ارجع للخلف واختر
-              <b style="color:var(--primary)">🖧 شبكة LAN — البرنامج يستقبل (Server)</b>.
-            </div>
           </div>
 
           <div id="wiz-s3-tcpserver" style="display:none">
-            <div style="background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.25);border-radius:10px;padding:14px;margin-bottom:16px">
-              <div style="font-size:13px;font-weight:800;color:#ff4d6d;margin-bottom:8px">🖧 البرنامج يستقبل (Server)</div>
+            <div style="background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:14px;margin-bottom:16px">
+              <div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:8px">🖥 وضع السيرفر — الجهاز يتصل بالبرنامج</div>
               <div style="font-size:11px;color:var(--text2);line-height:2">
-                <b style="color:var(--text)">1.</b> وصّل الجهاز بالشبكة (نفس الـ Subnet)<br>
-                <b style="color:var(--text)">2.</b> في <b style="color:var(--text)">الجهاز</b> أدخل <b style="color:var(--text)">IP هذا الحاسوب</b> والمنفذ أدناه<br>
-                <b style="color:var(--text)">3.</b> الجهاز سيتصل بالبرنامج تلقائياً بعد التشغيل
+                <b style="color:var(--text)">1.</b> البرنامج ينتظر على المنفذ أدناه<br>
+                <b style="color:var(--text)">2.</b> في الجهاز: أدخل <b style="color:var(--text)">IP الحاسوب</b> ونفس المنفذ<br>
+                <b style="color:var(--text)">3.</b> الجهاز سيتصل تلقائياً ويُعيد المحاولة عند الانقطاع
               </div>
             </div>
             <div class="fg">
               <label class="fl">Port الاستقبال *</label>
               <input class="fc" id="wiz-srv-port" placeholder="5100" value="5100" style="direction:ltr;text-align:left">
             </div>
-            <div id="wiz-zybio-hint" style="display:none;margin-top:12px;background:rgba(255,77,109,0.07);border:1px solid rgba(255,77,109,0.3);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
-              🩸 <b style="color:#ff4d6d">Zybio Z3</b> (حسب دليل الشركة §2.1 و §2.2):<br>
-              • الجهاز <b style="color:var(--text)">هو الذي يتصل بالبرنامج</b> — لذلك اخترنا وضع Server. ✅<br>
-              • في الجهاز: <span style="color:var(--primary)">Setup → Communication (LIS)</span> → أدخل <b style="color:var(--text)">IP هذا الحاسوب</b> + نفس المنفذ.<br>
-              • البروتوكول في الجهاز: <b style="color:var(--text)">HL7</b> · الترميز <b style="color:var(--text)">UTF-8</b>.<br>
-              • البرنامج يرسل <b style="color:var(--text)">ACK^R01</b> تلقائياً بعد كل نتيجة (إلزامي — §3.8.1).<br>
-              • رسائل الكنترول (QC) تُسجَّل في السجل ولا تُحفظ كنتيجة مريض.
+            <div id="wiz-zybio-hint" style="display:none;margin-top:12px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🩸 <b style="color:var(--primary)">Zybio Z60 / Z3</b> (حسب دليل الشركة — القسم 2.1):<br>
+              • في الجهاز: <span style="color:var(--primary)">Setup → Communication (LIS)</span> — أدخل <b style="color:var(--text)">IP الحاسوب</b> + <b style="color:var(--text)">Port</b> نفسه.<br>
+              • البروتوكول: <b style="color:var(--text)">HL7 v2.3.1</b> · الترميز <b style="color:var(--text)">UTF-8 (UNICODE)</b>.<br>
+              • الجهاز هو من <b style="color:var(--text)">يتصل بالبرنامج</b> بعد التشغيل، ويعيد المحاولة تلقائياً إذا فشل.<br>
+              • البرنامج يرد <b style="color:var(--text)">ACK^R01</b> تلقائياً على كل نتيجة (إلزامي حسب الدليل).<br>
+              • نتائج الكنترول (QC) تُتجاهل تلقائياً ولا تُحفظ كنتيجة مريض.<br>
+              • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
             </div>
           </div>
 
@@ -27722,6 +27711,43 @@ const LIS_DEFAULT_MAPPINGS=[
   {deviceCode:'MCV',medlabCode:'MCV',name:'MCV',device:'all',note:''},
   {deviceCode:'MCH',medlabCode:'MCH',name:'MCH',device:'all',note:''},
   {deviceCode:'MCHC',medlabCode:'MCHC',name:'MCHC',device:'all',note:''},
+  // ── 🩸 Zybio Z60 / Z3 — أكواد LOINC حسب دليل الشركة (الملحق 4.2) ──────────
+  // الجهاز يرسل الكود في OBX-3 بصيغة "ID^Name^EncodeSys" مثل 6790-2^WBC^LN
+  // الدليل ينصّ أن الـ ID + EncodeSys هما المُعرّف الوحيد للتحليل (لا الاسم).
+  {deviceCode:'6790-2',  medlabCode:'WBC',  name:'WBC (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'789-8',   medlabCode:'RBC',  name:'RBC (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'718-7',   medlabCode:'HGB',  name:'HGB (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'4544-3',  medlabCode:'HCT',  name:'HCT (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'787-2',   medlabCode:'MCV',  name:'MCV (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'785-6',   medlabCode:'MCH',  name:'MCH (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'786-4',   medlabCode:'MCHC', name:'MCHC (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'777-3',   medlabCode:'PLT',  name:'PLT (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'788-0',   medlabCode:'RDW',  name:'RDW-CV (Zybio)', device:'all',note:'Zybio Z60'},
+  {deviceCode:'22000-5', medlabCode:'RDWSD',name:'RDW-SD (Zybio)', device:'all',note:'Zybio Z60'},
+  {deviceCode:'33623-1', medlabCode:'MPV',  name:'MPV (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'33207-3', medlabCode:'PDW',  name:'PDW (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'12003',   medlabCode:'PCT',  name:'PCT (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'49386-7', medlabCode:'PLCR', name:'P-LCR (Zybio)',  device:'all',note:'Zybio Z60'},
+  {deviceCode:'35167-7', medlabCode:'PLCC', name:'P-LCC (Zybio)',  device:'all',note:'Zybio Z60'},
+  // 3-part differential (Z3 / Z60 الأساسي)
+  {deviceCode:'731-0',   medlabCode:'LYM',  name:'LYM# (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'736-9',   medlabCode:'LYMP', name:'LYM% (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'33154-7', medlabCode:'MID',  name:'MID# (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'33155-4', medlabCode:'MIDP', name:'MID% (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'19023-1', medlabCode:'GRAN', name:'GRAN# (Zybio)',  device:'all',note:'Zybio Z60'},
+  {deviceCode:'21482-6', medlabCode:'GRANP',name:'GRAN% (Zybio)',  device:'all',note:'Zybio Z60'},
+  // 5-part differential (Z60)
+  {deviceCode:'751-8',   medlabCode:'NEU',  name:'NEU# (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'770-8',   medlabCode:'NEUP', name:'NEU% (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'742-7',   medlabCode:'MON',  name:'MON# (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'5905-5',  medlabCode:'MONP', name:'MON% (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'711-2',   medlabCode:'EOS',  name:'EOS# (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'713-8',   medlabCode:'EOSP', name:'EOS% (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'704-7',   medlabCode:'BAS',  name:'BAS# (Zybio)',   device:'all',note:'Zybio Z60'},
+  {deviceCode:'706-2',   medlabCode:'BASP', name:'BAS% (Zybio)',   device:'all',note:'Zybio Z60'},
+  // CRP (اختياري حسب موديل الجهاز)
+  {deviceCode:'72426-1', medlabCode:'CRP',  name:'CRP (Zybio)',    device:'all',note:'Zybio Z60'},
+  {deviceCode:'12008',   medlabCode:'CRP',  name:'Hs-CRP (Zybio)', device:'all',note:'Zybio Z60'},
   // Vitamins
   {deviceCode:'VITD',medlabCode:'VITD',name:'Vitamin D',device:'all',note:''},
   {deviceCode:'25OHD',medlabCode:'VITD',name:'Vitamin D 25-OH',device:'all',note:''},
@@ -27951,12 +27977,9 @@ function lisWizShowConnFields(){
     const el=document.getElementById('wiz-s3-'+c);
     if(el) el.style.display=c===_wizConn?'block':'none';
   });
-  // 🩸 Zybio: أظهر إرشاد الجهاز في وضع Server، وتحذير الوضع الخاطئ في وضع Client
-  const _zy=_wizVendor==='zybio';
-  const zh=document.getElementById('wiz-zybio-hint');
-  if(zh) zh.style.display=(_zy&&_wizConn==='tcpserver')?'block':'none';
-  const zw=document.getElementById('wiz-zybio-wrongmode');
-  if(zw) zw.style.display=(_zy&&_wizConn==='network')?'block':'none';
+  // 🩸 Zybio: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
+  const zHint=document.getElementById('wiz-zybio-hint');
+  if(zHint) zHint.style.display=(_wizVendor==='zybio'&&_wizConn==='tcpserver')?'block':'none';
 }
 
 function lisWizBuildSummary(){
@@ -27970,10 +27993,6 @@ function lisWizBuildSummary(){
   let extra='';
   if(_wizConn==='serial') extra=`<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">Baud Rate</span><b>${baud}</b></div>`;
   if(_wizConn==='network') extra=`<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">IP الجهاز</span><b>${ip||'غير محدد'}</b></div><div style="display:flex;justify-content:space-between;margin-top:6px"><span style="color:var(--text2)">Port</span><b>${port}</b></div>`;
-  if(_wizConn==='tcpserver'){
-    const sp=document.getElementById('wiz-srv-port')?.value||'5100';
-    extra=`<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">Port الاستقبال</span><b>${sp}</b></div><div style="display:flex;justify-content:space-between;margin-top:6px"><span style="color:var(--text2)">الوضع</span><b>البرنامج = Server</b></div>`;
-  }
   if(_wizConn==='file') extra=`<div style="display:flex;justify-content:space-between"><span style="color:var(--text2)">المجلد</span><b style="font-size:10px">${fp||'سيُختار عند الاتصال'}</b></div>`;
 
   const sum=document.getElementById('wiz-summary');
@@ -28001,7 +28020,7 @@ async function lisWizFinish(){
   // network → TCP Client, tcpserver → TCP Server, serial → Serial, file → file watcher
   const connMap={serial:'serial',network:'network',tcpserver:'tcpserver',file:'file',manual:'file'};
   const ip=document.getElementById('wiz-ip')?.value||'';
-  // في وضع Server المنفذ يأتي من حقل الاستقبال وليس من حقل الاتصال
+  // 🖥 وضع السيرفر يقرأ منفذه من حقله الخاص (wiz-srv-port)
   const port=(_wizConn==='tcpserver')
     ? (document.getElementById('wiz-srv-port')?.value||'5100')
     : (document.getElementById('wiz-port')?.value||'5100');
@@ -28012,12 +28031,10 @@ async function lisWizFinish(){
     id:'ld'+Date.now(),
     name:_wizDevName,
     vendor:_wizVendor,
-    // 🩸 Zybio Z3 = محلّل دم (CBC) وليس كيمياء
-    type:_wizVendor==='zybio'?'hematology':'chemistry',
+    // 🩸 Zybio Z60/Z3 جهاز دم (CBC) — بقية الأجهزة تبقى كما هي
+    type:(_wizVendor==='zybio'?'hematology':'chemistry'),
     conn:connMap[_wizConn],
     protocol:_wizProtocol,
-    // 🩸 Zybio: الرد إلزامي (§3.8.1) — main.js يفرضه أيضاً لهذا الـ vendor
-    sendAck:_wizVendor==='zybio'?true:false,
     baud,
     ip,
     port,
@@ -28025,6 +28042,8 @@ async function lisWizFinish(){
     filePath:fp,
     connected:false,
     rxCount:0,
+    // 🩸 Zybio: الرد ACK^R01 إلزامي حسب دليل الشركة (3.8.1)
+    sendAck:(_wizVendor==='zybio'),
     _wizConn:_wizConn,
   };
 
@@ -28045,16 +28064,6 @@ async function lisWizFinish(){
     showNotif('تذكير','الجهاز جاهز — اضغط وصّل لبدء الاتصال','info');
     return;
   }
-  // 🖧 وضع Server: شغّل الاستقبال فوراً حتى يتمكن الجهاز من الاتصال
-  if(_wizConn==='tcpserver'){
-    setTimeout(async()=>{
-      const fresh=lisDevices.find(d=>d.id===dev.id);
-      if(!fresh) return;
-      if(typeof lisStartTCPServer==='function') await lisStartTCPServer(fresh);
-      lisRenderDevices(); lisUpdateStats();
-    },300);
-    return;
-  }
   // Try auto-connect for serial and file
   setTimeout(async()=>{
     const fresh=lisDevices.find(d=>d.id===dev.id);
@@ -28062,6 +28071,7 @@ async function lisWizFinish(){
     if(_wizConn==='serial') await lisConnectSerialDevice(fresh);
     else if(_wizConn==='file') await lisConnectFileDevice(fresh);
     else if(_wizConn==='network') await lisConnectTCPDevice(fresh);
+    else if(_wizConn==='tcpserver') await lisStartTCPServer(fresh); // 🖥 Zybio
     lisRenderDevices();
     lisUpdateStats();
   },300);
@@ -28502,8 +28512,8 @@ function lisAutoFillDevice(){
     sysmex:  {name:'Sysmex XN',          proto:'astm', conn:'serial'},
     mindray: {name:'Mindray BC-5000',    proto:'hl7',  conn:'network',  ip:'10.0.0.2',  port:'5100'},
     snibe:   {name:'MAGLUMI 600',        proto:'astm', conn:'serial',   baud:'9600'},
-    // 🩸 Zybio Z3: الجهاز = Client يتصل بنا → البرنامج Server (الدليل §2.1)
-    zybio:   {name:'Zybio Z3',           proto:'hl7',  conn:'tcpserver', port:'5100'},
+    // 🩸 Zybio Z60/Z3: الجهاز هو من يتصل بالبرنامج (LIS Server) — دليل الشركة 2.1
+    zybio:   {name:'Zybio Z60',          proto:'hl7',  conn:'tcpserver', port:'5100'},
     biobase: {name:'Biobase',            proto:'astm', conn:'serial'},
     rayto:   {name:'Rayto',              proto:'astm', conn:'serial'},
     other:   {name:'',                   proto:'astm', conn:'serial'},
@@ -28516,11 +28526,6 @@ function lisAutoFillDevice(){
   if(v==='mindray'){
     const ipEl=document.getElementById('lis-dev-ip');
     if(ipEl&&!ipEl.value) ipEl.value='10.0.0.2';
-  }
-  // 🩸 Zybio: منفذ الاستقبال الافتراضي (البرنامج يعمل Server)
-  if(v==='zybio'){
-    const spEl=document.getElementById('lis-dev-srv-port');
-    if(spEl&&!spEl.value) spEl.value='5100';
   }
 }
 function lisSaveDevice(){
@@ -29287,195 +29292,7 @@ function lisOpenTcpGuide(){
 // ═══════════════════════════════════════════════
 // PROTOCOL PARSERS
 // ═══════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-// 🩸 Zybio Z3 — درايفر معزول (HL7 v2.3.1 عبر MLLP/TCP)
-// ─────────────────────────────────────────────────────────────
-// مبني حرفياً على: "Communication protocol specification for
-//   hematology analyzer" — Zybio (v1.0 / 2018-11-18)
-//
-// لماذا درايفر منفصل؟ بنية رسائل Zybio تختلف عن BC-5000/MAGLUMI
-// في ٦ نقاط جوهرية — المحلّل العام يفشل فيها:
-//
-//  (١) PID فارغ دائماً: «PID|1||^^^^MR||^|||0» (§3.8.1)
-//      → رقم العينة في OBR-3 (Filler Order Number) — §3.5
-//  (٢) OBX-3 = «6790-2^WBC^LN» → المكوّن الأول كود LOINC (6790-2)
-//      والاسم في المكوّن الثاني (WBC). الدليل §3.6 ينص صراحةً:
-//      "ID and EncodeSys are used to uniquely determine a test
-//       parameter, while Name is mainly descriptive".
-//      → نطابق بجدول LOINC أولاً ثم بالاسم كاحتياط.
-//  (٣) جهاز ٣ تعدادات (3-part): GRAN/MID بدل NEU/LYM/MON/EOS/BAS
-//  (٤) الوحدات ISO: «10*9/L» → نحوّلها لـ «10^9/L» (§4.2)
-//  (٥) الأعلام قد تجتمع: «H~A» → نأخذ الأول فقط (§3.6 OBX-8)
-//  (٦) MSH-11 = «Q» → رسالة Quality Control — تُسجَّل ولا تُحفظ
-//      كنتيجة مريض (§3.8.2). كذلك OBX-2=«ED» = رسوم بيانية
-//      (Histogram BMP/Base64) — تُتجاهل (§4.3).
-//
-// العزل: يُستدعى فقط عندما vendor==='zybio'. لا يمسّ أي جهاز آخر.
-// ═══════════════════════════════════════════════════════════════
-
-// جدول LOINC/99MRC → أكواد MedLab (الملحق §4.2 من الدليل)
-const ZYBIO_CODE_MAP = {
-  // ── WBC series ──
-  '6790-2':'WBC',
-  '751-8':'NEU#',   '770-8':'NEU%',
-  '731-0':'LYM#',   '736-9':'LYM%',
-  '742-7':'MON#',   '5905-5':'MON%',
-  '711-2':'EOS#',   '713-8':'EOS%',
-  '704-7':'BAS#',   '706-2':'BAS%',
-  // 3-part diff (خاص بأجهزة Zybio ذات الـ ٣ تعدادات)
-  '19023-1':'GRAN#','21482-6':'GRAN%',
-  '33154-7':'MID#', '33155-4':'MID%',
-  // ── RBC series ──
-  '789-8':'RBC',    '718-7':'HGB',    '4544-3':'HCT',
-  '787-2':'MCV',    '785-6':'MCH',    '786-4':'MCHC',
-  '788-0':'RDW-CV', '22000-5':'RDW-SD',
-  // ── PLT series ──
-  '777-3':'PLT',    '33623-1':'MPV',  '33207-3':'PDW',
-  '12003':'PCT',    '35167-7':'P-LCC','49386-7':'P-LCR',
-  // ── CRP (اختياري — يظهر في موديلات CRP) ──
-  '72426-1':'CRP',  '12008':'HS-CRP',
-};
-
-// أكواد 99MRC وصفية (ليست نتائج) — تُتجاهل تماماً (§3.6.1 + §4.2)
-const ZYBIO_SKIP_CODES = {
-  '03001':1,/*Take Mode*/ '03002':1,/*Blood Mode*/ '03003':1,/*Test Mode*/
-  '03004':1,/*Qc Level*/  '04001':1,/*Ref Group*/  '09001':1,/*Remark*/
-  '31525-0':1,/*Age*/
-};
-
-// وحدات Zybio → صيغة العرض في البرنامج
-// ⚠️ الدليل يستخدم صيغتين للأُس في نفس الملف:
-//    • §4.2 (جدول الوحدات الرسمي): «10*9/L»  ← الصيغة المنصوص عليها
-//    • §3.8.1 (مثال الرسالة الكامل): «10^9/L» ← الصيغة الفعلية في المثال
-//    لذا ندعم الاثنتين. لا نُقسّم على '^' هنا إطلاقاً لأنه قد يكون أُسّاً
-//    وليس فاصل مكوّنات (خطأ يُنتج «10» بدل «10^9/L»).
-function _zybioUnit(u){
-  let s=String(u||'').trim();
-  if(!s) return '';
-  // وحدة CE كاملة نادرة الشكل «10*9/L^^ISO+» → خذ المكوّن الأول فقط.
-  // نُطبّقها فقط عند وجود '^^' (فاصل مكوّنات مؤكد) حتى لا نكسر أُسّ «10^9/L».
-  if(s.indexOf('^^')!==-1) s=s.split('^^')[0].trim();
-  return s.replace(/10\*(\d+)\/([a-zA-Z]+)/g,'10^$1/$2')  // 10*9/L → 10^9/L
-          .replace(/^um3$/i,'um^3')
-          .trim();
-}
-
-// العلم: «H~A» أو «L~A» → H / L فقط (§3.6 OBX-8)
-function _zybioFlag(f){
-  const first=String(f||'').split('~')[0].trim().toUpperCase();
-  if(!first||first==='N') return '';
-  if(first.startsWith('H')) return 'H';
-  if(first.startsWith('L')) return 'L';
-  if(first==='A') return 'A';
-  return first;
-}
-
-// كود التحليل من OBX-3: «6790-2^WBC^LN»
-//   نُجرّب LOINC أولاً (الموثوق) ثم الاسم الوصفي كاحتياط.
-function _zybioResolveCode(obx3){
-  const parts=String(obx3||'').split('^');
-  const id  =(parts[0]||'').trim();
-  const name=(parts[1]||'').trim().toUpperCase().replace(/\s+/g,'');
-  if(ZYBIO_SKIP_CODES[id]) return null;                 // حقل وصفي
-  if(ZYBIO_CODE_MAP[id])   return ZYBIO_CODE_MAP[id];   // ✅ مطابقة LOINC
-  if(name && cbcIsParam(name)) return cbcNormalizeCode(name); // احتياط بالاسم
-  return name||id||null;
-}
-
-function lisParseZybio(raw,deviceName){
-  const segs=String(raw||'').split(/\r\n|\r|\n/).map(s=>s.trim()).filter(Boolean);
-  if(!segs.length) return;
-
-  // ── MSH ────────────────────────────────────────────────────
-  const msh=segs.find(s=>s.startsWith('MSH'))||'';
-  const mshF=msh.split('|');
-  const msgType=(mshF[8]||'').toUpperCase().trim();
-  const procId =(mshF[10]||'P').toUpperCase().trim();
-
-  if(msgType.startsWith('ACK')) return;   // رد فقط — ليس نتيجة
-
-  // ── §3.8.2: MSH-11='Q' → رسالة كنترول (QC) ────────────────
-  // تُسجَّل في السجل للمراجعة فقط — لا تُحفظ كنتيجة مريض إطلاقاً.
-  if(procId==='Q'){
-    lisAddLog('warn','🧪 Zybio: رسالة كنترول (QC) — سُجّلت ولم تُحفظ كنتيجة مريض');
-    return;
-  }
-  if(!msgType.startsWith('ORU')){
-    lisAddLog('info','🩸 Zybio: رسالة غير نتائج ('+(msgType||'?')+') — تجاهُل');
-    return;
-  }
-
-  // ── رقم العينة: OBR-3 (§3.5) — PID فارغ في Zybio (§3.8.1) ──
-  const obr=segs.find(s=>s.startsWith('OBR'))||'';
-  const obrF=obr.split('|');
-  let sid=(obrF[3]||'').split('^')[0].trim();          // Filler Order Number
-  if(!sid) sid=(obrF[2]||'').split('^')[0].trim();     // Placer (احتياط)
-
-  // اسم المريض من PID-5 إن وُجد (غالباً فارغ في Zybio)
-  const pid=segs.find(s=>s.startsWith('PID'))||'';
-  const pidF=pid.split('|');
-  let pname=(pidF[5]||'').replace(/\^/g,' ').trim();
-  // احتياط أخير للرقم: PID-3 إن كان الجهاز مُعرَّفاً بالمريض
-  if(!sid){
-    const p3=(pidF[3]||'').split('^')[0].replace(/[^0-9]/g,'').trim();
-    if(p3) sid=p3;
-  }
-  if(!sid){
-    lisAddLog('err','❌ Zybio: لا يوجد رقم عينة في OBR-3 ولا PID — تعذّر ربط النتيجة');
-    return;
-  }
-
-  lisAddLog('astm','🩸 Zybio ORU — SID:'+sid+(pname?' | '+pname:''));
-
-  // ── OBX ────────────────────────────────────────────────────
-  let n=0;
-  segs.filter(s=>s.startsWith('OBX')).forEach(seg=>{
-    const f=seg.split('|');
-    const type=(f[2]||'').trim().toUpperCase();
-    // §4.3: 'ED' = رسم بياني BMP/Base64 — لا يُخزَّن
-    if(type==='ED') return;
-
-    const code=_zybioResolveCode(f[3]||'');
-    if(!code) return;                       // حقل وصفي (Take Mode…) أو غير معروف
-
-    const rawVal=(f[5]||'').split('^')[0].trim();
-    // §4.2: القيم النصية (IS) مثل T/F للأعلام — نتجاهلها كنتيجة رقمية
-    if(type==='IS' && !/\d/.test(rawVal)) return;
-    if(!rawVal) return;
-
-    const m=rawVal.match(/([<>]?\s*-?\d+(?:\.\d+)?)/);
-    const value=m?m[1].replace(/\s/g,''):rawVal;
-    // §3.8.1: العمر يأتي بقيمة -1 عند عدم توفره — تجاهُل أي قيمة سالبة
-    if(parseFloat(value)<0) return;
-
-    const unit =_zybioUnit(f[6]||'');
-    const range=(f[7]||'').trim();
-    const flag =_zybioFlag(f[8]||'');
-
-    lisAddLog('astm','  ├ '+code+' = '+value+' '+unit+(flag?' ['+flag+']':''));
-
-    if(cbcIsParam(code)){
-      cbcAddParam(sid,code,value,unit,range,flag,pname);
-    } else {
-      // CRP / Hs-CRP وأي تحليل غير CBC → المسار العام
-      lisIngestResult({
-        id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
-        sampleId:sid, patName:pname||'',
-        deviceCode:code, medlabCode:lisResolveCode(code),
-        value, unit, refRange:range, flags:flag,
-        status:'final', device:deviceName, protocol:'HL7',
-        datetime:new Date().toISOString(), transferred:false,
-      });
-    }
-    n++;
-  });
-
-  lisAddLog(n?'ok':'warn','🩸 Zybio: '+n+' باراميتر من العينة '+sid);
-}
-
 function lisParseByProtocol(text,dev){
-  // 🩸 Zybio Z3 — درايفر معزول (بنية OBR-3/LOINC تختلف عن باقي أجهزة HL7)
-  if((dev.vendor||'')==='zybio'){ lisParseZybio(text,dev.name); return; }
   const proto=(dev.protocol||'astm').toLowerCase();
   if(proto==='hl7') lisParseHL7(text,dev.name);
   else if(proto==='csv') lisParseCSV(text,dev.name);
@@ -29735,11 +29552,6 @@ const CBC_PARAMS_MAP = {
   'MON%':   {ar:'Mon% الوحيدات نسبة',         unit:'%',       refM:'3-12',      order:9},
   'EOS%':   {ar:'Eos% الحمضات نسبة',          unit:'%',       refM:'0.5-5.0',   order:10},
   'BAS%':   {ar:'Bas% القعيدات نسبة',         unit:'%',       refM:'0-1',       order:11},
-  // ── 3-part diff (أجهزة الـ ٣ تعدادات مثل Zybio Z3) ──
-  'GRAN#':  {ar:'Gran# المحببات عدد',         unit:'10^9/L',  refM:'1.8-6.3',   order:11.1},
-  'GRAN%':  {ar:'Gran% المحببات نسبة',        unit:'%',       refM:'50-70',     order:11.2},
-  'MID#':   {ar:'Mid# الخلايا المتوسطة عدد',  unit:'10^9/L',  refM:'0.1-1.5',   order:11.3},
-  'MID%':   {ar:'Mid% الخلايا المتوسطة نسبة', unit:'%',       refM:'3-15',      order:11.4},
   // RBC Series
   'RBC':    {ar:'RBC  خلايا الدم الحمراء',    unit:'10^12/L', refM:'3.50-5.50', order:12},
   'HGB':    {ar:'HGB  الهيموغلوبين',          unit:'g/dL',    refM:'11.0-17.5', order:13},
@@ -29754,9 +29566,6 @@ const CBC_PARAMS_MAP = {
   'MPV':    {ar:'MPV  متوسط حجم الصفيحة',     unit:'fL',      refM:'7-11',      order:21},
   'PDW':    {ar:'PDW  توزيع الصفائح',         unit:'',        refM:'9-17',      order:22},
   'PCT':    {ar:'PCT  كمية الصفائح',          unit:'mL/L',    refM:'1.08-2.82', order:23},
-  // ── معاملات صفائح إضافية (يرسلها Zybio Z3) ──
-  'P-LCC':  {ar:'P-LCC الصفائح الكبيرة عدد',  unit:'10^9/L',  refM:'30-90',     order:24},
-  'P-LCR':  {ar:'P-LCR الصفائح الكبيرة نسبة', unit:'%',       refM:'11-45',     order:25},
 };
 const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
 function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
@@ -30000,6 +29809,14 @@ function lisParseHL7(raw,deviceName){
 // تتجنب إعادة تحليل HL7 وتضمن استخدام patientId الصحيح من PID
 function lisParseHL7Parsed(parsed, deviceName){
   if(!parsed||!parsed.results||!parsed.results.length) return;
+  // ── 🩸 Zybio — رسائل الكنترول (QC) لا تُحفظ كنتائج مريض ─────────────
+  // دليل الشركة (3.8.2): عندما MSH-11 = 'Q' تكون الرسالة نتيجة Quality
+  // Control (L-J / X-B) وليست عينة مريض. نسجّلها في السجل فقط.
+  // معزول: isQC لا تكون true إلا إذا أرسل الجهاز 'Q' صراحةً.
+  if(parsed.isQC){
+    lisAddLog('info','🧪 '+deviceName+' — رسالة كنترول (QC) تم تجاهلها (لا تُحفظ كنتيجة مريض)');
+    return;
+  }
   lisAddLog('astm','تحليل HL7 (parsed) من: '+deviceName+' | SID:'+parsed.patientId);
 
   parsed.results.forEach(function(obx){
