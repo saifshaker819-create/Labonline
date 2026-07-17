@@ -27515,7 +27515,7 @@ document.addEventListener('DOMContentLoaded', function(){
 // ═══════ الحالة ═══════
 var VA = {
   rec:null, on:false, ctx:'idle', silence:null, tick:null,
-  last:0, SIL:10000, booted:false
+  last:0, SIL:10000, booted:false, pick:null
 };
 var VA_TITLES=['السيد','السيدة','الآنسة','الحاج','الحاجة','الاستاذ','الاستاذة','الطفل','الطفلة','الدكتور','الدكتورة'];
 
@@ -27601,32 +27601,107 @@ function vaExtractPhone(raw){
   return out.length>=10?out:(joined.length>=7?joined:'');
 }
 
-// ═══════ مرادفات التحاليل (لهجة عامية + إنجليزي منطوق) ═══════
+// ═══════ محرك تهجئة الحروف: "اج دي ال" → HDL ═══════
+// يحوّل أسماء الحروف المنطوقة بالعربي إلى حروف لاتينية.
+// هكذا يعمل مع أي كود في قاعدة التحاليل تلقائياً (٥٥٧+ كود) دون قوائم يدوية.
+// ⚠️ العربية لا تملك P ولا V — لذلك "بي" = B أو P، و"في" = V أو F.
+//    نولّد كل الاحتمالات ونطابقها بالكود الحقيقي (أي أن الكود هو الحَكَم).
+var VA_LET={
+  'ايه':['A'],'أيه':['A'],'الف':['A'],
+  'بي':['B','P'],'بيه':['B','P'],'پي':['P'],
+  'سي':['C','S'],'سيه':['C'],
+  'دي':['D'],'ديه':['D'],
+  'اي':['A','I','E'],'إي':['E'],'آي':['I'],
+  'اف':['F'],'إف':['F'],
+  'جي':['G','J'],'چي':['G'],
+  'اج':['H'],'اتش':['H'],'هاش':['H'],'اش':['H'],'اچ':['H'],'هاي':['H'],
+  'جيه':['J'],'جاي':['J'],
+  'كي':['K'],'كيه':['K'],
+  'ال':['L'],'إل':['L'],
+  'ام':['M'],'إم':['M'],
+  'ان':['N'],'إن':['N'],
+  'او':['O'],'أو':['O'],
+  'كيو':['Q'],'كو':['Q'],
+  'ار':['R'],'آر':['R'],
+  'اس':['S'],'إس':['S'],
+  'تي':['T'],'تيه':['T'],
+  'يو':['U'],'يوو':['U'],
+  'في':['V','F'],'ڤي':['V'],'فيه':['V'],
+  'دبليو':['W'],'دبليوو':['W'],
+  'اكس':['X'],'إكس':['X'],'اكز':['X'],
+  'واي':['Y'],'وأي':['Y'],
+  'زد':['Z'],'زي':['Z']
+};
+// أرقام منطوقة داخل الأكواد: CA19-9 / CA-125 / C3
+var VA_NUMW={'صفر':'0','واحد':'1','اثنين':'2','ثنين':'2','ثلاثه':'3','ثلاث':'3','اربعه':'4','اربع':'4',
+  'خمسه':'5','خمس':'5','سته':'6','ست':'6','سبعه':'7','سبع':'7','ثمانيه':'8','ثمان':'8','تسعه':'9','تسع':'9',
+  'عشره':'10','احدعش':'11','اثناعش':'12','خمستعش':'15','تسعتعش':'19','عشرين':'20','مئه':'100','مايه':'100','ميه':'100'};
+
+// يولّد كل التهجئات المحتملة: "بي اس ايه" → [BSA, PSA]
+// يعيد [] إن لم تكن العبارة تهجئة حروف أصلاً.
+function vaSpellAll(phrase){
+  var t=vaNorm(phrase);
+  if(!t) return [];
+  var toks=t.split(' ').filter(Boolean);
+  if(!toks.length) return [];
+  var outs=[''], hits=0;
+  for(var i=0;i<toks.length;i++){
+    var w=toks[i], opts=null;
+    if(/^\d+$/.test(w))        opts=[w];
+    else if(VA_LET[w])         opts=VA_LET[w];
+    else if(VA_NUMW[w])        opts=[VA_NUMW[w]];
+    else if(/^[a-z0-9]+$/.test(w)) opts=[w.toUpperCase()];
+    else return [];            // كلمة غير قابلة للتهجئة
+    hits++;
+    var next=[];
+    for(var a=0;a<outs.length;a++)
+      for(var b=0;b<opts.length;b++){
+        next.push(outs[a]+opts[b]);
+        if(next.length>64) break;   // سقف أمان للتشعّب
+      }
+    outs=next;
+  }
+  return hits?outs:[];
+}
+
+// يطبّع كوداً للمقارنة: يزيل الفواصل والرموز — LDL-C → LDLC، CA19-9 → CA199
+function vaCodeKey(c){
+  return String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+
+// ═══════ مرادفات كلامية (وصفية) — تكمّل التهجئة ولا تحلّ محلها ═══════
+
+// يطبّع كوداً للمقارنة: يزيل الفواصل والرموز — LDL-C → LDLC، CA19-9 → CA199
+function vaCodeKey(c){
+  return String(c||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+}
+
+// ═══════ مرادفات كلامية (وصفية) — تكمّل التهجئة ولا تحلّ محلها ═══════
 var VA_TEST_SYN={
-  'tsh':['تي اس اج','تي اس اتش','تي إس إتش','تي اس هاش','الغده','الغده الدرقيه','درقيه','تي اس اش'],
-  'rbs':['رندم بلد شكر','راندوم بلد شوكر','سكر عشوائي','السكر العشوائي','ار بي اس','شكر عشوائي','سكر'],
-  'fbs':['فاستنك بلد شكر','صائم','سكر صائم','اف بي اس','فاستينغ'],
-  'cbc':['سي بي سي','صوره دم','صورة الدم','دم كامل','سي بي سي كامل'],
-  'hba1c':['اج بي ايه ون سي','تراكمي','السكر التراكمي','هيموغلوبين تراكمي','اي وان سي'],
-  'gua':['حامض اليوريك','يوريك اسيد','حمض البوليك','يوريك'],
-  'cr':['كرياتينين','الكرياتين','كريتينين'],
-  'bun':['بولينا','يوريا','بي يو ان'],
+  'tsh':['الغده','الغده الدرقيه','درقيه'],
+  'rbs':['رندم بلد شكر','راندوم بلد شوكر','سكر عشوائي','السكر العشوائي','شكر عشوائي','سكر'],
+  'fbs':['فاستنك بلد شكر','صائم','سكر صائم','فاستينغ'],
+  'cbc':['صوره دم','صورة الدم','دم كامل'],
+  'hba1c':['تراكمي','السكر التراكمي','هيموغلوبين تراكمي'],
+  'ua':['حامض اليوريك','يوريك اسيد','حمض البوليك','يوريك'],
+  'creat':['كرياتينين','الكرياتين','كريتينين','الكرياتينين'],
+  'bun':['بولينا','يوريا'],
   'chol':['كولسترول','الكوليسترول','كليسترول'],
   'tg':['دهون ثلاثيه','ترايكلسريد','دهون'],
-  'alt':['ايه ال تي','جي بي تي','انزيمات الكبد','الكبد'],
-  'ast':['ايه اس تي','جي او تي'],
-  'alp':['الكالين فوسفاتيز','ايه ال بي'],
+  'alt':['انزيمات الكبد','الكبد'],
+  'ast':['جي او تي'],
+  'alp':['الكالين فوسفاتيز'],
   'tbil':['بيليروبين','الصفار','صفراء'],
   'ca':['كالسيوم','الكالسيوم'],
   'na':['صوديوم','الصوديوم'],
   'k':['بوتاسيوم','البوتاسيوم'],
-  'fe':['حديد','الحديد','ايرون'],
+  'serumfe':['حديد','الحديد','ايرون'],
   'ferr':['فيريتين','مخزون الحديد'],
-  'vitd':['فيتامين دي','فيتامين د'],
+  'vitd':['فيتامين دي','فيتامين د','فيتامين دال'],
   'vitb12':['فيتامين بي تعشر','بي تعشر','فيتامين ب ١٢'],
-  'psa':['بي اس ايه','البروستات','بروستات'],
-  'esr':['اي اس ار','سرعه الترسيب','ترسيب'],
-  'crp':['سي ار بي','التهاب'],
+  'psa':['البروستات','بروستات'],
+  'esr':['سرعه الترسيب','ترسيب'],
+  'crp':['التهاب'],
   'ua':['ادرار','الادرار','بول','تحليل البول','جي يو اي'],
   'stool':['براز','خرو','غائط','تحليل البراز'],
   'hp':['اج بايلوري','جرثومه المعده','بايلوري','هيليكوباكتر'],
@@ -27655,45 +27730,100 @@ function vaEditDist(a,b){
   return prev[n];
 }
 
-// يبني فهرس التحاليل من tests الحقيقية + المرادفات
+// يبني فهرس التحاليل من tests الحقيقية
+// codeKeys: أكواد مطبَّعة للمطابقة بالتهجئة (LDL, CA199, HSCRP…)
+// wordKeys: أسماء/مرادفات وصفية للمطابقة الكلامية
 function vaTestIndex(){
   var idx=[];
   if(typeof tests==='undefined' || !Array.isArray(tests)) return idx;
   tests.forEach(function(t){
     if(!t || !t.id) return;
-    var keys=[];
-    if(t.code) keys.push(vaNorm(t.code));
-    if(t.name) keys.push(vaNorm(t.name));
-    if(t.nameEn) keys.push(vaNorm(t.nameEn));
-    if(t.shortName) keys.push(vaNorm(t.shortName));
-    var codeL=String(t.code||'').toLowerCase().trim();
-    if(VA_TEST_SYN[codeL]) VA_TEST_SYN[codeL].forEach(function(s){keys.push(vaNorm(s));});
-    keys=keys.filter(function(k){return k && k.length>1;});
-    if(keys.length) idx.push({id:t.id, name:t.name||t.nameEn||t.code, keys:keys});
+    var codeKeys=[], wordKeys=[];
+    if(t.code){
+      codeKeys.push(vaCodeKey(t.code));
+      wordKeys.push(vaNorm(t.code));
+    }
+    if(t.shortName){
+      codeKeys.push(vaCodeKey(t.shortName));
+      wordKeys.push(vaNorm(t.shortName));
+    }
+    if(t.name)   wordKeys.push(vaNorm(t.name));
+    if(t.nameEn) wordKeys.push(vaNorm(t.nameEn));
+    // مرادفات وصفية: نطابق بمفتاح الكود المطبَّع (VIT-D → VITD)
+    var ckey=vaCodeKey(t.code);
+    for(var sk in VA_TEST_SYN){
+      if(!VA_TEST_SYN.hasOwnProperty(sk)) continue;
+      if(vaCodeKey(sk)===ckey){
+        VA_TEST_SYN[sk].forEach(function(s){wordKeys.push(vaNorm(s));});
+      }
+    }
+    codeKeys=codeKeys.filter(function(k){return k && k.length>=1;});
+    wordKeys=wordKeys.filter(function(k){return k && k.length>1;});
+    if(codeKeys.length||wordKeys.length)
+      idx.push({id:t.id, name:t.name||t.nameEn||t.code, code:t.code||'',
+                codeKeys:codeKeys, wordKeys:wordKeys});
   });
   return idx;
 }
 
-// يطابق عبارة منطوقة → تحليل واحد (تطابق تام ثم احتواء ثم تقريبي)
+// يطابق عبارة منطوقة → تحليل واحد
+// الأولوية: 1) تهجئة الحروف على الكود  2) اسم/مرادف تام  3) احتواء  4) تقريبي
 function vaMatchTest(phrase){
   var p=vaNorm(phrase);
-  if(!p || p.length<2) return null;
-  var idx=vaTestIndex(), i, j, best=null, bestD=99;
-  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].keys.length;j++)
-    if(idx[i].keys[j]===p) return idx[i];
-  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].keys.length;j++){
-    var k=idx[i].keys[j];
+  if(!p || p.length<1) return null;
+  var idx=vaTestIndex(), i, j;
+
+  // نحسب التهجئة أولاً: إن كانت العبارة تهجئة حروف، فالكود هو الحَكَم
+  // ولا نسمح لمطابقة النص أن تسبقها (وإلا فات كشف تعارض ALB/ALP).
+  var cands=vaSpellAll(phrase);
+  var isSpelling=cands.length>0;
+
+  // (0) تطابق تام مع اسم وصفي — فقط إن لم تكن العبارة تهجئة
+  if(!isSpelling){
+    for(i=0;i<idx.length;i++) for(j=0;j<idx[i].wordKeys.length;j++)
+      if(idx[i].wordKeys[j]===p) return idx[i];
+  }
+
+  // (1) تهجئة: "اج دي ال" → HDL — أدق مسار وأعلاها أولوية.
+  //     نجرّب كل الاحتمالات (بي = B أو P) ونقبل التطابق التام فقط،
+  //     فالكود الحقيقي هو الحَكَم — لا تخمين تقريبي على الأكواد.
+  //     ⚠️ إن طابق أكثر من تحليل (ALB و ALP) نعيدها كلها ليختار المستخدم،
+  //        فالاختيار الصامت لتحليل خاطئ خطر في مختبر.
+  if(isSpelling){
+    var hitsArr=[], hitIds={};
+    for(var c=0;c<cands.length;c++){
+      var spk=vaCodeKey(cands[c]);
+      if(!spk) continue;
+      for(i=0;i<idx.length;i++) for(j=0;j<idx[i].codeKeys.length;j++)
+        if(idx[i].codeKeys[j]===spk && !hitIds[idx[i].id]){
+          hitIds[idx[i].id]=1; hitsArr.push(idx[i]);
+        }
+    }
+    if(hitsArr.length===1) return hitsArr[0];
+    if(hitsArr.length>1) return {ambiguous:true, options:hitsArr};
+  }
+
+  // (2) تطابق تام مع اسم أو مرادف
+  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].wordKeys.length;j++)
+    if(idx[i].wordKeys[j]===p) return idx[i];
+
+  // (3) احتواء
+  var best=null, bestD=99;
+  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].wordKeys.length;j++){
+    var k=idx[i].wordKeys[j];
     if(k.length>=3 && (p.indexOf(k)>-1 || k.indexOf(p)>-1)){
       var d=Math.abs(k.length-p.length);
       if(d<bestD){ bestD=d; best=idx[i]; }
     }
   }
   if(best) return best;
-  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].keys.length;j++){
-    var kk=idx[i].keys[j];
-    if(kk.length<3) continue;
+
+  // (4) تقريبي (أخطاء النطق/التعرف)
+  for(i=0;i<idx.length;i++) for(j=0;j<idx[i].wordKeys.length;j++){
+    var kk=idx[i].wordKeys[j];
+    if(kk.length<4) continue;
     var dd=vaEditDist(p,kk);
-    var lim=kk.length<=4?1:(kk.length<=7?2:3);
+    var lim=kk.length<=6?1:(kk.length<=9?2:3);
     if(dd<=lim && dd<bestD){ bestD=dd; best=idx[i]; }
   }
   return best;
@@ -27773,7 +27903,7 @@ window.vaStart=function(){
     if(VA.on){ try{ VA.rec.start(); }catch(e){} }  // إعادة تشغيل تلقائية
   };
 
-  VA.on=true;
+  VA.on=true; VA.pick=null;
   try{ VA.rec.start(); }catch(e){}
   var p=document.getElementById('va-panel'); if(p) p.style.display='block';
   vaOrb('va-live');
@@ -28020,6 +28150,23 @@ function vaDoctor(v,isEdit){
 
 // ═══════ الخطوة 2: اختيار التحاليل ═══════
 function vaTests(raw,t){
+  // ── حسم التعارض: المستخدم يقول رقم الخيار (١ أو ٢) ──
+  if(VA.pick && VA.pick.length){
+    var pn=vaWordsToNum(raw);
+    if(pn!=null && pn>=1 && pn<=VA.pick.length){
+      var chosen=VA.pick[pn-1];
+      VA.pick=null;
+      if(typeof toggleWizTest==='function'){
+        var dup=(typeof wizSelectedTests!=='undefined')&&wizSelectedTests.some(function(x){return x.id===chosen.id;});
+        if(dup){ vaUI(null,'ℹ️ '+chosen.name+' مضاف أصلاً',null); return true; }
+        toggleWizTest(chosen.id);
+        vaUI(null,'✅ '+chosen.name+' ('+chosen.code+') — المجموع: '+wizSelectedTests.length,null);
+        return true;
+      }
+    }
+    if(/^(الغاء|الغي|لا)$/.test(t)){ VA.pick=null; vaUI(null,'↩️ أُلغي الاختيار',null); return true; }
+  }
+
   // حفظ → ينهي دور المساعد
   if(/^(حفظ|احفظ|خزن|تم|انهاء|انهي|سجل)$/.test(t)){
     if(typeof wizFinish==='function'){
@@ -28043,6 +28190,8 @@ function vaTests(raw,t){
   if(mDel){
     var dt=vaMatchTest(mDel[1]);
     if(!dt){ vaUI(null,'❓ لم أعرف التحليل: '+mDel[1],null); return true; }
+    if(dt.ambiguous){ vaUI(null,'❓ حدّد بدقة — يوجد أكثر من تطابق: '+
+        dt.options.map(function(o){return o.code;}).join(' / '),null); return true; }
     var sel=(typeof wizSelectedTests!=='undefined')&&wizSelectedTests.some(function(x){return x.id===dt.id;});
     if(!sel){ vaUI(null,'ℹ️ '+dt.name+' غير مختار أصلاً',null); return true; }
     if(typeof toggleWizTest==='function'){
@@ -28055,14 +28204,22 @@ function vaTests(raw,t){
   // إضافة تحليل (مع دعم "و" لعدة تحاليل)
   var phrase=raw.replace(/^\s*(اضف|ضيف|اضافه|زد)\s+/i,'').trim();
   var chunks=phrase.split(/\s+و\s+|،|,/).map(function(x){return x.trim();}).filter(Boolean);
-  var added=[], unknown=[];
+  var added=[], unknown=[], ambig=null;
   chunks.forEach(function(c){
     var m=vaMatchTest(c);
     if(!m){ unknown.push(c); return; }
+    // تعارض حقيقي (ALB مقابل ALP) → اطلب الحسم بدل التخمين
+    if(m.ambiguous){ if(!ambig) ambig=m.options; return; }
     var already=(typeof wizSelectedTests!=='undefined')&&wizSelectedTests.some(function(x){return x.id===m.id;});
     if(already){ added.push(m.name+' (موجود)'); return; }
     if(typeof toggleWizTest==='function'){ toggleWizTest(m.id); added.push(m.name); }
   });
+  if(ambig && !added.length){
+    VA.pick=ambig;
+    var list=ambig.map(function(o,n){ return (n+1)+') <b>'+o.code+'</b> — '+o.name; }).join('<br>');
+    vaUI(null,'❓ أيّهما تقصد؟ قل الرقم:<br>'+list,null);
+    return true;
+  }
   if(added.length){
     var tot=(typeof wizSelectedTests!=='undefined')?wizSelectedTests.length:0;
     vaUI(null,'✅ '+added.join(' · ')+' — المجموع: '+tot,null);
