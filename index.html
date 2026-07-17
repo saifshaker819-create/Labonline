@@ -27515,7 +27515,12 @@ document.addEventListener('DOMContentLoaded', function(){
 // ═══════ الحالة ═══════
 var VA = {
   rec:null, on:false, ctx:'idle', silence:null, tick:null,
-  last:0, SIL:10000, booted:false, pick:null
+  last:0, SIL:10000, booted:false, pick:null,
+  // ⭐ إدارة الميكروفون بين مُستمِع الإيقاظ والجلسة النشطة
+  wakeWanted:false,  // هل فعّل المستخدم كلمة «مساعد»؟ (افتراضياً: لا)
+  handing:false,     // جارٍ تسليم الميكروفون من الإيقاظ إلى الجلسة
+  _long:false,       // ضغطة طويلة على الزر
+  wakeBoot:null, wakeKill:null, wakeRevive:null
 };
 var VA_TITLES=['السيد','السيدة','الآنسة','الحاج','الحاجة','الاستاذ','الاستاذة','الطفل','الطفلة','الدكتور','الدكتورة'];
 
@@ -27870,6 +27875,9 @@ window.vaStart=function(){
     return;
   }
   if(VA.on) return;
+  // ⭐ حرّر الميكروفون من مُستمِع الإيقاظ أولاً — وجود محرّكين معاً كان
+  //    يرمي InvalidStateError فيُسمع صوت البدء بلا أي استجابة.
+  if(VA.wakeKill) VA.wakeKill();
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   VA.rec=new SR();
   VA.rec.lang='ar-IQ';
@@ -27904,7 +27912,15 @@ window.vaStart=function(){
   };
 
   VA.on=true; VA.pick=null;
-  try{ VA.rec.start(); }catch(e){}
+  // ⭐ إن كان الميكروفون ما زال مشغولاً لحظياً → أعد المحاولة بدل الفشل الصامت
+  try{ VA.rec.start(); }
+  catch(e){
+    setTimeout(function(){
+      if(!VA.on || !VA.rec) return;
+      try{ VA.rec.start(); }
+      catch(e2){ vaUI('','⚠️ الميكروفون مشغول — أعد الضغط على الزر',null); window.vaStop(); }
+    }, 350);
+  }
   var p=document.getElementById('va-panel'); if(p) p.style.display='block';
   vaOrb('va-live');
   vaBtnState(true);
@@ -27915,11 +27931,16 @@ window.vaStart=function(){
 };
 window.vaStop=function(){
   VA.on=false;
-  if(VA.rec){ try{ VA.rec.onend=null; VA.rec.stop(); }catch(e){} VA.rec=null; }
+  if(VA.rec){ try{ VA.rec.onend=null; VA.rec.onresult=null; VA.rec.stop(); }catch(e){} VA.rec=null; }
   if(VA.tick){ clearInterval(VA.tick); VA.tick=null; }
   var p=document.getElementById('va-panel'); if(p) p.style.display='none';
   vaOrb('');
   vaBtnState(false);
+  // ⭐ أعد الإيقاظ فقط إذا كان المستخدم قد فعّله — وبعد تحرير الميكروفون
+  if(VA.wakeWanted && VA.wakeBoot){
+    VA.wakeRevive&&VA.wakeRevive();
+    setTimeout(function(){ if(!VA.on && VA.wakeWanted) VA.wakeBoot(); }, 700);
+  }
 };
 function vaBump(){ VA.last=Date.now(); }
 function vaTick(){
@@ -28240,13 +28261,16 @@ function vaWake(){
     try{ w=new SR(); }catch(e){ return; }
     w.lang='ar-IQ'; w.continuous=true; w.interimResults=false; w.maxAlternatives=2;
     w.onresult=function(e){
-      if(VA.on) return;
+      if(VA.on || VA.handing) return;
       for(var i=e.resultIndex;i<e.results.length;i++){
         for(var k=0;k<e.results[i].length;k++){
           var s=vaNorm(e.results[i][k].transcript);
           if(/(^|\s)(مساعد|المساعد|مساعده)(\s|$)/.test(s)){
-            try{ w.stop(); }catch(x){}
-            setTimeout(window.vaStart,220);
+            // ⭐ تسليم الميكروفون بالكامل قبل بدء الجلسة:
+            //    ابدأ vaStart من داخل onend فقط — لا محرّكين معاً.
+            VA.handing = true;
+            try{ w.onresult=null; w.onend=function(){ w=null; VA.handing=false; window.vaStart(); }; w.stop(); }
+            catch(x){ VA.handing=false; window.vaStart(); }
             return;
           }
         }
@@ -28256,21 +28280,51 @@ function vaWake(){
       if(e.error==='not-allowed'||e.error==='service-not-allowed'){ dead=true; }
     };
     w.onend=function(){
-      if(dead) return;
-      setTimeout(function(){ if(!VA.on) boot(); },700);  // لا تنافس الجلسة النشطة
+      // ⭐ لا تُعِد الإيقاظ أثناء جلسة نشطة أو أثناء التسليم — منع سرقة الميكروفون
+      if(dead || VA.on || VA.handing || !VA.wakeWanted) return;
+      setTimeout(function(){ if(!VA.on && !VA.handing && VA.wakeWanted) boot(); },900);
     };
     try{ w.start(); }catch(e){}
   }
-  // لا نشغّل الإيقاظ إلا بعد أول تفاعل (سياسة الميكروفون)
-  var once=function(){
-    document.removeEventListener('click',once);
-    boot();
-  };
-  document.addEventListener('click',once);
+  // ⭐ إصلاح: لا تشغيل تلقائي إطلاقاً.
+  //    كان: addEventListener('click') → أي نقرة (حتى تسجيل الدخول) تفتح الميكروفون وحدها.
+  //    الآن: الإيقاظ لا يبدأ إلا إذا فعّله المستخدم صراحةً من الزر.
+  VA.wakeBoot = boot;
+  VA.wakeKill = function(){ dead=true; if(w){ try{ w.onend=null; w.onresult=null; w.stop(); }catch(x){} w=null; } };
+  VA.wakeRevive = function(){ dead=false; };
+  if(VA.wakeWanted) boot();
 }
 
+// ⭐ تشغيل/إيقاف كلمة الإيقاظ "مساعد" — باختيار المستخدم فقط، ويُحفظ
+window.vaWakeToggle=function(){
+  VA.wakeWanted = !VA.wakeWanted;
+  try{ localStorage.setItem('va_wake_on', VA.wakeWanted?'1':'0'); }catch(e){}
+  if(VA.wakeWanted){
+    if(typeof showNotif==='function') showNotif('🎙️ المساعد','تم تفعيل كلمة الإيقاظ — قل «مساعد» للبدء','success');
+    if(!VA.booted) vaWake();
+    else { VA.wakeRevive&&VA.wakeRevive(); if(!VA.on&&VA.wakeBoot) VA.wakeBoot(); }
+  } else {
+    VA.wakeKill&&VA.wakeKill();
+    if(typeof showNotif==='function') showNotif('🎙️ المساعد','تم إيقاف كلمة الإيقاظ — استخدم الزر للبدء','info');
+  }
+};
+
 // ═══════ زر الهيدر (بجانب الإشعارات) ═══════
-window.vaToggle=function(){ VA.on?window.vaStop():window.vaStart(); };
+// ضغطة قصيرة: تشغيل/إيقاف الاستماع · ضغطة طويلة (٧٠٠ms): تفعيل/إيقاف كلمة «مساعد»
+window.vaToggle=function(){ if(VA._long){ VA._long=false; return; } VA.on?window.vaStop():window.vaStart(); };
+(function(){
+  var t=null;
+  function down(){ t=setTimeout(function(){ VA._long=true; window.vaWakeToggle(); },700); }
+  function up(){ if(t){ clearTimeout(t); t=null; } }
+  document.addEventListener('DOMContentLoaded',function(){
+    var b=document.getElementById('va-fab');
+    if(!b) return;
+    b.addEventListener('mousedown',down);  b.addEventListener('mouseup',up);
+    b.addEventListener('mouseleave',up);
+    b.addEventListener('touchstart',down,{passive:true});
+    b.addEventListener('touchend',up);     b.addEventListener('touchcancel',up);
+  });
+})();
 
 // يعكس حالة الاستماع على زر الهيدر (نقطة حمراء + توهج)
 function vaBtnState(live){
@@ -28283,7 +28337,13 @@ function vaBtnState(live){
   }
 }
 
-function vaInit(){ vaWake(); }
+function vaInit(){
+  // ⭐ الافتراضي: كلمة الإيقاظ مُطفأة → لا يعمل المساعد وحده عند الدخول.
+  //    يعمل بالضغط على الزر، أو بقول «مساعد» بعد تفعيل الإيقاظ يدوياً.
+  try{ VA.wakeWanted = (localStorage.getItem('va_wake_on') === '1'); }
+  catch(e){ VA.wakeWanted = false; }
+  if(VA.wakeWanted) vaWake();
+}
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',vaInit);
 else vaInit();
 
