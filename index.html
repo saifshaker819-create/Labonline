@@ -36758,16 +36758,67 @@ var _LAN_RENDER = {
   semenRecords:    function(){ try{renderAll();}catch(e){} },
   phoneBook:       function(){ try{renderAll();}catch(e){} }
 };
+// ⭐ إعادة الرسم مجمَّعة ومؤجَّلة (debounce 250ms):
+//    عدة مفاتيح واردة معاً = رندر واحد فقط، وليس 14 رندر متتالي.
 function _lanRender(key){
-  var f = _LAN_RENDER[key];
-  if(f) setTimeout(f, 0);
-  try{ document.dispatchEvent(new CustomEvent('dp:refresh')); }catch(e){}
+  _lanRenderQueue[key] = 1;
+  if(_lanRenderTimer) return;
+  _lanRenderTimer = setTimeout(function(){
+    _lanRenderTimer = null;
+    var keys = Object.keys(_lanRenderQueue);
+    _lanRenderQueue = {};
+    var done = {};
+    for(var i=0;i<keys.length;i++){
+      var f = _LAN_RENDER[keys[i]];
+      if(!f) continue;
+      var sig = f.toString();
+      if(done[sig]) continue;   // لا تكرّر renderAll() 6 مرات
+      done[sig] = 1;
+      try{ f(); }catch(e){}
+    }
+    try{ document.dispatchEvent(new CustomEvent('dp:refresh')); }catch(e){}
+  }, 250);
 }
 
 // ⭐ قراءة البيانات الحالية لأي مفتاح
 function _lanGetLocal(key){
   try{ var v = load(key, []); return Array.isArray(v) ? v : []; }catch(e){ return []; }
 }
+
+// ════════════════════════════════════════════════════════════
+// ⭐ الأداء: بصمة (hash) لكل مفتاح — لتجاهل التحديثات المتطابقة
+//    بدونها كان كل حفظ/استقبال يعيد الكتابة + الرندر الكامل
+//    حتى لو لم تتغيّر أي بيانات → بطء الهاتف + إشعار متكرر.
+// ════════════════════════════════════════════════════════════
+var _lanHash = {};   // key -> بصمة آخر حالة معروفة
+
+// hash سريع (FNV-1a 32bit) — أسرع بكثير من مقارنة JSON كاملة
+function _lanFingerprint(arr){
+  if(!Array.isArray(arr)) return '0:0';
+  var h = 0x811c9dc5, s;
+  try{ s = JSON.stringify(arr); }catch(e){ return 'x:'+arr.length; }
+  for(var i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = (h + (h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24)) >>> 0;
+  }
+  return arr.length + ':' + h.toString(36);
+}
+
+// هل تغيّرت البيانات فعلاً عن آخر بصمة معروفة؟
+function _lanChanged(key, arr){
+  var f = _lanFingerprint(arr);
+  if(_lanHash[key] === f) return false;
+  _lanHash[key] = f;
+  return true;
+}
+
+// ⭐ تجميع إعادة الرسم — بدلاً من رندر كامل لكل رسالة واردة
+var _lanRenderQueue = {};
+var _lanRenderTimer = null;
+
+// ⭐ تجميع البثّ الصادر — بدلاً من إرسال 347 سجل عند كل ضغطة حفظ
+var _lanBcastQueue  = {};
+var _lanBcastTimer  = null;
 
 // ⭐ بصمة الجهاز — لتمييز مصدر كل رسالة
 var _lanDeviceId = (function(){
@@ -36821,8 +36872,10 @@ function _lanMergeArrays(localArr, incomingArr){
 
 // ⭐ تطبيق بيانات مفتاح محلياً بدون إعادة بث (منع الحلقة)
 function _lanApplyKey(key, data){
-  if(_LAN_SYNC_KEYS.indexOf(key) === -1) return;
-  if(!Array.isArray(data)) return;
+  if(_LAN_SYNC_KEYS.indexOf(key) === -1) return false;
+  if(!Array.isArray(data)) return false;
+  // ⭐ لا شيء تغيّر → لا كتابة ولا رندر ولا إشعار (هذا كان سبب البطء الرئيسي)
+  if(!_lanChanged(key, data)) return false;
   _lanApplying = true;
   try{
     if(typeof window._smSetters === 'object' && window._smSetters[key]){
@@ -36832,6 +36885,7 @@ function _lanApplyKey(key, data){
     if(typeof _MC !== 'undefined') { try{ _MC[key] = data; }catch(e){} }
   } finally { _lanApplying = false; }
   _lanRender(key);
+  return true;
 }
 
 // ⭐ إرسال رسالة خام عبر LAN (سيرفير → عملاء، أو عميل → سيرفير)
@@ -36855,6 +36909,8 @@ function _lanResetGate(){
   _lanSyncReady = false;
   _lanPendingKeys = {};
   if(_lanNegTimer){ clearTimeout(_lanNegTimer); _lanNegTimer = null; }
+  // ⭐ صفّر البصمات عند بدء جلسة جديدة → المصالحة الأولى تُطبَّق فعلاً
+  _lanHash = {};
 }
 
 // بعد اكتمال المصالحة: افتح البوابة وابثّ ما تأجّل
@@ -36865,7 +36921,7 @@ function _lanOpenGate(){
   var keys = Object.keys(_lanPendingKeys);
   _lanPendingKeys = {};
   for(var i=0;i<keys.length;i++){
-    lanBroadcast(keys[i], _lanGetLocal(keys[i]));
+    lanBroadcastQueued(keys[i]);
   }
   if(keys.length) showNotif('🌐 LAN','تم بثّ التعديلات المؤجّلة ✓','info');
 }
@@ -36899,10 +36955,8 @@ function _lanApplyFullState(payload){
     if(!Array.isArray(payload[k])) continue;
     var localArr = _lanGetLocal(k);
     var merged   = _lanMergeArrays(localArr, payload[k]);
-    if(merged.length !== localArr.length || payload[k].length){
-      _lanApplyKey(k, merged);
-      changed += merged.length;
-    }
+    // ⭐ _lanApplyKey يقارن البصمة داخلياً ويعيد false إن لم يتغيّر شيء
+    if(_lanApplyKey(k, merged)) changed++;
   }
   return changed;
 }
@@ -36945,6 +36999,23 @@ function _lanUpdateStatus(){
 }
 
 // بث التغيير لجميع الأجهزة المرتبطة
+// ⭐ بثّ مؤجَّل ومجمَّع (400ms): عدة حفظات متتالية = رسالة واحدة.
+//    ويتجاهل البثّ تماماً إن لم تتغيّر البيانات فعلياً.
+function lanBroadcastQueued(key){
+  _lanBcastQueue[key] = 1;
+  if(_lanBcastTimer) return;
+  _lanBcastTimer = setTimeout(function(){
+    _lanBcastTimer = null;
+    var keys = Object.keys(_lanBcastQueue);
+    _lanBcastQueue = {};
+    for(var i=0;i<keys.length;i++){
+      var k = keys[i], d = _lanGetLocal(k);
+      if(!_lanChanged(k, d)) continue;   // لا شيء جديد → لا ترسل
+      lanBroadcast(k, d);
+    }
+  }, 400);
+}
+
 function lanBroadcast(key, data){
   var msg = JSON.stringify({type:'sync', key:key, data:data, from:_lanDeviceId, ts:Date.now()});
   if(_lanMode==='server'){
@@ -36967,8 +37038,9 @@ function _lanHandleMessage(raw){
       if(msg.from && msg.from === _lanDeviceId) return; // تجاهل صدى رسائلنا
       var _localArr = _lanGetLocal(msg.key);
       var _merged   = _lanMergeArrays(_localArr, msg.data);
-      _lanApplyKey(msg.key, _merged);
-      showNotif('🌐 LAN','تم استقبال تحديث: '+msg.key,'info');
+      // ⭐ الإشعار فقط عند تغيير فعلي — لا إزعاج ولا رندر بلا سبب
+      if(_lanApplyKey(msg.key, _merged))
+        showNotif('🌐 LAN','تم استقبال تحديث: '+msg.key,'info');
     }
     // ⭐ جردة واردة: قارن مَن يملك بيانات أكثر
     else if(msg.type==='inventory' && msg.from !== _lanDeviceId){
@@ -37229,7 +37301,7 @@ function _ensureLanSaveHook(){
     if(!_lanMode || _lanApplying || _LAN_SYNC_KEYS.indexOf(key) === -1) return;
     // ⭐ قبل اكتمال المصالحة: أجّل البثّ حتى لا تفرض الحاسبة الأقل بياناتها
     if(!_lanSyncReady){ _lanPendingKeys[key] = 1; return; }
-    lanBroadcast(key, data);
+    lanBroadcastQueued(key);   // ⭐ مجمَّع + يتجاهل ما لم يتغيّر
   };
   _lanSaveHooked = true;
 }
