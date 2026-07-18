@@ -9592,9 +9592,17 @@ function renderWizStep(){
       <!-- الاسم -->
       <div class="fg" style="margin-bottom:18px;position:relative">
         <label class="fl" style="font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;color:inherit">الاسم الكامل <span class="req">*</span></label>
-        <div class="inp-lang-wrap" style="margin-top:6px">
-          <button type="button" class="lang-toggle-btn" id="wp-name-ltb" onclick="toggleInputLang('wp-name','wp-name-ltb')" title="تبديل لغة الإدخال">ع</button>
-          <input class="fc" id="wp-name" lang="ar" dir="rtl" inputmode="text" placeholder="ابدأ الكتابة للبحث..." value="${wizPatient.name||''}" oninput="suggestPatients(this.value)" autocomplete="off" style="font-size:17px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:nowrap">
+          <!-- النصف الأول: الاسم العربي (يظهر في التقرير) -->
+          <div class="inp-lang-wrap" style="flex:1;min-width:0">
+            <button type="button" class="lang-toggle-btn" id="wp-name-ltb" onclick="toggleInputLang('wp-name','wp-name-ltb')" title="تبديل لغة الإدخال">ع</button>
+            <input class="fc" id="wp-name" lang="ar" dir="rtl" inputmode="text" placeholder="الاسم بالعربي..." value="${wizPatient.name||''}" oninput="suggestPatients(this.value)" autocomplete="off" style="font-size:16px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
+          </div>
+          <!-- النصف الثاني: الاسم الإنكليزي (يُرسل للأجهزة) -->
+          <div style="flex:1;min-width:0;display:flex;gap:4px;align-items:stretch">
+            <input class="fc" id="wp-name-en" lang="en" dir="ltr" inputmode="text" placeholder="English name..." value="${wizPatient.nameEn||''}" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" style="flex:1;min-width:0;font-size:16px;font-weight:700;color:inherit">
+            <button type="button" class="btn btn-sm btn-s" id="wp-name-tr-btn" onclick="transliterateNameField()" title="تحويل الاسم العربي إلى إنكليزي" style="flex-shrink:0;padding:0 10px;font-size:12px;font-weight:800;white-space:nowrap">ع→En</button>
+          </div>
         </div>
         <div id="pt-suggest-box" class="pt-suggest" style="display:none"></div>
       </div>
@@ -10246,6 +10254,9 @@ function wizNext(){
   }
 
   const name=document.getElementById('wp-name').value.trim();
+  // الاسم الإنكليزي (يُرسل للأجهزة). إن تُرك فارغاً نحوّله تلقائياً من العربي.
+  let nameEn=(document.getElementById('wp-name-en')?.value||'').trim();
+  if(!nameEn && name) nameEn=arabicToLatinName(name);
   // التحقق من الاسم الثلاثي (3 كلمات على الأقل)
   if(!name){
     showNotif('⚠️ حقل مطلوب','يرجى إدخال اسم المريض','error');
@@ -10309,7 +10320,7 @@ function wizNext(){
   const dr=doctors.find(d=>d.id===did);
   const gender=(document.getElementById('wp-gender')||{}).value||wizPatient.gender||'male';
 
-  wizPatient={...wizPatient,name,dob:dobVal,birthYear:birthYearVal||wizPatient.birthYear||'',ageVal,ageY,ageM,ageD,ageDisplay,
+  wizPatient={...wizPatient,name,nameEn,dob:dobVal,birthYear:birthYearVal||wizPatient.birthYear||'',ageVal,ageY,ageM,ageD,ageDisplay,
     ageUnit:'year',
     gender,
     title:wizPatient.title||'',
@@ -10803,14 +10814,26 @@ function openLabelCopiesPopup(reqId){
         +'<span style="color:#ff9d9d">الصق كل ملصق على تيوبه الصحيح.</span>'
         +'</div>'
       : '')
-    +'<div style="font-size:12px;color:var(--text2,#8a97a6);margin-bottom:8px">عدد النسخ'+(_needsWB?' (لكل تيوب)':'')+'</div>'
-    +'<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:20px">'
+    +'<div style="font-size:12px;color:var(--text2,#8a97a6);margin-bottom:8px">'
+    +(_needsWB?'نسخ بقية التحاليل (سيرم)':'عدد النسخ')+'</div>'
+    +'<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:'+(_needsWB?'14px':'20px')+'">'
     +'  <button id="_lblDec" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▼</button>'
     +'  <input id="_lblCount" type="number" min="1" max="50" value="1" '
     +'    style="width:74px;height:52px;text-align:center;font-size:24px;font-weight:900;border-radius:12px;'
     +'    border:1.5px solid var(--primary,#00d4ff);background:rgba(0,212,255,0.08);color:var(--primary,#00d4ff)">'
     +'  <button id="_lblInc" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▲</button>'
     +'</div>'
+    // 🩸 خانة منفصلة لعدد نسخ ملصق التراكمي (EDTA) — تظهر فقط عند وجود تيوبين
+    +(_needsWB
+      ? '<div style="font-size:12px;color:#ff9d9d;margin-bottom:8px">🩸 نسخ ملصق التراكمي (EDTA)</div>'
+        +'<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:20px">'
+        +'  <button id="_wbDec" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▼</button>'
+        +'  <input id="_wbCount" type="number" min="1" max="50" value="1" '
+        +'    style="width:74px;height:52px;text-align:center;font-size:24px;font-weight:900;border-radius:12px;'
+        +'    border:1.5px solid #ff6b6b;background:rgba(255,107,107,0.08);color:#ff9d9d">'
+        +'  <button id="_wbInc" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▲</button>'
+        +'</div>'
+      : '')
     +'<div style="display:flex;gap:10px">'
     +'  <button id="_lblCancel" style="flex:1;padding:11px;border-radius:11px;border:1px solid var(--border,rgba(255,255,255,0.15));background:transparent;color:var(--text2,#8a97a6);font-size:13px;font-weight:800;cursor:pointer">إلغاء</button>'
     +'  <button id="_lblPrint" style="flex:2;padding:11px;border-radius:11px;border:none;background:linear-gradient(135deg,#00b4ff,#0066ff);color:#fff;font-size:13px;font-weight:900;cursor:pointer">🖨️ طباعة</button>'
@@ -10822,16 +10845,27 @@ function openLabelCopiesPopup(reqId){
   document.getElementById('_lblInc').addEventListener('click',function(){ inp.value=(parseInt(inp.value,10)||1)+1; _clamp(); });
   document.getElementById('_lblDec').addEventListener('click',function(){ inp.value=(parseInt(inp.value,10)||1)-1; _clamp(); });
   inp.addEventListener('input',_clamp);
+  // 🩸 خانة نسخ التراكمي المنفصلة (موجودة فقط عند _needsWB)
+  var wbInp=document.getElementById('_wbCount');
+  function _wbClamp(){ if(!wbInp) return; var v=parseInt(wbInp.value,10)||1; if(v<1)v=1; if(v>50)v=50; wbInp.value=v; }
+  if(wbInp){
+    document.getElementById('_wbInc').addEventListener('click',function(){ wbInp.value=(parseInt(wbInp.value,10)||1)+1; _wbClamp(); });
+    document.getElementById('_wbDec').addEventListener('click',function(){ wbInp.value=(parseInt(wbInp.value,10)||1)-1; _wbClamp(); });
+    wbInp.addEventListener('input',_wbClamp);
+  }
   document.getElementById('_lblCancel').addEventListener('click',function(){ closeLabelCopiesPopup(); });
   document.getElementById('_lblPrint').addEventListener('click',function(){
     _clamp();
     var n=parseInt(inp.value,10)||1;
+    // عدد نسخ التراكمي: من خانته المنفصلة إن وُجدت، وإلا 1
+    var wbN=1;
+    if(wbInp){ _wbClamp(); wbN=parseInt(wbInp.value,10)||1; }
     closeLabelCopiesPopup();
     // ملصق السيرم (السلوك القديم تماماً)
     printTubeLabel(reqId, n);
-    // 🩸 ملصق تيوب الهول بلود — فقط عند وجود تراكمي + تحاليل سيرم معاً
+    // 🩸 ملصق تيوب الهول بلود — بعدده المستقل — فقط عند وجود تراكمي + تحاليل سيرم معاً
     if(_needsWB){
-      setTimeout(function(){ printTubeLabel(reqId, n, 'wb'); }, 900*n+400);
+      setTimeout(function(){ printTubeLabel(reqId, wbN, 'wb'); }, 900*n+400);
     }
   });
   setTimeout(function(){ try{inp.focus();inp.select();}catch(e){} },60);
@@ -10861,7 +10895,7 @@ function _bcCleanCode(v){ return _bcToLatinDigits(v).replace(/[^0-9A-Za-z]/g,'')
 
 function _genBarcode128Global(text, opts){
   opts = opts || {};
-  var BAR_W = opts.barW || 1.8;   // عرض الوحدة الثابت (نفس قيمة ورقة التحاليل)
+  var BAR_W = opts.barW || 1.8;   // عرض الوحدة الافتراضي (نفس قيمة ورقة التحاليل)
   var h     = opts.height || 38;  // ارتفاع الأشرطة
   var PAD   = (opts.pad!=null) ? opts.pad : 4;
   var C128chars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
@@ -10896,11 +10930,112 @@ function _genBarcode128Global(text, opts){
   codes.forEach(function(c){ C128widths[c].forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); }); });
   STOP.forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); });
   bars.push({w:2,dark:false});
-  var totalW=bars.reduce(function(s,b){return s+b.w*BAR_W;},0)+PAD*2;
+
+  // ══════════════════════════════════════════════════════════
+  // ⭐ الحل الجذري لعدم قراءة بعض الباركودات (بنفس طول الرقم):
+  //   السبب ليس طول الرقم (كل ٦ أرقام = نفس العرض تماماً) بل *محاذاة
+  //   البكسل عند التنقيط*. عرض الوحدة 1.8px ينتج حواف أشرطة على بكسلات
+  //   كسرية، فتُنعَّم الأشرطة الرفيعة (anti-alias) وتخرج رمادية فيرفضها
+  //   القارئ — وأنماط أرقام معينة (أشرطة رفيعة متجاورة) تتأثر أكثر.
+  //   الحل: نجعل عرض الوحدة *عدداً صحيحاً من البكسلات* وكل الإحداثيات
+  //   صحيحة، فتقع كل الحواف على حدود بكسل → أشرطة سوداء/بيضاء حادة نقية
+  //   تُقرأ دائماً. النِّسَب 1:2:3:4 تبقى مضبوطة تماماً لأنها مضاعفات صحيحة.
+  // ══════════════════════════════════════════════════════════
+  var _modUnits=bars.reduce(function(s,b){return s+b.w;},0); // مجموع الوحدات
+  // 1) حدّد أقصى عرض وحدة يسع ضمن الملصق (إن مُرِّر maxW)
+  if(opts.maxW && _modUnits>0){
+    var _avail=opts.maxW - PAD*2;
+    if(_avail>0){
+      var _fitW=_avail/_modUnits;
+      if(_fitW < BAR_W) BAR_W=_fitW;
+    }
+  }
+  // 2) ⭐ ثبّت عرض الوحدة على عدد صحيح من البكسلات (لا كسور أبداً)
+  //    نأخذ الأرضية (floor) كي لا نتجاوز الملصق، وبحدّ أدنى 1px كي لا
+  //    تختفي الأشرطة الرفيعة على الطابعة الحرارية.
+  BAR_W=Math.max(1, Math.floor(BAR_W));
+
+  var totalW=_modUnits*BAR_W+PAD*2;
   var x=PAD, rects='';
-  bars.forEach(function(b){ if(b.dark) rects+='<rect x="'+x+'" y="2" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>'; x+=b.w*BAR_W; });
+  // إحداثيات وأعراض صحيحة → حواف على حدود بكسل → لا تنعيم
+  bars.forEach(function(b){
+    var bw=b.w*BAR_W;
+    if(b.dark) rects+='<rect x="'+x+'" y="2" width="'+bw+'" height="'+h+'" fill="#000"/>';
+    x+=bw;
+  });
   var totalH=h+4;
   return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" preserveAspectRatio="xMidYMid meet" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'</svg>';
+}
+
+// ══════════════════════════════════════════════════════════
+// 🔖 مستخرج الأشرطة الخام (نفس ترميز Code128B أعلاه) — للرسم المباشر
+//    على الكانفاس دون المرور بـ SVG. يعيد مصفوفة {w, dark} لكل شريط.
+//    استخدامه يمنع أي تنعيم (anti-alias) لأن الرسم يصير بمستطيلات
+//    صحيحة على بكسلات صحيحة — الحل الأضمن لقراءة الباركود.
+// ══════════════════════════════════════════════════════════
+function _genBarcode128Bars(text){
+  var C128chars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+  var C128widths=[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
+    [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
+    [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
+    [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
+    [3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],
+    [1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],
+    [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
+    [3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],
+    [3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
+    [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],
+    [1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],
+    [1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],
+    [2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],
+    [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
+    [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
+    [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
+    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]];
+  var START_B=104, STOP=[2,3,3,1,1,1,2];
+  var codes=[START_B], check=START_B;
+  for(var i=0;i<text.length;i++){
+    var idx=C128chars.indexOf(text[i]);
+    if(idx<0) continue;
+    codes.push(idx);
+    check+=(i+1)*idx;
+  }
+  codes.push(check%103);
+  var bars=[];
+  codes.forEach(function(c){ C128widths[c].forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); }); });
+  STOP.forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); });
+  bars.push({w:2,dark:false});
+  return bars;
+}
+
+// ══════════════════════════════════════════════════════════
+// 🖨️ رسم الباركود مباشرة على كانفاس (بلا SVG) → PNG حاد بلا تنعيم.
+//    quiet zone = 10 وحدات على كل جانب (متطلب Code128 لضمان القراءة).
+//    unitPx = عرض الوحدة بالبكسل (عدد صحيح) → كل الأشرطة مضاعفات صحيحة.
+//    يعيد dataURL جاهزاً للطباعة الصامتة على الطابعة الحرارية.
+// ══════════════════════════════════════════════════════════
+function _barcodePngDirect(text, opts){
+  opts=opts||{};
+  var unitPx=Math.max(2, Math.round(opts.unitPx||3)); // عرض الوحدة (صحيح)
+  var barsH =Math.max(40, Math.round(opts.height||120));
+  var quiet =10; // وحدات المنطقة الهادئة على كل جانب
+  var bars=_genBarcode128Bars(text);
+  var modUnits=bars.reduce(function(s,b){return s+b.w;},0);
+  var totalUnits=modUnits+quiet*2;
+  var cv=document.createElement('canvas');
+  cv.width = totalUnits*unitPx;   // عرض صحيح بالبكسل
+  cv.height= barsH;
+  var ctx=cv.getContext('2d');
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.fillStyle='#000';
+  var x=quiet*unitPx; // نبدأ بعد المنطقة الهادئة
+  bars.forEach(function(b){
+    var w=b.w*unitPx;
+    if(b.dark) ctx.fillRect(x,0,w,barsH); // مستطيلات على إحداثيات صحيحة
+    x+=w;
+  });
+  return cv.toDataURL('image/png');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -10987,7 +11122,10 @@ function printTubeLabel(reqId, copies, tubeKind){
   //    نتحكّم بالحجم فقط عبر ارتفاع ثابت + حد أقصى للعرض (لا تمطيط).
   // ══════════════════════════════════════════════════════════
   var _barPxH = Math.max(34, Math.round((parseFloat(_lh)||30) * 0.55 * 3.7795));
-  var barcodeSvg = _genBarcode128Global(barcodeId, { barW: 1.8, height: _barPxH, pad: 4 });
+  // ⭐ عرض وحدة ثابت = 2px (عدد صحيح) → عند التنقيط ×4 = 8px/وحدة، حواف
+  //    على حدود بكسل صحيحة بلا تنعيم. ٦ أرقام تسع دائماً في الملصق فلا حاجة
+  //    لأي تقييد عرض (maxW) قد يُرقّق الأشرطة.
+  var barcodeSvg = _genBarcode128Global(barcodeId, { barW: 2, height: _barPxH, pad: 4 });
 
   // HTML الملصق — عبر قالب يقبل شكل الباركود (SVG مضمّن أو صورة نقطية)
   function _buildLabelHTML(_bcMarkup){
@@ -10998,8 +11136,8 @@ function printTubeLabel(reqId, copies, tubeKind){
       +'body{width:'+_lw+'mm;height:'+_lh+'mm;background:#fff;overflow:hidden;'
       +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
       +'padding:0;gap:0.4mm;font-family:Arial,sans-serif}'
-      +'.bc-wrap{display:block;margin:0 auto;text-align:center;max-width:100%}'
-      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;height:auto;max-width:100%;margin:0 auto}'
+      +'.bc-wrap{display:block;margin:0 auto;text-align:center}'
+      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;height:auto;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges}'
       +'.bc-num{font-family:"Courier New",monospace;font-size:6pt;font-weight:900;'
       +'letter-spacing:1.5px;color:#000;margin-top:0.3mm;text-align:center;line-height:1}'
       +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
@@ -11017,8 +11155,11 @@ function printTubeLabel(reqId, copies, tubeKind){
       +'<div class="pt-name">'+ptName+'</div>'
       +'</body></html>';
   }
-  // النسخة المبنية على SVG (تُستخدم للطباعة عبر المتصفح/iframe كما كانت)
-  var html=_buildLabelHTML(barcodeSvg);
+  // النسخة المطبوعة: نُفضّل صورة الباركود المرسومة مباشرة (حواف حادة)،
+  // ونرجع للـ SVG فقط إن تعذّر إنشاؤها.
+  var _htmlBcPng=null;
+  try{ _htmlBcPng=_barcodePngDirect(barcodeId, { unitPx:3, height:Math.max(80,Math.round(_barPxH*2)) }); }catch(e){ _htmlBcPng=null; }
+  var html=_buildLabelHTML(_htmlBcPng ? '<img class="bc-img" src="'+_htmlBcPng+'"/>' : barcodeSvg);
 
   // تحويل SVG إلى صورة PNG عالية الدقة (لضمان الطباعة الصامتة على الطابعات الحرارية)
   // السبب: بعض تعريفات الطابعات الحرارية لا ترسم SVG المتجه في وضع الطباعة الصامتة،
@@ -11028,15 +11169,17 @@ function printTubeLabel(reqId, copies, tubeKind){
       var img=new Image();
       var blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
       var url=URL.createObjectURL(blob);
-      var scale=4; // ~ مناسب لدقة 203DPI
+      var scale=6; // مضاعف صحيح: عرض الوحدة 2px×6=12px → حواف على حدود بكسل، دقة عالية (~203DPI+)
       img.onload=function(){
         try{
           var cv=document.createElement('canvas');
-          cv.width=Math.max(1,Math.round(img.width*scale));
-          cv.height=Math.max(1,Math.round(img.height*scale));
+          cv.width=Math.max(1,Math.round(img.width)*scale);
+          cv.height=Math.max(1,Math.round(img.height)*scale);
           var ctx=cv.getContext('2d');
           ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
           ctx.imageSmoothingEnabled=false;
+          ctx.mozImageSmoothingEnabled=false;
+          ctx.webkitImageSmoothingEnabled=false;
           ctx.drawImage(img,0,0,cv.width,cv.height);
           URL.revokeObjectURL(url);
           cb(cv.toDataURL('image/png'));
@@ -11050,8 +11193,11 @@ function printTubeLabel(reqId, copies, tubeKind){
   // طباعة صامتة مباشرة عبر Electron (بالصورة النقطية)
   var barcodeP=(typeof settings!=='undefined'&&settings.printerBarcode)||'';
   if(window.electronAPI&&window.electronAPI.printContent&&barcodeP){
-    _svgToPng(barcodeSvg, function(pngUrl){
-      // إن نجح التحويل نطبع الصورة، وإلا نرجع للـ SVG كخطة بديلة
+    // ⭐ صورة الباركود تُرسم مباشرة على الكانفاس (بلا SVG) → حواف حادة بلا
+    //    تنعيم، قابلة للقراءة دائماً. إن فشلت لأي سبب نرجع للـ SVG كخطة بديلة.
+    var _bcPng=null;
+    try{ _bcPng=_barcodePngDirect(barcodeId, { unitPx:3, height:Math.max(80,Math.round(_barPxH*2)) }); }catch(e){ _bcPng=null; }
+    var _emit=function(pngUrl){
       var _htmlToPrint = pngUrl
         ? _buildLabelHTML('<img class="bc-img" src="'+pngUrl+'"/>')
         : html;
@@ -11066,7 +11212,9 @@ function printTubeLabel(reqId, copies, tubeKind){
         }).catch(function(e){console.warn('printContent err:',e);
           if(_i+1<_lblCopies) setTimeout(function(){_printCopy(_i+1);},350);});
       })(0);
-    });
+    };
+    if(_bcPng){ _emit(_bcPng); }
+    else { _svgToPng(barcodeSvg, _emit); } // خطة بديلة
     return;
   }
   // fallback: iframe صامت
@@ -24432,7 +24580,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       rows+='<tr style="background:'+bg+';'+sTop+'"><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:#666">'+rowNum+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:12px;font-weight:600">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:13px;font-weight:800;text-align:center;color:'+flagColor+'">'+val+'</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:'+flagColor+';font-weight:700">'+(flag||'')+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000;font-weight:600">'+unit+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000;font-weight:600">'+ref+'</td></tr>';
       rowNum++;
     });
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.report-title{text-align:center;font-size:13px;font-weight:800;color:'+tableColor+';border:2px solid '+tableColor+';padding:3px;margin:5px 0;border-radius:3px;}.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1.5px solid #ccc;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:4px 8px;gap:3px;border-left:1.5px solid #ccc;min-width:140px;}.pt-field{display:flex;gap:4px;align-items:baseline;}.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:48px;}.pt-val{font-weight:800;font-size:12px;}.rbox{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;text-align:center;min-width:120px;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;border:1px solid #002244;text-align:center;font-weight:700;}.footer-bar{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}</style></head><body>'+hdr+'<div class="report-title">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-bar"><div class="pt-left"><div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex/Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:16px">'+doctorName+'</span></div></div><div class="pt-right"><div class="rbox">ID: '+barcodeId+'</div><div class="rbox">'+sampleDate+'</div><div class="rbox">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:28px">#</th><th>Parameter</th><th>Result</th><th style="width:45px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table><div class="footer-bar"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.report-title{text-align:center;font-size:13px;font-weight:800;color:'+tableColor+';border:2px solid '+tableColor+';padding:3px;margin:5px 0;border-radius:3px;}.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1.5px solid #ccc;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:4px 8px;gap:3px;border-left:1.5px solid #ccc;min-width:140px;}.pt-field{display:flex;gap:4px;align-items:baseline;}.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:48px;}.pt-val{font-weight:800;font-size:14px;}.rbox{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;text-align:center;min-width:120px;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;border:1px solid #002244;text-align:center;font-weight:700;}.footer-bar{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}</style></head><body>'+hdr+'<div class="report-title">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-bar"><div class="pt-left"><div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:18px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex/Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:18px">'+doctorName+'</span></div></div><div class="pt-right"><div class="rbox">ID: '+barcodeId+'</div><div class="rbox">'+sampleDate+'</div><div class="rbox">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:28px">#</th><th>Parameter</th><th>Result</th><th style="width:45px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table><div class="footer-bar"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -24450,8 +24598,8 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       rows+='<tr style="background:'+bg+';'+sTop+'"><td style="width:5px;background:'+barColor+';padding:0"></td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:12px;font-weight:700;color:#1a2a3a">'+(LABELS[key]||key)+'</td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+'">'+val+'</td><td style="padding:4px 6px;border-bottom:1px solid #e8eef5;text-align:center"><span style="background:'+(flag?(flagColor+'22'):'transparent')+';color:'+flagColor+';font-weight:800;font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid '+(flag?flagColor:'transparent')+'">'+(flag||'N')+'</span></td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:10px;color:#000;font-weight:600;text-align:center">'+unit+'</td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:10px;color:#000;font-weight:600;text-align:center">'+ref+'</td></tr>';
       rowNum++;
     });
-    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;}.ttl{background:linear-gradient(90deg,'+tableColor+',#0055aa);color:#fff;text-align:center;font-size:13px;font-weight:900;padding:5px;margin:5px 0;border-radius:4px;letter-spacing:0.5px;}.pt-wrap{display:flex;gap:0;border:1.5px solid '+tableColor+';border-radius:5px;overflow:hidden;margin:6px 0;}.pt-main{flex:1;padding:7px 12px;display:flex;flex-direction:column;gap:4px;background:#f7faff;}.pt-side{background:'+tableColor+';color:#fff;padding:7px 10px;display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;min-width:130px;}.pt-row{display:flex;gap:5px;align-items:center;font-size:11px;}.pt-key{color:#668;font-weight:600;min-width:50px;}.pt-v{font-weight:800;font-size:12px;color:#1a2a3a;}.sbox{background:rgba(255,255,255,0.2);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;text-align:center;width:100%;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;font-weight:700;text-align:center;}.foot{border-top:2px solid '+tableColor+';margin-top:8px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#666;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-main"><div class="pt-row"><span class="pt-key">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:15px;font-weight:900">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-key">Sex / Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-key">Doctor:</span><span class="pt-v" style="font-size:14px">'+doctorName+'</span></div><div class="pt-row"><span class="pt-key">Sample:</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="pt-side"><div class="sbox">ID: '+barcodeId+'</div><div class="sbox">WB-CBC+DIFF</div><div class="sbox">'+sampleDate+'</div></div></div><table><thead><tr><th style="width:5px"></th><th style="text-align:left;padding-right:10px">Parameter</th><th>Result</th><th style="width:50px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;}.ttl{background:linear-gradient(90deg,'+tableColor+',#0055aa);color:#fff;text-align:center;font-size:13px;font-weight:900;padding:5px;margin:5px 0;border-radius:4px;letter-spacing:0.5px;}.pt-wrap{display:flex;gap:0;border:1.5px solid '+tableColor+';border-radius:5px;overflow:hidden;margin:6px 0;}.pt-main{flex:1;padding:7px 12px;display:flex;flex-direction:column;gap:4px;background:#f7faff;}.pt-side{background:'+tableColor+';color:#fff;padding:7px 10px;display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;min-width:130px;}.pt-row{display:flex;gap:5px;align-items:center;font-size:11px;}.pt-key{color:#668;font-weight:600;min-width:50px;}.pt-v{font-weight:800;font-size:14px;color:#1a2a3a;}.sbox{background:rgba(255,255,255,0.2);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;text-align:center;width:100%;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;font-weight:700;text-align:center;}.foot{border-top:2px solid '+tableColor+';margin-top:8px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#666;}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-main"><div class="pt-row"><span class="pt-key">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:17px;font-weight:900">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-key">Sex / Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-key">Doctor:</span><span class="pt-v" style="font-size:16px">'+doctorName+'</span></div><div class="pt-row"><span class="pt-key">Sample:</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="pt-side"><div class="sbox">ID: '+barcodeId+'</div><div class="sbox">WB-CBC+DIFF</div><div class="sbox">'+sampleDate+'</div></div></div><table><thead><tr><th style="width:5px"></th><th style="text-align:left;padding-right:10px">Parameter</th><th>Result</th><th style="width:50px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -24476,8 +24624,8 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       if(!rows) return;
       groupsHTML+='<div style="margin-bottom:5px;border-radius:5px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)"><div style="background:'+g.color+';color:#fff;padding:3px 10px;font-size:11px;font-weight:800;letter-spacing:0.3px">'+g.title+'</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:'+g.color+'22"><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:left;border-bottom:1px solid '+g.color+'44">Parameter</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Result</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Unit</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     });
-    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:0.5mm 2mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:12px;font-weight:900;color:'+tableColor+';border-bottom:2px solid '+tableColor+';padding:3px 0;margin:3px 0 5px;text-transform:uppercase;letter-spacing:1px;}.pt-card{display:grid;grid-template-columns:1fr auto;gap:0;border:1.5px solid '+tableColor+';border-radius:5px;overflow:hidden;margin:0 0 6px;}.pt-info{padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-field{display:flex;gap:5px;align-items:center;font-size:10px;}.pt-lbl{color:#667;font-weight:600;min-width:50px;}.pt-val{font-weight:800;color:#1a2035;}.pt-ids{background:'+tableColor+';color:#fff;padding:6px 10px;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;min-width:115px;}.id-chip{background:rgba(255,255,255,0.22);font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-align:center;width:100%;}.foot{border-top:1px solid #ddd;margin-top:5px;padding-top:3px;display:flex;justify-content:space-between;font-size:9px;color:#888;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-card"><div class="pt-info"><div class="pt-field"><span class="pt-lbl">Patient</span><span class="pt-val" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex / Age</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor</span><span class="pt-val">'+doctorName+'</span></div><div class="pt-field"><span class="pt-lbl">Date</span><span class="pt-val">'+sampleDate+'</span></div></div><div class="pt-ids"><div class="id-chip">ID: '+barcodeId+'</div><div class="id-chip">WB-CBC+DIFF</div></div></div>'+groupsHTML+'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:0.5mm 2mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:12px;font-weight:900;color:'+tableColor+';border-bottom:2px solid '+tableColor+';padding:3px 0;margin:3px 0 5px;text-transform:uppercase;letter-spacing:1px;}.pt-card{display:grid;grid-template-columns:1fr auto;gap:0;border:1.5px solid '+tableColor+';border-radius:5px;overflow:hidden;margin:0 0 6px;}.pt-info{padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-field{display:flex;gap:5px;align-items:center;font-size:10px;}.pt-lbl{color:#667;font-weight:600;min-width:50px;}.pt-val{font-weight:800;color:#1a2035;font-size:12px;}.pt-ids{background:'+tableColor+';color:#fff;padding:6px 10px;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;min-width:115px;}.id-chip{background:rgba(255,255,255,0.22);font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-align:center;width:100%;}.foot{border-top:1px solid #ddd;margin-top:5px;padding-top:3px;display:flex;justify-content:space-between;font-size:9px;color:#888;}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-card"><div class="pt-info"><div class="pt-field"><span class="pt-lbl">Patient</span><span class="pt-val" style="color:'+nameColor+';font-size:17px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex / Age</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor</span><span class="pt-val">'+doctorName+'</span></div><div class="pt-field"><span class="pt-lbl">Date</span><span class="pt-val">'+sampleDate+'</span></div></div><div class="pt-ids"><div class="id-chip">ID: '+barcodeId+'</div><div class="id-chip">WB-CBC+DIFF</div></div></div>'+groupsHTML+'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -24495,8 +24643,8 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       rows+='<tr style="background:'+bg+'\">'+(sep?'<td colspan="6" style="padding:3px 10px;font-size:10px;font-weight:900;color:'+ac+';letter-spacing:1px;background:'+ac+'15;border-top:1.5px solid '+ac+'44">'+(key==='WBC'?'▸ WBC DIFFERENTIAL':key==='RBC'?'▸ RED CELL INDICES':'▸ PLATELET INDICES')+'</td></tr><tr style="background:#fff">':'')+'<td style="padding:3px 8px;font-size:11px;color:#888;border-bottom:1px solid #f0f0f0;text-align:center">'+rowNum+'</td><td style="padding:3px 10px;font-size:12px;font-weight:700;color:#2c3e50;border-bottom:1px solid #f0f0f0">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+';border-bottom:1px solid #f0f0f0">'+val+'</td><td style="padding:3px 6px;text-align:center;border-bottom:1px solid #f0f0f0"><span style="display:inline-block;min-width:22px;padding:1px 4px;border-radius:10px;font-size:10px;font-weight:800;background:'+(flag!=='N'?(flagColor+'18'):'#f5f5f5')+';color:'+flagColor+'">'+flag+'</span></td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+unit+'</td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+ref+'</td></tr>';
       rowNum++;
     });
-    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.outer{border:2px solid '+ac+';border-radius:10px;overflow:hidden;margin:6px 0;}.ttl{text-align:center;font-size:13px;font-weight:900;background:'+ac+';color:#fff;padding:5px;}.pt-wrap{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:'+ac+'0a;border-bottom:1px solid '+ac+'33;}.pt-l{display:flex;flex-direction:column;gap:3px;}.pt-row{display:flex;gap:6px;align-items:center;}.pt-k{font-size:10px;color:#888;font-weight:600;min-width:50px;}.pt-v{font-size:12px;font-weight:800;color:#1a2035;}.chips{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}.chip{background:'+ac+';color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;}table{width:100%;border-collapse:collapse;}th{padding:5px 8px;font-size:11px;font-weight:700;color:'+ac+';text-align:center;border-bottom:2px solid '+ac+'33;background:'+ac+'0d;}.foot{padding:5px 14px;background:'+ac+'0a;border-top:1px solid '+ac+'33;display:flex;justify-content:space-between;font-size:10px;color:#888;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="outer"><div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-l"><div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div><div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="chips"><div class="chip">ID: '+barcodeId+'</div><div class="chip">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:30px">#</th><th style="text-align:left;padding-right:12px">Parameter</th><th>Result</th><th style="width:48px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></div></body></html>';
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.outer{border:2px solid '+ac+';border-radius:10px;overflow:hidden;margin:6px 0;}.ttl{text-align:center;font-size:13px;font-weight:900;background:'+ac+';color:#fff;padding:5px;}.pt-wrap{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:'+ac+'0a;border-bottom:1px solid '+ac+'33;}.pt-l{display:flex;flex-direction:column;gap:3px;}.pt-row{display:flex;gap:6px;align-items:center;}.pt-k{font-size:10px;color:#888;font-weight:600;min-width:50px;}.pt-v{font-size:14px;font-weight:800;color:#1a2035;}.chips{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}.chip{background:'+ac+';color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;}table{width:100%;border-collapse:collapse;}th{padding:5px 8px;font-size:11px;font-weight:700;color:'+ac+';text-align:center;border-bottom:2px solid '+ac+'33;background:'+ac+'0d;}.foot{padding:5px 14px;background:'+ac+'0a;border-top:1px solid '+ac+'33;display:flex;justify-content:space-between;font-size:10px;color:#888;}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="outer"><div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-l"><div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:17px">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div><div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="chips"><div class="chip">ID: '+barcodeId+'</div><div class="chip">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:30px">#</th><th style="text-align:left;padding-right:12px">Parameter</th><th>Result</th><th style="width:48px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -24517,8 +24665,8 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       r+='</tbody></table>';
       return r;
     }
-    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:13px;font-weight:900;color:#fff;background:'+tableColor+';padding:4px;margin:4px 0;border-radius:4px;}.pt-strip{display:flex;justify-content:space-between;align-items:center;background:'+tableColor+'11;border:1.5px solid '+tableColor+'55;border-radius:5px;padding:6px 12px;margin:5px 0;}.pt-main{display:flex;flex-direction:column;gap:3px;}.pt-r{display:flex;gap:6px;font-size:11px;}.pt-k{color:#667;font-weight:600;min-width:48px;}.pt-v{font-weight:800;color:#1a2035;}.pt-ids{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}.idc{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;}.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px;}.col-hdr{font-size:11px;font-weight:800;padding:3px 7px;border-radius:4px 4px 0 0;color:#fff;text-align:center;}.foot{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:3px;display:flex;justify-content:space-between;font-size:10px;color:#666;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-strip"><div class="pt-main"><div class="pt-r"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:14px">'+ptFullName+'</span></div><div class="pt-r"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-r"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div></div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div><div class="idc">WB-CBC+DIFF</div></div></div><div class="cols"><div><div class="col-hdr" style="background:#1565c0">WBC Differential</div>'+buildCol(half1,'#1565c0')+'</div><div><div class="col-hdr" style="background:#b71c1c">RBC / PLT Indices</div>'+buildCol(half2,'#b71c1c')+'</div></div><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:13px;font-weight:900;color:#fff;background:'+tableColor+';padding:4px;margin:4px 0;border-radius:4px;}.pt-strip{display:flex;justify-content:space-between;align-items:center;background:'+tableColor+'11;border:1.5px solid '+tableColor+'55;border-radius:5px;padding:6px 12px;margin:5px 0;}.pt-main{display:flex;flex-direction:column;gap:3px;}.pt-r{display:flex;gap:6px;font-size:11px;}.pt-k{color:#667;font-weight:600;min-width:48px;}.pt-v{font-weight:800;color:#1a2035;font-size:13px;}.pt-ids{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}.idc{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;}.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px;}.col-hdr{font-size:11px;font-weight:800;padding:3px 7px;border-radius:4px 4px 0 0;color:#fff;text-align:center;}.foot{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:3px;display:flex;justify-content:space-between;font-size:10px;color:#666;}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-strip"><div class="pt-main"><div class="pt-r"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div><div class="pt-r"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-r"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div></div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div><div class="idc">WB-CBC+DIFF</div></div></div><div class="cols"><div><div class="col-hdr" style="background:#1565c0">WBC Differential</div>'+buildCol(half1,'#1565c0')+'</div><div><div class="col-hdr" style="background:#b71c1c">RBC / PLT Indices</div>'+buildCol(half2,'#b71c1c')+'</div></div><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -24555,7 +24703,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       +'.pt-l{display:flex;flex-direction:column;gap:5px;flex:1}'
       +'.pt-row{display:flex;gap:8px;align-items:center}'
       +'.pt-k{font-size:9px;color:#8893a5;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;min-width:54px}'
-      +'.pt-v{font-size:12px;font-weight:800;color:#1f2b3d}'
+      +'.pt-v{font-size:14px;font-weight:800;color:#1f2b3d}'
       +'.pt-chips{display:flex;flex-direction:column;gap:5px;justify-content:center;align-items:flex-end}'
       +'.chip{background:'+ac+';color:#fff;font-size:10px;font-weight:800;padding:3px 12px;border-radius:20px;text-align:center;box-shadow:0 2px 6px '+ac+'33}'
       +'.tbl-wrap{border:1px solid #eef1f5;border-radius:12px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.05);margin-top:5px}'
@@ -24567,7 +24715,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
     return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
       +'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div>'
       +'<div class="pt-card"><div class="pt-l">'
-      +'<div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:17px">'+ptFullName+'</span></div>'
       +'<div class="pt-row"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div>'
       +'<div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div>'
       +'<div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div>'
@@ -24632,7 +24780,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
       +'.ttl{text-align:center;font-size:13px;font-weight:900;color:'+ac+';padding:5px 0;margin:4px 0;border-top:3px solid '+ac+';border-bottom:1px solid '+ac+'44;letter-spacing:1px;text-transform:uppercase}'
       +'.pt-strip{display:flex;justify-content:space-between;align-items:center;border:1px solid '+ac+'33;border-left:5px solid '+ac+';border-radius:0 8px 8px 0;padding:8px 14px;margin:5px 0;background:'+ac+'06}'
-      +'.pt-l{display:flex;flex-direction:column;gap:4px}.pt-row{display:flex;gap:8px;font-size:11px}.pt-k{color:#8893a5;font-weight:700;min-width:52px}.pt-v{font-weight:800;color:#1f2b3d}'
+      +'.pt-l{display:flex;flex-direction:column;gap:4px}.pt-row{display:flex;gap:8px;font-size:11px}.pt-k{color:#8893a5;font-weight:700;min-width:52px}.pt-v{font-weight:800;color:#1f2b3d;font-size:13px}'
       +'.pt-ids{display:flex;flex-direction:column;gap:4px;align-items:flex-end}.idc{background:'+ac+';color:#fff;font-size:10px;font-weight:800;padding:2px 10px;border-radius:4px}'
       +'.lgnd{display:flex;justify-content:flex-end;gap:14px;font-size:8px;color:#8893a5;margin:3px 4px;font-weight:600}'
       +'table{width:100%;border-collapse:collapse;margin-top:3px}thead th{background:'+ac+';color:#fff;padding:5px 8px;font-size:10px;font-weight:700;text-align:center}thead th.l{text-align:left;padding-left:10px}'
@@ -24640,7 +24788,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
     return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
       +'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div>'
       +'<div class="pt-strip"><div class="pt-l">'
-      +'<div class="pt-row"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:14px">'+ptFullName+'</span></div>'
+      +'<div class="pt-row"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div>'
       +'<div class="pt-row"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div>'
       +'<div class="pt-row"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div>'
       +'</div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div></div></div>'
@@ -24684,7 +24832,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       +'.pt-grid{display:grid;grid-template-columns:1fr 1fr;gap:3px 24px;padding:10px 6px;border-top:1px solid #edf0f4;border-bottom:1px solid #edf0f4;margin-bottom:8px}'
       +'.pt-item{display:flex;justify-content:space-between;font-size:11px;padding:2px 0}'
       +'.pt-k{color:#9aa5b5;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;font-size:9px}'
-      +'.pt-v{font-weight:800;color:#1f2b3d}'
+      +'.pt-v{font-weight:800;color:#1f2b3d;font-size:13px}'
       +'table{width:100%;border-collapse:collapse;margin-top:2px}'
       +'thead th{padding:5px 4px;font-size:9px;font-weight:700;color:#9aa5b5;text-transform:uppercase;letter-spacing:1px;border-bottom:2px solid #1a2230}'
       +'thead th.l{text-align:left}thead th.r{text-align:right}'
@@ -25708,6 +25856,98 @@ function _printViaIframe(html, isBarcode){
 // ============================================================
 // TOGGLE INPUT LANG — تبديل لغة حقل الإدخال بزر
 // ============================================================
+// ══════════════════════════════════════════════════════════
+// 🔤 تحويل الاسم العربي إلى إنكليزي (transliteration) — للأجهزة فقط.
+//    التقرير يبقى بالعربي؛ هذا الاسم يُرسل لـ CL-900i/MAGLUMI وأي جهاز
+//    يطلب معلومات المريض. تحويل حرف-بحرف مبسّط مع معالجة أل التعريف
+//    والتاء المربوطة والحركات الشائعة. النتيجة تقريبية لكنها مقبولة
+//    للأجهزة (اسم لاتيني بلا رموز عربية).
+// ══════════════════════════════════════════════════════════
+function arabicToLatinName(str){
+  if(!str) return '';
+  var s=String(str);
+  // إزالة التشكيل (الحركات) والتطويل
+  s=s.replace(/[\u064B-\u0652\u0670\u0640]/g,'');
+
+  // ── قاموس الأسماء العراقية/العربية الشائعة (تهجئة إنكليزية معتادة) ──
+  //    يُطابَق أولاً قبل التحويل الحرفي لنتيجة أدق وأقرب للمألوف.
+  var DICT={
+    'محمد':'Mohammed','احمد':'Ahmed','أحمد':'Ahmed','علي':'Ali','حسين':'Hussein',
+    'حسن':'Hassan','عبد':'Abd','الله':'Allah','عبدالله':'Abdullah','كريم':'Kareem',
+    'خالد':'Khalid','ابراهيم':'Ibrahim','إبراهيم':'Ibrahim','مصطفى':'Mustafa',
+    'يوسف':'Yousif','عمر':'Omar','عثمان':'Othman','صالح':'Salih','سالم':'Salim',
+    'كاظم':'Kadhim','جعفر':'Jaafar','عباس':'Abbas','جاسم':'Jassim','قاسم':'Qasim',
+    'ستار':'Sattar','جبار':'Jabbar','رحيم':'Raheem','رزاق':'Razzaq','حميد':'Hameed',
+    'مجيد':'Majeed','سعد':'Saad','سعيد':'Saeed','وليد':'Waleed','ماجد':'Majid',
+    'فاطمة':'Fatima','زينب':'Zainab','نور':'Noor','هدى':'Huda','سارة':'Sara',
+    'مريم':'Mariam','رقية':'Ruqaya','زهراء':'Zahraa','بتول':'Batool','شهد':'Shahad',
+    'رنا':'Rana','دعاء':'Duaa','اسراء':'Israa','رغد':'Raghad','ايه':'Aya','آية':'Aya',
+    'مروة':'Marwa','نرجس':'Narjis','بان':'Ban','تبارك':'Tabarak','فرح':'Farah',
+    'ياسين':'Yassin','طارق':'Tariq','باسم':'Basim','عادل':'Adil','عامر':'Amir',
+    'فراس':'Firas','ثائر':'Thair','رعد':'Raad','مازن':'Mazin','هيثم':'Haitham',
+    'ليث':'Laith','زيد':'Zaid','مهند':'Muhannad','اياد':'Ayad','غيث':'Ghaith',
+    'الجبوري':'Al-Jubouri','العبيدي':'Al-Obaidi','الدليمي':'Al-Dulaimi',
+    'التميمي':'Al-Tamimi','الزيدي':'Al-Zaidi','الساعدي':'Al-Saedi','الربيعي':'Al-Rubaie'
+  };
+
+  var map={
+    'ا':'a','أ':'a','إ':'i','آ':'aa','ٱ':'a',
+    'ب':'b','ت':'t','ث':'th','ج':'j','ح':'h','خ':'kh',
+    'د':'d','ذ':'dh','ر':'r','ز':'z','س':'s','ش':'sh',
+    'ص':'s','ض':'d','ط':'t','ظ':'z','ع':'a','غ':'gh',
+    'ف':'f','ق':'q','ك':'k','ل':'l','م':'m','ن':'n',
+    'ه':'h','و':'o','ي':'i','ى':'a','ة':'a','ء':'','ؤ':'o','ئ':'i',
+    'پ':'p','چ':'ch','ژ':'zh','گ':'g','ک':'k','ی':'i'
+  };
+
+  var words=s.trim().split(/\s+/);
+  var out=words.map(function(w){
+    if(!w) return '';
+    // مطابقة القاموس أولاً (بالكلمة كاملة)
+    if(DICT[w]) return DICT[w];
+    // أل التعريف في بداية الكلمة → "Al-"
+    var prefix='';
+    if(w.length>2 && w.charAt(0)==='ا' && w.charAt(1)==='ل'){
+      prefix='Al-';
+      w=w.slice(2);
+      if(DICT['ال'+w]) return DICT['ال'+w];
+    }
+    var r='';
+    for(var i=0;i<w.length;i++){
+      var ch=w.charAt(i);
+      r += (map[ch]!==undefined ? map[ch] : ch);
+    }
+    if(!r) return prefix||'';
+    // أول حرف كبير
+    r=r.charAt(0).toUpperCase()+r.slice(1);
+    return prefix?prefix+r:r;
+  }).filter(Boolean);
+  return out.join(' ').replace(/\s+/g,' ').trim();
+}
+
+// زرّ التحويل في واجهة إدخال المريض: يملأ حقل الإنكليزي من العربي
+function transliterateNameField(){
+  var ar=document.getElementById('wp-name');
+  var en=document.getElementById('wp-name-en');
+  if(!ar||!en) return;
+  var val=(ar.value||'').trim();
+  if(!val){ showNotif('تنبيه','أدخل الاسم بالعربي أولاً','warning'); ar.focus(); return; }
+  en.value=arabicToLatinName(val);
+  en.focus();
+}
+
+// ══════════════════════════════════════════════════════════
+// 🔤 الاسم المُرسل للأجهزة: إنكليزي دائماً.
+//    الأولوية: nameEn المحفوظ → تحويل تلقائي من الاسم العربي.
+//    يُنظَّف من فواصل HL7 (| و ^) لتجنّب كسر الرسالة.
+// ══════════════════════════════════════════════════════════
+function _ptDeviceName(pt){
+  if(!pt) return '';
+  var en=(pt.nameEn||'').trim();
+  if(!en) en=arabicToLatinName(pt.name||'');
+  return en.replace(/\|/g,' ').replace(/\^/g,' ').trim();
+}
+
 function toggleInputLang(inputId, btnId){
   var el  = document.getElementById(inputId);
   var btn = document.getElementById(btnId);
@@ -28229,8 +28469,9 @@ async function _pushResultsToDeviceLocal(_remote){
   const pt=patients.find(p=>p.id===req.patientId)||{};
 
   // بيانات المريض (نفس صيغة الاستعلام: name/gender/birth)
+  // ⭐ الاسم يُرسل بالإنكليزي دائماً (لا العربي)
   const _pid={
-    name:(pt.name||'').replace(/\|/g,' ').replace(/\^/g,' '),
+    name:_ptDeviceName(pt),
     gender:(pt.gender==='أنثى'||/^f/i.test(pt.gender||''))?'F':((pt.gender==='ذكر'||/^m/i.test(pt.gender||''))?'M':''),
     birth:(pt.birthDate||pt.dob||'').replace(/[-/]/g,'')
   };
@@ -28958,23 +29199,49 @@ async function lisHandleHl7Query(info){
 
     // ابحث عن الطلب المرتبط
     let req = null;
+    // ⭐ نجمع كل طلبات المريض غير المنتهية بتاريخ اليوم (مو أحدث طلب فقط).
+    //    السبب: المريض قد يملك عدة طلبات (LH بطلب، HbA1c بطلب آخر) وكل جهاز
+    //    يستعلم بنفس رقم المريض؛ لازم يرى الجهاز تحاليله أينما كانت. الفلترة
+    //    الصارمة (pushDevice) لاحقاً تضمن أن كل جهاز يأخذ تحاليله فقط.
+    const _todayStr=new Date().toISOString().split('T')[0];
+    let reqList=[];
     if(typeof requests!=='undefined' && requests.length){
       if(pt){
         const ptReqs = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
-        req = ptReqs.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] || null;
-        if(ptReqs.length) lisAddLog('info','📋 طلبات المريض: '+ptReqs.length);
+        // طلبات اليوم غير المنتهية أولاً
+        let sel = ptReqs.filter(r => String(r.date||'').slice(0,10)===_todayStr && r.status!=='done');
+        // احتياط: إن لم توجد طلبات اليوم غير منتهية، خذ طلبات اليوم كلها
+        if(!sel.length) sel = ptReqs.filter(r => String(r.date||'').slice(0,10)===_todayStr);
+        // احتياط أخير: أحدث طلب (السلوك القديم) كي لا نفقد أي حالة
+        if(!sel.length && ptReqs.length){
+          sel = [ptReqs.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0]];
+        }
+        reqList = sel;
+        if(ptReqs.length) lisAddLog('info','📋 طلبات المريض: '+ptReqs.length+' — المختارة: '+reqList.length);
       }
-      if(!req){
-        req = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
+      if(!reqList.length){
+        const _r = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
+        if(_r) reqList=[_r];
       }
     }
-    if(req) lisAddLog('info','📋 الطلب: '+(req.id||'-')+' تحاليل='+((req.tests||[]).length));
+    if(reqList.length) lisAddLog('info','📋 الطلبات: '+reqList.map(r=>r.id||'-').join(', '));
     else    lisAddLog('warn','⚠️ لا طلب للعينة '+sid);
+
+    // ── دمج تحاليل كل الطلبات المختارة في قائمة واحدة (بدون تكرار) ──
+    const _mergedTests=[];
+    const _seenTid=new Set();
+    reqList.forEach(function(rq){
+      (rq.tests||[]).forEach(function(tid){
+        if(!_seenTid.has(tid)){ _seenTid.add(tid); _mergedTests.push(tid); }
+      });
+    });
+    req = reqList.length ? { tests:_mergedTests } : null;
 
     if(req && req.tests && req.tests.length){
       // بيانات المريض للـ PID (اسم/جنس/ميلاد)
+      // ⭐ الاسم يُرسل بالإنكليزي دائماً (لا العربي) لكل جهاز يطلب المعلومات
       const _pid = pt ? {
-        name:  (pt.name||'').replace(/\|/g,' ').replace(/\^/g,' '),
+        name:  _ptDeviceName(pt),
         gender:(pt.gender==='أنثى'||/^f/i.test(pt.gender||''))?'F':((pt.gender==='ذكر'||/^m/i.test(pt.gender||''))?'M':''),
         birth: (pt.birthDate||pt.dob||'').replace(/[-/]/g,'')
       } : {};
@@ -29347,6 +29614,8 @@ function _c111RuleFor(deviceCode, deviceName){
     // الجهاز يرسل رقم قناة ٣ خانات (ACN) مثل 418 — قد يصل بأصفار بادئة (057)
     const dcRaw=_up(deviceCode);
     if(!dcRaw) return 'round5';
+    // 🩸 HbA1c: تقريب لمرتبة عشرية واحدة (7.34 → 7.3) بدل التقريب لأقرب ٥.
+    if(['HBA1C','A1C','HB-A1C','HBA1'].includes(dcRaw.replace(/\s/g,''))) return 'hba1c1dp';
     const _numEq=(a,b)=>{
       a=String(a||'').trim(); b=String(b||'').trim();
       if(!a||!b) return false;
@@ -29390,6 +29659,11 @@ function _c111RoundValue(rawVal, rule){
   const num=parseFloat(m[1]);
   if(!isFinite(num)) return s;
   const neg=num<0;
+  // 🩸 HbA1c: مرتبة عشرية واحدة فقط (7.34 → 7.3 ، 7 → 7)
+  if(rule==='hba1c1dp'){
+    const r1=Math.round(Math.abs(num)*10)/10;
+    return (neg?'-':'')+String(r1);
+  }
   const absTrunc=Math.trunc(Math.abs(num));    // حذف الكسور: 107.12 → 107
   if(rule==='trunc') return (neg?'-':'')+String(absTrunc);
   const rounded=Math.floor(absTrunc/5)*5;      // النزول لأقرب ٥: 107 → 105
@@ -29465,7 +29739,7 @@ function lisParseASTM(raw,deviceName,devObj){
           const _rule=_c111RuleFor(testCode, deviceName);
           const _before=value;
           value=_c111RoundValue(value,_rule);
-          const _rn=(_rule==='none'?'بلا تعديل':_rule==='trunc'?'حذف كسور':'تقريب ٥');
+          const _rn=(_rule==='none'?'بلا تعديل':_rule==='trunc'?'حذف كسور':_rule==='hba1c1dp'?'HbA1c مرتبة واحدة':'تقريب ٥');
           lisAddLog('astm','⚙️ c111 ['+testCode+'] '+_rn+': '+_before+
             (value!==_before?(' → '+value):' (بلا تغيير)'));
         }
@@ -29502,6 +29776,34 @@ function lisParseASTM(raw,deviceName,devObj){
             datetime: lisParseASTMDate(dt)||new Date().toISOString(),
             transferred:false,
           });
+          // ⭐ c111 فقط: VLDL = TG ÷ ٥ (يُحسب تلقائياً عند وصول الدهون الثلاثية)
+          //    مثال: TG=150 → VLDL=30. يُحقن كنتيجة مستقلة كأنها من الجهاز.
+          if(_isC111){
+            const _mlCode=(lisResolveCode(testCode)||'').toUpperCase();
+            const _isTG=(_mlCode==='TG')||['TG','TRIG','TRIGL'].includes(String(testCode||'').toUpperCase());
+            if(_isTG){
+              const _tgNum=parseFloat(String(value).replace(/[^0-9.\-]/g,''));
+              if(isFinite(_tgNum)){
+                const _vldl=Math.round((_tgNum/5)*10)/10;   // تقريب لمرتبة واحدة
+                lisAddLog('astm','🧮 c111: VLDL = TG('+value+') ÷ ٥ = '+_vldl);
+                lisIngestResult({
+                  id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
+                  sampleId: sid||'SID'+Date.now(),
+                  patName:  currentPatient?.patName||'',
+                  deviceCode:'VLDL',
+                  medlabCode:'VLDL',
+                  value:String(_vldl), unit:'mg/dL',
+                  refRange:'2 - 30',
+                  flags:'',
+                  status:   status==='F'?'final':'preliminary',
+                  device:   deviceName,
+                  protocol: 'ASTM',
+                  datetime: lisParseASTMDate(dt)||new Date().toISOString(),
+                  transferred:false,
+                });
+              }
+            }
+          }
         }
         break;
       }
@@ -30155,6 +30457,38 @@ function _lisMatchReqInList(reqs, res, ptsList){
   if(!sid) return undefined;
   const sidNum=sid.replace(/[^0-9]/g,'');
 
+  // ⭐ هل يحتوي الطلب فعلاً على التحليل الوارد من الجهاز؟
+  //    يُستخدم لترجيح الطلب الصحيح عند وجود عدة طلبات لنفس المريض
+  //    (مثال: طلب LH منفصل عن طلب HbA1c — كلاهما بنفس patientId).
+  //    لا يغيّر أي مطابقة قائمة؛ فقط يضيف أفضلية للطلب الحاوي للتحليل.
+  const _incoming=String(res.medlabCode||res.deviceCode||'').toUpperCase().replace(/[-\s]+/g,'');
+  const _allTestsM=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+  function _reqHasTest(r){
+    if(!_incoming||!Array.isArray(r.tests)||!r.tests.length) return false;
+    // نتيجة محفوظة مسبقاً بهذا الكود → الطلب يخص هذا التحليل
+    if(r.results){
+      for(const k in r.results){ if(String(k).toUpperCase().replace(/[-\s]+/g,'')===_incoming) return true; }
+    }
+    return r.tests.some(function(tid){
+      const tidUp=String(tid||'').toUpperCase().replace(/[-\s]+/g,'');
+      if(tidUp===_incoming) return true;
+      const t=_allTestsM.find(function(x){return x.id===tid||x.code===tid;});
+      if(!t) return false;
+      const c1=String(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+      const c2=String(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+      const c3=String(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+      // ربط الجهاز (mapping) — الكود القادم قد يكون deviceCode مربوطاً بهذا التحليل
+      const _map=(typeof lisMappings!=='undefined'?lisMappings:[]).find(function(m){
+        const dc=String(m.deviceCode||'').toUpperCase().replace(/[-\s]+/g,'');
+        const ml=String(_lisMedlabCode(m)||'').toUpperCase().replace(/[-\s]+/g,'');
+        return (dc&&dc===_incoming)&&(ml===c1||ml===c2||ml===c3);
+      });
+      if(_map) return true;
+      return c1===_incoming||c2===_incoming||c3===_incoming;
+    });
+  }
+  const _todayStr=new Date().toISOString().split('T')[0];
+
   // جمع المرشحين أولاً ثم اختيار الأفضل
   const candidates=[];
 
@@ -30201,14 +30535,34 @@ function _lisMatchReqInList(reqs, res, ptsList){
 
   if(!candidates.length) return undefined;
 
-  // ترتيب الأولوية: score عالي أولاً، ثم الطلبات غير المنتهية، ثم الأحدث
+  // ⭐ احسب سِمات كل مرشّح: هل يحتوي التحليل الوارد؟ هل بتاريخ اليوم؟ هل غير منتهٍ؟
+  candidates.forEach(function(c){
+    c.hasTest =_reqHasTest(c.r)?1:0;
+    c.isToday =(String(c.r.date||'').slice(0,10)===_todayStr)?1:0;
+    c.notDone =(c.r.status!=='done')?1:0;
+  });
+
+  // ── تفضيل قوي: الطلب الحاوي للتحليل الوارد + بتاريخ اليوم + غير منتهٍ ──
+  //    هذا يمنع خلط طلبين لنفس المريض (LH ↔ HbA1c) ويوجّه النتيجة لطلبها الصحيح.
+  //    إن لم يوجد أي مرشّح "يحتوي التحليل"، نُبقي السلوك القديم كما هو (بدون تقييد)
+  //    حتى لا نكسر أي مطابقة كانت تعمل مسبقاً لأي جهاز.
+  const _anyHasTest=candidates.some(function(c){return c.hasTest;});
+
   candidates.sort(function(a,b){
+    // 1) الطلب الذي يحتوي التحليل الوارد فعلاً يفوز دائماً
+    if(_anyHasTest && b.hasTest!==a.hasTest) return b.hasTest-a.hasTest;
+    // 2) بين الطلبات الحاوية للتحليل: فضّل طلب اليوم غير المنتهي
+    if(a.hasTest&&b.hasTest){
+      if(b.notDone!==a.notDone) return b.notDone-a.notDone;
+      if(b.isToday!==a.isToday) return b.isToday-a.isToday;
+    }
+    // 3) درجة المطابقة (SID/patientId/…)
     if(b.score!==a.score) return b.score-a.score;
-    // نفضل الطلبات غير المنتهية على المنتهية
-    const aNotDone=(a.r.status!=='done')?1:0;
-    const bNotDone=(b.r.status!=='done')?1:0;
-    if(bNotDone!==aNotDone) return bNotDone-aNotDone;
-    // نفضل الأحدث (id أكبر)
+    // 4) نفضل الطلبات غير المنتهية على المنتهية
+    if(b.notDone!==a.notDone) return b.notDone-a.notDone;
+    // 5) نفضل طلب اليوم
+    if(b.isToday!==a.isToday) return b.isToday-a.isToday;
+    // 6) نفضل الأحدث (id أكبر)
     return String(b.r.id).localeCompare(String(a.r.id));
   });
 
