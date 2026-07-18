@@ -9588,6 +9588,11 @@ function deleteReqFromPanel(reqId, pid){
 }
 
 function openPrintModal(rid){
+  // Delta Check: افحص قبل المعاينة/الطباعة المباشرة
+  try{ if(window.DeltaCheck && window.DeltaCheck.loadCfg().enabled && !openPrintModal._dcPass){
+    var _rid=rid||(typeof currentReqId!=='undefined'?currentReqId:null);
+    if(_rid){ window.DeltaCheck.beforePrint(_rid).then(function(ok){ if(ok!==false){ openPrintModal._dcPass=true; openPrintModal(rid); openPrintModal._dcPass=false; } }); return; }
+  } }catch(e){}
   // Fix 2: resolve reqId from parameter, hidden select, or currentReqId
   if(rid) currentReqId=rid;
   // If still no currentReqId, try getting from the hidden select
@@ -11711,7 +11716,14 @@ function goToResult(id){
     loadResultEntry();
   },80);
 }
-function goToPrint(id){currentReqId=id;nav('print');document.getElementById('print-req-sel').value=id;loadPrintPreviewSide();}
+function goToPrint(id){
+  try{ if(window.DeltaCheck && window.DeltaCheck.loadCfg().enabled){
+    window.DeltaCheck.beforePrint(id).then(function(ok){
+      if(ok!==false){ currentReqId=id; nav('print'); var _s=document.getElementById('print-req-sel'); if(_s)_s.value=id; loadPrintPreviewSide(); }
+    }); return;
+  } }catch(e){}
+  currentReqId=id;nav('print');document.getElementById('print-req-sel').value=id;loadPrintPreviewSide();
+}
 
 // ============================================================
 // VIEW/EDIT RESULTS MODAL (طلب 2، 3، 8)
@@ -11959,6 +11971,7 @@ function vrCheckResult(tid,val){
   else if(v<t.minVal){interp.textContent='⬇️ Low';interp.style.cssText='color:var(--warning);font-weight:700';if(inp)inp.className='res-input res-low';}
   else{interp.textContent='✅ Normal';interp.style.cssText='color:var(--success);font-weight:700';if(inp)inp.className='res-input res-ok';}
   _vrAutoSave();
+  try{ if(window.DeltaCheck) window.DeltaCheck.onManualCheck(tid, val, (typeof currentReqId!=='undefined'?currentReqId:null)); }catch(e){}
 }
 
 function vrRemoveTest(tid){
@@ -30783,6 +30796,7 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   }
 
   req.results[resultKey]=res.value;
+  try{ if(window.DeltaCheck) window.DeltaCheck.onDeviceResult(req, res); }catch(e){}
   req.resultDetails[resultKey]={value:res.value,unit:res.unit,refRange:res.refRange,flags:res.flags,fromDevice:res.device,datetime:res.datetime};
   const allCodes=(req.tests||[]);
   const allDone=allCodes.length>0&&allCodes.every(function(tc){return req.results&&req.results[tc];});
@@ -38084,49 +38098,9 @@ if(window.electronAPI && window.electronAPI.isElectron){
   //     لأن هذا المسار غير متزامن ولا يمكن إيقاف الجهاز؛ في وضع المنع
   //     نُبقي القيمة لكن نُسجّل الحدث ونعرض التحذير للمستخدم.
   function hookDevicePath(){
-    if(typeof window._lisApplyResultToReq!=='function' && typeof _lisApplyResultToReq!=='function') return false;
-    var orig = (typeof window._lisApplyResultToReq==='function')?window._lisApplyResultToReq:_lisApplyResultToReq;
-    if(orig._dcWrapped) return true;
-    var wrapped=function(req,res,reqs,idbKey){
-      try{
-        var cfg=loadCfg();
-        if(cfg.enabled && req && res){
-          // نحدد testId عبر مطابقة الكود (نفس منطق البرنامج مبسّطاً)
-          var code=(res.medlabCode||res.deviceCode||'').toUpperCase();
-          var t=_allTests().find(function(x){
-            var c=(x.code||'').toUpperCase(), ne=(x.nameEn||'').toUpperCase(), ns=(x.nameShort||'').toUpperCase();
-            return c===code||ne===code||ns===code;
-          });
-          if(t && cfg.excluded.indexOf(t.id)<0){
-            var cur=_num(res.value);
-            if(!isNaN(cur)){
-              var prev=findPreviousResult(req.patientId, t.id, req.id, cfg.days);
-              if(prev){
-                var ev=evaluate(t.id, cur, prev.value);
-                if(ev.flag){
-                  var pName=req.patientName||_patientNameById(req.patientId);
-                  logEvent({testName:_testName(t),testId:t.id,patientId:req.patientId,patientName:pName,
-                    prev:prev.raw,cur:res.value,diff:ev.diff,pct:ev.pct,reason:ev.reason,decision:'device'});
-                  // عرض تحذير غير معطِّل (النتيجة تُطبَّق لأن الجهاز أرسلها)
-                  showWarningModal({patientId:req.patientId,patientName:pName,testId:t.id,testName:_testName(t),
-                    prev:prev.raw,prevDate:prev.date,cur:res.value,diff:ev.diff,pct:ev.pct,mode:ev.mode,action:'warn'})
-                    .then(function(dec){
-                      var mapped=dec==='approve'?'approved':(dec==='recheck'?'recheck':'canceled');
-                      // تحديث آخر سجل بالقرار
-                      var log=loadLog();
-                      if(log.length){ log[log.length-1].decision=mapped; saveLog(log); if(document.getElementById('dc-log-body')) renderLog(); }
-                    });
-                }
-              }
-            }
-          }
-        }
-      }catch(e){ console.warn('[DeltaCheck] device hook error',e); }
-      return orig.apply(this, arguments);
-    };
-    wrapped._dcWrapped=true;
-    if(typeof window._lisApplyResultToReq==='function') window._lisApplyResultToReq=wrapped;
-    try{ _lisApplyResultToReq=wrapped; }catch(e){}
+    // مسار الأجهزة يُعالَج الآن عبر نداء مباشر داخل _lisApplyResultToReq
+    // (window.DeltaCheck.onDeviceResult) لأن الاستدعاء الداخلي لا يمرّ عبر window.
+    // نُبقي هذه الدالة كـ no-op لتفادي ازدواج التحذير.
     return true;
   }
 
@@ -38218,6 +38192,116 @@ if(window.electronAPI && window.electronAPI.isElectron){
     return true;
   }
 
+  // ════════════════════════════════════════════════════════════════
+  //  واجهة نداء مباشرة (تُستدعى من داخل دوال البرنامج نفسها)
+  //  تعمل بغضّ النظر عن ربط window، وتتفادى التكرار.
+  // ════════════════════════════════════════════════════════════════
+  var _seenTyping = {};   // reqId|testId -> lastValue (أثناء الكتابة)
+  var _typingTimer = null;
+
+  // (أ) أثناء الكتابة/التغيير في واجهة إدخال النتائج
+  function onManualCheck(tid, val, reqId){
+    try{
+      var cfg=loadCfg();
+      if(!cfg.enabled || !tid) return;
+      if(cfg.excluded.indexOf(tid)>=0) return;
+      var cur=_num(val); if(isNaN(cur)) return;
+      var rid=reqId || (typeof window.currentReqId!=='undefined'?window.currentReqId:null);
+      var r=(window.requests&&rid)?window.requests.find(function(x){return x.id===rid;}):null;
+      if(!r) return;
+      var key=rid+'|'+tid;
+      if(_seenTyping[key]===String(val)) return;
+      clearTimeout(_typingTimer);
+      _typingTimer=setTimeout(function(){
+        if(document.getElementById('dc-warn-overlay')) return;
+        var prev=findPreviousResult(r.patientId, tid, r.id, cfg.days);
+        if(!prev) return;
+        var ev=evaluate(tid, cur, prev.value);
+        if(!ev.flag){ _seenTyping[key]=String(val); return; }
+        _seenTyping[key]=String(val);
+        var t=_testById(tid);
+        var pName=r.patientName||_patientNameById(r.patientId);
+        showWarningModal({patientId:r.patientId, patientName:pName, testId:tid, testName:_testName(t)||tid,
+          prev:prev.raw, prevDate:prev.date, cur:val, diff:ev.diff, pct:ev.pct, mode:ev.mode, action:cfg.action})
+          .then(function(dec){
+            var mapped=dec==='approve'?'approved':(dec==='recheck'?'recheck':'canceled');
+            logEvent({testName:_testName(t), testId:tid, patientId:r.patientId, patientName:pName,
+              prev:prev.raw, cur:val, diff:ev.diff, pct:ev.pct, reason:ev.reason, decision:mapped});
+            if(cfg.action==='block' && dec!=='approve'){
+              var el=document.getElementById('vr-rv-'+tid)||document.getElementById('rv-'+tid);
+              if(el) el.value='';
+              if(r.results && r.results[tid]!==undefined){ delete r.results[tid]; if(typeof window.save==='function') window.save('requests',window.requests); }
+              _seenTyping[key]='';
+              if(typeof window.showNotif==='function') window.showNotif('Delta Check','النتيجة لم تُعتمد — يرجى إعادة الفحص','warning');
+            }
+          });
+      }, 650);
+    }catch(e){ console.warn('[DeltaCheck] onManualCheck',e); }
+  }
+
+  // (ب) نتيجة قادمة من جهاز HL7/ASTM (تُستدعى من _lisApplyResultToReq)
+  function onDeviceResult(req, res){
+    try{
+      var cfg=loadCfg();
+      if(!cfg.enabled || !req || !res) return;
+      var code=(res.medlabCode||res.deviceCode||'').toUpperCase();
+      var t=_allTests().find(function(x){
+        var c=(x.code||'').toUpperCase(), ne=(x.nameEn||'').toUpperCase(), ns=(x.nameShort||'').toUpperCase();
+        return c===code||ne===code||ns===code;
+      });
+      if(!t || cfg.excluded.indexOf(t.id)>=0) return;
+      var cur=_num(res.value); if(isNaN(cur)) return;
+      var prev=findPreviousResult(req.patientId, t.id, req.id, cfg.days);
+      if(!prev) return;
+      var ev=evaluate(t.id, cur, prev.value);
+      if(!ev.flag) return;
+      var pName=req.patientName||_patientNameById(req.patientId);
+      logEvent({testName:_testName(t), testId:t.id, patientId:req.patientId, patientName:pName,
+        prev:prev.raw, cur:res.value, diff:ev.diff, pct:ev.pct, reason:ev.reason, decision:'device'});
+      showWarningModal({patientId:req.patientId, patientName:pName, testId:t.id, testName:_testName(t),
+        prev:prev.raw, prevDate:prev.date, cur:res.value, diff:ev.diff, pct:ev.pct, mode:ev.mode, action:'warn'})
+        .then(function(dec){
+          var mapped=dec==='approve'?'approved':(dec==='recheck'?'recheck':'canceled');
+          var log=loadLog(); if(log.length){ log[log.length-1].decision=mapped; saveLog(log); if(document.getElementById('dc-log-body')) renderLog(); }
+        });
+    }catch(e){ console.warn('[DeltaCheck] onDeviceResult',e); }
+  }
+
+  // (ج) حارس قبل الطباعة/المعاينة المباشرة من قسم الطلبات.
+  //     يُعيد Promise<boolean>: true=تابع الطباعة، false=امنع (وضع المنع).
+  function beforePrint(reqId){
+    try{
+      var cfg=loadCfg();
+      if(!cfg.enabled) return Promise.resolve(true);
+      var rid=reqId || (typeof window.currentReqId!=='undefined'?window.currentReqId:null);
+      if(!rid) return Promise.resolve(true);
+      return checkRequestAllTests(rid).then(function(res){
+        if(cfg.action==='block' && !res.ok){
+          if(typeof window.showNotif==='function') window.showNotif('Delta Check','توجد نتائج متجاوزة لم تُعتمد — تحقّق قبل الطباعة','warning');
+          return false;
+        }
+        return true;
+      });
+    }catch(e){ console.warn('[DeltaCheck] beforePrint',e); return Promise.resolve(true); }
+  }
+
+  function checkRequestAllTests(reqId){
+    var cfg=loadCfg();
+    if(!cfg.enabled) return Promise.resolve({ok:true, blocked:[]});
+    var r=(window.requests)?window.requests.find(function(x){return x.id===reqId;}):null;
+    if(!r||!r.results) return Promise.resolve({ok:true, blocked:[]});
+    var items=[];
+    (r.tests||[]).forEach(function(tid){
+      if(cfg.excluded.indexOf(tid)>=0) return;
+      var v=r.results[tid];
+      if(v===undefined||v===null||String(v).trim()==='') return;
+      if(isNaN(_num(v))) return;
+      items.push({patientId:r.patientId, patientName:r.patientName||_patientNameById(r.patientId), testId:tid, curValue:v, excludeReqId:r.id});
+    });
+    if(!items.length) return Promise.resolve({ok:true, blocked:[]});
+    return checkMany(items);
+  }
+
   // ── تركيب الـ hooks مع إعادة المحاولة (الدوال قد تُعرّف لاحقاً) ────
   function installHooks(){
     var a=hookDevicePath(), b=hookManualVr(), c=hookAutoSave();
@@ -38246,7 +38330,9 @@ if(window.electronAPI && window.electronAPI.isElectron){
     addExcluded:addExcluded, removeExcluded:removeExcluded,
     addPerTest:addPerTest, removePerTest:removePerTest,
     clearLog:clearLog, exportLog:exportLog,
-    installHooks:installHooks
+    installHooks:installHooks,
+    onManualCheck:onManualCheck, onDeviceResult:onDeviceResult,
+    beforePrint:beforePrint, checkRequestAllTests:checkRequestAllTests
   };
 })();
 </script>
