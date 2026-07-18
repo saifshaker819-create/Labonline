@@ -9596,7 +9596,7 @@ function renderWizStep(){
           <!-- النصف الأول: الاسم العربي (يظهر في التقرير) -->
           <div class="inp-lang-wrap" style="flex:1;min-width:0">
             <button type="button" class="lang-toggle-btn" id="wp-name-ltb" onclick="toggleInputLang('wp-name','wp-name-ltb')" title="تبديل لغة الإدخال">ع</button>
-            <input class="fc" id="wp-name" lang="ar" dir="rtl" inputmode="text" placeholder="الاسم بالعربي..." value="${wizPatient.name||''}" oninput="suggestPatients(this.value)" autocomplete="off" style="font-size:16px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
+            <input class="fc" id="wp-name" lang="ar" dir="rtl" inputmode="text" placeholder="الاسم بالعربي..." value="${wizPatient.name||''}" oninput="suggestPatients(this.value);autoFillNameEn(this.value)" autocomplete="off" style="font-size:16px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
           </div>
           <!-- النصف الثاني: الاسم الإنكليزي (يُرسل للأجهزة) -->
           <div style="flex:1;min-width:0;display:flex;gap:4px;align-items:stretch">
@@ -25933,8 +25933,35 @@ function transliterateNameField(){
   var val=(ar.value||'').trim();
   if(!val){ showNotif('تنبيه','أدخل الاسم بالعربي أولاً','warning'); ar.focus(); return; }
   en.value=arabicToLatinName(val);
+  en._autoFilled=true;   // آخر قيمة أتت من التحويل التلقائي
   en.focus();
 }
+
+// ══════════════════════════════════════════════════════════
+// 🔤 تحويل تلقائي للاسم الإنكليزي أثناء الكتابة بالعربي.
+//    يُحدّث الحقل الإنكليزي مباشرةً ما لم يكن المستخدم قد عدّله يدوياً
+//    (عندها نحترم تعديله ولا نكتب فوقه). يُستدعى من oninput للحقل العربي.
+// ══════════════════════════════════════════════════════════
+function autoFillNameEn(arVal){
+  var en=document.getElementById('wp-name-en');
+  if(!en) return;
+  var cur=(en.value||'');
+  // إن كان الحقل فارغاً أو محتواه ناتجاً عن تحويل تلقائي سابق → حدّثه.
+  // إن عدّله المستخدم يدوياً (لا يطابق آخر تحويل) → لا نلمسه.
+  if(cur==='' || en._autoFilled && cur===(en._lastAuto||'')){
+    var out=arabicToLatinName((arVal||'').trim());
+    en.value=out;
+    en._autoFilled=true;
+    en._lastAuto=out;
+  }
+}
+
+// عند تعديل الحقل الإنكليزي يدوياً: أوقف الكتابة التلقائية فوقه
+document.addEventListener('input',function(e){
+  if(e.target && e.target.id==='wp-name-en'){
+    if(e.target.value!==(e.target._lastAuto||'')) e.target._autoFilled=false;
+  }
+},true);
 
 // ══════════════════════════════════════════════════════════
 // 🔤 الاسم المُرسل للأجهزة: إنكليزي دائماً.
