@@ -2908,6 +2908,23 @@ body.light-mode .dp-ftab{color:#6b7280;}
 body.light-mode .dp-filter-tabs{border-bottom-color:#dde4ec;}
 body.light-mode .dp-viewer{background:#d8dde3;}
 
+/* ═══ شريط الاقتراحات الذكية (Smart Suggestion Bar) ═══ */
+#smartrec-bar{position:absolute;top:0;left:0;right:0;z-index:60;transform:translateY(-120%);opacity:0;transition:transform .28s cubic-bezier(.22,1,.36,1),opacity .28s;pointer-events:none;padding:8px 10px 0}
+#smartrec-bar.show{transform:translateY(0);opacity:1;pointer-events:auto}
+.smartrec-inner{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,rgba(0,212,255,0.14),rgba(120,90,255,0.12));border:1px solid rgba(0,212,255,0.4);border-radius:11px;padding:9px 12px;box-shadow:0 6px 22px rgba(0,0,0,0.4);backdrop-filter:blur(6px)}
+.smartrec-ic{font-size:20px;flex-shrink:0;animation:smartrec-pulse 1.8s ease-in-out infinite}
+@keyframes smartrec-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+.smartrec-txt{flex:1;min-width:0}
+.smartrec-title{font-size:12px;font-weight:800;color:var(--primary);margin-bottom:1px}
+.smartrec-desc{font-size:11px;color:var(--text);line-height:1.45}
+.smartrec-desc b{color:#ffd76b;font-weight:800}
+.smartrec-acts{display:flex;gap:6px;flex-shrink:0;align-items:center}
+.smartrec-btn{font-family:'Cairo',sans-serif;font-weight:800;font-size:11px;padding:5px 12px;border-radius:7px;cursor:pointer;border:none;white-space:nowrap;transition:filter .15s}
+.smartrec-btn:hover{filter:brightness(1.12)}
+.smartrec-btn-add{background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#001018}
+.smartrec-btn-skip{background:rgba(255,255,255,0.08);color:var(--text2);border:1px solid var(--border)}
+.smartrec-btn-never{background:transparent;color:var(--text2);border:none;font-size:15px;padding:4px 6px;line-height:1}
+.smartrec-count{background:rgba(0,0,0,0.35);color:var(--primary);font-size:9px;font-weight:800;border-radius:20px;padding:1px 7px;flex-shrink:0}
 </style>
 
 <!-- ══════════════════════════════════════════════════════════
@@ -4541,16 +4558,24 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           </div>
         </div>
 
-        <!-- ٥.١ - فحص دلتا الذكي (Delta Check) -->
+        <!-- ٥.١ - المميزات الذكية (Smart Features) -->
         <div class="st-card" id="stc-delta">
           <div class="st-card-hdr" onclick="toggleStCard('stc-delta')">
             <div style="display:flex;align-items:center;gap:12px">
-              <span style="font-size:22px">🔎</span>
-              <div><div class="st-card-title">فحص دلتا الذكي — Delta Check</div><div class="st-card-sub">مقارنة النتيجة الحالية بآخر نتيجة للمريض قبل الاعتماد</div></div>
+              <span style="font-size:22px">🧠</span>
+              <div><div class="st-card-title">المميزات الذكية</div><div class="st-card-sub">فحص دلتا الذكي + الاقتراحات الذكية للتحاليل</div></div>
             </div>
             <span class="st-card-arrow" id="arr-stc-delta">▼</span>
           </div>
           <div class="st-card-body" id="body-stc-delta" style="display:none">
+
+            <!-- ▼▼ منسدلة (1): فحص دلتا الذكي ▼▼ -->
+            <div class="smart-sub" style="border:1px solid var(--border);border-radius:11px;margin-bottom:12px;overflow:hidden">
+              <div onclick="toggleSmartSub('sf-delta')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;background:rgba(255,170,0,0.06)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">🔎</span><div><div style="font-size:13px;font-weight:800">فحص دلتا الذكي — Delta Check</div><div style="font-size:10px;color:var(--text2)">مقارنة النتيجة الحالية بآخر نتيجة للمريض قبل الاعتماد</div></div></div>
+                <span class="st-card-arrow" id="arr-sf-delta">▼</span>
+              </div>
+              <div id="body-sf-delta" style="display:none;padding:14px;border-top:1px solid var(--border)">
             <div style="font-size:11px;color:var(--text2);margin-bottom:14px;background:rgba(255,170,0,0.06);border:1px solid rgba(255,170,0,0.25);border-radius:9px;padding:10px">
               🔎 يقارن البرنامج تلقائياً كل نتيجة رقمية مع آخر نتيجة لنفس المريض (حسب رقم الملف الدائم) لنفس التحليل. إذا تجاوز الفرق الحد المسموح يظهر تحذير قبل الاعتماد — يعمل مع HL7 و ASTM والإدخال اليدوي.
             </div>
@@ -4631,6 +4656,77 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div style="font-size:10px;color:var(--text2);margin-bottom:10px">يُسجَّل: المستخدم، التاريخ والوقت، التحليل، النتيجة السابقة والحالية، الفرق، سبب التجاوز، وقرار المستخدم.</div>
               <div id="dc-log-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
             </div>
+              </div>
+            </div>
+            <!-- ▲▲ نهاية منسدلة فحص دلتا ▲▲ -->
+
+            <!-- ▼▼ منسدلة (2): الاقتراحات الذكية للتحاليل ▼▼ -->
+            <div class="smart-sub" style="border:1px solid var(--border);border-radius:11px;overflow:hidden">
+              <div onclick="toggleSmartSub('sf-rec')" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;background:rgba(0,212,255,0.06)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">💡</span><div><div style="font-size:13px;font-weight:800">الاقتراحات الذكية للتحاليل</div><div style="font-size:10px;color:var(--text2)">اقتراح تحاليل مرتبطة أو منسية أثناء إنشاء الطلب</div></div></div>
+                <span class="st-card-arrow" id="arr-sf-rec">▼</span>
+              </div>
+              <div id="body-sf-rec" style="display:none;padding:14px;border-top:1px solid var(--border)">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:14px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:9px;padding:10px">
+                  💡 أثناء اختيار التحاليل للمريض، يعرض البرنامج شريط اقتراح علوي انسيابياً يقترح تحاليل مرتبطة أو ناقصة — دون إضافة أي تحليل تلقائياً. القرار النهائي دائماً للمستخدم.
+                </div>
+
+                <!-- تفعيل عام -->
+                <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,180,100,0.06);border:1px solid rgba(0,180,100,0.25);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+                  <div><div style="font-size:13px;font-weight:800">تفعيل الاقتراحات الذكية</div><div style="font-size:10px;color:var(--text2);margin-top:2px">تشغيل أو إيقاف الميزة بالكامل</div></div>
+                  <div class="tog" id="sr-tog-enabled" onclick="this.classList.toggle('on');SmartRec.saveConfig()"><div class="tog-t"></div></div>
+                </div>
+
+                <!-- أنواع الاقتراحات (منسدلات لكل خاصية) -->
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+                    <div><div style="font-size:12px;font-weight:800">🔗 تحاليل مرتبطة</div><div style="font-size:10px;color:var(--text2);margin-top:2px">مثال: عند اختيار TSH يقترح FT3 و FT4</div></div>
+                    <div class="tog" id="sr-tog-related" onclick="this.classList.toggle('on');SmartRec.saveConfig()"><div class="tog-t"></div></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+                    <div><div style="font-size:12px;font-weight:800">🧩 إكمال الباقات</div><div style="font-size:10px;color:var(--text2);margin-top:2px">اقتراح بقية تحاليل الباقة (LFT/RFT/Lipid...) إن كانت ناقصة</div></div>
+                    <div class="tog" id="sr-tog-panels" onclick="this.classList.toggle('on');SmartRec.saveConfig()"><div class="tog-t"></div></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:9px 12px">
+                    <div><div style="font-size:12px;font-weight:800">📅 حسب سجل المريض</div><div style="font-size:10px;color:var(--text2);margin-top:2px">تنبيه عند تكرار تحليل أُجري مؤخراً</div></div>
+                    <div class="tog" id="sr-tog-history" onclick="this.classList.toggle('on');SmartRec.saveConfig()"><div class="tog-t"></div></div>
+                  </div>
+                </div>
+
+                <!-- نافذة التكرار الزمنية -->
+                <div class="fg" style="margin-bottom:14px">
+                  <label class="fl">⏱️ تنبيه التكرار: اعتبر التحليل "أُجري مؤخراً" خلال</label>
+                  <select class="fc" id="sr-recent-days" onchange="SmartRec.saveConfig()">
+                    <option value="1">آخر يوم واحد</option>
+                    <option value="3">آخر 3 أيام</option>
+                    <option value="7" selected>آخر 7 أيام</option>
+                    <option value="14">آخر 14 يوماً</option>
+                    <option value="30">آخر 30 يوماً</option>
+                  </select>
+                </div>
+
+                <!-- قواعد مخصّصة -->
+                <div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:14px;margin-bottom:14px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div style="font-size:12px;font-weight:800;color:var(--primary)">🎯 قواعد الاقتراح المرتبط</div>
+                    <button class="btn btn-p btn-sm" onclick="SmartRec.addRulePrompt()">+ قاعدة جديدة</button>
+                  </div>
+                  <div style="font-size:10px;color:var(--text2);margin-bottom:10px">كل قاعدة: عند اختيار تحليل "المُشغِّل" يُقترح تحاليل "الهدف". يمكنك التعديل أو الحذف.</div>
+                  <div id="sr-rules-list" style="display:flex;flex-direction:column;gap:8px"></div>
+                </div>
+
+                <!-- الاقتراحات المكتومة -->
+                <div style="background:rgba(255,80,80,0.04);border:1px solid rgba(255,80,80,0.22);border-radius:10px;padding:14px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div style="font-size:12px;font-weight:800;color:#ff6b6b">🚫 اقتراحات مكتومة (لا تظهر مجدداً)</div>
+                    <button class="btn btn-d btn-sm" onclick="SmartRec.clearMuted()">مسح الكل</button>
+                  </div>
+                  <div id="sr-muted-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+                </div>
+              </div>
+            </div>
+            <!-- ▲▲ نهاية منسدلة الاقتراحات الذكية ▲▲ -->
+
           </div>
         </div>
 
@@ -6117,7 +6213,23 @@ body.light-mode .dp-viewer{background:#d8dde3;}
 
 <!-- New Patient Wizard -->
 <div class="moverlay" id="m-wizard">
-  <div class="modal wide resizable-modal" id="m-wizard-inner" style="max-width:1640px">
+  <div class="modal wide resizable-modal" id="m-wizard-inner" style="max-width:1640px;position:relative">
+    <!-- ⭐ شريط الاقتراحات الذكية -->
+    <div id="smartrec-bar">
+      <div class="smartrec-inner">
+        <span class="smartrec-ic">💡</span>
+        <div class="smartrec-txt">
+          <div class="smartrec-title" id="smartrec-title">اقتراح ذكي</div>
+          <div class="smartrec-desc" id="smartrec-desc"></div>
+        </div>
+        <span class="smartrec-count" id="smartrec-count" style="display:none"></span>
+        <div class="smartrec-acts">
+          <button class="smartrec-btn smartrec-btn-add" id="smartrec-add" onclick="SmartRec.acceptCurrent()">إضافة</button>
+          <button class="smartrec-btn smartrec-btn-skip" onclick="SmartRec.skipCurrent()">تجاهل</button>
+          <button class="smartrec-btn smartrec-btn-never" title="عدم إظهار هذا الاقتراح مرة أخرى" onclick="SmartRec.neverCurrent()">🚫</button>
+        </div>
+      </div>
+    </div>
     <div class="mhdr">
       <div class="mtitle" id="wiz-title">👤 مريض جديد - الخطوة 1</div>
       <button class="mclose" onclick="closeModal('m-wizard')">×</button>
@@ -9491,7 +9603,7 @@ function nav(p){
 // MODALS
 // ============================================================
 function openModal(id){document.getElementById(id).classList.add('open');if(window._applyAutoLang)requestAnimationFrame(window._applyAutoLang);}
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='m-wizard'){try{if(window.SmartRec)SmartRec.reset();}catch(e){}}}
 document.querySelectorAll('.moverlay').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});});
 
 // ============================================================
@@ -9776,6 +9888,9 @@ function renderWizStep(){
   const body=document.getElementById('wiz-body');
   const ftr=document.getElementById('wiz-ftr');
   const title=document.getElementById('wiz-title');
+
+  // ⭐ نظّف شريط الاقتراحات عند كل تبديل خطوة
+  try{ if(window.SmartRec) SmartRec.reset(); }catch(e){}
 
   if(wizStep===1){
     title.textContent='👤 الخطوة 1: بيانات المريض';
@@ -10454,6 +10569,9 @@ function toggleWizTest(tid){
       try{ _wizSrch.setSelectionRange(0, (_wizSrch.value||'').length); }catch(e){}
     });
   }
+
+  // ⭐ محرك الاقتراحات الذكية — يعمل في الخلفية دون مقاطعة
+  try{ if(window.SmartRec) SmartRec.analyze(); }catch(e){}
 }
 
 // تحديث جزئي سريع: يضيف أو يحذف عنصر واحد فقط من القائمة اليمنى
@@ -17588,8 +17706,18 @@ function toggleStCard(id){
     if(id==='stc-groups') renderSettingsGroups();
     if(id==='stc-ua-stool') renderUAFieldsEditor();
     if(id==='stc-phones') renderPhoneBook();
-    if(id==='stc-delta'){ try{ DeltaCheck.renderSettingsUI(); }catch(e){console.warn('[DeltaCheck] UI',e);} }
+    if(id==='stc-delta'){ try{ DeltaCheck.renderSettingsUI(); }catch(e){console.warn('[DeltaCheck] UI',e);} try{ SmartRec.renderSettingsUI(); }catch(e){console.warn('[SmartRec] UI',e);} }
   }
+}
+
+// تبديل المنسدلات الفرعية داخل بطاقة المميزات الذكية
+function toggleSmartSub(id){
+  var body=document.getElementById('body-'+id);
+  var arrow=document.getElementById('arr-'+id);
+  if(!body) return;
+  var isOpen=body.style.display==='block';
+  body.style.display=isOpen?'none':'block';
+  if(arrow) arrow.classList.toggle('open',!isOpen);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -18097,6 +18225,336 @@ var DeltaCheck = (function(){
   };
 })();
 window.DeltaCheck = DeltaCheck;
+
+// ══════════════════════════════════════════════════════════════
+// 💡 SMART REC — محرك الاقتراحات الذكية للتحاليل
+//   يعمل أثناء اختيار التحاليل في الويزارد. يعرض شريط اقتراح علوي
+//   انسيابياً (Slide Down) دون إضافة أي تحليل تلقائياً.
+//   وحدة مستقلة تماماً — لا تمسّ أي منطق قائم. كل العمل في الخلفية.
+// ══════════════════════════════════════════════════════════════
+var SmartRec = (function(){
+  var CFG_KEY = 'smartRecConfig';
+
+  // قواعد الاقتراح الافتراضية — تُطابَق بالكود (code) غير حسّاس لحالة الأحرف
+  var _defaultRules = [
+    { id:'r_thyroid', trigger:['TSH'], target:['FT3','FT4'], label:'تحاليل الغدة الدرقية' },
+    { id:'r_lipid',   trigger:['CHOL','CHOLESTEROL'], target:['HDL','LDL','TG','TRIG','TRIGLYCERIDE'], label:'ملف الدهون (Lipid Profile)' },
+    { id:'r_lft',     trigger:['AST','SGOT','ALT','SGPT'], target:['AST','ALT','ALP','TBIL','DBIL','T.BIL','D.BIL'], label:'وظائف الكبد (LFT)' },
+    { id:'r_rft',     trigger:['UREA','BUN'], target:['UREA','CREAT','CREATININE','URIC','UA'], label:'وظائف الكلى (RFT)' },
+    { id:'r_diabetes',trigger:['HBA1C'], target:['FBS','GLU','GLUCOSE'], label:'متابعة السكري' }
+  ];
+
+  var _defaultCfg = {
+    enabled:false,
+    related:true,
+    panels:true,
+    history:true,
+    recentDays:7,
+    rules:null,          // يُملأ من _defaultRules عند أول تحميل
+    muted:[]             // معرفات اقتراحات مكتومة: "rule:<id>" أو "recent:<code>"
+  };
+
+  var cfg = null;
+
+  function _loadCfg(){
+    var saved = {};
+    try{ saved = load(CFG_KEY, {}) || {}; }catch(e){ saved = {}; }
+    cfg = Object.assign({}, _defaultCfg, saved);
+    if(!Array.isArray(cfg.rules) || !cfg.rules.length) cfg.rules = JSON.parse(JSON.stringify(_defaultRules));
+    if(!Array.isArray(cfg.muted)) cfg.muted = [];
+    return cfg;
+  }
+  function getConfig(){ if(!cfg) _loadCfg(); return cfg; }
+  function _persist(){ try{ save(CFG_KEY, cfg); }catch(e){ console.warn('[SmartRec] save',e); } }
+
+  // ── أدوات ──────────────────────────────────────────────────
+  function _up(s){ return String(s||'').trim().toUpperCase(); }
+  function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function _findByCode(code){
+    if(typeof tests==='undefined'||!tests) return null;
+    var u=_up(code);
+    return tests.find(function(t){ return _up(t.code)===u || _up(t.nameEn)===u || _up(t.nameShort)===u; }) || null;
+  }
+  function _selectedCodes(){
+    if(typeof wizSelectedTests==='undefined'||!wizSelectedTests) return [];
+    return wizSelectedTests.map(function(t){ return _up(t.code); });
+  }
+  function _selectedIds(){
+    if(typeof wizSelectedTests==='undefined'||!wizSelectedTests) return [];
+    return wizSelectedTests.map(function(t){ return t.id; });
+  }
+  function _isSelected(code){ return _selectedCodes().indexOf(_up(code))>=0; }
+
+  // ── بناء طابور الاقتراحات من الطلب الحالي ──────────────────
+  function _buildQueue(){
+    getConfig();
+    var q = [];
+    var selCodes = _selectedCodes();
+    if(!selCodes.length) return q;
+
+    // (1) قواعد التحاليل المرتبطة / إكمال الباقات
+    if(cfg.related || cfg.panels){
+      cfg.rules.forEach(function(rule){
+        var mk='rule:'+rule.id;
+        if(cfg.muted.indexOf(mk)>=0) return;
+        // هل أحد المُشغِّلات مختار؟
+        var triggered = rule.trigger.some(function(c){ return selCodes.indexOf(_up(c))>=0; });
+        if(!triggered) return;
+        // الأهداف الناقصة الموجودة فعلاً في قاعدة التحاليل
+        var missing = [];
+        var seen = {};
+        rule.target.forEach(function(c){
+          if(selCodes.indexOf(_up(c))>=0) return;      // مختار أصلاً
+          var t=_findByCode(c);
+          if(!t) return;                                // غير موجود في القاعدة
+          if(seen[t.id]) return;
+          seen[t.id]=1;
+          missing.push(t);
+        });
+        if(!missing.length) return;
+        q.push({
+          key:mk,
+          title:'اقتراح ذكي — '+(rule.label||'تحاليل مرتبطة'),
+          descHtml:'تم اختيار تحليل مرتبط. هل ترغب بإضافة: <b>'+missing.map(function(t){return _esc(tDisplayName?tDisplayName(t):(t.nameEn||t.code));}).join('، ')+'</b>؟',
+          addIds:missing.map(function(t){return t.id;})
+        });
+      });
+    }
+
+    // (2) حسب سجل المريض — تكرار تحليل أُجري مؤخراً
+    if(cfg.history){
+      try{
+        var pid = (typeof wizPatient!=='undefined' && wizPatient) ? wizPatient.id : null;
+        if(pid && typeof requests!=='undefined' && Array.isArray(requests)){
+          var winMs = (cfg.recentDays>0)? cfg.recentDays*86400000 : 0;
+          var now = Date.now();
+          var selIds = _selectedIds();
+          selIds.forEach(function(tid){
+            var t = tests.find(function(x){return x.id===tid;});
+            if(!t) return;
+            var mk='recent:'+_up(t.code);
+            if(cfg.muted.indexOf(mk)>=0) return;
+            // ابحث عن آخر طلب لنفس المريض يحوي هذا التحليل
+            var recent = null;
+            requests.forEach(function(r){
+              if(!r || r.patientId!==pid) return;
+              if(!r.tests || r.tests.indexOf(tid)<0) return;
+              var d = Date.parse(((r.resultDate||r.date)||'').slice(0,10));
+              if(isNaN(d)) return;
+              if(winMs>0 && (now-d)>winMs) return;
+              if(!recent || d>recent._t) recent={ _t:d, r:r };
+            });
+            if(recent){
+              var days = Math.max(0, Math.round((now-recent._t)/86400000));
+              q.push({
+                key:'recentwarn:'+tid,           // تحذير — لا يُكتم دائماً
+                muteKey:mk,
+                title:'⚠️ تنبيه تكرار',
+                descHtml:'تحليل <b>'+_esc(tDisplayName?tDisplayName(t):(t.nameEn||t.code))+'</b> أُجري لهذا المريض '+(days===0?'اليوم':('قبل '+days+' يوم'))+'. هل تريد تكراره؟',
+                addIds:[],                        // لا يوجد ما يُضاف — مجرد تنبيه
+                warnOnly:true
+              });
+            }
+          });
+        }
+      }catch(e){ console.warn('[SmartRec] history',e); }
+    }
+
+    return q;
+  }
+
+  // ── إدارة الشريط والطابور ──────────────────────────────────
+  var _queue = [];
+  var _cur = null;
+  var _hideTimer = null;
+
+  function _barEls(){
+    return {
+      bar:document.getElementById('smartrec-bar'),
+      title:document.getElementById('smartrec-title'),
+      desc:document.getElementById('smartrec-desc'),
+      count:document.getElementById('smartrec-count'),
+      add:document.getElementById('smartrec-add')
+    };
+  }
+
+  function _renderCurrent(){
+    var e=_barEls(); if(!e.bar) return;
+    if(!_cur){ hide(); return; }
+    if(e.title) e.title.textContent=_cur.title||'اقتراح ذكي';
+    if(e.desc) e.desc.innerHTML=_cur.descHtml||'';
+    if(e.add) e.add.style.display=(_cur.addIds && _cur.addIds.length)?'':'none';
+    if(e.count){
+      var remaining=_queue.length;
+      if(remaining>0){ e.count.style.display=''; e.count.textContent='+'+remaining; }
+      else e.count.style.display='none';
+    }
+    if(_hideTimer){ clearTimeout(_hideTimer); _hideTimer=null; }
+    e.bar.classList.add('show');
+  }
+
+  function hide(){
+    var e=_barEls(); if(!e.bar) return;
+    e.bar.classList.remove('show');
+    _cur=null;
+  }
+
+  function _next(){
+    if(!_queue.length){ hide(); return; }
+    _cur=_queue.shift();
+    _renderCurrent();
+  }
+
+  // نقطة الدخول: تُستدعى بعد كل اختيار/إلغاء تحليل (في الخلفية)
+  var _debounce=null;
+  function analyze(){
+    getConfig();
+    if(!cfg.enabled) { hide(); return; }
+    // debounce بسيط حتى لا نحسب مع كل ضغطة سريعة
+    if(_debounce) clearTimeout(_debounce);
+    _debounce=setTimeout(function(){
+      try{
+        var fresh=_buildQueue();
+        // استبعِد الاقتراح المعروض حالياً إن بقي صالحاً حتى لا يومض
+        _queue = fresh;
+        // إن لم يكن هناك اقتراح معروض، اعرض الأول
+        if(!_cur){ _next(); }
+        else {
+          // حدّث العدّاد وأبقِ الحالي إن كان ما زال ضمن الطابور المنطقي
+          _renderCurrent();
+        }
+        // إن أصبح الطابور فارغاً ولا يوجد حالي → أخفِ
+        if(!_cur && !_queue.length) hide();
+      }catch(err){ console.warn('[SmartRec] analyze',err); }
+    }, 180);
+  }
+
+  // ── أزرار الشريط ───────────────────────────────────────────
+  function acceptCurrent(){
+    if(!_cur){ return; }
+    var ids=_cur.addIds||[];
+    var added=0;
+    ids.forEach(function(tid){
+      try{
+        if(typeof wizSelectedTests==='undefined') return;
+        if(wizSelectedTests.find(function(x){return x.id===tid;})) return;
+        var t=tests.find(function(x){return x.id===tid;});
+        if(!t) return;
+        wizSelectedTests.push(t);
+        added++;
+      }catch(e){}
+    });
+    if(added){
+      try{ if(typeof renderWizTestList==='function') renderWizTestList(); }catch(e){}
+      try{ if(typeof renderWizRightPanel==='function') renderWizRightPanel(); }catch(e){}
+      try{ if(typeof updateWizTotal==='function') updateWizTotal(); }catch(e){}
+      try{ showNotif('تمت الإضافة','أُضيفت '+added+' تحليل من الاقتراح','success'); }catch(e){}
+    }
+    _cur=null;
+    // أعِد التحليل — قد تظهر اقتراحات جديدة أو يُغلق الطابور
+    _next();
+    analyze();
+  }
+
+  function skipCurrent(){
+    _cur=null;
+    _next();
+  }
+
+  function neverCurrent(){
+    if(_cur){
+      getConfig();
+      var mk=_cur.muteKey||_cur.key;
+      if(mk && cfg.muted.indexOf(mk)<0){ cfg.muted.push(mk); _persist(); }
+    }
+    _cur=null;
+    _next();
+  }
+
+  // يُستدعى عند فتح/إغلاق الويزارد لتنظيف الحالة
+  function reset(){
+    _queue=[]; _cur=null;
+    if(_debounce){ clearTimeout(_debounce); _debounce=null; }
+    hide();
+  }
+
+  // ── واجهة الإعدادات ────────────────────────────────────────
+  function renderSettingsUI(){
+    getConfig();
+    var setTog=function(id,val){ var el=document.getElementById(id); if(el) el.classList.toggle('on',!!val); };
+    setTog('sr-tog-enabled', cfg.enabled);
+    setTog('sr-tog-related', cfg.related);
+    setTog('sr-tog-panels', cfg.panels);
+    setTog('sr-tog-history', cfg.history);
+    var rd=document.getElementById('sr-recent-days'); if(rd) rd.value=String(cfg.recentDays);
+    _renderRules();
+    _renderMuted();
+  }
+
+  function saveConfig(){
+    getConfig();
+    var g=function(id){ var el=document.getElementById(id); return el?el.classList.contains('on'):false; };
+    cfg.enabled=g('sr-tog-enabled');
+    cfg.related=g('sr-tog-related');
+    cfg.panels=g('sr-tog-panels');
+    cfg.history=g('sr-tog-history');
+    var rd=document.getElementById('sr-recent-days'); if(rd) cfg.recentDays=parseInt(rd.value,10)||7;
+    _persist();
+  }
+
+  function _renderRules(){
+    var box=document.getElementById('sr-rules-list'); if(!box) return;
+    if(!cfg.rules.length){ box.innerHTML='<div style="font-size:11px;color:var(--text2);padding:4px">لا توجد قواعد.</div>'; return; }
+    box.innerHTML=cfg.rules.map(function(r){
+      return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:9px 11px;display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+        '<div style="min-width:0"><div style="font-size:12px;font-weight:800">'+_esc(r.label||r.id)+'</div>'+
+        '<div style="font-size:10px;color:var(--text2);margin-top:2px">عند: <b style="color:#ffd76b">'+_esc(r.trigger.join(', '))+'</b> ← يقترح: '+_esc(r.target.join(', '))+'</div></div>'+
+        '<button class="btn btn-d btn-sm" onclick="SmartRec.removeRule(\''+r.id+'\')">🗑️</button>'+
+      '</div>';
+    }).join('');
+  }
+
+  function _renderMuted(){
+    var box=document.getElementById('sr-muted-list'); if(!box) return;
+    if(!cfg.muted.length){ box.innerHTML='<div style="font-size:11px;color:var(--text2)">لا توجد اقتراحات مكتومة.</div>'; return; }
+    box.innerHTML=cfg.muted.map(function(mk){
+      var lbl=mk;
+      if(mk.indexOf('rule:')===0){ var rid=mk.slice(5); var rr=cfg.rules.find(function(x){return x.id===rid;}); lbl=rr?rr.label:rid; }
+      else if(mk.indexOf('recent:')===0){ lbl='تكرار '+mk.slice(7); }
+      return '<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,80,80,0.1);border:1px solid rgba(255,80,80,0.3);border-radius:20px;padding:3px 10px;font-size:11px">'+
+        _esc(lbl)+' <span style="cursor:pointer;color:#ff6b6b;font-weight:900" onclick="SmartRec.unmute(\''+_esc(mk)+'\')">✕</span></span>';
+    }).join('');
+  }
+
+  function removeRule(id){
+    getConfig();
+    cfg.rules=cfg.rules.filter(function(r){return r.id!==id;});
+    _persist(); _renderRules();
+  }
+  function clearMuted(){ getConfig(); cfg.muted=[]; _persist(); _renderMuted(); }
+  function unmute(mk){ getConfig(); cfg.muted=cfg.muted.filter(function(x){return x!==mk;}); _persist(); _renderMuted(); }
+
+  function addRulePrompt(){
+    var label=prompt('اسم القاعدة (مثال: ملف السكري):'); if(label===null) return;
+    var trig=prompt('كود/أكواد التحليل المُشغِّل (افصل بينها بفاصلة):\nمثال: TSH'); if(trig===null) return;
+    var targ=prompt('كود/أكواد التحاليل المقترحة (افصل بينها بفاصلة):\nمثال: FT3,FT4'); if(targ===null) return;
+    var splt=function(s){ return String(s||'').split(',').map(function(x){return x.trim();}).filter(Boolean); };
+    var tr=splt(trig), tg=splt(targ);
+    if(!tr.length || !tg.length){ try{showNotif('غير مكتمل','يجب إدخال مُشغِّل واحد وهدف واحد على الأقل','error');}catch(e){} return; }
+    getConfig();
+    cfg.rules.push({ id:'r_'+Date.now().toString(36), trigger:tr, target:tg, label:(label||'قاعدة مخصّصة') });
+    _persist(); _renderRules();
+    try{ showNotif('تمت الإضافة','أُضيفت قاعدة اقتراح جديدة','success'); }catch(e){}
+  }
+
+  return {
+    getConfig:getConfig, saveConfig:saveConfig, renderSettingsUI:renderSettingsUI,
+    analyze:analyze, reset:reset,
+    acceptCurrent:acceptCurrent, skipCurrent:skipCurrent, neverCurrent:neverCurrent,
+    removeRule:removeRule, addRulePrompt:addRulePrompt, clearMuted:clearMuted, unmute:unmute
+  };
+})();
+window.SmartRec = SmartRec;
 
 // ── Fix 7: Branch Device Mapping ───────────────────────────
 const TEST_SUBCATS=[
