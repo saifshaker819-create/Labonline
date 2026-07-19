@@ -12723,6 +12723,15 @@ function editPatientFromResults(){
 function saveDraft(){const req=collectResults();if(!req)return;req.status='inprogress';save('requests',requests);showNotif('تم الحفظ','تم حفظ المسودة ✅','success');}
 function finalizeResult(){
   const req=collectResults();if(!req)return;
+  // ── Delta Check: افحص قبل تأكيد النتائج ──────────────────
+  if(window.DeltaCheck && window.DeltaCheck.loadCfg && window.DeltaCheck.loadCfg().enabled){
+    window.DeltaCheck.gatePrint(req.id).then(function(ok){
+      if(ok===false) return; // إعادة/إلغاء → لا يُعتمد
+      req.status='done';
+      save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
+    });
+    return;
+  }
   req.status='done';
   save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
 }
@@ -38122,8 +38131,12 @@ if(window.electronAPI && window.electronAPI.isElectron){
     try{
       var cfg=loadCfg();
       if(!cfg.enabled) return Promise.resolve(true);
-      var rid=reqId || (typeof window.currentReqId!=='undefined'?window.currentReqId:null);
-      var r=(window.requests&&rid)?window.requests.find(function(x){return x.id===rid;}):null;
+      // المتغيرات requests/currentReqId معرّفة بـ let في السكربت الرئيسي،
+      // وهي مشتركة عبر السكربتات لكنها ليست على window. نستخدمها بالاسم المجرّد.
+      var _reqs=(typeof requests!=='undefined'&&Array.isArray(requests))?requests:_allRequests();
+      var _cur=(typeof currentReqId!=='undefined'&&currentReqId)?currentReqId:null;
+      var rid=reqId || _cur;
+      var r=(rid)?_reqs.find(function(x){return x.id===rid;}):null;
       if(!r||!r.results) return Promise.resolve(true);
       var items=[];
       (r.tests||[]).forEach(function(tid){
@@ -38138,7 +38151,7 @@ if(window.electronAPI && window.electronAPI.isElectron){
         // ok=true: لا تجاوز، أو المستخدم اعتمد كل التجاوزات → تابع الطباعة
         // ok=false: المستخدم اختار إعادة/إلغاء لتحليل واحد على الأقل → أوقف
         if(!result.ok){
-          if(typeof window.showNotif==='function') window.showNotif('Delta Check','تم إيقاف الطباعة — راجع النتائج المتجاوزة','warning');
+          if(typeof showNotif==='function') showNotif('Delta Check','تم إيقاف الطباعة — راجع النتائج المتجاوزة','warning');
           return false;
         }
         return true;
