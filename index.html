@@ -4541,117 +4541,95 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           </div>
         </div>
 
-
-        <!-- ٥.١ - Delta Check — فحص الفروقات الذكي -->
-        <div class="st-card" id="stc-deltacheck">
-          <div class="st-card-hdr" onclick="toggleStCard('stc-deltacheck')">
+        <!-- ٥.١ - فحص دلتا الذكي (Delta Check) -->
+        <div class="st-card" id="stc-delta">
+          <div class="st-card-hdr" onclick="toggleStCard('stc-delta')">
             <div style="display:flex;align-items:center;gap:12px">
-              <span style="font-size:22px">🧠</span>
-              <div><div class="st-card-title">Delta Check — فحص الفروقات الذكي</div><div class="st-card-sub">مقارنة النتيجة الحالية بآخر نتيجة سابقة للمريض والتنبيه عند التغيّر الكبير</div></div>
+              <span style="font-size:22px">🔎</span>
+              <div><div class="st-card-title">فحص دلتا الذكي — Delta Check</div><div class="st-card-sub">مقارنة النتيجة الحالية بآخر نتيجة للمريض قبل الاعتماد</div></div>
             </div>
-            <span class="st-card-arrow" id="arr-stc-deltacheck">▼</span>
+            <span class="st-card-arrow" id="arr-stc-delta">▼</span>
           </div>
-          <div class="st-card-body" id="body-stc-deltacheck" style="display:none">
-            <div style="font-size:11px;color:var(--text2);margin-bottom:14px;background:rgba(255,152,0,0.06);border:1px solid rgba(255,152,0,0.25);border-radius:9px;padding:11px">
-              🧠 يقارن البرنامج تلقائياً كل نتيجة (من جهاز HL7/ASTM أو إدخال يدوي) بآخر نتيجة لنفس المريض (برقم الملف الدائم) لنفس التحليل، ويظهر تحذيراً قبل الاعتماد عند تجاوز الحد المسموح.
+          <div class="st-card-body" id="body-stc-delta" style="display:none">
+            <div style="font-size:11px;color:var(--text2);margin-bottom:14px;background:rgba(255,170,0,0.06);border:1px solid rgba(255,170,0,0.25);border-radius:9px;padding:10px">
+              🔎 يقارن البرنامج تلقائياً كل نتيجة رقمية مع آخر نتيجة لنفس المريض (حسب رقم الملف الدائم) لنفس التحليل. إذا تجاوز الفرق الحد المسموح يظهر تحذير قبل الاعتماد — يعمل مع HL7 و ASTM والإدخال اليدوي.
             </div>
 
-            <!-- تفعيل -->
-            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,180,100,0.06);border:1px solid rgba(0,180,100,0.25);border-radius:8px;padding:11px 12px;margin-bottom:14px">
-              <div>
-                <div style="font-size:12px;font-weight:800">تفعيل Delta Check</div>
-                <div style="font-size:10px;color:var(--text2);margin-top:2px">عند التعطيل لا تُجرى أي مقارنة</div>
-              </div>
-              <div class="tog" id="dc-tog-enabled" onclick="DeltaCheck.toggleEnabled(this)"><div class="tog-t"></div></div>
+            <!-- تفعيل عام -->
+            <div style="display:flex;justify-content:space-between;align-items:center;background:rgba(0,180,100,0.06);border:1px solid rgba(0,180,100,0.25);border-radius:8px;padding:10px 12px;margin-bottom:14px">
+              <div><div style="font-size:13px;font-weight:800">تفعيل فحص دلتا</div><div style="font-size:10px;color:var(--text2);margin-top:2px">تشغيل أو إيقاف الميزة بالكامل</div></div>
+              <div class="tog" id="dc-tog-enabled" onclick="this.classList.toggle('on');DeltaCheck.saveConfig()"><div class="tog-t"></div></div>
             </div>
 
-            <!-- نافذة المقارنة + السلوك -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-              <div>
-                <label class="fl" style="font-size:11px;margin-bottom:4px">نافذة المقارنة (أيام)</label>
-                <select class="fc" id="dc-days" style="font-size:12px;font-weight:700" onchange="DeltaCheck.saveFromUI()">
-                  <option value="30">30 يوماً</option>
-                  <option value="90">90 يوماً</option>
-                  <option value="180">180 يوماً</option>
-                  <option value="365">365 يوماً</option>
-                  <option value="9999">بدون حد</option>
-                </select>
-              </div>
-              <div>
-                <label class="fl" style="font-size:11px;margin-bottom:4px">السلوك عند التجاوز</label>
-                <select class="fc" id="dc-action" style="font-size:12px;font-weight:700" onchange="DeltaCheck.saveFromUI()">
-                  <option value="warn">تحذير فقط (يسمح بالاعتماد)</option>
-                  <option value="block">منع الاعتماد حتى التأكيد</option>
-                </select>
-              </div>
+            <!-- عدد أيام المقارنة -->
+            <div class="fg" style="margin-bottom:14px">
+              <label class="fl">📅 نطاق المقارنة (عدد الأيام السابقة)</label>
+              <select class="fc" id="dc-days" onchange="DeltaCheck.saveConfig()">
+                <option value="30">آخر 30 يوماً</option>
+                <option value="90">آخر 90 يوماً</option>
+                <option value="180">آخر 180 يوماً</option>
+                <option value="365" selected>آخر 365 يوماً</option>
+                <option value="0">بدون حد زمني (كل السجل)</option>
+              </select>
             </div>
 
-            <!-- الحد الافتراضي -->
-            <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
-              <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">📏 الحد الافتراضي (لكل التحاليل)</div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <div>
-                  <label class="fl" style="font-size:11px;margin-bottom:4px">نوع الحد</label>
-                  <select class="fc" id="dc-mode" style="font-size:12px" onchange="DeltaCheck.saveFromUI()">
-                    <option value="percent">نسبة مئوية ٪</option>
-                    <option value="absolute">فرق رقمي ثابت</option>
-                  </select>
+            <!-- الوضع الافتراضي للحد -->
+            <div class="fg" style="margin-bottom:14px">
+              <label class="fl">⚖️ نوع الحد الافتراضي</label>
+              <select class="fc" id="dc-default-mode" onchange="DeltaCheck.saveConfig()">
+                <option value="percent" selected>نسبة مئوية للتغير (%)</option>
+                <option value="absolute">فرق رقمي ثابت</option>
+              </select>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <div style="flex:1">
+                  <div style="font-size:10px;color:var(--text2);margin-bottom:3px">نسبة التغير الافتراضية %</div>
+                  <input class="fc" id="dc-default-percent" type="number" min="1" max="100" value="50" onchange="DeltaCheck.saveConfig()">
                 </div>
-                <div>
-                  <label class="fl" style="font-size:11px;margin-bottom:4px">القيمة</label>
-                  <input class="fc" type="number" id="dc-threshold" min="0" step="0.1" value="30" style="font-size:13px;font-weight:700;text-align:center" onchange="DeltaCheck.saveFromUI()">
+                <div style="flex:1">
+                  <div style="font-size:10px;color:var(--text2);margin-bottom:3px">الفرق الرقمي الافتراضي</div>
+                  <input class="fc" id="dc-default-abs" type="number" min="0" step="0.1" value="0" onchange="DeltaCheck.saveConfig()">
                 </div>
               </div>
+              <div style="font-size:10px;color:var(--text2);margin-top:4px">يُطبَّق على أي تحليل ليس له حد خاص في القائمة أدناه.</div>
             </div>
 
-            <!-- قواعد خاصة لكل تحليل -->
-            <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px">
-              <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">🎯 قواعد خاصة لكل تحليل</div>
-              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
-                <select class="fc" id="dc-pt-sel" style="flex:2;min-width:130px;font-size:12px"><option value="">— اختر تحليلاً —</option></select>
-                <select class="fc" id="dc-pt-mode" style="flex:1;min-width:90px;font-size:12px">
-                  <option value="percent">٪ نسبة</option>
-                  <option value="absolute">فرق ثابت</option>
-                </select>
-                <input class="fc" type="number" id="dc-pt-threshold" min="0" step="0.1" placeholder="الحد" style="width:70px;font-size:12px;text-align:center">
-                <button class="btn btn-p btn-sm" onclick="DeltaCheck.addPerTest()">➕ إضافة</button>
-              </div>
-              <div id="dc-pertest-list"></div>
+            <!-- سلوك التحذير -->
+            <div class="fg" style="margin-bottom:16px">
+              <label class="fl">🚦 سلوك التحذير عند التجاوز</label>
+              <select class="fc" id="dc-behavior" onchange="DeltaCheck.saveConfig()">
+                <option value="warn" selected>إظهار تحذير فقط (يمكن الاعتماد)</option>
+                <option value="block">منع الاعتماد حتى يؤكد المستخدم صراحةً</option>
+              </select>
+            </div>
+
+            <!-- حدود مخصّصة لكل تحليل -->
+            <div style="background:rgba(0,212,255,0.04);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:14px;margin-bottom:16px">
+              <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:8px">🎯 حدود مخصّصة لكل تحليل (اختياري)</div>
+              <div style="font-size:10px;color:var(--text2);margin-bottom:10px">حدّد نسبة أو فرقاً ثابتاً لتحاليل معيّنة يطغى على الحد الافتراضي.</div>
+              <div class="srch-box" style="margin-bottom:10px"><span class="srch-ic">🔍</span><input class="srch-inp" id="dc-test-srch" lang="ar" dir="rtl" placeholder="ابحث عن تحليل لإضافة حد خاص..." oninput="DeltaCheck.renderTestSearch(this.value)"></div>
+              <div id="dc-test-search-results" style="max-height:180px;overflow-y:auto;margin-bottom:10px"></div>
+              <div id="dc-per-test-list" style="display:flex;flex-direction:column;gap:8px"></div>
             </div>
 
             <!-- استثناء تحاليل -->
-            <div style="background:rgba(255,60,60,0.04);border:1px solid rgba(255,60,60,0.2);border-radius:10px;padding:12px;margin-bottom:14px">
-              <div style="font-size:12px;font-weight:800;color:#ff8a80;margin-bottom:10px">🚫 استثناء تحاليل من المقارنة</div>
-              <div style="display:flex;gap:6px;margin-bottom:10px">
-                <select class="fc" id="dc-excl-sel" style="flex:1;font-size:12px"><option value="">— اختر تحليلاً —</option></select>
-                <button class="btn btn-s btn-sm" onclick="DeltaCheck.addExcluded()">➕ استثناء</button>
-              </div>
-              <div id="dc-excluded-list"></div>
+            <div style="background:rgba(255,80,80,0.04);border:1px solid rgba(255,80,80,0.22);border-radius:10px;padding:14px;margin-bottom:16px">
+              <div style="font-size:12px;font-weight:800;color:#ff6b6b;margin-bottom:8px">🚫 تحاليل مستثناة من المقارنة</div>
+              <div class="srch-box" style="margin-bottom:10px"><span class="srch-ic">🔍</span><input class="srch-inp" id="dc-excl-srch" lang="ar" dir="rtl" placeholder="ابحث عن تحليل لاستثنائه..." oninput="DeltaCheck.renderExclSearch(this.value)"></div>
+              <div id="dc-excl-search-results" style="max-height:150px;overflow-y:auto;margin-bottom:10px"></div>
+              <div id="dc-excl-list" style="display:flex;flex-wrap:wrap;gap:6px"></div>
             </div>
 
             <!-- سجل الأحداث -->
-            <div class="gc" style="margin-top:0">
-              <div class="gc-hdr" style="display:flex;justify-content:space-between;align-items:center">
-                <div class="gc-title">📋 سجل أحداث Delta Check</div>
+            <div style="background:rgba(160,120,255,0.05);border:1px solid rgba(160,120,255,0.25);border-radius:10px;padding:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <div style="font-size:12px;font-weight:800;color:#b09aff">📋 سجل أحداث فحص دلتا</div>
                 <div style="display:flex;gap:6px">
-                  <button class="btn btn-s" style="font-size:10px;padding:4px 9px" onclick="DeltaCheck.exportLog()">⬇️ تصدير CSV</button>
-                  <button class="btn btn-s" style="font-size:10px;padding:4px 9px;color:#ff6b6b;border-color:rgba(255,60,60,.4)" onclick="DeltaCheck.clearLog()">🗑️ مسح</button>
+                  <button class="btn btn-s btn-sm" onclick="DeltaCheck.exportLog()">📤 تصدير</button>
+                  <button class="btn btn-d btn-sm" onclick="DeltaCheck.clearLog()">🗑️ مسح</button>
                 </div>
               </div>
-              <div class="gc-body" style="padding:0;max-height:300px;overflow:auto">
-                <table style="width:100%;border-collapse:collapse;font-size:11px">
-                  <thead><tr style="background:rgba(255,152,0,.08);position:sticky;top:0">
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">الوقت</th>
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">المستخدم</th>
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">التحليل</th>
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">السابقة</th>
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">الحالية</th>
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">التغيّر</th>
-                    <th style="padding:7px 8px;text-align:right;color:#ffb74d;font-size:10px">القرار</th>
-                  </tr></thead>
-                  <tbody id="dc-log-body"></tbody>
-                </table>
-              </div>
+              <div style="font-size:10px;color:var(--text2);margin-bottom:10px">يُسجَّل: المستخدم، التاريخ والوقت، التحليل، النتيجة السابقة والحالية، الفرق، سبب التجاوز، وقرار المستخدم.</div>
+              <div id="dc-log-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:8px"></div>
             </div>
           </div>
         </div>
@@ -7014,6 +6992,37 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
     <div class="mftr">
       <button class="btn btn-s" onclick="closeModal('m-chat-result')">إلغاء</button>
       <button class="btn btn-p" id="chat-send-confirm-btn" onclick="chatSendConfirm()">📤 إرسال</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Delta Check: مودال التحذير ═══ -->
+<div class="moverlay" id="m-delta-check" style="z-index:99999999">
+  <div class="modal" style="max-width:600px;max-height:92vh;overflow-y:auto;border:2px solid rgba(255,170,0,0.5)">
+    <div class="mhdr" style="background:rgba(255,170,0,0.08)">
+      <div class="mtitle" style="color:#ffaa00">⚠️ تحذير فحص دلتا</div>
+      <button class="mclose" onclick="DeltaCheck.dismiss()">✕</button>
+    </div>
+    <div class="mbody">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px;line-height:1.7">
+        تم اكتشاف اختلاف كبير عن آخر نتيجة لهذا المريض.
+      </div>
+      <div id="dc-modal-summary" style="display:flex;flex-direction:column;gap:1px;margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid var(--border)"></div>
+      <div style="background:rgba(255,170,0,0.06);border:1px solid rgba(255,170,0,0.25);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--text);line-height:1.9">
+        يرجى التأكد من:
+        <div style="margin-top:6px;color:var(--text2)">
+          • هوية العينة.<br>
+          • صحة قراءة الجهاز.<br>
+          • عدم وجود خطأ في الإدخال.<br>
+          • الحاجة لإعادة الفحص.
+        </div>
+      </div>
+    </div>
+    <div class="mftr" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-s" onclick="DeltaCheck.viewPrevious()">📊 عرض النتائج السابقة</button>
+      <button class="btn btn-w" onclick="DeltaCheck.retest()">🔁 إعادة الفحص</button>
+      <button class="btn btn-ok" id="dc-approve-btn" onclick="DeltaCheck.approve()">✅ اعتماد رغم التحذير</button>
+      <button class="btn btn-d" onclick="DeltaCheck.cancel()">✖️ إلغاء</button>
     </div>
   </div>
 </div>
@@ -9674,6 +9683,91 @@ function openPrintModal(rid){
 function getStatusText(s){return{pending:'⏳ معلق',inprogress:'🔄 جاري',done:'✅ مكتمل'}[s]||s;}
 
 // ============================================================
+// النقطة ٢: تحويل الاسم العربي إلى إنجليزي (transliteration)
+// ─────────────────────────────────────────────────────────────
+//   - يُستخدم لتعبئة حقل الاسم الإنجليزي تلقائياً في نموذج المريض.
+//   - يُستخدم أيضاً كبديل عند إرسال اسم المريض للأجهزة إن لم يُحفظ اسم
+//     إنجليزي (للمرضى القدامى) — فلا يُرسل العربي إطلاقاً للأجهزة.
+//   - معزول تماماً: لا يمسّ أي منطق أجهزة أو بروتوكولات.
+// ============================================================
+// قاموس أسماء عراقية/عربية شائعة → تهجئة إنجليزية معتادة (يقلّل التعديل اليدوي)
+const _AR_NAME_DICT={
+  'محمد':'Mohammed','احمد':'Ahmed','أحمد':'Ahmed','علي':'Ali','حسين':'Hussein',
+  'حسن':'Hassan','عبد':'Abd','الله':'Allah','عبدالله':'Abdullah','كريم':'Kareem',
+  'عباس':'Abbas','جعفر':'Jaafar','مصطفى':'Mustafa','مرتضى':'Murtadha','حيدر':'Haider',
+  'زينب':'Zainab','فاطمة':'Fatima','فاطمه':'Fatima','زهراء':'Zahraa','رقية':'Ruqaya',
+  'مريم':'Maryam','نور':'Noor','هدى':'Huda','سارة':'Sara','ساره':'Sara','رنا':'Rana',
+  'ياسر':'Yasir','عمر':'Omar','خالد':'Khalid','ابراهيم':'Ibrahim','إبراهيم':'Ibrahim',
+  'يوسف':'Yousif','عثمان':'Othman','جاسم':'Jasim','كاظم':'Kadhim','صادق':'Sadiq',
+  'باقر':'Baqir','سجاد':'Sajjad','قاسم':'Qasim','رسول':'Rasool','عادل':'Adil',
+  'وليد':'Waleed','سعد':'Saad','فراس':'Firas','ليث':'Laith','مازن':'Mazin',
+  'نجاة':'Najat','سميرة':'Samira','امل':'Amal','أمل':'Amal','وفاء':'Wafaa',
+  'دعاء':'Duaa','آية':'Aya','ايه':'Aya','رغد':'Raghad','تبارك':'Tabarak',
+  'الجبوري':'Al-Jubouri','العبيدي':'Al-Obaidi','الربيعي':'Al-Rubaie','التميمي':'Al-Tamimi',
+  'الساعدي':'Al-Saedi','الموسوي':'Al-Mousawi','الدليمي':'Al-Dulaimi','العزاوي':'Al-Azawi'
+};
+function _arToEnName(ar){
+  const s=String(ar||'').trim();
+  if(!s) return '';
+  // إن كان النص إنجليزياً أصلاً (لا حروف عربية) → أعِده كما هو
+  if(!/[\u0600-\u06FF]/.test(s)) return s;
+  // مطابقة قاموسية كلمةً بكلمة أولاً (للأسماء الشائعة)
+  const _stripTashkeel=w=>w.replace(/[\u064B-\u0652\u0670]/g,'');
+  const _dictWords=s.split(/\s+/).map(function(w){
+    const key=_stripTashkeel(w);
+    if(_AR_NAME_DICT[key]) return _AR_NAME_DICT[key];
+    return null; // غير موجود → يُحوَّل حرفياً لاحقاً
+  });
+  const map={
+    'ا':'a','أ':'a','إ':'i','آ':'aa','ء':'','ؤ':'o','ئ':'e','ٱ':'a',
+    'ب':'b','ت':'t','ث':'th','ج':'j','ح':'h','خ':'kh','د':'d','ذ':'th',
+    'ر':'r','ز':'z','س':'s','ش':'sh','ص':'s','ض':'d','ط':'t','ظ':'z',
+    'ع':'a','غ':'gh','ف':'f','ق':'q','ك':'k','ل':'l','م':'m','ن':'n',
+    'ه':'h','ة':'a','و':'w','ي':'y','ى':'a','ﻻ':'la',
+    'گ':'g','چ':'ch','پ':'p','ژ':'zh','ڤ':'v',
+    'َ':'a','ُ':'u','ِ':'i','ّ':'','ْ':'','ً':'an','ٌ':'un','ٍ':'in','ـ':'',
+    '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'
+  };
+  // معالجة "ال" التعريف في بداية الكلمات → al-
+  const words=s.split(/\s+/).map(function(w,i){
+    // إن وُجدت الكلمة في القاموس، استخدمها مباشرةً
+    if(_dictWords[i]) return _dictWords[i];
+    let hadAl=false, ww=w;
+    if(/^ال/.test(ww) && ww.length>2){ hadAl=true; ww=ww.slice(2); }
+    let out='';
+    for(const ch of ww){ out += (map[ch]!==undefined?map[ch]:ch); }
+    out=out.replace(/[\u0600-\u06FF]/g,''); // أي حرف عربي متبقٍ يُحذف
+    out=(hadAl?'al-':'')+out;
+    // أول حرف كبير
+    out=out.replace(/^(al-)?([a-z])/,function(_,p,c){return (p||'')+c.toUpperCase();});
+    return out;
+  }).filter(Boolean);
+  return words.join(' ').replace(/\s+/g,' ').trim();
+}
+// اسم المريض المُرسل للأجهزة: الإنجليزي المحفوظ إن وُجد، وإلا تحويل حرفي
+// للعربي. لا يُرسل الاسم العربي للأجهزة أبداً (النقطة ٢).
+function _ptDeviceName(pt){
+  if(!pt) return '';
+  const en=String(pt.nameEn||'').trim();
+  if(en) return en.replace(/\|/g,' ').replace(/\^/g,' ');
+  return _arToEnName(pt.name||'').replace(/\|/g,' ').replace(/\^/g,' ');
+}
+// تحديث حقل الاسم الإنجليزي في نموذج المريض من العربي (يحترم التعديل اليدوي)
+function syncWpNameEn(){
+  const arEl=document.getElementById('wp-name');
+  const enEl=document.getElementById('wp-name-en');
+  if(!arEl||!enEl) return;
+  // لا نكتب فوق تعديل يدوي: نُحدّث تلقائياً فقط إن لم يُعدّل المستخدم الحقل يدوياً
+  if(enEl.dataset.manual==='1') return;
+  enEl.value=_arToEnName(arEl.value);
+}
+// وسم الحقل الإنجليزي كمُعدَّل يدوياً عند كتابة المستخدم فيه مباشرةً
+function markWpNameEnManual(){
+  const enEl=document.getElementById('wp-name-en');
+  if(enEl) enEl.dataset.manual = enEl.value.trim()?'1':'0';
+}
+
+// ============================================================
 // WIZARD - NEW PATIENT WITH AUTOCOMPLETE
 // ============================================================
 function startNewPatient(){wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;renderWizStep();openModal('m-wizard');}
@@ -9704,19 +9798,18 @@ function renderWizStep(){
         </div>
       </div>
 
-      <!-- الاسم -->
+      <!-- الاسم (عربي + إنجليزي تلقائي) -->
       <div class="fg" style="margin-bottom:18px;position:relative">
         <label class="fl" style="font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;color:inherit">الاسم الكامل <span class="req">*</span></label>
-        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:nowrap">
-          <!-- النصف الأول: الاسم العربي (يظهر في التقرير) -->
-          <div class="inp-lang-wrap" style="flex:1;min-width:0">
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <!-- النصف العربي -->
+          <div class="inp-lang-wrap" style="flex:1;min-width:150px">
             <button type="button" class="lang-toggle-btn" id="wp-name-ltb" onclick="toggleInputLang('wp-name','wp-name-ltb')" title="تبديل لغة الإدخال">ع</button>
-            <input class="fc" id="wp-name" lang="ar" dir="rtl" inputmode="text" placeholder="الاسم بالعربي..." value="${wizPatient.name||''}" oninput="suggestPatients(this.value);autoFillNameEn(this.value)" autocomplete="off" style="font-size:16px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
+            <input class="fc" id="wp-name" lang="ar" dir="rtl" inputmode="text" placeholder="الاسم بالعربي..." value="${wizPatient.name||''}" oninput="suggestPatients(this.value);syncWpNameEn()" autocomplete="off" style="font-size:17px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit">
           </div>
-          <!-- النصف الثاني: الاسم الإنكليزي (يُرسل للأجهزة) -->
-          <div style="flex:1;min-width:0;display:flex;gap:4px;align-items:stretch">
-            <input class="fc" id="wp-name-en" lang="en" dir="ltr" inputmode="text" placeholder="English name..." value="${wizPatient.nameEn||''}" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" style="flex:1;min-width:0;font-size:16px;font-weight:700;color:inherit">
-            <button type="button" class="btn btn-sm btn-s" id="wp-name-tr-btn" onclick="transliterateNameField()" title="تحويل الاسم العربي إلى إنكليزي" style="flex-shrink:0;padding:0 10px;font-size:12px;font-weight:800;white-space:nowrap">ع→En</button>
+          <!-- النصف الإنجليزي (تلقائي + قابل للتعديل) -->
+          <div style="flex:1;min-width:150px">
+            <input class="fc" id="wp-name-en" lang="en" dir="ltr" inputmode="text" placeholder="English name..." value="${wizPatient.nameEn||''}" oninput="markWpNameEnManual()" autocomplete="off" data-manual="${wizPatient.nameEn?'1':'0'}" style="font-size:16px;font-family:'Cairo',sans-serif;font-weight:700;color:inherit" title="يُملأ تلقائياً من العربي — يمكنك تعديله يدوياً. يُرسَل هذا الاسم للأجهزة.">
           </div>
         </div>
         <div id="pt-suggest-box" class="pt-suggest" style="display:none"></div>
@@ -9749,7 +9842,12 @@ function renderWizStep(){
       <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
         <div class="fg" style="flex:1;min-width:200px;margin-bottom:0">
           <label class="fl" style="font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;color:inherit">الطبيب المحول</label>
-          <select class="fc" id="wp-doctor" style="font-size:17px;font-family:'Cairo',sans-serif;font-weight:700;color:#000000;margin-top:6px;background:var(--bg-input);border:2px solid var(--primary)">
+          <div id="wp-doctor-ac" style="position:relative;margin-top:6px">
+            <input class="fc" id="wp-doctor-search" autocomplete="off" placeholder="اكتب اسم الطبيب للبحث..." value="${(doctors.find(d=>d.id===wizPatient.doctorId)||{}).name||''}" style="font-size:17px;font-family:'Cairo',sans-serif;font-weight:700;color:#000000;background:var(--bg-input);border:2px solid var(--primary)">
+            <div id="wp-doctor-suggest" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:60;max-height:230px;overflow-y:auto;background:var(--bg-input,#fff);border:2px solid var(--primary);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.25)"></div>
+          </div>
+          <!-- select مخفي للحفاظ على التوافق مع منطق الحفظ -->
+          <select id="wp-doctor" style="display:none">
             <option value="">-- بدون طبيب --</option>
             ${doctors.map(d=>`<option value="${d.id}" ${wizPatient.doctorId===d.id?'selected':''}>${d.name}</option>`).join('')}
             <option value="__add__">➕ إضافة طبيب جديد...</option>
@@ -9812,6 +9910,66 @@ function renderWizStep(){
       const docSel=document.getElementById('wp-doctor');
       if(docSel){docSel.onchange=function(){if(this.value==='__add__'){document.getElementById('inline-add-doctor').classList.add('open');this.value='';}else{document.getElementById('inline-add-doctor').classList.remove('open');}};
       }
+      // ── بحث/فلترة الطبيب (autocomplete) ──
+      (function(){
+        const inp=document.getElementById('wp-doctor-search');
+        const box=document.getElementById('wp-doctor-suggest');
+        if(!inp||!box||!docSel) return;
+        function normAr(s){
+          return String(s||'').toLowerCase()
+            .replace(/[أإآا]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه')
+            .replace(/[ًٌٍَُِّْـ]/g,'').replace(/\s+/g,' ').trim();
+        }
+        function pickDoctor(id,name){
+          docSel.value=id;
+          inp.value=name;
+          box.style.display='none';
+          document.getElementById('inline-add-doctor').classList.remove('open');
+        }
+        function render(q){
+          const nq=normAr(q);
+          let list=doctors.filter(d=>!nq||normAr(d.name).includes(nq));
+          let html='';
+          if(!nq){
+            html+='<div class="wp-doc-opt" data-id="" style="padding:9px 12px;cursor:pointer;font-family:\'Cairo\',sans-serif;font-weight:700;border-bottom:1px solid var(--border,#eee);color:var(--text2,#888)">-- بدون طبيب --</div>';
+          }
+          html+=list.map(d=>{const sp=d.specialty||d.spec||'';return `<div class="wp-doc-opt" data-id="${d.id}" style="padding:10px 12px;cursor:pointer;font-family:'Cairo',sans-serif;font-weight:700;border-bottom:1px solid var(--border,#eee);color:var(--text,#000)">${d.name}${sp?` <span style="color:var(--text2,#888);font-weight:600;font-size:13px">— ${sp}</span>`:''}</div>`;}).join('');
+          if(!list.length && nq){
+            html+='<div style="padding:10px 12px;font-family:\'Cairo\',sans-serif;color:var(--text2,#888)">لا يوجد طبيب مطابق</div>';
+          }
+          // خيار إضافة طبيب جديد دائماً
+          html+='<div class="wp-doc-opt" data-id="__add__" style="padding:10px 12px;cursor:pointer;font-family:\'Cairo\',sans-serif;font-weight:800;color:var(--primary);border-top:1px solid var(--border,#eee)">➕ إضافة طبيب جديد...</div>';
+          box.innerHTML=html;
+          box.style.display='block';
+        }
+        inp.addEventListener('focus',function(){ render(inp.value); });
+        inp.addEventListener('input',function(){
+          render(inp.value);
+          // إذا مسح النص → لا طبيب مختار
+          const nq=normAr(inp.value);
+          const exact=doctors.find(d=>normAr(d.name)===nq);
+          docSel.value=exact?exact.id:'';
+        });
+        box.addEventListener('mousedown',function(e){
+          const opt=e.target.closest('.wp-doc-opt');
+          if(!opt) return;
+          e.preventDefault();
+          const id=opt.getAttribute('data-id');
+          if(id==='__add__'){
+            box.style.display='none';
+            inp.value='';
+            docSel.value='';
+            document.getElementById('inline-add-doctor').classList.add('open');
+            const nn=document.getElementById('inline-dr-name'); if(nn) nn.focus();
+            return;
+          }
+          const d=doctors.find(x=>x.id===id);
+          pickDoctor(id, d?d.name:'');
+        });
+        document.addEventListener('mousedown',function(e){
+          if(!e.target.closest('#wp-doctor-ac')) box.style.display='none';
+        });
+      })();
       // تعيين رمز الدولة الافتراضي (محفوظ من آخر اختيار أو العراق)
       const ccSel=document.getElementById('wp-phone-cc');
       if(ccSel && !wizPatient.id){ ccSel.value=localStorage.getItem('medlab_default_phone_cc')||'964'; }
@@ -10082,6 +10240,16 @@ async function selectExistingPatient(pid){
   wizPatient={...p};
   document.getElementById('pt-suggest-box').style.display='none';
   document.getElementById('wp-name').value=p.name;
+  // النقطة ٢: عبّئ حقل الاسم الإنجليزي — المحفوظ إن وُجد، وإلا تحويل حرفي
+  // تلقائي للمرضى القدامى (حتى يُرسَل للأجهزة بالإنجليزي لا العربي)
+  (function(){
+    const enEl=document.getElementById('wp-name-en');
+    if(!enEl) return;
+    const enVal=(p.nameEn&&String(p.nameEn).trim())?String(p.nameEn).trim():_arToEnName(p.name||'');
+    enEl.value=enVal;
+    enEl.dataset.manual=(p.nameEn&&String(p.nameEn).trim())?'1':'0';
+    if(!p.nameEn||!String(p.nameEn).trim()){ wizPatient.nameEn=enVal; }
+  })();
   if(p.birthYear){ const byEl=document.getElementById('wp-birthyear'); if(byEl){ byEl.value=p.birthYear; calcAgeFromBirthYear(); } }
   else if(p.dob){ document.getElementById('wp-dob').value=p.dob; calcAgeFromDob(); }
   else {
@@ -10204,6 +10372,11 @@ function addDoctorInline(){
   opt.value=newDoc.id;opt.textContent=newDoc.name;
   sel.insertBefore(opt,sel.lastElementChild);
   sel.value=newDoc.id;
+  // مزامنة حقل البحث الجديد
+  const _srch=document.getElementById('wp-doctor-search');
+  if(_srch) _srch.value=newDoc.name;
+  const _sug=document.getElementById('wp-doctor-suggest');
+  if(_sug) _sug.style.display='none';
   document.getElementById('inline-add-doctor').classList.remove('open');
   showNotif('تم','تم إضافة الطبيب ✅','success');
 }
@@ -10369,9 +10542,10 @@ function wizNext(){
   }
 
   const name=document.getElementById('wp-name').value.trim();
-  // الاسم الإنكليزي (يُرسل للأجهزة). إن تُرك فارغاً نحوّله تلقائياً من العربي.
-  let nameEn=(document.getElementById('wp-name-en')?.value||'').trim();
-  if(!nameEn && name) nameEn=arabicToLatinName(name);
+  // النقطة ٢: الاسم الإنجليزي — إن تُرك فارغاً نولّده تلقائياً من العربي
+  let nameEn=(document.getElementById('wp-name-en')||{}).value||'';
+  nameEn=String(nameEn).trim();
+  if(!nameEn && name) nameEn=_arToEnName(name);
   // التحقق من الاسم الثلاثي (3 كلمات على الأقل)
   if(!name){
     showNotif('⚠️ حقل مطلوب','يرجى إدخال اسم المريض','error');
@@ -11010,7 +11184,7 @@ function _bcCleanCode(v){ return _bcToLatinDigits(v).replace(/[^0-9A-Za-z]/g,'')
 
 function _genBarcode128Global(text, opts){
   opts = opts || {};
-  var BAR_W = opts.barW || 1.8;   // عرض الوحدة الافتراضي (نفس قيمة ورقة التحاليل)
+  var BAR_W = opts.barW || 1.8;   // عرض الوحدة الثابت (نفس قيمة ورقة التحاليل)
   var h     = opts.height || 38;  // ارتفاع الأشرطة
   var PAD   = (opts.pad!=null) ? opts.pad : 4;
   var C128chars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
@@ -11045,112 +11219,11 @@ function _genBarcode128Global(text, opts){
   codes.forEach(function(c){ C128widths[c].forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); }); });
   STOP.forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); });
   bars.push({w:2,dark:false});
-
-  // ══════════════════════════════════════════════════════════
-  // ⭐ الحل الجذري لعدم قراءة بعض الباركودات (بنفس طول الرقم):
-  //   السبب ليس طول الرقم (كل ٦ أرقام = نفس العرض تماماً) بل *محاذاة
-  //   البكسل عند التنقيط*. عرض الوحدة 1.8px ينتج حواف أشرطة على بكسلات
-  //   كسرية، فتُنعَّم الأشرطة الرفيعة (anti-alias) وتخرج رمادية فيرفضها
-  //   القارئ — وأنماط أرقام معينة (أشرطة رفيعة متجاورة) تتأثر أكثر.
-  //   الحل: نجعل عرض الوحدة *عدداً صحيحاً من البكسلات* وكل الإحداثيات
-  //   صحيحة، فتقع كل الحواف على حدود بكسل → أشرطة سوداء/بيضاء حادة نقية
-  //   تُقرأ دائماً. النِّسَب 1:2:3:4 تبقى مضبوطة تماماً لأنها مضاعفات صحيحة.
-  // ══════════════════════════════════════════════════════════
-  var _modUnits=bars.reduce(function(s,b){return s+b.w;},0); // مجموع الوحدات
-  // 1) حدّد أقصى عرض وحدة يسع ضمن الملصق (إن مُرِّر maxW)
-  if(opts.maxW && _modUnits>0){
-    var _avail=opts.maxW - PAD*2;
-    if(_avail>0){
-      var _fitW=_avail/_modUnits;
-      if(_fitW < BAR_W) BAR_W=_fitW;
-    }
-  }
-  // 2) ⭐ ثبّت عرض الوحدة على عدد صحيح من البكسلات (لا كسور أبداً)
-  //    نأخذ الأرضية (floor) كي لا نتجاوز الملصق، وبحدّ أدنى 1px كي لا
-  //    تختفي الأشرطة الرفيعة على الطابعة الحرارية.
-  BAR_W=Math.max(1, Math.floor(BAR_W));
-
-  var totalW=_modUnits*BAR_W+PAD*2;
+  var totalW=bars.reduce(function(s,b){return s+b.w*BAR_W;},0)+PAD*2;
   var x=PAD, rects='';
-  // إحداثيات وأعراض صحيحة → حواف على حدود بكسل → لا تنعيم
-  bars.forEach(function(b){
-    var bw=b.w*BAR_W;
-    if(b.dark) rects+='<rect x="'+x+'" y="2" width="'+bw+'" height="'+h+'" fill="#000"/>';
-    x+=bw;
-  });
+  bars.forEach(function(b){ if(b.dark) rects+='<rect x="'+x+'" y="2" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>'; x+=b.w*BAR_W; });
   var totalH=h+4;
   return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" preserveAspectRatio="xMidYMid meet" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'</svg>';
-}
-
-// ══════════════════════════════════════════════════════════
-// 🔖 مستخرج الأشرطة الخام (نفس ترميز Code128B أعلاه) — للرسم المباشر
-//    على الكانفاس دون المرور بـ SVG. يعيد مصفوفة {w, dark} لكل شريط.
-//    استخدامه يمنع أي تنعيم (anti-alias) لأن الرسم يصير بمستطيلات
-//    صحيحة على بكسلات صحيحة — الحل الأضمن لقراءة الباركود.
-// ══════════════════════════════════════════════════════════
-function _genBarcode128Bars(text){
-  var C128chars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
-  var C128widths=[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
-    [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
-    [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
-    [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
-    [3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
-    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],
-    [1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],
-    [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
-    [3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],
-    [3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
-    [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],
-    [1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],
-    [1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],
-    [2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],
-    [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
-    [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
-    [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
-    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]];
-  var START_B=104, STOP=[2,3,3,1,1,1,2];
-  var codes=[START_B], check=START_B;
-  for(var i=0;i<text.length;i++){
-    var idx=C128chars.indexOf(text[i]);
-    if(idx<0) continue;
-    codes.push(idx);
-    check+=(i+1)*idx;
-  }
-  codes.push(check%103);
-  var bars=[];
-  codes.forEach(function(c){ C128widths[c].forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); }); });
-  STOP.forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); });
-  bars.push({w:2,dark:false});
-  return bars;
-}
-
-// ══════════════════════════════════════════════════════════
-// 🖨️ رسم الباركود مباشرة على كانفاس (بلا SVG) → PNG حاد بلا تنعيم.
-//    quiet zone = 10 وحدات على كل جانب (متطلب Code128 لضمان القراءة).
-//    unitPx = عرض الوحدة بالبكسل (عدد صحيح) → كل الأشرطة مضاعفات صحيحة.
-//    يعيد dataURL جاهزاً للطباعة الصامتة على الطابعة الحرارية.
-// ══════════════════════════════════════════════════════════
-function _barcodePngDirect(text, opts){
-  opts=opts||{};
-  var unitPx=Math.max(2, Math.round(opts.unitPx||3)); // عرض الوحدة (صحيح)
-  var barsH =Math.max(40, Math.round(opts.height||120));
-  var quiet =10; // وحدات المنطقة الهادئة على كل جانب
-  var bars=_genBarcode128Bars(text);
-  var modUnits=bars.reduce(function(s,b){return s+b.w;},0);
-  var totalUnits=modUnits+quiet*2;
-  var cv=document.createElement('canvas');
-  cv.width = totalUnits*unitPx;   // عرض صحيح بالبكسل
-  cv.height= barsH;
-  var ctx=cv.getContext('2d');
-  ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
-  ctx.fillStyle='#000';
-  var x=quiet*unitPx; // نبدأ بعد المنطقة الهادئة
-  bars.forEach(function(b){
-    var w=b.w*unitPx;
-    if(b.dark) ctx.fillRect(x,0,w,barsH); // مستطيلات على إحداثيات صحيحة
-    x+=w;
-  });
-  return cv.toDataURL('image/png');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -11237,10 +11310,7 @@ function printTubeLabel(reqId, copies, tubeKind){
   //    نتحكّم بالحجم فقط عبر ارتفاع ثابت + حد أقصى للعرض (لا تمطيط).
   // ══════════════════════════════════════════════════════════
   var _barPxH = Math.max(34, Math.round((parseFloat(_lh)||30) * 0.55 * 3.7795));
-  // ⭐ عرض وحدة ثابت = 2px (عدد صحيح) → عند التنقيط ×4 = 8px/وحدة، حواف
-  //    على حدود بكسل صحيحة بلا تنعيم. ٦ أرقام تسع دائماً في الملصق فلا حاجة
-  //    لأي تقييد عرض (maxW) قد يُرقّق الأشرطة.
-  var barcodeSvg = _genBarcode128Global(barcodeId, { barW: 2, height: _barPxH, pad: 4 });
+  var barcodeSvg = _genBarcode128Global(barcodeId, { barW: 1.8, height: _barPxH, pad: 4 });
 
   // HTML الملصق — عبر قالب يقبل شكل الباركود (SVG مضمّن أو صورة نقطية)
   function _buildLabelHTML(_bcMarkup){
@@ -11251,8 +11321,8 @@ function printTubeLabel(reqId, copies, tubeKind){
       +'body{width:'+_lw+'mm;height:'+_lh+'mm;background:#fff;overflow:hidden;'
       +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
       +'padding:0;gap:0.4mm;font-family:Arial,sans-serif}'
-      +'.bc-wrap{display:block;margin:0 auto;text-align:center}'
-      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;height:auto;margin:0 auto;image-rendering:pixelated;image-rendering:crisp-edges}'
+      +'.bc-wrap{display:block;margin:0 auto;text-align:center;max-width:100%}'
+      +'.bc-wrap svg,.bc-wrap img,.bc-img{display:block;height:auto;max-width:100%;margin:0 auto}'
       +'.bc-num{font-family:"Courier New",monospace;font-size:6pt;font-weight:900;'
       +'letter-spacing:1.5px;color:#000;margin-top:0.3mm;text-align:center;line-height:1}'
       +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
@@ -11270,11 +11340,8 @@ function printTubeLabel(reqId, copies, tubeKind){
       +'<div class="pt-name">'+ptName+'</div>'
       +'</body></html>';
   }
-  // النسخة المطبوعة: نُفضّل صورة الباركود المرسومة مباشرة (حواف حادة)،
-  // ونرجع للـ SVG فقط إن تعذّر إنشاؤها.
-  var _htmlBcPng=null;
-  try{ _htmlBcPng=_barcodePngDirect(barcodeId, { unitPx:3, height:Math.max(80,Math.round(_barPxH*2)) }); }catch(e){ _htmlBcPng=null; }
-  var html=_buildLabelHTML(_htmlBcPng ? '<img class="bc-img" src="'+_htmlBcPng+'"/>' : barcodeSvg);
+  // النسخة المبنية على SVG (تُستخدم للطباعة عبر المتصفح/iframe كما كانت)
+  var html=_buildLabelHTML(barcodeSvg);
 
   // تحويل SVG إلى صورة PNG عالية الدقة (لضمان الطباعة الصامتة على الطابعات الحرارية)
   // السبب: بعض تعريفات الطابعات الحرارية لا ترسم SVG المتجه في وضع الطباعة الصامتة،
@@ -11284,17 +11351,15 @@ function printTubeLabel(reqId, copies, tubeKind){
       var img=new Image();
       var blob=new Blob([svgStr],{type:'image/svg+xml;charset=utf-8'});
       var url=URL.createObjectURL(blob);
-      var scale=6; // مضاعف صحيح: عرض الوحدة 2px×6=12px → حواف على حدود بكسل، دقة عالية (~203DPI+)
+      var scale=4; // ~ مناسب لدقة 203DPI
       img.onload=function(){
         try{
           var cv=document.createElement('canvas');
-          cv.width=Math.max(1,Math.round(img.width)*scale);
-          cv.height=Math.max(1,Math.round(img.height)*scale);
+          cv.width=Math.max(1,Math.round(img.width*scale));
+          cv.height=Math.max(1,Math.round(img.height*scale));
           var ctx=cv.getContext('2d');
           ctx.fillStyle='#fff'; ctx.fillRect(0,0,cv.width,cv.height);
           ctx.imageSmoothingEnabled=false;
-          ctx.mozImageSmoothingEnabled=false;
-          ctx.webkitImageSmoothingEnabled=false;
           ctx.drawImage(img,0,0,cv.width,cv.height);
           URL.revokeObjectURL(url);
           cb(cv.toDataURL('image/png'));
@@ -11308,11 +11373,8 @@ function printTubeLabel(reqId, copies, tubeKind){
   // طباعة صامتة مباشرة عبر Electron (بالصورة النقطية)
   var barcodeP=(typeof settings!=='undefined'&&settings.printerBarcode)||'';
   if(window.electronAPI&&window.electronAPI.printContent&&barcodeP){
-    // ⭐ صورة الباركود تُرسم مباشرة على الكانفاس (بلا SVG) → حواف حادة بلا
-    //    تنعيم، قابلة للقراءة دائماً. إن فشلت لأي سبب نرجع للـ SVG كخطة بديلة.
-    var _bcPng=null;
-    try{ _bcPng=_barcodePngDirect(barcodeId, { unitPx:3, height:Math.max(80,Math.round(_barPxH*2)) }); }catch(e){ _bcPng=null; }
-    var _emit=function(pngUrl){
+    _svgToPng(barcodeSvg, function(pngUrl){
+      // إن نجح التحويل نطبع الصورة، وإلا نرجع للـ SVG كخطة بديلة
       var _htmlToPrint = pngUrl
         ? _buildLabelHTML('<img class="bc-img" src="'+pngUrl+'"/>')
         : html;
@@ -11327,9 +11389,7 @@ function printTubeLabel(reqId, copies, tubeKind){
         }).catch(function(e){console.warn('printContent err:',e);
           if(_i+1<_lblCopies) setTimeout(function(){_printCopy(_i+1);},350);});
       })(0);
-    };
-    if(_bcPng){ _emit(_bcPng); }
-    else { _svgToPng(barcodeSvg, _emit); } // خطة بديلة
+    });
     return;
   }
   // fallback: iframe صامت
@@ -11974,6 +12034,8 @@ function vrRemoveTest(tid){
 
 function vrSaveResults(){
   const r=requests.find(x=>x.id===currentReqId);if(!r)return;
+  // اجمع القيم من الحقول أولاً دون كتابتها فوراً (لفحص دلتا)
+  const _staged={};
   r.tests.forEach(tid=>{
     const el=document.getElementById('vr-rv-'+tid);
     if(!el) return;
@@ -11983,11 +12045,26 @@ function vrSaveResults(){
       const manEl=document.getElementById('vr-rv-manual-'+tid);
       v = manEl ? manEl.value : '';
     }
-    if(v!==undefined&&v!=='') r.results[tid]=v;
+    if(v!==undefined&&v!=='') _staged[tid]=v;
   });
-  save('requests',requests);
-  showNotif('تم','تم حفظ النتائج ✅','success');
-  // لا نغلق النافذة حتى يتمكن المستخدم من مواصلة التعديل
+  const _commit=function(){
+    Object.keys(_staged).forEach(function(tid){ r.results[tid]=_staged[tid]; });
+    save('requests',requests);
+    showNotif('تم','تم حفظ النتائج ✅','success');
+    // لا نغلق النافذة حتى يتمكن المستخدم من مواصلة التعديل
+  };
+  // 🔎 Delta Check — قبل حفظ التعديلات
+  try{
+    if(window.DeltaCheck && DeltaCheck.getConfig().enabled){
+      DeltaCheck.guard({
+        patientId:r.patientId, values:_staged, reqId:r.id, source:'edit',
+        onApprove:_commit,
+        onCancel:function(kind){ try{ if(kind!=='retest') showNotif('لم تُحفظ','تم إلغاء الحفظ بسبب فحص دلتا','warning'); }catch(e){} }
+      });
+      return;
+    }
+  }catch(e){ console.warn('[DeltaCheck] vrSave hook',e); }
+  _commit();
 }
 
 function vrSearchTests(q){
@@ -12723,17 +12800,32 @@ function editPatientFromResults(){
 function saveDraft(){const req=collectResults();if(!req)return;req.status='inprogress';save('requests',requests);showNotif('تم الحفظ','تم حفظ المسودة ✅','success');}
 function finalizeResult(){
   const req=collectResults();if(!req)return;
-  // ── Delta Check: افحص قبل تأكيد النتائج ──────────────────
-  if(window.DeltaCheck && window.DeltaCheck.loadCfg && window.DeltaCheck.loadCfg().enabled){
-    window.DeltaCheck.gatePrint(req.id).then(function(ok){
-      if(ok===false) return; // إعادة/إلغاء → لا يُعتمد
-      req.status='done';
-      save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
-    });
-    return;
-  }
-  req.status='done';
-  save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
+  // 🔎 Delta Check — فحص التجاوزات قبل الاعتماد النهائي (إدخال يدوي)
+  const _doFinalize=function(){
+    req.status='done';
+    save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
+  };
+  try{
+    if(window.DeltaCheck && DeltaCheck.getConfig().enabled){
+      // القيم الجاري اعتمادها (رقمية فقط تُقيَّم داخل المحرك)
+      const _vals={};
+      (req.tests||[]).forEach(function(tid){
+        const v=req.results?req.results[tid]:undefined;
+        if(v!==undefined&&v!==null&&v!==''&&v!=='done') _vals[tid]=v;
+      });
+      DeltaCheck.guard({
+        patientId:req.patientId, values:_vals, reqId:req.id, source:'manual',
+        onApprove:_doFinalize,
+        onCancel:function(kind){
+          // لا نعتمد — نُبقي القيم محفوظة كمسودة بدون تحويل الحالة إلى done
+          save('requests',requests);
+          try{ if(kind!=='retest') showNotif('لم تُعتمد','تم إلغاء الاعتماد — القيم محفوظة كمسودة','warning'); }catch(e){}
+        }
+      });
+      return;
+    }
+  }catch(e){ console.warn('[DeltaCheck] finalize hook',e); }
+  _doFinalize();
 }
 // ============================================================
 // 📑 GROUPING FEATURE — توزيع التحاليل يدوياً على صفحات الطباعة
@@ -15431,15 +15523,6 @@ function _doPrintFallback(html, afterCB){
 
 function doPrint(reqId){
   if(reqId) currentReqId=reqId;
-  // ── Delta Check: افحص قبل الطباعة (يغطّي «حفظ وطباعة» وزر «طباعة») ──
-  if(!doPrint._dcPassed && window.DeltaCheck && window.DeltaCheck.loadCfg && window.DeltaCheck.loadCfg().enabled){
-    window.DeltaCheck.gatePrint(currentReqId).then(function(ok){
-      if(ok===false) return; // إعادة/إلغاء → لا تُطبع
-      doPrint._dcPassed=true;
-      try{ doPrint(currentReqId); }finally{ doPrint._dcPassed=false; }
-    });
-    return;
-  }
   const req=requests.find(r=>r.id===currentReqId);
   if(!req) return;
   window._medlabPrinting=true;
@@ -17461,9 +17544,496 @@ function toggleStCard(id){
     if(id==='stc-groups') renderSettingsGroups();
     if(id==='stc-ua-stool') renderUAFieldsEditor();
     if(id==='stc-phones') renderPhoneBook();
-    if(id==='stc-deltacheck' && window.DeltaCheck){ DeltaCheck.populateTestSelects(); DeltaCheck.renderSettings(); }
+    if(id==='stc-delta'){ try{ DeltaCheck.renderSettingsUI(); }catch(e){console.warn('[DeltaCheck] UI',e);} }
   }
 }
+
+// ══════════════════════════════════════════════════════════════
+// 🔎 DELTA CHECK — فحص دلتا الذكي
+//   يقارن كل نتيجة رقمية بآخر نتيجة لنفس المريض (رقم الملف الدائم)
+//   لنفس التحليل ضمن نطاق زمني، ويظهر تحذيراً قبل الاعتماد.
+//   يعمل مع: HL7 / ASTM / الإدخال اليدوي.
+//   وحدة مستقلة تماماً — لا تمسّ أي منطق قائم.
+// ══════════════════════════════════════════════════════════════
+var DeltaCheck = (function(){
+  var CFG_KEY = 'deltaCheckConfig';
+  var LOG_KEY = 'deltaCheckLog';
+
+  // الإعدادات الافتراضية
+  var _defaultCfg = {
+    enabled:false,
+    days:365,
+    defaultMode:'percent',   // 'percent' | 'absolute'
+    defaultPercent:50,
+    defaultAbs:0,
+    behavior:'warn',         // 'warn' | 'block'
+    perTest:{},              // { testId: {mode:'percent'|'absolute', value:Number} }
+    excluded:[]              // [testId, ...]
+  };
+
+  var cfg = null;            // الإعدادات المحمّلة
+  var _pending = null;       // حالة التحذير الحالية (طابور)
+
+  // ── تحميل/حفظ الإعدادات ────────────────────────────────────
+  function _loadCfg(){
+    var saved = {};
+    try{ saved = load(CFG_KEY, {}) || {}; }catch(e){ saved = {}; }
+    cfg = Object.assign({}, _defaultCfg, saved);
+    if(!cfg.perTest || typeof cfg.perTest!=='object') cfg.perTest = {};
+    if(!Array.isArray(cfg.excluded)) cfg.excluded = [];
+    return cfg;
+  }
+  function getConfig(){ if(!cfg) _loadCfg(); return cfg; }
+
+  function _persist(){
+    try{ save(CFG_KEY, cfg); }catch(e){ console.warn('[DeltaCheck] save cfg',e); }
+  }
+
+  // ── أدوات مساعدة ───────────────────────────────────────────
+  function _num(v){
+    if(v===null||v===undefined) return NaN;
+    var s = String(v).trim();
+    if(!s) return NaN;
+    if(s.charAt(0)==='<'||s.charAt(0)==='>') s = s.substring(1).trim();
+    return parseFloat(s);
+  }
+  function _findTest(tid){
+    if(typeof tests==='undefined'||!tests) return null;
+    return tests.find(function(t){return t.id===tid;}) || null;
+  }
+  function _testLabel(tid){
+    var t = _findTest(tid);
+    if(!t) return tid;
+    return (t.nameEn||t.nameShort||t.code||tid);
+  }
+  function _reqDayStr(r){
+    return ((r&&(r.resultDate||r.date))||'')+'';
+  }
+  function _reqTime(r){
+    // ترتيب زمني تقريبي: نستعمل resultDate ثم date
+    var d = _reqDayStr(r).slice(0,10);
+    var t = Date.parse(d);
+    return isNaN(t) ? 0 : t;
+  }
+  function _curUser(){
+    try{
+      if(typeof getSession==='function'){ var s=getSession(); if(s&&s.username) return s.username; }
+    }catch(e){}
+    try{ if(typeof DB!=='undefined'&&DB._user) return DB._user; }catch(e){}
+    return 'غير معروف';
+  }
+
+  // ── العثور على آخر نتيجة سابقة لنفس المريض/التحليل ──────────
+  //   patientId: رقم الملف الدائم — currentReqId يُستثنى.
+  function _findPrevious(patientId, testId, currentReqId){
+    if(typeof requests==='undefined'||!Array.isArray(requests)) return null;
+    var winMs = (cfg.days>0) ? cfg.days*86400000 : 0;
+    var now = Date.now();
+    var candidates = requests.filter(function(r){
+      if(!r || r.patientId!==patientId) return false;
+      if(r.id===currentReqId) return false;
+      if(!r.results) return false;
+      var v = r.results[testId];
+      if(v===undefined||v===null||v==='') return false;
+      if(v==='done') return false; // علامة داخلية وليست قيمة
+      if(isNaN(_num(v))) return false; // نقارن الأرقام فقط
+      if(winMs>0){
+        var rt = _reqTime(r);
+        if(rt>0 && (now-rt)>winMs) return false;
+      }
+      return true;
+    });
+    if(!candidates.length) return null;
+    // الأحدث زمنياً
+    candidates.sort(function(a,b){ return _reqTime(b)-_reqTime(a); });
+    var prev = candidates[0];
+    return { value:_num(prev.results[testId]), rawValue:prev.results[testId], req:prev };
+  }
+
+  // ── حساب الحد المطبَّق لتحليل ──────────────────────────────
+  function _thresholdFor(testId){
+    var pt = cfg.perTest[testId];
+    if(pt && (pt.value>0)) return { mode:pt.mode||cfg.defaultMode, value:parseFloat(pt.value) };
+    if(cfg.defaultMode==='absolute' && cfg.defaultAbs>0) return { mode:'absolute', value:parseFloat(cfg.defaultAbs) };
+    if(cfg.defaultMode==='percent' && cfg.defaultPercent>0) return { mode:'percent', value:parseFloat(cfg.defaultPercent) };
+    // fallback: لو النوع الافتراضي بلا قيمة، جرّب الآخر
+    if(cfg.defaultPercent>0) return { mode:'percent', value:parseFloat(cfg.defaultPercent) };
+    if(cfg.defaultAbs>0) return { mode:'absolute', value:parseFloat(cfg.defaultAbs) };
+    return null;
+  }
+
+  // ── تقييم قيمة واحدة → هل هناك تجاوز؟ ───────────────────────
+  //   يعيد كائن violation أو null.
+  function _evaluate(patientId, testId, currentValue, currentReqId){
+    if(!cfg.enabled) return null;
+    if(cfg.excluded.indexOf(testId)>=0) return null;
+    var cur = _num(currentValue);
+    if(isNaN(cur)) return null; // قيم نوعية غير مشمولة
+    var prev = _findPrevious(patientId, testId, currentReqId);
+    if(!prev) return null;
+    var th = _thresholdFor(testId);
+    if(!th) return null;
+
+    var diff = cur - prev.value;
+    var absDiff = Math.abs(diff);
+    var pct = (prev.value!==0) ? (absDiff/Math.abs(prev.value))*100 : (cur!==0?100:0);
+    var exceeded=false, reason='';
+    if(th.mode==='percent'){
+      exceeded = pct > th.value;
+      reason = 'تجاوز نسبة التغير المسموحة ('+th.value+'%) — التغير الفعلي '+pct.toFixed(1)+'%';
+    } else {
+      exceeded = absDiff > th.value;
+      reason = 'تجاوز الفرق الرقمي المسموح ('+th.value+') — الفرق الفعلي '+_fmt(absDiff);
+    }
+    if(!exceeded) return null;
+    return {
+      testId:testId, testLabel:_testLabel(testId),
+      prev:prev.value, prevRaw:prev.rawValue, prevReq:prev.req,
+      cur:cur, curRaw:currentValue,
+      diff:diff, absDiff:absDiff, pct:pct,
+      mode:th.mode, limit:th.value, reason:reason,
+      patientId:patientId
+    };
+  }
+
+  function _fmt(n){
+    if(!isFinite(n)) return String(n);
+    return (Math.round(n*100)/100).toString();
+  }
+
+  // ── جمع كل التجاوزات لطلب كامل قبل الاعتماد ─────────────────
+  //   values: كائن { testId: value } للنتائج الجاري اعتمادها.
+  function _collectViolations(patientId, values, currentReqId){
+    var out = [];
+    if(!cfg.enabled) return out;
+    Object.keys(values||{}).forEach(function(tid){
+      var v = values[tid];
+      if(v==='done') return;
+      var viol = _evaluate(patientId, tid, v, currentReqId);
+      if(viol) out.push(viol);
+    });
+    return out;
+  }
+
+  // ── سجل الأحداث ────────────────────────────────────────────
+  function _loadLog(){
+    try{ var l = load(LOG_KEY, []); return Array.isArray(l)?l:[]; }catch(e){ return []; }
+  }
+  function _addLog(entry){
+    try{
+      var l = _loadLog();
+      l.unshift(entry);
+      if(l.length>500) l = l.slice(0,500);
+      save(LOG_KEY, l);
+    }catch(e){ console.warn('[DeltaCheck] log',e); }
+  }
+  function _logViolation(v, decision){
+    _addLog({
+      user:_curUser(),
+      datetime:new Date().toISOString(),
+      test:v.testLabel,
+      prev:v.prevRaw,
+      cur:v.curRaw,
+      diff:_fmt(v.absDiff),
+      pct:v.pct.toFixed(1)+'%',
+      reason:v.reason,
+      decision:decision   // 'approved' | 'retest' | 'cancelled'
+    });
+  }
+
+  // ── المودال: عرض التجاوزات ─────────────────────────────────
+  function _showModal(state){
+    _pending = state;
+    var box = document.getElementById('dc-modal-summary');
+    if(box){
+      box.innerHTML = state.violations.map(function(v){
+        return ''+
+          '<div style="background:var(--bg-glass);padding:12px 14px">'+
+            '<div style="font-size:13px;font-weight:800;color:var(--primary);margin-bottom:8px">'+_esc(v.testLabel)+'</div>'+
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:var(--text2)">النتيجة السابقة:</span><span style="font-weight:700">'+_esc(v.prevRaw)+'</span></div>'+
+            '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span style="color:var(--text2)">النتيجة الحالية:</span><span style="font-weight:800;color:#ffaa00">'+_esc(v.curRaw)+'</span></div>'+
+            '<div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--text2)">نسبة التغير:</span><span style="font-weight:800;color:#ff6b6b">'+v.pct.toFixed(0)+'%</span></div>'+
+          '</div>';
+      }).join('');
+    }
+    // زر الاعتماد: في وضع المنع نبقيه فعّالاً (تأكيد صريح) لكن بنص مختلف
+    var apBtn = document.getElementById('dc-approve-btn');
+    if(apBtn){
+      apBtn.textContent = (cfg.behavior==='block') ? '✅ تأكيد الاعتماد صراحةً' : '✅ اعتماد رغم التحذير';
+    }
+    openModal('m-delta-check');
+  }
+  function _esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+  // ── نقطة الدخول العامة: تُستدعى قبل أي اعتماد ───────────────
+  //   ctx = { patientId, values:{tid:val}, reqId, source, onApprove, onCancel }
+  //   إذا لا توجد تجاوزات → onApprove فوراً.
+  //   إذا وُجدت → يعرض المودال ويؤجّل القرار.
+  function guard(ctx){
+    getConfig();
+    if(!cfg.enabled){ ctx.onApprove&&ctx.onApprove(); return; }
+    var viols = [];
+    try{ viols = _collectViolations(ctx.patientId, ctx.values, ctx.reqId); }catch(e){ console.warn('[DeltaCheck] eval',e); }
+    if(!viols.length){ ctx.onApprove&&ctx.onApprove(); return; }
+    _showModal({ violations:viols, ctx:ctx });
+  }
+
+  // ── أزرار المودال ──────────────────────────────────────────
+  function approve(){
+    if(!_pending) return;
+    _pending.violations.forEach(function(v){ _logViolation(v,'approved'); });
+    var ctx = _pending.ctx; _pending=null;
+    closeModal('m-delta-check');
+    ctx.onApprove && ctx.onApprove();
+  }
+  function retest(){
+    if(!_pending) return;
+    _pending.violations.forEach(function(v){ _logViolation(v,'retest'); });
+    var ctx = _pending.ctx; _pending=null;
+    closeModal('m-delta-check');
+    try{ showNotif('إعادة الفحص','تم تسجيل القرار: إعادة الفحص — لم تُعتمد النتائج','warning'); }catch(e){}
+    ctx.onCancel && ctx.onCancel('retest');
+  }
+  function cancel(){
+    if(!_pending){ closeModal('m-delta-check'); return; }
+    _pending.violations.forEach(function(v){ _logViolation(v,'cancelled'); });
+    var ctx = _pending.ctx; _pending=null;
+    closeModal('m-delta-check');
+    ctx.onCancel && ctx.onCancel('cancelled');
+  }
+  function dismiss(){ // زر ✕ = إلغاء
+    cancel();
+  }
+  function viewPrevious(){
+    if(!_pending) return;
+    var v = _pending.violations[0];
+    var pid = v && v.patientId;
+    closeModal('m-delta-check');
+    try{
+      if(pid && typeof showPatientResults==='function'){
+        // إن كان الطلب السابق معروفاً افتح نتائجه، وإلا افتح نتائج المريض
+        if(v.prevReq && typeof openViewResultsModal==='function'){ openViewResultsModal(v.prevReq.id); }
+        else showPatientResults();
+      } else if(typeof showPatientResults==='function'){ showPatientResults(); }
+    }catch(e){ console.warn('[DeltaCheck] viewPrev',e); }
+    // نُعيد فتح التحذير بعد لحظة حتى لا يضيع الطابور
+    var st = _pending;
+    setTimeout(function(){ if(st){ _pending=st; openModal('m-delta-check'); } }, 50);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // واجهة الإعدادات
+  // ══════════════════════════════════════════════════════════
+  function renderSettingsUI(){
+    getConfig();
+    var g = function(id){ return document.getElementById(id); };
+    var togEn = g('dc-tog-enabled'); if(togEn) togEn.classList.toggle('on', !!cfg.enabled);
+    if(g('dc-days')) g('dc-days').value = String(cfg.days);
+    if(g('dc-default-mode')) g('dc-default-mode').value = cfg.defaultMode;
+    if(g('dc-default-percent')) g('dc-default-percent').value = cfg.defaultPercent;
+    if(g('dc-default-abs')) g('dc-default-abs').value = cfg.defaultAbs;
+    if(g('dc-behavior')) g('dc-behavior').value = cfg.behavior;
+    _renderPerTestList();
+    _renderExclList();
+    renderLog();
+  }
+
+  function saveConfig(){
+    getConfig();
+    var g = function(id){ return document.getElementById(id); };
+    if(g('dc-tog-enabled')) cfg.enabled = g('dc-tog-enabled').classList.contains('on');
+    if(g('dc-days')) cfg.days = parseInt(g('dc-days').value)||0;
+    if(g('dc-default-mode')) cfg.defaultMode = g('dc-default-mode').value;
+    if(g('dc-default-percent')) cfg.defaultPercent = parseFloat(g('dc-default-percent').value)||0;
+    if(g('dc-default-abs')) cfg.defaultAbs = parseFloat(g('dc-default-abs').value)||0;
+    if(g('dc-behavior')) cfg.behavior = g('dc-behavior').value;
+    _persist();
+  }
+
+  // بحث التحاليل لإضافة حد خاص
+  function renderTestSearch(q){
+    var box = document.getElementById('dc-test-search-results');
+    if(!box) return;
+    q = (q||'').trim().toLowerCase();
+    if(q.length<1){ box.innerHTML=''; return; }
+    if(typeof tests==='undefined'){ box.innerHTML=''; return; }
+    var res = tests.filter(function(t){
+      if(t.isCalc||t.isSpecialExam) return false;
+      if(cfg.perTest[t.id]) return false;
+      var hay = ((t.nameEn||'')+(t.code||'')+(t.nameShort||'')).toLowerCase();
+      return hay.indexOf(q)>=0;
+    }).slice(0,20);
+    box.innerHTML = res.map(function(t){
+      return '<div onclick="DeltaCheck.addPerTest(\''+t.id+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px" onmouseover="this.style.background=\'rgba(0,212,255,0.08)\'" onmouseout="this.style.background=\'\'"><b>'+_esc(t.nameEn||t.code)+'</b> <span style="color:var(--text2);font-size:10px">'+_esc(t.code||'')+'</span></div>';
+    }).join('') || '<div style="padding:10px;color:var(--text2);font-size:11px">لا نتائج</div>';
+  }
+  function addPerTest(tid){
+    getConfig();
+    cfg.perTest[tid] = { mode:cfg.defaultMode, value:(cfg.defaultMode==='percent'?(cfg.defaultPercent||50):(cfg.defaultAbs||1)) };
+    _persist();
+    var s=document.getElementById('dc-test-srch'); if(s) s.value='';
+    var r=document.getElementById('dc-test-search-results'); if(r) r.innerHTML='';
+    _renderPerTestList();
+  }
+  function updatePerTest(tid, field, val){
+    getConfig();
+    if(!cfg.perTest[tid]) return;
+    if(field==='mode') cfg.perTest[tid].mode = val;
+    if(field==='value') cfg.perTest[tid].value = parseFloat(val)||0;
+    _persist();
+  }
+  function removePerTest(tid){
+    getConfig();
+    delete cfg.perTest[tid];
+    _persist();
+    _renderPerTestList();
+  }
+  function _renderPerTestList(){
+    var box = document.getElementById('dc-per-test-list');
+    if(!box) return;
+    var ids = Object.keys(cfg.perTest);
+    if(!ids.length){ box.innerHTML='<div style="font-size:11px;color:var(--text2);padding:4px">لا توجد حدود خاصة — يُطبَّق الحد الافتراضي على الجميع.</div>'; return; }
+    box.innerHTML = ids.map(function(tid){
+      var c = cfg.perTest[tid];
+      return ''+
+      '<div style="display:flex;align-items:center;gap:8px;background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:8px 10px">'+
+        '<div style="flex:1;font-size:12px;font-weight:700">'+_esc(_testLabel(tid))+'</div>'+
+        '<select class="fc" style="width:auto;padding:4px 8px;font-size:11px" onchange="DeltaCheck.updatePerTest(\''+tid+'\',\'mode\',this.value)">'+
+          '<option value="percent"'+(c.mode==='percent'?' selected':'')+'>%</option>'+
+          '<option value="absolute"'+(c.mode==='absolute'?' selected':'')+'>فرق</option>'+
+        '</select>'+
+        '<input class="fc" type="number" min="0" step="0.1" value="'+c.value+'" style="width:80px;padding:4px 8px;font-size:11px" onchange="DeltaCheck.updatePerTest(\''+tid+'\',\'value\',this.value)">'+
+        '<button class="btn btn-d btn-sm" style="padding:4px 8px" onclick="DeltaCheck.removePerTest(\''+tid+'\')">🗑️</button>'+
+      '</div>';
+    }).join('');
+  }
+
+  // استثناء تحاليل
+  function renderExclSearch(q){
+    var box = document.getElementById('dc-excl-search-results');
+    if(!box) return;
+    q = (q||'').trim().toLowerCase();
+    if(q.length<1){ box.innerHTML=''; return; }
+    if(typeof tests==='undefined'){ box.innerHTML=''; return; }
+    var res = tests.filter(function(t){
+      if(t.isCalc||t.isSpecialExam) return false;
+      if(cfg.excluded.indexOf(t.id)>=0) return false;
+      var hay = ((t.nameEn||'')+(t.code||'')+(t.nameShort||'')).toLowerCase();
+      return hay.indexOf(q)>=0;
+    }).slice(0,20);
+    box.innerHTML = res.map(function(t){
+      return '<div onclick="DeltaCheck.addExcl(\''+t.id+'\')" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);font-size:12px" onmouseover="this.style.background=\'rgba(255,80,80,0.08)\'" onmouseout="this.style.background=\'\'"><b>'+_esc(t.nameEn||t.code)+'</b> <span style="color:var(--text2);font-size:10px">'+_esc(t.code||'')+'</span></div>';
+    }).join('') || '<div style="padding:10px;color:var(--text2);font-size:11px">لا نتائج</div>';
+  }
+  function addExcl(tid){
+    getConfig();
+    if(cfg.excluded.indexOf(tid)<0) cfg.excluded.push(tid);
+    _persist();
+    var s=document.getElementById('dc-excl-srch'); if(s) s.value='';
+    var r=document.getElementById('dc-excl-search-results'); if(r) r.innerHTML='';
+    _renderExclList();
+  }
+  function removeExcl(tid){
+    getConfig();
+    cfg.excluded = cfg.excluded.filter(function(x){return x!==tid;});
+    _persist();
+    _renderExclList();
+  }
+  function _renderExclList(){
+    var box = document.getElementById('dc-excl-list');
+    if(!box) return;
+    if(!cfg.excluded.length){ box.innerHTML='<div style="font-size:11px;color:var(--text2)">لا توجد تحاليل مستثناة.</div>'; return; }
+    box.innerHTML = cfg.excluded.map(function(tid){
+      return '<div style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,80,80,0.1);border:1px solid rgba(255,80,80,0.3);border-radius:20px;padding:4px 10px;font-size:11px;font-weight:700">'+_esc(_testLabel(tid))+' <span style="cursor:pointer;color:#ff6b6b" onclick="DeltaCheck.removeExcl(\''+tid+'\')">×</span></div>';
+    }).join('');
+  }
+
+  // سجل الأحداث
+  function renderLog(){
+    var box = document.getElementById('dc-log-list');
+    if(!box) return;
+    var l = _loadLog();
+    if(!l.length){ box.innerHTML='<div style="font-size:11px;color:var(--text2);padding:6px">لا توجد أحداث مسجّلة بعد.</div>'; return; }
+    var badge = function(d){
+      if(d==='approved') return '<span style="background:rgba(0,180,100,0.15);color:#00c46a;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800">✅ اعتُمدت</span>';
+      if(d==='retest')   return '<span style="background:rgba(255,170,0,0.15);color:#ffaa00;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800">🔁 إعادة فحص</span>';
+      if(d==='device-flag') return '<span style="background:rgba(0,140,255,0.15);color:#4aa8ff;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800">📟 جهاز — للمراجعة</span>';
+      return '<span style="background:rgba(255,80,80,0.15);color:#ff6b6b;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:800">✖️ أُلغيت</span>';
+    };
+    box.innerHTML = l.map(function(e){
+      var dt = '';
+      try{ dt = new Date(e.datetime).toLocaleString('ar'); }catch(x){ dt = e.datetime; }
+      return ''+
+      '<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:9px;padding:10px 12px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'+
+          '<span style="font-size:12px;font-weight:800;color:var(--primary)">'+_esc(e.test)+'</span>'+badge(e.decision)+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--text);line-height:1.8">'+
+          'السابقة: <b>'+_esc(e.prev)+'</b> ← الحالية: <b style="color:#ffaa00">'+_esc(e.cur)+'</b> · الفرق: <b>'+_esc(e.diff)+'</b> ('+_esc(e.pct)+')'+
+        '</div>'+
+        '<div style="font-size:10px;color:var(--text2);margin-top:4px">'+_esc(e.reason)+'</div>'+
+        '<div style="font-size:10px;color:var(--text2);margin-top:4px;display:flex;justify-content:space-between">'+
+          '<span>👤 '+_esc(e.user)+'</span><span>'+_esc(dt)+'</span>'+
+        '</div>'+
+      '</div>';
+    }).join('');
+  }
+  function clearLog(){
+    if(!confirm('مسح كامل سجل أحداث فحص دلتا؟')) return;
+    try{ save(LOG_KEY, []); }catch(e){}
+    renderLog();
+    try{ showNotif('تم','تم مسح سجل فحص دلتا','success'); }catch(e){}
+  }
+  function exportLog(){
+    var l = _loadLog();
+    if(!l.length){ try{ showNotif('تنبيه','لا توجد أحداث للتصدير','warning'); }catch(e){} return; }
+    var rows = [['المستخدم','التاريخ والوقت','التحليل','السابقة','الحالية','الفرق','النسبة','السبب','القرار']];
+    l.forEach(function(e){
+      var dt=''; try{ dt=new Date(e.datetime).toLocaleString('ar'); }catch(x){ dt=e.datetime; }
+      var dec = e.decision==='approved'?'اعتُمدت':(e.decision==='retest'?'إعادة فحص':(e.decision==='device-flag'?'جهاز — للمراجعة':'أُلغيت'));
+      rows.push([e.user,dt,e.test,e.prev,e.cur,e.diff,e.pct,e.reason,dec]);
+    });
+    var csv = '\uFEFF'+rows.map(function(r){ return r.map(function(c){ return '"'+String(c==null?'':c).replace(/"/g,'""')+'"'; }).join(','); }).join('\r\n');
+    try{
+      var blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'delta-check-log-'+new Date().toISOString().slice(0,10)+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+    }catch(e){ console.warn('[DeltaCheck] export',e); }
+  }
+
+  // ── مسار الأجهزة (HL7/ASTM): تقييم صامت + تسجيل + تحذير ──────
+  //   لا يعرض مودالاً حاجباً (النتائج تصل دفعات لا متزامنة)، بل
+  //   يُقيّم القيمة الواردة، وإن تجاوزت الحد سجّلها وأعاد كائن التجاوز
+  //   ليضع عليه المستدعي علامة، مع إظهار تنبيه للفنّي لمراجعتها.
+  function evaluateDevice(patientId, testId, incomingValue, reqId){
+    getConfig();
+    if(!cfg.enabled) return null;
+    var viol=null;
+    try{ viol=_evaluate(patientId, testId, incomingValue, reqId); }catch(e){ return null; }
+    if(!viol) return null;
+    _logViolation(viol, 'device-flag');
+    try{
+      showNotif('⚠️ فحص دلتا',
+        viol.testLabel+': تغيّر كبير عن آخر نتيجة (السابقة '+viol.prevRaw+' ← الحالية '+viol.curRaw+' · '+viol.pct.toFixed(0)+'%) — يرجى المراجعة قبل الطباعة',
+        'warning');
+    }catch(e){}
+    return viol;
+  }
+
+  return {
+    getConfig:getConfig, saveConfig:saveConfig,
+    guard:guard, evaluateDevice:evaluateDevice,
+    approve:approve, retest:retest, cancel:cancel, dismiss:dismiss, viewPrevious:viewPrevious,
+    renderSettingsUI:renderSettingsUI,
+    renderTestSearch:renderTestSearch, addPerTest:addPerTest, updatePerTest:updatePerTest, removePerTest:removePerTest,
+    renderExclSearch:renderExclSearch, addExcl:addExcl, removeExcl:removeExcl,
+    renderLog:renderLog, clearLog:clearLog, exportLog:exportLog
+  };
+})();
+window.DeltaCheck = DeltaCheck;
 
 // ── Fix 7: Branch Device Mapping ───────────────────────────
 const TEST_SUBCATS=[
@@ -25990,125 +26560,6 @@ function _printViaIframe(html, isBarcode){
 // ============================================================
 // TOGGLE INPUT LANG — تبديل لغة حقل الإدخال بزر
 // ============================================================
-// ══════════════════════════════════════════════════════════
-// 🔤 تحويل الاسم العربي إلى إنكليزي (transliteration) — للأجهزة فقط.
-//    التقرير يبقى بالعربي؛ هذا الاسم يُرسل لـ CL-900i/MAGLUMI وأي جهاز
-//    يطلب معلومات المريض. تحويل حرف-بحرف مبسّط مع معالجة أل التعريف
-//    والتاء المربوطة والحركات الشائعة. النتيجة تقريبية لكنها مقبولة
-//    للأجهزة (اسم لاتيني بلا رموز عربية).
-// ══════════════════════════════════════════════════════════
-function arabicToLatinName(str){
-  if(!str) return '';
-  var s=String(str);
-  // إزالة التشكيل (الحركات) والتطويل
-  s=s.replace(/[\u064B-\u0652\u0670\u0640]/g,'');
-
-  // ── قاموس الأسماء العراقية/العربية الشائعة (تهجئة إنكليزية معتادة) ──
-  //    يُطابَق أولاً قبل التحويل الحرفي لنتيجة أدق وأقرب للمألوف.
-  var DICT={
-    'محمد':'Mohammed','احمد':'Ahmed','أحمد':'Ahmed','علي':'Ali','حسين':'Hussein',
-    'حسن':'Hassan','عبد':'Abd','الله':'Allah','عبدالله':'Abdullah','كريم':'Kareem',
-    'خالد':'Khalid','ابراهيم':'Ibrahim','إبراهيم':'Ibrahim','مصطفى':'Mustafa',
-    'يوسف':'Yousif','عمر':'Omar','عثمان':'Othman','صالح':'Salih','سالم':'Salim',
-    'كاظم':'Kadhim','جعفر':'Jaafar','عباس':'Abbas','جاسم':'Jassim','قاسم':'Qasim',
-    'ستار':'Sattar','جبار':'Jabbar','رحيم':'Raheem','رزاق':'Razzaq','حميد':'Hameed',
-    'مجيد':'Majeed','سعد':'Saad','سعيد':'Saeed','وليد':'Waleed','ماجد':'Majid',
-    'فاطمة':'Fatima','زينب':'Zainab','نور':'Noor','هدى':'Huda','سارة':'Sara',
-    'مريم':'Mariam','رقية':'Ruqaya','زهراء':'Zahraa','بتول':'Batool','شهد':'Shahad',
-    'رنا':'Rana','دعاء':'Duaa','اسراء':'Israa','رغد':'Raghad','ايه':'Aya','آية':'Aya',
-    'مروة':'Marwa','نرجس':'Narjis','بان':'Ban','تبارك':'Tabarak','فرح':'Farah',
-    'ياسين':'Yassin','طارق':'Tariq','باسم':'Basim','عادل':'Adil','عامر':'Amir',
-    'فراس':'Firas','ثائر':'Thair','رعد':'Raad','مازن':'Mazin','هيثم':'Haitham',
-    'ليث':'Laith','زيد':'Zaid','مهند':'Muhannad','اياد':'Ayad','غيث':'Ghaith',
-    'الجبوري':'Al-Jubouri','العبيدي':'Al-Obaidi','الدليمي':'Al-Dulaimi',
-    'التميمي':'Al-Tamimi','الزيدي':'Al-Zaidi','الساعدي':'Al-Saedi','الربيعي':'Al-Rubaie'
-  };
-
-  var map={
-    'ا':'a','أ':'a','إ':'i','آ':'aa','ٱ':'a',
-    'ب':'b','ت':'t','ث':'th','ج':'j','ح':'h','خ':'kh',
-    'د':'d','ذ':'dh','ر':'r','ز':'z','س':'s','ش':'sh',
-    'ص':'s','ض':'d','ط':'t','ظ':'z','ع':'a','غ':'gh',
-    'ف':'f','ق':'q','ك':'k','ل':'l','م':'m','ن':'n',
-    'ه':'h','و':'o','ي':'i','ى':'a','ة':'a','ء':'','ؤ':'o','ئ':'i',
-    'پ':'p','چ':'ch','ژ':'zh','گ':'g','ک':'k','ی':'i'
-  };
-
-  var words=s.trim().split(/\s+/);
-  var out=words.map(function(w){
-    if(!w) return '';
-    // مطابقة القاموس أولاً (بالكلمة كاملة)
-    if(DICT[w]) return DICT[w];
-    // أل التعريف في بداية الكلمة → "Al-"
-    var prefix='';
-    if(w.length>2 && w.charAt(0)==='ا' && w.charAt(1)==='ل'){
-      prefix='Al-';
-      w=w.slice(2);
-      if(DICT['ال'+w]) return DICT['ال'+w];
-    }
-    var r='';
-    for(var i=0;i<w.length;i++){
-      var ch=w.charAt(i);
-      r += (map[ch]!==undefined ? map[ch] : ch);
-    }
-    if(!r) return prefix||'';
-    // أول حرف كبير
-    r=r.charAt(0).toUpperCase()+r.slice(1);
-    return prefix?prefix+r:r;
-  }).filter(Boolean);
-  return out.join(' ').replace(/\s+/g,' ').trim();
-}
-
-// زرّ التحويل في واجهة إدخال المريض: يملأ حقل الإنكليزي من العربي
-function transliterateNameField(){
-  var ar=document.getElementById('wp-name');
-  var en=document.getElementById('wp-name-en');
-  if(!ar||!en) return;
-  var val=(ar.value||'').trim();
-  if(!val){ showNotif('تنبيه','أدخل الاسم بالعربي أولاً','warning'); ar.focus(); return; }
-  en.value=arabicToLatinName(val);
-  en._autoFilled=true;   // آخر قيمة أتت من التحويل التلقائي
-  en.focus();
-}
-
-// ══════════════════════════════════════════════════════════
-// 🔤 تحويل تلقائي للاسم الإنكليزي أثناء الكتابة بالعربي.
-//    يُحدّث الحقل الإنكليزي مباشرةً ما لم يكن المستخدم قد عدّله يدوياً
-//    (عندها نحترم تعديله ولا نكتب فوقه). يُستدعى من oninput للحقل العربي.
-// ══════════════════════════════════════════════════════════
-function autoFillNameEn(arVal){
-  var en=document.getElementById('wp-name-en');
-  if(!en) return;
-  var cur=(en.value||'');
-  // إن كان الحقل فارغاً أو محتواه ناتجاً عن تحويل تلقائي سابق → حدّثه.
-  // إن عدّله المستخدم يدوياً (لا يطابق آخر تحويل) → لا نلمسه.
-  if(cur==='' || en._autoFilled && cur===(en._lastAuto||'')){
-    var out=arabicToLatinName((arVal||'').trim());
-    en.value=out;
-    en._autoFilled=true;
-    en._lastAuto=out;
-  }
-}
-
-// عند تعديل الحقل الإنكليزي يدوياً: أوقف الكتابة التلقائية فوقه
-document.addEventListener('input',function(e){
-  if(e.target && e.target.id==='wp-name-en'){
-    if(e.target.value!==(e.target._lastAuto||'')) e.target._autoFilled=false;
-  }
-},true);
-
-// ══════════════════════════════════════════════════════════
-// 🔤 الاسم المُرسل للأجهزة: إنكليزي دائماً.
-//    الأولوية: nameEn المحفوظ → تحويل تلقائي من الاسم العربي.
-//    يُنظَّف من فواصل HL7 (| و ^) لتجنّب كسر الرسالة.
-// ══════════════════════════════════════════════════════════
-function _ptDeviceName(pt){
-  if(!pt) return '';
-  var en=(pt.nameEn||'').trim();
-  if(!en) en=arabicToLatinName(pt.name||'');
-  return en.replace(/\|/g,' ').replace(/\^/g,' ').trim();
-}
-
 function toggleInputLang(inputId, btnId){
   var el  = document.getElementById(inputId);
   var btn = document.getElementById(btnId);
@@ -28630,7 +29081,7 @@ async function _pushResultsToDeviceLocal(_remote){
   const pt=patients.find(p=>p.id===req.patientId)||{};
 
   // بيانات المريض (نفس صيغة الاستعلام: name/gender/birth)
-  // ⭐ الاسم يُرسل بالإنكليزي دائماً (لا العربي)
+  // ⭐ النقطة ٢: يُرسَل الاسم بالإنجليزي فقط للأجهزة (لا العربي)
   const _pid={
     name:_ptDeviceName(pt),
     gender:(pt.gender==='أنثى'||/^f/i.test(pt.gender||''))?'F':((pt.gender==='ذكر'||/^m/i.test(pt.gender||''))?'M':''),
@@ -29358,49 +29809,41 @@ async function lisHandleHl7Query(info){
     if(pt) lisAddLog('info','👤 المريض: '+(pt.name||pt.id)+' (id='+pt.id+', barcode='+(pt.barcode||'-')+')');
     else   lisAddLog('warn','⚠️ لا مريض بـ SID='+sid);
 
-    // ابحث عن الطلب المرتبط
-    let req = null;
-    // ⭐ نجمع كل طلبات المريض غير المنتهية بتاريخ اليوم (مو أحدث طلب فقط).
-    //    السبب: المريض قد يملك عدة طلبات (LH بطلب، HbA1c بطلب آخر) وكل جهاز
-    //    يستعلم بنفس رقم المريض؛ لازم يرى الجهاز تحاليله أينما كانت. الفلترة
-    //    الصارمة (pushDevice) لاحقاً تضمن أن كل جهاز يأخذ تحاليله فقط.
-    const _todayStr=new Date().toISOString().split('T')[0];
-    let reqList=[];
+    // ── ابحث عن كل طلبات المريض المرتبطة (لا طلب واحد فقط) ──────────────
+    // ⭐ الإصلاح الجذري (النقطة ١): المريض قد يملك أكثر من طلب مفتوح
+    //    (مثل LH في طلب وHbA1c في طلب آخر). كل الأجهزة تستعلم بنفس رقم
+    //    المريض كـ SID، لذا يجب أن نجمع تحاليل *جميع* طلباته غير المنتهية،
+    //    لا أحدث طلب فقط — وإلا يرى الجهاز طلباً لا يخصّه فيرد "لا يوجد".
+    let reqList = [];
     if(typeof requests!=='undefined' && requests.length){
       if(pt){
-        const ptReqs = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
-        // طلبات اليوم غير المنتهية أولاً
-        let sel = ptReqs.filter(r => String(r.date||'').slice(0,10)===_todayStr && r.status!=='done');
-        // احتياط: إن لم توجد طلبات اليوم غير منتهية، خذ طلبات اليوم كلها
-        if(!sel.length) sel = ptReqs.filter(r => String(r.date||'').slice(0,10)===_todayStr);
-        // احتياط أخير: أحدث طلب (السلوك القديم) كي لا نفقد أي حالة
-        if(!sel.length && ptReqs.length){
-          sel = [ptReqs.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0]];
+        reqList = requests.filter(r =>
+          (_match(r.patientId,pt.id) || _match(r.ptId,pt.id)) && r.status!=='done'
+        );
+        // إن كانت كل طلبات المريض منتهية، اسمح بأحدثها للتوافق مع إعادة الطلب
+        if(!reqList.length){
+          const allDone = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
+          if(allDone.length) reqList = [ allDone.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] ];
         }
-        reqList = sel;
-        if(ptReqs.length) lisAddLog('info','📋 طلبات المريض: '+ptReqs.length+' — المختارة: '+reqList.length);
+        if(reqList.length) lisAddLog('info','📋 طلبات المريض غير المنتهية: '+reqList.length);
       }
       if(!reqList.length){
         const _r = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
-        if(_r) reqList=[_r];
+        if(_r) reqList = [_r];
       }
     }
-    if(reqList.length) lisAddLog('info','📋 الطلبات: '+reqList.map(r=>r.id||'-').join(', '));
-    else    lisAddLog('warn','⚠️ لا طلب للعينة '+sid);
+    // احتفظ بمرجع أول طلب لأغراض السجل/الـ PID فقط
+    const req = reqList[0] || null;
+    if(reqList.length){
+      const _totTests = reqList.reduce((n,r)=>n+((r.tests||[]).length),0);
+      lisAddLog('info','📋 عدد الطلبات='+reqList.length+' — إجمالي التحاليل='+_totTests);
+    } else {
+      lisAddLog('warn','⚠️ لا طلب للعينة '+sid);
+    }
 
-    // ── دمج تحاليل كل الطلبات المختارة في قائمة واحدة (بدون تكرار) ──
-    const _mergedTests=[];
-    const _seenTid=new Set();
-    reqList.forEach(function(rq){
-      (rq.tests||[]).forEach(function(tid){
-        if(!_seenTid.has(tid)){ _seenTid.add(tid); _mergedTests.push(tid); }
-      });
-    });
-    req = reqList.length ? { tests:_mergedTests } : null;
-
-    if(req && req.tests && req.tests.length){
+    if(reqList.length){
       // بيانات المريض للـ PID (اسم/جنس/ميلاد)
-      // ⭐ الاسم يُرسل بالإنكليزي دائماً (لا العربي) لكل جهاز يطلب المعلومات
+      // ⭐ النقطة ٢: يُرسَل الاسم بالإنجليزي فقط للأجهزة (لا العربي)
       const _pid = pt ? {
         name:  _ptDeviceName(pt),
         gender:(pt.gender==='أنثى'||/^f/i.test(pt.gender||''))?'F':((pt.gender==='ذكر'||/^m/i.test(pt.gender||''))?'M':''),
@@ -29420,7 +29863,12 @@ async function lisHandleHl7Query(info){
       // لهذا الجهاز (سلوك متسق لأي جهاز). غير ذلك: نُبقي التوافق القديم.
       const _strictFilter = _isSnibeReq || _hasAssigned;
 
-      req.tests.forEach(tid => {
+      // منع إرسال نفس التحليل مرتين إن تكرر بين طلبات المريض
+      const _sentCodes = new Set();
+
+      // ⭐ نمرّ على تحاليل *كل* طلبات المريض غير المنتهية
+      reqList.forEach(_rq => {
+        (_rq.tests||[]).forEach(tid => {
         const t = (typeof tests!=='undefined'?tests:[]).find(x=>x.id===tid||x.code===tid);
         if(!t){ lisAddLog('warn','⚠️ تحليل مفقود: '+tid); return; }
         let devCode = t.code || t.name || '';
@@ -29444,7 +29892,15 @@ async function lisHandleHl7Query(info){
         } else {
           lisAddLog('warn','⚠️ '+(t.code||t.name)+' → لا يوجد ربط (mapping) → سيُرسل بالاسم بلا كود رقمي');
         }
+        // منع التكرار: نفس الكود (والقناة) لا يُرسل مرتين
+        const _dedupKey = String(devCode).toUpperCase()+'|'+String(channel);
+        if(_sentCodes.has(_dedupKey)){
+          lisAddLog('info','⏭ '+(t.code||t.name)+' → مكرر بين الطلبات — تجاهُل');
+          return;
+        }
+        _sentCodes.add(_dedupKey);
         testsToSend.push({ code: devCode, name: t.name||devCode, channel: channel, _pid: _pid });
+        });
       });
     }
   } catch(e){
@@ -29495,26 +29951,41 @@ async function lisHandleC111Query(info){
     if(pt) lisAddLog('info','👤 المريض: '+(pt.name||pt.id));
     else   lisAddLog('warn','⚠️ لا مريض بـ SID='+sid);
 
-    let req = null;
+    // ⭐ الإصلاح الجذري (النقطة ١): اجمع كل طلبات المريض غير المنتهية
+    let reqList = [];
     if(typeof requests!=='undefined' && requests.length){
       if(pt){
-        const ptReqs = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
-        req = ptReqs.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] || null;
+        reqList = requests.filter(r =>
+          (_match(r.patientId,pt.id) || _match(r.ptId,pt.id)) && r.status!=='done'
+        );
+        if(!reqList.length){
+          const allDone = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
+          if(allDone.length) reqList = [ allDone.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] ];
+        }
       }
-      if(!req){
-        req = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
+      if(!reqList.length){
+        const _r = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
+        if(_r) reqList = [_r];
       }
     }
-    if(req) lisAddLog('info','📋 الطلب: '+(req.id||'-')+' تحاليل='+((req.tests||[]).length));
-    else    lisAddLog('warn','⚠️ لا طلب للعينة '+sid+' — سيُرد Z (لا طلبات)');
+    const req = reqList[0] || null;
+    if(reqList.length){
+      const _totTests = reqList.reduce((n,r)=>n+((r.tests||[]).length),0);
+      lisAddLog('info','📋 عدد الطلبات='+reqList.length+' — إجمالي التحاليل='+_totTests);
+    } else {
+      lisAddLog('warn','⚠️ لا طلب للعينة '+sid+' — سيُرد Z (لا طلبات)');
+    }
 
-    // 🩸 هل يوجد تعارض تيوبين فعلاً (تراكمي + سيرم معاً)؟
-    const _sp = _c111SplitReqTests(req);
-    const _reqNeedsSplit = (_sp.wb.length>0 && _sp.serum.length>0);
+    // 🩸 هل يوجد تعارض تيوبين فعلاً (تراكمي + سيرم معاً)؟ — نجمع عبر كل الطلبات
+    let _wbTot=0, _serumTot=0;
+    reqList.forEach(_rq=>{ const _s=_c111SplitReqTests(_rq); _wbTot+=_s.wb.length; _serumTot+=_s.serum.length; });
+    const _reqNeedsSplit = (_wbTot>0 && _serumTot>0);
     if(_reqNeedsSplit) lisAddLog('astm','🩸 الطلب يحتاج تيوبين — تيوب '+(_isWbTube?'EDTA (تراكمي)':'سيرم')+' الآن');
 
-    if(req && req.tests && req.tests.length){
-      req.tests.forEach(tid => {
+    if(reqList.length){
+      const _sentHac = new Set();
+      reqList.forEach(_rq => {
+        (_rq.tests||[]).forEach(tid => {
         const t = (typeof tests!=='undefined'?tests:[]).find(x=>x.id===tid||x.code===tid);
         if(!t){ lisAddLog('warn','⚠️ تحليل مفقود: '+tid); return; }
         // 🩸 فصل التيوبين: تيوب EDTA يأخذ تحاليل الهول بلود فقط،
@@ -29536,11 +30007,17 @@ async function lisHandleC111Query(info){
         if(!hac && t.code && /^\d+$/.test(String(t.code).trim())) hac = String(t.code).trim();
 
         if(hac){
-          testsToSend.push({ code: hac });
-          lisAddLog('info','🔗 '+(t.code||t.name)+' → HAC '+hac);
+          if(_sentHac.has(hac)){
+            lisAddLog('info','⏭ '+(t.code||t.name)+' → HAC '+hac+' مكرر بين الطلبات — تجاهُل');
+          } else {
+            _sentHac.add(hac);
+            testsToSend.push({ code: hac });
+            lisAddLog('info','🔗 '+(t.code||t.name)+' → HAC '+hac);
+          }
         } else {
           lisAddLog('warn','⚠️ '+(t.code||t.name)+' → لا يوجد كود رقمي (HAC). أضِف رقم القناة في جدول الربط.');
         }
+        });
       });
     }
   } catch(e){
@@ -29820,9 +30297,9 @@ function _c111RoundValue(rawVal, rule){
   const num=parseFloat(m[1]);
   if(!isFinite(num)) return s;
   const neg=num<0;
-  // 🩸 HbA1c: مرتبة عشرية واحدة فقط (7.34 → 7.3 ، 7 → 7)
+  // 🩸 HbA1c: حذف ما بعد الخانة العشرية الأولى (بلا تقريب) — 6.55 → 6.5 ، 7 → 7
   if(rule==='hba1c1dp'){
-    const r1=Math.round(Math.abs(num)*10)/10;
+    const r1=Math.trunc(Math.abs(num)*10)/10;
     return (neg?'-':'')+String(r1);
   }
   const absTrunc=Math.trunc(Math.abs(num));    // حذف الكسور: 107.12 → 107
@@ -30167,6 +30644,16 @@ function cbcFlush(sampleId){
       var _lastPrint=_cbcAutoPrintLog[_autoCBCReqId]||0;
       if(_now-_lastPrint>=60000){
         _cbcAutoPrintLog[_autoCBCReqId]=_now;
+        // بما أن البرنامج يطبع CBC تلقائياً — نعتبر الطلب مكتملاً ومطبوعاً
+        try{
+          targetReq.status='done';
+          targetReq.printed=true;
+          if(!targetReq.resultDate) targetReq.resultDate=new Date().toISOString().split('T')[0];
+          targetReq._updatedAt=Date.now();
+          if(typeof save==='function') save('requests',requests);
+          if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(_){} }
+          if(typeof renderRequests==='function'){ try{ renderRequests(); }catch(_){} }
+        }catch(_){}
         setTimeout(function(){ printCBCFromDevice(_autoCBCReqId); }, 800);
       }
     }
@@ -30577,6 +31064,31 @@ function _lisIngestFlush(){
   try{ lisRenderMiniLog(); }catch(_){}
 }
 function lisIngestResult(result){
+  // ── النقطة ٣: HbA1c بمرتبة عشرية واحدة فقط — لأي جهاز ──────────────
+  // المطلوب: حذف ما بعد الخانة العشرية الأولى (6.55 → 6.5 ، 6.5 → 6.5).
+  // يُطبَّق مركزياً هنا فيشمل كل البروتوكولات (HL7/ASTM/CSV). آمن ومتوافق:
+  // مسار c111 قد يكون طبّقه مسبقاً، وإعادة التطبيق لا تُغيّر القيمة.
+  try{
+    const _dc=String(result.deviceCode||'').toUpperCase().replace(/\s/g,'');
+    const _mc=String(result.medlabCode||'').toUpperCase().replace(/\s/g,'');
+    const _isHbA1c=['HBA1C','A1C','HB-A1C','HBA1'].includes(_dc)||
+                   ['HBA1C','A1C','HB-A1C','HBA1'].includes(_mc);
+    if(_isHbA1c){
+      const _s=String(result.value==null?'':result.value).trim();
+      const _m=_s.match(/^(-?)(\d+)(?:\.(\d+))?$/); // أرقام صريحة فقط
+      if(_m){
+        const _sign=_m[1]||'';
+        const _int=_m[2];
+        const _frac=_m[3]||'';
+        // حذف ما بعد الخانة العشرية الأولى (بلا تقريب): 6.55 → 6.5
+        const _val=_frac ? (_sign+_int+'.'+_frac.charAt(0)) : (_sign+_int);
+        if(_val!==_s){
+          lisAddLog('astm','⚙️ HbA1c → مرتبة عشرية واحدة: '+_s+' → '+_val);
+          result.value=_val;
+        }
+      }
+    }
+  }catch(_){}
   lisResults.unshift(result);
   lisAddLog('ok','نتيجة: '+result.deviceCode+'='+result.value+' | SID:'+result.sampleId);
 
@@ -30618,37 +31130,40 @@ function _lisMatchReqInList(reqs, res, ptsList){
   if(!sid) return undefined;
   const sidNum=sid.replace(/[^0-9]/g,'');
 
-  // ⭐ هل يحتوي الطلب فعلاً على التحليل الوارد من الجهاز؟
-  //    يُستخدم لترجيح الطلب الصحيح عند وجود عدة طلبات لنفس المريض
-  //    (مثال: طلب LH منفصل عن طلب HbA1c — كلاهما بنفس patientId).
-  //    لا يغيّر أي مطابقة قائمة؛ فقط يضيف أفضلية للطلب الحاوي للتحليل.
-  const _incoming=String(res.medlabCode||res.deviceCode||'').toUpperCase().replace(/[-\s]+/g,'');
-  const _allTestsM=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
-  function _reqHasTest(r){
-    if(!_incoming||!Array.isArray(r.tests)||!r.tests.length) return false;
-    // نتيجة محفوظة مسبقاً بهذا الكود → الطلب يخص هذا التحليل
-    if(r.results){
-      for(const k in r.results){ if(String(k).toUpperCase().replace(/[-\s]+/g,'')===_incoming) return true; }
-    }
-    return r.tests.some(function(tid){
-      const tidUp=String(tid||'').toUpperCase().replace(/[-\s]+/g,'');
-      if(tidUp===_incoming) return true;
-      const t=_allTestsM.find(function(x){return x.id===tid||x.code===tid;});
-      if(!t) return false;
-      const c1=String(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
-      const c2=String(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
-      const c3=String(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
-      // ربط الجهاز (mapping) — الكود القادم قد يكون deviceCode مربوطاً بهذا التحليل
-      const _map=(typeof lisMappings!=='undefined'?lisMappings:[]).find(function(m){
-        const dc=String(m.deviceCode||'').toUpperCase().replace(/[-\s]+/g,'');
-        const ml=String(_lisMedlabCode(m)||'').toUpperCase().replace(/[-\s]+/g,'');
-        return (dc&&dc===_incoming)&&(ml===c1||ml===c2||ml===c3);
-      });
-      if(_map) return true;
-      return c1===_incoming||c2===_incoming||c3===_incoming;
-    });
+  // ── مساعد (النقطة ١): هل يحتوي هذا الطلب على التحليل القادم من الجهاز؟ ──
+  //   نعيد: 2 = يحتوي التحليل وخانته ما زالت فارغة (الأفضل)
+  //         1 = يحتوي التحليل لكن مُدخل مسبقاً
+  //         0 = لا يحتوي التحليل إطلاقاً
+  // هذا هو جوهر منع الخلط: نتيجة LH يجب أن تذهب للطلب الذي طلب LH فعلاً،
+  // لا لأحدث طلب زمنياً للمريض نفسه.
+  function _reqTestFit(r){
+    try{
+      const code=(res.medlabCode||res.deviceCode||'').toUpperCase();
+      if(!code) return 0;
+      const codeNorm=code.replace(/[-\s]+/g,'');
+      const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+      const reqTests=Array.isArray(r.tests)?r.tests:[];
+      let matchedKey=null;
+      for(const tid of reqTests){
+        const tidUp=String(tid||'').toUpperCase();
+        const tidNorm=tidUp.replace(/[-\s]+/g,'');
+        // مطابقة مباشرة على كود/معرّف التحليل داخل الطلب
+        if(tidUp===code||tidNorm===codeNorm){ matchedKey=tid; break; }
+        // مطابقة عبر بيانات التحليل (code / nameShort / nameEn / id)
+        const t=_allTests.find(x=>x.id===tid||x.code===tid);
+        if(t){
+          const tc=(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+          const tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+          const tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+          const tid2=(t.id||'').toUpperCase();
+          if(tc===codeNorm||tns===codeNorm||tne===codeNorm||tid2===code){ matchedKey=tid; break; }
+        }
+      }
+      if(!matchedKey) return 0;
+      const filled=r.results && (r.results[matchedKey]!=null && r.results[matchedKey]!=='');
+      return filled?1:2;
+    }catch(e){ return 0; }
   }
-  const _todayStr=new Date().toISOString().split('T')[0];
 
   // جمع المرشحين أولاً ثم اختيار الأفضل
   const candidates=[];
@@ -30696,38 +31211,30 @@ function _lisMatchReqInList(reqs, res, ptsList){
 
   if(!candidates.length) return undefined;
 
-  // ⭐ احسب سِمات كل مرشّح: هل يحتوي التحليل الوارد؟ هل بتاريخ اليوم؟ هل غير منتهٍ؟
-  candidates.forEach(function(c){
-    c.hasTest =_reqHasTest(c.r)?1:0;
-    c.isToday =(String(c.r.date||'').slice(0,10)===_todayStr)?1:0;
-    c.notDone =(c.r.status!=='done')?1:0;
-  });
+  // احسب مدى احتواء كل مرشح للتحليل القادم (2=يحتوي وفارغ، 1=يحتوي ومُدخل، 0=لا)
+  candidates.forEach(function(c){ c.fit=_reqTestFit(c.r); });
 
-  // ── تفضيل قوي: الطلب الحاوي للتحليل الوارد + بتاريخ اليوم + غير منتهٍ ──
-  //    هذا يمنع خلط طلبين لنفس المريض (LH ↔ HbA1c) ويوجّه النتيجة لطلبها الصحيح.
-  //    إن لم يوجد أي مرشّح "يحتوي التحليل"، نُبقي السلوك القديم كما هو (بدون تقييد)
-  //    حتى لا نكسر أي مطابقة كانت تعمل مسبقاً لأي جهاز.
-  const _anyHasTest=candidates.some(function(c){return c.hasTest;});
+  // ⭐ إن وُجد مرشح واحد على الأقل يحتوي التحليل فعلاً (fit>0)، فاستبعد كل
+  //    المرشحين الذين لا يحتوونه (fit===0). هذا يمنع نهائياً دخول نتيجة LH
+  //    في طلب لا يحتوي LH (طلب السكر التراكمي) والعكس.
+  const _anyFit=candidates.some(function(c){return c.fit>0;});
+  const pool=_anyFit?candidates.filter(function(c){return c.fit>0;}):candidates;
 
-  candidates.sort(function(a,b){
-    // 1) الطلب الذي يحتوي التحليل الوارد فعلاً يفوز دائماً
-    if(_anyHasTest && b.hasTest!==a.hasTest) return b.hasTest-a.hasTest;
-    // 2) بين الطلبات الحاوية للتحليل: فضّل طلب اليوم غير المنتهي
-    if(a.hasTest&&b.hasTest){
-      if(b.notDone!==a.notDone) return b.notDone-a.notDone;
-      if(b.isToday!==a.isToday) return b.isToday-a.isToday;
-    }
-    // 3) درجة المطابقة (SID/patientId/…)
+  // ترتيب الأولوية:
+  //   1) fit أعلى (يحتوي التحليل + خانته فارغة)
+  //   2) score أعلى (قوة مطابقة العينة/المريض)
+  //   3) الطلبات غير المنتهية
+  //   4) الأحدث (id أكبر)
+  pool.sort(function(a,b){
+    if(b.fit!==a.fit) return b.fit-a.fit;
     if(b.score!==a.score) return b.score-a.score;
-    // 4) نفضل الطلبات غير المنتهية على المنتهية
-    if(b.notDone!==a.notDone) return b.notDone-a.notDone;
-    // 5) نفضل طلب اليوم
-    if(b.isToday!==a.isToday) return b.isToday-a.isToday;
-    // 6) نفضل الأحدث (id أكبر)
+    const aNotDone=(a.r.status!=='done')?1:0;
+    const bNotDone=(b.r.status!=='done')?1:0;
+    if(bNotDone!==aNotDone) return bNotDone-aNotDone;
     return String(b.r.id).localeCompare(String(a.r.id));
   });
 
-  return candidates[0].r;
+  return pool[0].r;
 }
 
 // ── مساعد: تطبيق نتيجة على طلب وحفظه ────────────────────────────────────
@@ -30800,8 +31307,17 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
     }
   }
 
+  // 🔎 Delta Check — تقييم صامت لنتيجة الجهاز (HL7/ASTM) قبل الكتابة
+  var _dcViol=null;
+  try{
+    if(window.DeltaCheck && DeltaCheck.getConfig().enabled){
+      _dcViol=DeltaCheck.evaluateDevice(req.patientId, resultKey, res.value, req.id);
+    }
+  }catch(e){ console.warn('[DeltaCheck] device hook',e); }
+
   req.results[resultKey]=res.value;
   req.resultDetails[resultKey]={value:res.value,unit:res.unit,refRange:res.refRange,flags:res.flags,fromDevice:res.device,datetime:res.datetime};
+  if(_dcViol){ req.resultDetails[resultKey].deltaFlag=true; req.resultDetails[resultKey].deltaInfo={prev:_dcViol.prevRaw,pct:Math.round(_dcViol.pct)}; }
   const allCodes=(req.tests||[]);
   const allDone=allCodes.length>0&&allCodes.every(function(tc){return req.results&&req.results[tc];});
   if(allDone) req.status='done';
@@ -37633,563 +38149,3 @@ if(window.electronAPI && window.electronAPI.isElectron){
 
 
 </script>
-
-<!-- ════════════════════════════════════════════════════════════════════
-     🧠 DELTA CHECK — فحص الفروقات الذكي (Smart Delta Check)
-     وحدة مستقلة تُقارن النتيجة الحالية بآخر نتيجة سابقة لنفس المريض
-     (برقم الملف الدائم patientId) لنفس التحليل، وتنبّه عند التغيّر الكبير.
-     تعمل مع: HL7 / ASTM (عبر _lisApplyResultToReq) + الإدخال اليدوي
-     (عبر vrSaveResults و _autoSaveResults). حقن كامل بدون تعديل المنطق.
-════════════════════════════════════════════════════════════════════ -->
-<script>
-(function(){
-  'use strict';
-  if(window.DeltaCheck && window.DeltaCheck._ready) return;
-
-  // ── مفاتيح التخزين (تتبع prefix المستخدم عبر DB) ──────────────────
-  var CFG_KEY = 'deltacheck_cfg';
-  var LOG_KEY = 'deltacheck_log';
-
-  // ── الإعدادات الافتراضية ─────────────────────────────────────────
-  function defaultCfg(){
-    return {
-      enabled: false,          // مفعّل/معطّل
-      days: 90,                // نافذة المقارنة بالأيام
-      mode: 'percent',         // 'percent' نسبة مئوية | 'absolute' فرق رقمي ثابت
-      threshold: 30,           // القيمة الافتراضية (٪ أو رقم مطلق)
-      action: 'warn',          // 'warn' تحذير فقط | 'block' منع حتى التأكيد
-      perTest: {},             // { testId: {mode, threshold} } تجاوزات لكل تحليل
-      excluded: []             // [testId,...] تحاليل مستثناة
-    };
-  }
-
-  // ── قراءة/حفظ الإعدادات عبر طبقة DB (تحترم prefix المستخدم) ───────
-  function _db(){ return (typeof DB!=='undefined')?DB:null; }
-  function loadCfg(){
-    try{
-      var d=_db(); var raw = d?d.get(CFG_KEY):JSON.parse(localStorage.getItem('mlab2_'+CFG_KEY)||'null');
-      var cfg=defaultCfg();
-      if(raw&&typeof raw==='object'){ for(var k in raw){ if(raw.hasOwnProperty(k)) cfg[k]=raw[k]; } }
-      return cfg;
-    }catch(e){ return defaultCfg(); }
-  }
-  function saveCfg(cfg){
-    try{
-      var d=_db();
-      if(d) d.set(CFG_KEY, cfg);
-      else localStorage.setItem('mlab2_'+CFG_KEY, JSON.stringify(cfg));
-    }catch(e){}
-  }
-  function loadLog(){
-    try{
-      var d=_db(); var raw = d?d.get(LOG_KEY):JSON.parse(localStorage.getItem('mlab2_'+LOG_KEY)||'null');
-      return Array.isArray(raw)?raw:[];
-    }catch(e){ return []; }
-  }
-  function saveLog(arr){
-    try{
-      // نبقي آخر 1000 حدث فقط
-      if(arr.length>1000) arr=arr.slice(arr.length-1000);
-      var d=_db();
-      if(d) d.set(LOG_KEY, arr);
-      else localStorage.setItem('mlab2_'+LOG_KEY, JSON.stringify(arr));
-    }catch(e){}
-  }
-
-  // ── أدوات مساعدة ─────────────────────────────────────────────────
-  function _num(v){
-    // يدعم علامات < > ويستخرج الرقم
-    if(v===null||v===undefined) return NaN;
-    var s=String(v).trim();
-    if(!s) return NaN;
-    if(s.charAt(0)==='<'||s.charAt(0)==='>') s=s.substring(1).trim();
-    var n=parseFloat(s);
-    return isFinite(n)?n:NaN;
-  }
-  function _allTests(){
-    if(typeof tests!=='undefined'&&tests&&tests.length) return tests;
-    if(typeof ALL_TESTS!=='undefined') return ALL_TESTS;
-    return [];
-  }
-  function _testById(id){
-    return _allTests().find(function(t){return t.id===id;})||null;
-  }
-  function _testName(t){
-    if(!t) return '';
-    return t.nameEn||t.nameShort||t.code||t.id||'';
-  }
-  function _currentUser(){
-    try{
-      if(typeof getSession==='function'){ var s=getSession(); if(s&&(s.username||s.name)) return s.username||s.name; }
-    }catch(e){}
-    try{ if(typeof DB!=='undefined'&&DB._user) return DB._user; }catch(e){}
-    return '—';
-  }
-  function _allRequests(){
-    if(typeof requests!=='undefined'&&Array.isArray(requests)) return requests;
-    return [];
-  }
-  function _reqDate(r){
-    // نعيد Date من date (YYYY-MM-DD) أو resultDate إن وُجد
-    var d = r.resultDate||r.date||'';
-    if(!d) return null;
-    var dt=new Date(d);
-    return isNaN(dt.getTime())?null:dt;
-  }
-
-  // ── جلب آخر نتيجة سابقة لنفس المريض ونفس التحليل ضمن النافذة ─────
-  // patientId = رقم الملف الدائم. testId = معرّف التحليل.
-  // نتجاهل الطلب الحالي (excludeReqId). نعيد {value, date, reqId} أو null.
-  function findPreviousResult(patientId, testId, excludeReqId, days){
-    if(!patientId||!testId) return null;
-    var now=Date.now();
-    var winMs=(days&&days>0)?days*86400000:Infinity;
-    var best=null, bestT=-1;
-    var reqs=_allRequests();
-    for(var i=0;i<reqs.length;i++){
-      var r=reqs[i];
-      if(!r||r.patientId!==patientId) continue;
-      if(excludeReqId&&r.id===excludeReqId) continue;
-      if(!r.results||r.results[testId]===undefined||r.results[testId]===null||String(r.results[testId]).trim()==='') continue;
-      var val=_num(r.results[testId]);
-      if(isNaN(val)) continue;                     // نتائج غير رقمية لا تُقارن
-      var dt=_reqDate(r);
-      var t=dt?dt.getTime():0;
-      if(winMs!==Infinity && dt && (now-t)>winMs) continue; // خارج النافذة
-      // نفضّل الأحدث
-      if(t>bestT){ bestT=t; best={value:val, raw:r.results[testId], date:dt?dt.toISOString().split('T')[0]:'', reqId:r.id}; }
-    }
-    return best;
-  }
-
-  // ── تقييم الفرق مقابل الحدود ──────────────────────────────────────
-  // نعيد {flag, prev, cur, diff, pct, mode, limit, reason} — flag=true يعني تجاوز.
-  function evaluate(testId, curVal, prevVal){
-    var cfg=loadCfg();
-    var cur=_num(curVal), prev=_num(prevVal);
-    if(isNaN(cur)||isNaN(prev)) return {flag:false};
-    // تجاوزات لكل تحليل
-    var pt=cfg.perTest&&cfg.perTest[testId];
-    var mode=(pt&&pt.mode)?pt.mode:cfg.mode;
-    var limit=(pt&&pt.threshold!==undefined&&pt.threshold!==null&&pt.threshold!=='')?parseFloat(pt.threshold):parseFloat(cfg.threshold);
-    if(isNaN(limit)) limit = (mode==='percent')?30:0;
-    var diff=cur-prev;
-    var absDiff=Math.abs(diff);
-    var pct = prev!==0 ? (absDiff/Math.abs(prev))*100 : (cur!==0?100:0);
-    var flag=false, reason='';
-    if(mode==='absolute'){
-      flag = absDiff > limit;
-      reason='فرق رقمي '+absDiff.toFixed(2)+' يتجاوز الحد '+limit;
-    } else {
-      flag = pct > limit;
-      reason='نسبة التغيّر '+pct.toFixed(0)+'٪ تتجاوز الحد '+limit+'٪';
-    }
-    return {flag:flag, prev:prev, cur:cur, diff:diff, pct:pct, mode:mode, limit:limit, reason:reason};
-  }
-
-  // ── تسجيل حدث في سجل الأحداث ──────────────────────────────────────
-  function logEvent(o){
-    var log=loadLog();
-    log.push({
-      ts: new Date().toISOString(),
-      user: _currentUser(),
-      test: o.testName||'',
-      testId: o.testId||'',
-      patientId: o.patientId||'',
-      patientName: o.patientName||'',
-      prev: o.prev,
-      cur: o.cur,
-      diff: (o.diff!==undefined&&o.diff!==null)?Number(o.diff).toFixed(2):'',
-      pct: (o.pct!==undefined&&o.pct!==null)?Number(o.pct).toFixed(0):'',
-      reason: o.reason||'',
-      decision: o.decision||''   // approved | recheck | canceled | (فارغ)
-    });
-    saveLog(log);
-    if(document.getElementById('dc-log-body')) DeltaCheck.renderLog();
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  //  نافذة التحذير — تُظهر التفاصيل والأزرار الأربعة
-  //  onDecision(decision): approve | recheck | viewPrev | cancel
-  // ════════════════════════════════════════════════════════════════
-  function showWarningModal(ctx){
-    return new Promise(function(resolve){
-      var old=document.getElementById('dc-warn-overlay');
-      if(old) old.remove();
-      var canBlock = ctx.action==='block';
-      var pct = (ctx.pct!==undefined)?Math.round(ctx.pct):'';
-      var ov=document.createElement('div');
-      ov.id='dc-warn-overlay';
-      ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(4,8,18,0.92);display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px);animation:fi .12s ease';
-      ov.innerHTML =
-        '<div style="max-width:460px;width:100%;background:linear-gradient(180deg,#1a1005,#120a02);border:2px solid #ff9800;border-radius:18px;box-shadow:0 20px 60px rgba(255,152,0,.25);overflow:hidden;font-family:\'Cairo\',sans-serif" dir="rtl">'
-        + '<div style="background:linear-gradient(90deg,rgba(255,152,0,.18),rgba(255,60,60,.12));padding:16px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,152,0,.35)">'
-        +   '<span style="font-size:30px">⚠️</span>'
-        +   '<div><div style="font-size:16px;font-weight:900;color:#ffb74d">تحذير — Delta Check</div>'
-        +   '<div style="font-size:11px;color:#ffcc80;margin-top:2px">تم اكتشاف اختلاف كبير عن آخر نتيجة لهذا المريض</div></div>'
-        + '</div>'
-        + '<div style="padding:18px">'
-        +   '<div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:#ffe0b2">'
-        +     '<div style="display:flex;justify-content:space-between;background:rgba(255,255,255,.04);padding:9px 12px;border-radius:9px"><span>المريض</span><b style="color:#fff">'+(ctx.patientName||'—')+' <span style="color:#ffb74d;font-size:11px">('+(ctx.patientId||'—')+')</span></b></div>'
-        +     '<div style="display:flex;justify-content:space-between;background:rgba(255,255,255,.04);padding:9px 12px;border-radius:9px"><span>التحليل</span><b style="color:#fff">'+(ctx.testName||'—')+'</b></div>'
-        +     '<div style="display:flex;justify-content:space-between;background:rgba(0,200,120,.08);padding:9px 12px;border-radius:9px"><span>النتيجة السابقة</span><b style="color:#4dd0a0">'+ctx.prev+(ctx.prevDate?' <span style="color:#7a9;font-size:10px">('+ctx.prevDate+')</span>':'')+'</b></div>'
-        +     '<div style="display:flex;justify-content:space-between;background:rgba(255,60,60,.10);padding:9px 12px;border-radius:9px"><span>النتيجة الحالية</span><b style="color:#ff6b6b">'+ctx.cur+'</b></div>'
-        +     '<div style="display:flex;justify-content:space-between;background:rgba(255,152,0,.12);padding:9px 12px;border-radius:9px"><span>نسبة التغيّر</span><b style="color:#ffb74d">'+pct+'٪'+(ctx.mode==='absolute'?' <span style="font-size:10px;color:#ffcc80">(فرق: '+Math.abs(ctx.diff).toFixed(2)+')</span>':'')+'</b></div>'
-        +   '</div>'
-        +   '<div style="margin-top:14px;font-size:11.5px;color:#ffcc80;background:rgba(255,152,0,.06);border:1px solid rgba(255,152,0,.25);border-radius:10px;padding:11px 13px;line-height:1.9">'
-        +     'يرجى التأكد من:<br>• هوية العينة &nbsp;• صحة قراءة الجهاز<br>• عدم وجود خطأ في الإدخال &nbsp;• الحاجة لإعادة الفحص'
-        +   '</div>'
-        +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px">'
-        +     '<button id="dc-btn-prev" style="grid-column:1/-1;padding:11px;border-radius:10px;border:1px solid rgba(0,212,255,.4);background:rgba(0,212,255,.10);color:#00d4ff;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit">📊 عرض النتائج السابقة</button>'
-        +     '<button id="dc-btn-recheck" style="padding:11px;border-radius:10px;border:1px solid rgba(255,152,0,.5);background:rgba(255,152,0,.12);color:#ffb74d;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit">🔁 إعادة الفحص</button>'
-        +     '<button id="dc-btn-approve" style="padding:11px;border-radius:10px;border:1px solid rgba(0,200,120,.5);background:rgba(0,200,120,.14);color:#4dd0a0;font-weight:800;font-size:12.5px;cursor:pointer;font-family:inherit">✔️ اعتماد رغم التحذير</button>'
-        +     '<button id="dc-btn-cancel" style="grid-column:1/-1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:#bbb;font-weight:700;font-size:12px;cursor:pointer;font-family:inherit">✖️ إلغاء</button>'
-        +   '</div>'
-        + '</div></div>';
-      document.body.appendChild(ov);
-
-      function done(decision){
-        var el=document.getElementById('dc-warn-overlay');
-        if(el) el.remove();
-        resolve(decision);
-      }
-      document.getElementById('dc-btn-approve').onclick=function(){ done('approve'); };
-      document.getElementById('dc-btn-recheck').onclick=function(){ done('recheck'); };
-      document.getElementById('dc-btn-cancel').onclick=function(){ done('cancel'); };
-      document.getElementById('dc-btn-prev').onclick=function(){
-        DeltaCheck.showHistory(ctx.patientId, ctx.testId, ctx.testName);
-      };
-    });
-  }
-
-  // ── نافذة عرض النتائج السابقة (تاريخية) ─────────────────────────
-  function showHistory(patientId, testId, testName){
-    var reqs=_allRequests().filter(function(r){
-      return r&&r.patientId===patientId&&r.results&&r.results[testId]!==undefined&&r.results[testId]!==null&&String(r.results[testId]).trim()!=='';
-    }).sort(function(a,b){
-      var da=_reqDate(a), db=_reqDate(b);
-      return (db?db.getTime():0)-(da?da.getTime():0);
-    });
-    var rows=reqs.map(function(r){
-      var d=_reqDate(r); var ds=d?d.toISOString().split('T')[0]:(r.date||'—');
-      return '<tr><td style="padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.06)">'+ds+'</td>'
-           + '<td style="padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.06);font-weight:800;color:#00d4ff">'+r.results[testId]+'</td>'
-           + '<td style="padding:7px 10px;border-bottom:1px solid rgba(255,255,255,.06);color:#888;font-size:11px">'+(r.id||'')+'</td></tr>';
-    }).join('')||'<tr><td colspan="3" style="padding:14px;text-align:center;color:#888">لا توجد نتائج سابقة</td></tr>';
-    var old=document.getElementById('dc-hist-overlay'); if(old) old.remove();
-    var ov=document.createElement('div');
-    ov.id='dc-hist-overlay';
-    ov.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(4,8,18,.9);display:flex;align-items:center;justify-content:center;padding:16px';
-    ov.innerHTML='<div dir="rtl" style="max-width:420px;width:100%;background:#0c1420;border:1px solid rgba(0,212,255,.35);border-radius:16px;overflow:hidden;font-family:\'Cairo\',sans-serif">'
-      +'<div style="padding:14px 16px;border-bottom:1px solid rgba(0,212,255,.25);display:flex;justify-content:space-between;align-items:center">'
-      +'<div style="font-weight:900;color:#00d4ff;font-size:14px">📊 النتائج السابقة — '+(testName||'')+'</div>'
-      +'<span onclick="this.closest(\'#dc-hist-overlay\').remove()" style="cursor:pointer;color:#888;font-size:20px">×</span></div>'
-      +'<div style="max-height:60vh;overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;color:#cde">'
-      +'<thead><tr style="background:rgba(0,212,255,.08)"><th style="padding:8px 10px;text-align:right">التاريخ</th><th style="padding:8px 10px;text-align:right">القيمة</th><th style="padding:8px 10px;text-align:right">الطلب</th></tr></thead>'
-      +'<tbody>'+rows+'</tbody></table></div></div>';
-    ov.addEventListener('click',function(e){ if(e.target===ov) ov.remove(); });
-    document.body.appendChild(ov);
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  //  الدالة المركزية: فحص نتيجة واحدة قبل اعتمادها
-  //  تُعيد Promise<{proceed:boolean, decision:string}>
-  //  proceed=false يعني: ألغِ الاعتماد (إعادة فحص / إلغاء في وضع المنع)
-  // ════════════════════════════════════════════════════════════════
-  function checkOne(o){
-    // o: {patientId, patientName, testId, curValue, excludeReqId}
-    return new Promise(function(resolve){
-      var cfg=loadCfg();
-      if(!cfg.enabled){ resolve({proceed:true, decision:''}); return; }
-      var testId=o.testId;
-      if(!testId || cfg.excluded.indexOf(testId)>=0){ resolve({proceed:true, decision:''}); return; }
-      var cur=_num(o.curValue);
-      if(isNaN(cur)){ resolve({proceed:true, decision:''}); return; }  // غير رقمي
-      var prev=findPreviousResult(o.patientId, testId, o.excludeReqId, cfg.days);
-      if(!prev){ resolve({proceed:true, decision:''}); return; }        // لا سابقة
-      var ev=evaluate(testId, cur, prev.value);
-      if(!ev.flag){ resolve({proceed:true, decision:''}); return; }     // ضمن الحد
-
-      var t=_testById(testId);
-      var ctx={
-        patientId:o.patientId, patientName:o.patientName||'—',
-        testId:testId, testName:_testName(t)||testId,
-        prev:prev.raw, prevDate:prev.date, cur:o.curValue,
-        diff:ev.diff, pct:ev.pct, mode:ev.mode, action:cfg.action
-      };
-
-      showWarningModal(ctx).then(function(decision){
-        if(decision==='viewPrev'){ // لن يصل عادة (الزر لا يغلق)
-          resolve({proceed:true, decision:''}); return;
-        }
-        var mapped = decision==='approve'?'approved':(decision==='recheck'?'recheck':'canceled');
-        logEvent({
-          testName:ctx.testName, testId:testId,
-          patientId:o.patientId, patientName:o.patientName,
-          prev:prev.raw, cur:o.curValue, diff:ev.diff, pct:ev.pct,
-          reason:ev.reason, decision:mapped
-        });
-        if(decision==='approve'){
-          resolve({proceed:true, decision:'approved'});
-        } else {
-          // إعادة فحص أو إلغاء → لا نعتمد
-          resolve({proceed:false, decision:mapped});
-        }
-      });
-    });
-  }
-
-  // ── فحص مجموعة نتائج (لطلب كامل) بالتسلسل ─────────────────────────
-  // items: [{patientId, patientName, testId, curValue, excludeReqId}]
-  // نعيد Promise<{ok:boolean, blocked:[testId,...]}>
-  function checkMany(items){
-    var blocked=[];
-    var i=0;
-    function next(){
-      if(i>=items.length) return Promise.resolve({ok:blocked.length===0, blocked:blocked});
-      var it=items[i++];
-      return checkOne(it).then(function(res){
-        if(!res.proceed) blocked.push(it.testId);
-        return next();
-      });
-    }
-    return next();
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  //  واجهة الإعدادات — الرندر والحفظ
-  // ════════════════════════════════════════════════════════════════
-  function renderSettings(){
-    var cfg=loadCfg();
-    var set=function(id,v){var e=document.getElementById(id);if(e){if(e.type==='checkbox')e.checked=!!v;else e.value=v;}};
-    // toggle مفعّل
-    var tog=document.getElementById('dc-tog-enabled');
-    if(tog){ tog.classList.toggle('on', !!cfg.enabled); }
-    set('dc-days', cfg.days);
-    set('dc-mode', cfg.mode);
-    set('dc-threshold', cfg.threshold);
-    var actEl=document.getElementById('dc-action'); if(actEl) actEl.value=cfg.action;
-    renderExcluded();
-    renderPerTest();
-    renderLog();
-  }
-
-  function _testOptions(selectedId){
-    return _allTests().filter(function(t){return t.minVal!==null||t.maxVal!==null||t.unit!=='multiple';})
-      .map(function(t){return '<option value="'+t.id+'"'+(t.id===selectedId?' selected':'')+'>'+_testName(t)+' ('+(t.code||'')+')</option>';}).join('');
-  }
-
-  function renderExcluded(){
-    var cfg=loadCfg();
-    var box=document.getElementById('dc-excluded-list');
-    if(!box) return;
-    box.innerHTML = cfg.excluded.length? cfg.excluded.map(function(id){
-      var t=_testById(id);
-      return '<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(255,60,60,.12);border:1px solid rgba(255,60,60,.3);color:#ff8a80;border-radius:20px;padding:4px 10px;font-size:11px;margin:3px">'
-        +(_testName(t)||id)+' <span onclick="DeltaCheck.removeExcluded(\''+id+'\')" style="cursor:pointer;font-weight:900">×</span></span>';
-    }).join('') : '<span style="color:#888;font-size:11px">لا توجد تحاليل مستثناة</span>';
-  }
-
-  function renderPerTest(){
-    var cfg=loadCfg();
-    var box=document.getElementById('dc-pertest-list');
-    if(!box) return;
-    var keys=Object.keys(cfg.perTest||{});
-    box.innerHTML = keys.length? keys.map(function(id){
-      var t=_testById(id); var o=cfg.perTest[id];
-      return '<div style="display:flex;align-items:center;gap:8px;background:rgba(0,212,255,.05);border:1px solid rgba(0,212,255,.2);border-radius:9px;padding:8px 10px;margin-bottom:6px;font-size:11px">'
-        +'<b style="flex:1;color:#00d4ff">'+(_testName(t)||id)+'</b>'
-        +'<span style="color:#aaa">'+(o.mode==='absolute'?'فرق ثابت':'نسبة ٪')+': <b style="color:#fff">'+o.threshold+'</b></span>'
-        +'<span onclick="DeltaCheck.removePerTest(\''+id+'\')" style="cursor:pointer;color:#ff6b6b;font-weight:900">×</span></div>';
-    }).join('') : '<span style="color:#888;font-size:11px">لا توجد قواعد خاصة — تُستخدم القيمة الافتراضية للجميع</span>';
-  }
-
-  function renderLog(){
-    var log=loadLog().slice().reverse();
-    var body=document.getElementById('dc-log-body');
-    if(!body) return;
-    if(!log.length){ body.innerHTML='<tr><td colspan="7" style="padding:14px;text-align:center;color:#888;font-size:11px">لا توجد أحداث مسجّلة بعد</td></tr>'; return; }
-    body.innerHTML = log.slice(0,300).map(function(e){
-      var dt=new Date(e.ts); var ds=isNaN(dt.getTime())?e.ts:(dt.toLocaleDateString('en-GB')+' '+dt.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}));
-      var decCol = e.decision==='approved'?'#4dd0a0':(e.decision==='recheck'?'#ffb74d':(e.decision==='canceled'?'#ff6b6b':'#888'));
-      var decTxt = e.decision==='approved'?'اعتُمِدت':(e.decision==='recheck'?'إعادة فحص':(e.decision==='canceled'?'أُلغيت':'—'));
-      return '<tr style="border-bottom:1px solid rgba(255,255,255,.05)">'
-        +'<td style="padding:6px 8px;font-size:10px;color:#9ab;white-space:nowrap">'+ds+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:#cde">'+(e.user||'')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:#fff;font-weight:700">'+(e.test||'')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:#4dd0a0">'+(e.prev!==undefined?e.prev:'')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:#ff6b6b">'+(e.cur!==undefined?e.cur:'')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:#ffb74d">'+(e.pct!==''?e.pct+'٪':'')+'</td>'
-        +'<td style="padding:6px 8px;font-size:11px;color:'+decCol+';font-weight:700">'+decTxt+'</td>'
-        +'</tr>';
-    }).join('');
-  }
-
-  // ── إجراءات الإعدادات (مربوطة بالأزرار) ──────────────────────────
-  function saveFromUI(){
-    var cfg=loadCfg();
-    var tog=document.getElementById('dc-tog-enabled');
-    if(tog) cfg.enabled = tog.classList.contains('on');
-    var d=parseInt((document.getElementById('dc-days')||{}).value,10); if(!isNaN(d)&&d>0) cfg.days=d;
-    var m=(document.getElementById('dc-mode')||{}).value; if(m) cfg.mode=m;
-    var th=parseFloat((document.getElementById('dc-threshold')||{}).value); if(!isNaN(th)) cfg.threshold=th;
-    var ac=(document.getElementById('dc-action')||{}).value; if(ac) cfg.action=ac;
-    saveCfg(cfg);
-    if(typeof showNotif==='function') showNotif('تم','تم حفظ إعدادات Delta Check ✅','success');
-  }
-  function toggleEnabled(el){ el.classList.toggle('on'); saveFromUI(); }
-  function addExcluded(){
-    var sel=document.getElementById('dc-excl-sel'); if(!sel||!sel.value) return;
-    var cfg=loadCfg();
-    if(cfg.excluded.indexOf(sel.value)<0){ cfg.excluded.push(sel.value); saveCfg(cfg); renderExcluded(); }
-    sel.value='';
-  }
-  function removeExcluded(id){
-    var cfg=loadCfg(); cfg.excluded=cfg.excluded.filter(function(x){return x!==id;}); saveCfg(cfg); renderExcluded();
-  }
-  function addPerTest(){
-    var sel=document.getElementById('dc-pt-sel');
-    var md=document.getElementById('dc-pt-mode');
-    var th=document.getElementById('dc-pt-threshold');
-    if(!sel||!sel.value){ if(typeof showNotif==='function') showNotif('تنبيه','اختر تحليلاً أولاً','warning'); return; }
-    var v=parseFloat(th.value); if(isNaN(v)){ if(typeof showNotif==='function') showNotif('تنبيه','أدخل قيمة الحد','warning'); return; }
-    var cfg=loadCfg();
-    if(!cfg.perTest) cfg.perTest={};
-    cfg.perTest[sel.value]={mode:md.value, threshold:v};
-    saveCfg(cfg); renderPerTest();
-    sel.value=''; th.value='';
-  }
-  function removePerTest(id){
-    var cfg=loadCfg(); if(cfg.perTest) delete cfg.perTest[id]; saveCfg(cfg); renderPerTest();
-  }
-  function clearLog(){
-    if(!confirm('حذف كل سجل أحداث Delta Check؟')) return;
-    saveLog([]); renderLog();
-    if(typeof showNotif==='function') showNotif('تم','تم مسح السجل','success');
-  }
-  function exportLog(){
-    var log=loadLog();
-    var rows=[['التاريخ والوقت','المستخدم','التحليل','السابقة','الحالية','الفرق','النسبة٪','السبب','القرار']];
-    log.forEach(function(e){
-      rows.push([e.ts,e.user,e.test,e.prev,e.cur,e.diff,e.pct,e.reason,e.decision]);
-    });
-    var csv='\uFEFF'+rows.map(function(r){return r.map(function(c){return '"'+String(c===undefined?'':c).replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-    var blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='delta_check_log.csv'; a.click();
-  }
-  // ملء قوائم اختيار التحاليل عند فتح البطاقة
-  function populateTestSelects(){
-    var s1=document.getElementById('dc-excl-sel');
-    var s2=document.getElementById('dc-pt-sel');
-    var opts='<option value="">— اختر تحليلاً —</option>'+_testOptions('');
-    if(s1&&!s1._filled){ s1.innerHTML=opts; s1._filled=true; }
-    if(s2&&!s2._filled){ s2.innerHTML=opts; s2._filled=true; }
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  //  الربط مع مسارات الاعتماد الثلاثة (HL7/ASTM + يدوي)
-  // ════════════════════════════════════════════════════════════════
-  function _patientNameById(pid){
-    if(typeof patients!=='undefined'&&Array.isArray(patients)){
-      var p=patients.find(function(x){return x.id===pid;});
-      if(p) return p.name||p.nameEn||'';
-    }
-    return '';
-  }
-
-  // (1) مسار الأجهزة HL7/ASTM: _lisApplyResultToReq(req,res,reqs,idbKey)
-  //     نلتقط النتيجة قبل كتابتها ونفحصها. الفحص هنا "تحذيري" (يسجّل)
-  //     لأن هذا المسار غير متزامن ولا يمكن إيقاف الجهاز؛ في وضع المنع
-  //     نُبقي القيمة لكن نُسجّل الحدث ونعرض التحذير للمستخدم.
-  function hookDevicePath(){
-    // أُلغِي الغلاف — التنبيه يظهر الآن عند الطباعة فقط.
-    return true;
-  }
-
-  // (2) الإدخال اليدوي: vrSaveResults — فحص متزامن قبل الحفظ
-  function hookManualVr(){
-    // أُلغِي هذا المسار — التنبيه يظهر الآن عند الطباعة فقط.
-    return true;
-  }
-
-  // (3) الحفظ التلقائي اليدوي: _autoSaveResults — فحص خفيف عند اكتمال طلب
-  //     هذا المسار يعمل صامتاً كل 500ms؛ نضيف فحصاً عند أول اكتشاف
-  //     تجاوز لكل (طلب+تحليل) ونتجنّب التكرار عبر علامة على الطلب.
-  function hookAutoSave(){
-    // أُلغِي الفحص أثناء الكتابة — التنبيه يظهر الآن عند الطباعة فقط.
-    return true;
-  }
-
-  // ════════════════════════════════════════════════════════════════
-  //  حارس الطباعة — يُستدعى من doPrint (يغطّي «حفظ وطباعة» من واجهة
-  //  إدخال النتائج، وزر «طباعة» من واجهة الطباعة، لأن كليهما يمر بـ doPrint).
-  //  يفحص كل نتائج الطلب الرقمية ويعرض التنبيه لكل تجاوز؛ القرار حسب
-  //  الزر المضغوط: «اعتماد» → يكمل، «إعادة/إلغاء» → يوقف الطباعة.
-  //  يُعيد Promise<boolean>.
-  // ════════════════════════════════════════════════════════════════
-  function gatePrint(reqId){
-    try{
-      var cfg=loadCfg();
-      if(!cfg.enabled) return Promise.resolve(true);
-      // المتغيرات requests/currentReqId معرّفة بـ let في السكربت الرئيسي،
-      // وهي مشتركة عبر السكربتات لكنها ليست على window. نستخدمها بالاسم المجرّد.
-      var _reqs=(typeof requests!=='undefined'&&Array.isArray(requests))?requests:_allRequests();
-      var _cur=(typeof currentReqId!=='undefined'&&currentReqId)?currentReqId:null;
-      var rid=reqId || _cur;
-      var r=(rid)?_reqs.find(function(x){return x.id===rid;}):null;
-      if(!r||!r.results) return Promise.resolve(true);
-      var items=[];
-      (r.tests||[]).forEach(function(tid){
-        if(cfg.excluded.indexOf(tid)>=0) return;
-        var v=r.results[tid];
-        if(v===undefined||v===null||String(v).trim()==='') return;
-        if(isNaN(_num(v))) return;
-        items.push({patientId:r.patientId, patientName:r.patientName||_patientNameById(r.patientId), testId:tid, curValue:v, excludeReqId:r.id});
-      });
-      if(!items.length) return Promise.resolve(true);
-      return checkMany(items).then(function(result){
-        // ok=true: لا تجاوز، أو المستخدم اعتمد كل التجاوزات → تابع الطباعة
-        // ok=false: المستخدم اختار إعادة/إلغاء لتحليل واحد على الأقل → أوقف
-        if(!result.ok){
-          if(typeof showNotif==='function') showNotif('Delta Check','تم إيقاف الطباعة — راجع النتائج المتجاوزة','warning');
-          return false;
-        }
-        return true;
-      });
-    }catch(e){ console.warn('[DeltaCheck] gatePrint',e); return Promise.resolve(true); }
-  }
-
-  // ── تركيب الـ hooks مع إعادة المحاولة (الدوال قد تُعرّف لاحقاً) ────
-  function installHooks(){
-    var a=hookDevicePath(), b=hookManualVr(), c=hookAutoSave();
-    return a&&b&&c;
-  }
-  var _tries=0;
-  var _iv=setInterval(function(){
-    _tries++;
-    if(installHooks() || _tries>40){ clearInterval(_iv); }
-  }, 500);
-  // محاولة فورية بعد تحميل DOM
-  if(document.readyState!=='loading') setTimeout(installHooks,300);
-  else document.addEventListener('DOMContentLoaded',function(){ setTimeout(installHooks,300); });
-
-  // ── الواجهة العامة ───────────────────────────────────────────────
-  window.DeltaCheck = {
-    _ready:true,
-    loadCfg:loadCfg, saveCfg:saveCfg,
-    checkOne:checkOne, checkMany:checkMany,
-    findPreviousResult:findPreviousResult, evaluate:evaluate,
-    showHistory:showHistory, showWarningModal:showWarningModal,
-    renderSettings:renderSettings, renderLog:renderLog,
-    renderExcluded:renderExcluded, renderPerTest:renderPerTest,
-    populateTestSelects:populateTestSelects,
-    saveFromUI:saveFromUI, toggleEnabled:toggleEnabled,
-    addExcluded:addExcluded, removeExcluded:removeExcluded,
-    addPerTest:addPerTest, removePerTest:removePerTest,
-    clearLog:clearLog, exportLog:exportLog,
-    installHooks:installHooks,
-    gatePrint:gatePrint
-  };
-})();
-</script>
-
