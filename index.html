@@ -10008,7 +10008,7 @@ function renderWizStep(){
                   <button type="button" class="lang-toggle-btn lang-en" id="wiz-test-srch-ltb" onclick="toggleInputLang('wiz-test-srch','wiz-test-srch-ltb')" title="تبديل لغة الإدخال" style="left:auto;right:auto;position:absolute;bottom:-18px;left:0;font-size:9px;padding:1px 4px;transform:none;">EN</button>
                   <input id="wiz-test-srch" lang="en" dir="ltr" inputmode="text"
                     placeholder="كود أو اسم..."
-                    oninput="filterWizTests()"
+                    oninput="filterWizTestsDebounced()"
                     onfocus="this.select()"
                     style="width:100%;background:rgba(255,255,255,0.06);border:1.5px solid var(--border);border-radius:8px;padding:6px 32px 6px 8px;color:var(--text);font-family:'Inter','Cairo',sans-serif;font-size:12px;outline:none;transition:border-color 0.2s;"
                     onfocus_extra="this.style.borderColor='var(--primary)'"
@@ -10523,6 +10523,16 @@ function filterWizTests(cat){
   renderWizTestList();
 }
 
+// ⚡ بحث مؤجّل (debounce) لحقل البحث النصّي عن التحاليل — يقلّل إعادة الرسم
+//    أثناء الكتابة السريعة. يعيد رسم قائمة التحاليل فقط (لا يمسّ الأقسام).
+var _wizSrchTimer=null;
+function filterWizTestsDebounced(){
+  clearTimeout(_wizSrchTimer);
+  _wizSrchTimer=setTimeout(function(){
+    try{ renderWizTestList(); }catch(e){ try{ filterWizTests(); }catch(_){} }
+  }, 120);
+}
+
 function wizBack(){wizStep=1;renderWizStep();}
 
 function wizNext(){
@@ -10771,9 +10781,16 @@ function wizFinish(){
   showNotif('تم الإنشاء',`${rqid} — ${pt.name} | ${total} ${settings.currency||''} — ${payStatus} ✅`,'success');
   currentReqId=rqid;
   window._goToResultCalled=true;
-  // رسم فوري من الكاش في الذاكرة — لا حاجة لانتظار IDB
-  renderRequests(); updateBadges(); updateDashboard();
+  // ⚡ الانتقال فوراً لواجهة النتائج، وتأجيل الرسوم الثقيلة (لوحة التحكم/الشارات)
+  //    إلى ما بعد رسم الإطار التالي كي لا تتجمّد الواجهة عند الحفظ.
   nav('results');
+  requestAnimationFrame(function(){
+    setTimeout(function(){
+      try{ renderRequests(); }catch(e){}
+      try{ updateBadges(); }catch(e){}
+      try{ updateDashboard(); }catch(e){}
+    }, 0);
+  });
 }
 
 // ── حساب مجموع التحاليل في المعالج ──────────────────────────
@@ -12259,12 +12276,14 @@ function loadResultEntry(){
     if(_curDayRE && rDay && rDay===_curDayRE) return false;
     return true;
   }).sort((a,b)=>new Date(b.resultDate||b.date)-new Date(a.resultDate||a.date));
+  // ⚡ حمّل سجلات الفحوصات الخاصة مرة واحدة فقط (بدلاً من داخل حلقة كل صف)
+  var _hasSpecial=reqTests.some(function(t){return t.isSpecialExam;});
+  if(_hasSpecial){ loadUARecords(); loadStoolExamRecords(); loadSemenRecords(); }
   tbody.innerHTML=reqTests.map(t=>{
     // Fix 2: Special exam row — inline button that opens modal without leaving page
     if(t.isSpecialExam){
       const isUA=t.isSpecialExam==='ua';
       const isSemen=t.isSpecialExam==='semen';
-      loadUARecords(); loadStoolExamRecords(); loadSemenRecords();
       const existingRec=isUA?uaRecords.find(r=>r.reqId===id):isSemen?semenRecords.find(r=>r.reqId===id):stoolExamRecords.find(r=>r.reqId===id);
       const icon=isUA?'💧':isSemen?'🔬':'🧫';
       const done=!!existingRec;
@@ -17841,16 +17860,28 @@ var DeltaCheck = (function(){
     if(!_pending) return;
     var v = _pending.violations[0];
     var prevReq = v && v.prevReq;
-    // اخفض z-index مودال دلتا مؤقتاً كي تظهر نافذة النتائج السابقة فوقه
-    var dcEl = document.getElementById('m-delta-check');
-    var _oldZ = dcEl ? dcEl.style.zIndex : '';
-    if(dcEl) dcEl.style.zIndex = '99990';
+    var _savedPending = _pending;            // احفظ الحالة المعلّقة
+    // أغلق تنبيه دلتا فعلياً كي تظهر نافذة النتائج بوضوح دون تراكب
+    closeModal('m-delta-check');
+    var vrEl = document.getElementById('m-view-results');
+    // راقب إغلاق نافذة النتائج (بأي طريقة: زر ×، إغلاق، نقر الخلفية) ثم أعد فتح التنبيه
+    if(vrEl && typeof MutationObserver!=='undefined'){
+      var _obs = new MutationObserver(function(){
+        if(!vrEl.classList.contains('open')){
+          _obs.disconnect();
+          if(_savedPending){ _pending=_savedPending; setTimeout(function(){ openModal('m-delta-check'); }, 60); }
+        }
+      });
+      _obs.observe(vrEl, {attributes:true, attributeFilter:['class']});
+    }
     try{
       if(prevReq && typeof openViewResultsModal==='function'){ openViewResultsModal(prevReq.id); }
       else if(typeof showPatientResults==='function'){ showPatientResults(); }
-    }catch(e){ console.warn('[DeltaCheck] viewPrev',e); }
-    // نعيد z-index مودال دلتا عند إغلاق نافذة النتائج (يبقى التحذير قائماً خلفها)
-    setTimeout(function(){ if(dcEl) dcEl.style.zIndex = _oldZ || '99999999'; }, 300);
+      else if(vrEl){ /* fallback: أعد فتح التنبيه فوراً */ if(_savedPending){ _pending=_savedPending; openModal('m-delta-check'); } }
+    }catch(e){
+      console.warn('[DeltaCheck] viewPrev',e);
+      if(_savedPending){ _pending=_savedPending; openModal('m-delta-check'); }
+    }
   }
 
   // ══════════════════════════════════════════════════════════
