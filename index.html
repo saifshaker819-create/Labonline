@@ -15523,6 +15523,31 @@ function _doPrintFallback(html, afterCB){
 
 function doPrint(reqId){
   if(reqId) currentReqId=reqId;
+  // 🔎 Delta Check — بوابة قبل الطباعة (تغطي: حفظ وطباعة من الإدخال + طباعة من واجهة الطباعة)
+  //   تُتجاوز عند: تعطيل الميزة، أو المتابعة بعد الموافقة الصريحة (_dcPrintApproved)
+  try{
+    if(window.DeltaCheck && DeltaCheck.getConfig().enabled && !window._dcPrintApproved){
+      var _dcReq=requests.find(function(r){return r.id===currentReqId;});
+      if(_dcReq){
+        var _dcVals={};
+        (_dcReq.tests||[]).forEach(function(tid){
+          var v=_dcReq.results?_dcReq.results[tid]:undefined;
+          if(v!==undefined&&v!==null&&v!==''&&v!=='done') _dcVals[tid]=v;
+        });
+        // استعلام بلا آثار جانبية: هل توجد تجاوزات؟
+        if(DeltaCheck.hasViolations(_dcReq.patientId, _dcVals, _dcReq.id)){
+          var _dcId=currentReqId;
+          DeltaCheck.guard({
+            patientId:_dcReq.patientId, values:_dcVals, reqId:_dcReq.id, source:'print',
+            onApprove:function(){ window._dcPrintApproved=true; try{ doPrint(_dcId); }finally{ window._dcPrintApproved=false; } },
+            onCancel:function(kind){ try{ if(kind!=='retest') showNotif('أُلغيت الطباعة','لم تُطبع النتائج بسبب فحص دلتا','warning'); }catch(e){} }
+          });
+          return; // المودال مفتوح — أوقف الطباعة حتى قرار المستخدم
+        }
+      }
+    }
+  }catch(e){ console.warn('[DeltaCheck] doPrint hook',e); }
+  window._dcPrintApproved=false;
   const req=requests.find(r=>r.id===currentReqId);
   if(!req) return;
   window._medlabPrinting=true;
@@ -17771,11 +17796,19 @@ var DeltaCheck = (function(){
   //   إذا وُجدت → يعرض المودال ويؤجّل القرار.
   function guard(ctx){
     getConfig();
-    if(!cfg.enabled){ ctx.onApprove&&ctx.onApprove(); return; }
+    if(!cfg.enabled){ ctx.onApprove&&ctx.onApprove(); return false; }
     var viols = [];
     try{ viols = _collectViolations(ctx.patientId, ctx.values, ctx.reqId); }catch(e){ console.warn('[DeltaCheck] eval',e); }
-    if(!viols.length){ ctx.onApprove&&ctx.onApprove(); return; }
+    if(!viols.length){ ctx.onApprove&&ctx.onApprove(); return false; }
     _showModal({ violations:viols, ctx:ctx });
+    return true;
+  }
+
+  // استعلام صِرف: هل توجد تجاوزات؟ (بلا مودال ولا تسجيل)
+  function hasViolations(patientId, values, reqId){
+    getConfig();
+    if(!cfg.enabled) return false;
+    try{ return _collectViolations(patientId, values, reqId).length>0; }catch(e){ return false; }
   }
 
   // ── أزرار المودال ──────────────────────────────────────────
@@ -17807,18 +17840,17 @@ var DeltaCheck = (function(){
   function viewPrevious(){
     if(!_pending) return;
     var v = _pending.violations[0];
-    var pid = v && v.patientId;
-    closeModal('m-delta-check');
+    var prevReq = v && v.prevReq;
+    // اخفض z-index مودال دلتا مؤقتاً كي تظهر نافذة النتائج السابقة فوقه
+    var dcEl = document.getElementById('m-delta-check');
+    var _oldZ = dcEl ? dcEl.style.zIndex : '';
+    if(dcEl) dcEl.style.zIndex = '99990';
     try{
-      if(pid && typeof showPatientResults==='function'){
-        // إن كان الطلب السابق معروفاً افتح نتائجه، وإلا افتح نتائج المريض
-        if(v.prevReq && typeof openViewResultsModal==='function'){ openViewResultsModal(v.prevReq.id); }
-        else showPatientResults();
-      } else if(typeof showPatientResults==='function'){ showPatientResults(); }
+      if(prevReq && typeof openViewResultsModal==='function'){ openViewResultsModal(prevReq.id); }
+      else if(typeof showPatientResults==='function'){ showPatientResults(); }
     }catch(e){ console.warn('[DeltaCheck] viewPrev',e); }
-    // نُعيد فتح التحذير بعد لحظة حتى لا يضيع الطابور
-    var st = _pending;
-    setTimeout(function(){ if(st){ _pending=st; openModal('m-delta-check'); } }, 50);
+    // نعيد z-index مودال دلتا عند إغلاق نافذة النتائج (يبقى التحذير قائماً خلفها)
+    setTimeout(function(){ if(dcEl) dcEl.style.zIndex = _oldZ || '99999999'; }, 300);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -18025,7 +18057,7 @@ var DeltaCheck = (function(){
 
   return {
     getConfig:getConfig, saveConfig:saveConfig,
-    guard:guard, evaluateDevice:evaluateDevice,
+    guard:guard, evaluateDevice:evaluateDevice, hasViolations:hasViolations,
     approve:approve, retest:retest, cancel:cancel, dismiss:dismiss, viewPrevious:viewPrevious,
     renderSettingsUI:renderSettingsUI,
     renderTestSearch:renderTestSearch, addPerTest:addPerTest, updatePerTest:updatePerTest, removePerTest:removePerTest,
