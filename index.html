@@ -12723,15 +12723,6 @@ function editPatientFromResults(){
 function saveDraft(){const req=collectResults();if(!req)return;req.status='inprogress';save('requests',requests);showNotif('تم الحفظ','تم حفظ المسودة ✅','success');}
 function finalizeResult(){
   const req=collectResults();if(!req)return;
-  // ── Delta Check: افحص قبل الاعتماد ──────────────────────
-  if(window.DeltaCheck && window.DeltaCheck.loadCfg && window.DeltaCheck.loadCfg().enabled){
-    window.DeltaCheck.gateFinalize(req.id).then(function(ok){
-      if(ok===false) return; // وضع المنع: نتائج متجاوزة لم تُعتمد
-      req.status='done';
-      save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
-    });
-    return;
-  }
   req.status='done';
   save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
 }
@@ -13322,22 +13313,11 @@ function finalizeAndPrint(){
       return;
     }
   }
-  // ── Delta Check: افحص قبل الحفظ والطباعة ────────────────
-  const _dcFinishPrint=function(){
-    req.status='done';
-    save('requests',requests);
-    renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
-    currentReqId=id;
-    doPrint(id);
-  };
-  if(window.DeltaCheck && window.DeltaCheck.loadCfg && window.DeltaCheck.loadCfg().enabled){
-    window.DeltaCheck.gateFinalize(id).then(function(ok){
-      if(ok===false) return; // وضع المنع: لا حفظ ولا طباعة
-      _dcFinishPrint();
-    });
-    return;
-  }
-  _dcFinishPrint();
+  req.status='done';
+  save('requests',requests);
+  renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
+  currentReqId=id;
+  doPrint(id);
 }
 function getInterp(t,val,gender,age){
   if(t.minVal===null&&!(t.ageRanges&&t.ageRanges.length))return val==='Positive'?'<span class="high">⚠️ Positive</span>':'<span class="normal">✅ Negative</span>';
@@ -15442,6 +15422,15 @@ function _doPrintFallback(html, afterCB){
 
 function doPrint(reqId){
   if(reqId) currentReqId=reqId;
+  // ── Delta Check: افحص قبل الطباعة (يغطّي «حفظ وطباعة» وزر «طباعة») ──
+  if(!doPrint._dcPassed && window.DeltaCheck && window.DeltaCheck.loadCfg && window.DeltaCheck.loadCfg().enabled){
+    window.DeltaCheck.gatePrint(currentReqId).then(function(ok){
+      if(ok===false) return; // إعادة/إلغاء → لا تُطبع
+      doPrint._dcPassed=true;
+      try{ doPrint(currentReqId); }finally{ doPrint._dcPassed=false; }
+    });
+    return;
+  }
   const req=requests.find(r=>r.id===currentReqId);
   if(!req) return;
   window._medlabPrinting=true;
@@ -38104,55 +38093,13 @@ if(window.electronAPI && window.electronAPI.isElectron){
   //     لأن هذا المسار غير متزامن ولا يمكن إيقاف الجهاز؛ في وضع المنع
   //     نُبقي القيمة لكن نُسجّل الحدث ونعرض التحذير للمستخدم.
   function hookDevicePath(){
-    if(typeof window._lisApplyResultToReq!=='function' && typeof _lisApplyResultToReq!=='function') return false;
-    var orig = (typeof window._lisApplyResultToReq==='function')?window._lisApplyResultToReq:_lisApplyResultToReq;
-    if(orig._dcWrapped) return true;
-    var wrapped=function(req,res,reqs,idbKey){
-      try{
-        var cfg=loadCfg();
-        if(cfg.enabled && req && res){
-          // نحدد testId عبر مطابقة الكود (نفس منطق البرنامج مبسّطاً)
-          var code=(res.medlabCode||res.deviceCode||'').toUpperCase();
-          var t=_allTests().find(function(x){
-            var c=(x.code||'').toUpperCase(), ne=(x.nameEn||'').toUpperCase(), ns=(x.nameShort||'').toUpperCase();
-            return c===code||ne===code||ns===code;
-          });
-          if(t && cfg.excluded.indexOf(t.id)<0){
-            var cur=_num(res.value);
-            if(!isNaN(cur)){
-              var prev=findPreviousResult(req.patientId, t.id, req.id, cfg.days);
-              if(prev){
-                var ev=evaluate(t.id, cur, prev.value);
-                if(ev.flag){
-                  var pName=req.patientName||_patientNameById(req.patientId);
-                  logEvent({testName:_testName(t),testId:t.id,patientId:req.patientId,patientName:pName,
-                    prev:prev.raw,cur:res.value,diff:ev.diff,pct:ev.pct,reason:ev.reason,decision:'device'});
-                  // عرض تحذير غير معطِّل (النتيجة تُطبَّق لأن الجهاز أرسلها)
-                  showWarningModal({patientId:req.patientId,patientName:pName,testId:t.id,testName:_testName(t),
-                    prev:prev.raw,prevDate:prev.date,cur:res.value,diff:ev.diff,pct:ev.pct,mode:ev.mode,action:'warn'})
-                    .then(function(dec){
-                      var mapped=dec==='approve'?'approved':(dec==='recheck'?'recheck':'canceled');
-                      // تحديث آخر سجل بالقرار
-                      var log=loadLog();
-                      if(log.length){ log[log.length-1].decision=mapped; saveLog(log); if(document.getElementById('dc-log-body')) renderLog(); }
-                    });
-                }
-              }
-            }
-          }
-        }
-      }catch(e){ console.warn('[DeltaCheck] device hook error',e); }
-      return orig.apply(this, arguments);
-    };
-    wrapped._dcWrapped=true;
-    if(typeof window._lisApplyResultToReq==='function') window._lisApplyResultToReq=wrapped;
-    try{ _lisApplyResultToReq=wrapped; }catch(e){}
+    // أُلغِي الغلاف — التنبيه يظهر الآن عند الطباعة فقط.
     return true;
   }
 
   // (2) الإدخال اليدوي: vrSaveResults — فحص متزامن قبل الحفظ
   function hookManualVr(){
-    // أُلغِي هذا المسار؛ الفحص يتم عند «تأكيد النتائج» و«حفظ وطباعة».
+    // أُلغِي هذا المسار — التنبيه يظهر الآن عند الطباعة فقط.
     return true;
   }
 
@@ -38160,18 +38107,18 @@ if(window.electronAPI && window.electronAPI.isElectron){
   //     هذا المسار يعمل صامتاً كل 500ms؛ نضيف فحصاً عند أول اكتشاف
   //     تجاوز لكل (طلب+تحليل) ونتجنّب التكرار عبر علامة على الطلب.
   function hookAutoSave(){
-    // ملاحظة: أُلغِي الفحص أثناء الحفظ التلقائي (كان يظهر التحذير أثناء الكتابة).
-    // فحص Delta Check يتم الآن عند «تأكيد النتائج» و«حفظ وطباعة» فقط.
+    // أُلغِي الفحص أثناء الكتابة — التنبيه يظهر الآن عند الطباعة فقط.
     return true;
   }
 
   // ════════════════════════════════════════════════════════════════
-  //  حارس الاعتماد النهائي — يُستدعى من «تأكيد النتائج» و«حفظ وطباعة».
-  //  يفحص كل نتائج الطلب (بعد collectResults) ويظهر التحذير عند التجاوز.
-  //  يُعيد Promise<boolean>: true=تابع الحفظ/الطباعة، false=توقّف (وضع المنع).
-  //  في وضع «تحذير فقط»: يعرض التحذير ثم يُعيد true دائماً.
+  //  حارس الطباعة — يُستدعى من doPrint (يغطّي «حفظ وطباعة» من واجهة
+  //  إدخال النتائج، وزر «طباعة» من واجهة الطباعة، لأن كليهما يمر بـ doPrint).
+  //  يفحص كل نتائج الطلب الرقمية ويعرض التنبيه لكل تجاوز؛ القرار حسب
+  //  الزر المضغوط: «اعتماد» → يكمل، «إعادة/إلغاء» → يوقف الطباعة.
+  //  يُعيد Promise<boolean>.
   // ════════════════════════════════════════════════════════════════
-  function gateFinalize(reqId){
+  function gatePrint(reqId){
     try{
       var cfg=loadCfg();
       if(!cfg.enabled) return Promise.resolve(true);
@@ -38188,21 +38135,15 @@ if(window.electronAPI && window.electronAPI.isElectron){
       });
       if(!items.length) return Promise.resolve(true);
       return checkMany(items).then(function(result){
-        // في وضع المنع: امنع الطباعة/الحفظ إن بقيت نتائج متجاوزة غير معتمدة
-        if(cfg.action==='block' && !result.ok){
-          // امسح القيم المحجوبة من req والحقول
-          (result.blocked||[]).forEach(function(tid){
-            if(r.results && r.results[tid]!==undefined) delete r.results[tid];
-            var el=document.getElementById('vr-rv-'+tid)||document.getElementById('rv-'+tid);
-            if(el) el.value='';
-          });
-          if(typeof window.save==='function') window.save('requests',window.requests);
-          if(typeof window.showNotif==='function') window.showNotif('Delta Check','توجد نتائج متجاوزة لم تُعتمد — يرجى إعادة الفحص','warning');
+        // ok=true: لا تجاوز، أو المستخدم اعتمد كل التجاوزات → تابع الطباعة
+        // ok=false: المستخدم اختار إعادة/إلغاء لتحليل واحد على الأقل → أوقف
+        if(!result.ok){
+          if(typeof window.showNotif==='function') window.showNotif('Delta Check','تم إيقاف الطباعة — راجع النتائج المتجاوزة','warning');
           return false;
         }
         return true;
       });
-    }catch(e){ console.warn('[DeltaCheck] gateFinalize',e); return Promise.resolve(true); }
+    }catch(e){ console.warn('[DeltaCheck] gatePrint',e); return Promise.resolve(true); }
   }
 
   // ── تركيب الـ hooks مع إعادة المحاولة (الدوال قد تُعرّف لاحقاً) ────
@@ -38234,7 +38175,7 @@ if(window.electronAPI && window.electronAPI.isElectron){
     addPerTest:addPerTest, removePerTest:removePerTest,
     clearLog:clearLog, exportLog:exportLog,
     installHooks:installHooks,
-    gateFinalize:gateFinalize
+    gatePrint:gatePrint
   };
 })();
 </script>
