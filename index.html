@@ -9606,10 +9606,23 @@ function closeModal(id){document.getElementById(id).classList.remove('open');if(
 // "يتيماً" فلا يظهر مؤشر في الحقول إلا بعد الخروج من النافذة والعودة.
 // الحل: تنظيف أي backdrop عالق + إعادة ضبط التركيز إلى نافذة المستند.
 function _restoreAppFocus(){
-  // تنظيف أي overlay عالق قد يمنع الأحداث بعد الحذف. لا نلمس التركيز إطلاقاً
-  // (لمس التركيز برمجياً بعد confirm يُنتج حالة "تركيز جزئي" تبتلع المسافة).
   try{
+    // 1) أزل أي بقايا overlay قد تمنع الأحداث/التركيز
     var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
+    // 2) أزّل التركيز عن أي عنصر مُزال ثم أعِد تفعيل النافذة
+    if(document.activeElement && document.activeElement.blur) {
+      try{ document.activeElement.blur(); }catch(_){}
+    }
+    // 3) إعادة تنشيط نافذة المستند — يعيد قدرة الحقول على استقبال التركيز
+    if(typeof window.focus==='function'){ window.focus(); }
+    // 4) لمسة على body لإعادة ضبط سلسلة التركيز في Chromium
+    if(document.body){
+      var _hadTabindex=document.body.hasAttribute('tabindex');
+      if(!_hadTabindex) document.body.setAttribute('tabindex','-1');
+      document.body.focus({preventScroll:true});
+      document.body.blur();
+      if(!_hadTabindex) document.body.removeAttribute('tabindex');
+    }
   }catch(e){}
 }
 window._restoreAppFocus=_restoreAppFocus;
@@ -9968,7 +9981,7 @@ function renderWizStep(){
           <label class="fl" style="font-family:'Cairo',sans-serif;font-size:18px;font-weight:900;color:inherit">الطبيب المحول</label>
           <div id="wp-doctor-ac" style="position:relative;margin-top:6px">
             <input class="fc" id="wp-doctor-search" autocomplete="off" placeholder="اكتب اسم الطبيب للبحث..." value="${(doctors.find(d=>d.id===wizPatient.doctorId)||{}).name||''}" style="font-size:17px;font-family:'Cairo',sans-serif;font-weight:700;color:#000000;background:var(--bg-input);border:2px solid var(--primary)">
-            <div id="wp-doctor-suggest" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:60;max-height:230px;overflow-y:auto;background:var(--bg-input,#fff);border:2px solid var(--primary);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.25)"></div>
+            <div id="wp-doctor-suggest" style="display:none;position:absolute;bottom:calc(100% + 2px);left:0;right:0;z-index:60;max-height:230px;overflow-y:auto;background:var(--bg-input,#fff);border:2px solid var(--primary);border-radius:8px;box-shadow:0 -6px 20px rgba(0,0,0,0.25)"></div>
           </div>
           <!-- select مخفي للحفاظ على التوافق مع منطق الحفظ -->
           <select id="wp-doctor" style="display:none">
@@ -11067,18 +11080,16 @@ function searchPatients(v){
   },80);
 }
 function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا المريض؟')){
-  // ⭐ نفّذ الحذف على stack جديد (بعد إغلاق confirm) لمنع "التركيز اليتيم"
-  setTimeout(function(){
-    patients=patients.filter(p=>p.id!==id);save('patients',patients);
-    // بدل renderAll() (١١ جدول) — ارسم فقط ما يتأثر بحذف المريض
-    var _activeTab=document.querySelector('#sec-patients .tabs .tab.active');
-    var _f=(_activeTab&&_activeTab.textContent.trim()==='اليوم')?'today':'all';
-    var _srchEl=document.getElementById('pts-srch-inp');
-    renderPatients(_f,(_srchEl&&_srchEl.value)||'');
-    updateBadges();updateDashboard();
-    showNotif('تم الحذف','تم حذف المريض','success');
-    _restoreAppFocus();
-  },0);
+  patients=patients.filter(p=>p.id!==id);save('patients',patients);
+  // ⭐ بدل renderAll() (١١ جدول) — ارسم فقط ما يتأثر بحذف المريض
+  const _activeTab=document.querySelector('#sec-patients .tabs .tab.active');
+  const _f=(_activeTab&&_activeTab.textContent.trim()==='اليوم')?'today':'all';
+  const _srchEl=document.getElementById('pts-srch-inp');
+  renderPatients(_f,(_srchEl&&_srchEl.value)||'');
+  updateBadges();updateDashboard();
+  showNotif('تم الحذف','تم حذف المريض','success');
+  // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
+  setTimeout(_restoreAppFocus,0);
 }}
 function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;renderWizStep();openModal('m-wizard');}
 
@@ -11869,19 +11880,15 @@ function searchReq(v){
   renderRequestsFiltered(filter,v);
 }
 function deleteReq(id){if(confirm('حذف هذا الطلب؟')){
-  // ⭐ نفّذ الحذف وإعادة الرسم على stack جديد (بعد إغلاق confirm تماماً).
-  //    التنفيذ المتزامن داخل معالج confirm يُسبّب "تركيز يتيم" في Chromium
-  //    (المؤشر يظهر لكن لا يكتب حتى الخروج والعودة). التأجيل يمنع ذلك.
-  setTimeout(function(){
-    requests=requests.filter(r=>r.id!==id);save('requests',requests);
-    // احترم الفلتر النشط بدل عرض كل الطلبات (كان renderRequests() يمرّر 'all')
-    var _activePill=document.querySelector('#sec-requests .req-pill[data-filter].active');
-    var _f=_activePill?_activePill.getAttribute('data-filter'):'today';
-    var _srchEl=document.getElementById('req-srch-inp');
-    renderRequestsFiltered(_f,(_srchEl&&_srchEl.value)||'');
-    updateBadges();updateDashboard();showNotif('تم الحذف','تم حذف الطلب');
-    _restoreAppFocus();
-  },0);
+  requests=requests.filter(r=>r.id!==id);save('requests',requests);
+  // ⭐ إصلاح: احترم الفلتر النشط بدل عرض كل الطلبات (كان renderRequests() يمرّر 'all')
+  const _activePill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+  const _f=_activePill?_activePill.getAttribute('data-filter'):'today';
+  const _srchEl=document.getElementById('req-srch-inp');
+  renderRequestsFiltered(_f,(_srchEl&&_srchEl.value)||'');
+  updateBadges();updateDashboard();showNotif('تم الحذف','تم حذف الطلب');
+  // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
+  setTimeout(_restoreAppFocus,0);
 }}
 function goToResult(id){
   currentReqId=id;
@@ -35330,8 +35337,23 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   },{passive:true});
 
-  // (أُزيلت شبكة أمان التركيز التي كانت تُركّز الحقول برمجياً — كانت تُنتج
-  //  حالة "تركيز جزئي" تبتلع مفتاح المسافة أثناء الكتابة بعد الحذف)
+  // ⭐⭐ شبكة أمان عالمية لفقدان التركيز ⭐⭐
+  // إذا نُقر على حقل إدخال ولم يستقبل التركيز فعلياً (بسبب حالة "التركيز اليتيم"
+  // بعد confirm()/إعادة بناء DOM) — نفرض التركيز عليه فوراً. يغطي كل عمليات
+  // الحذف/الاستلام الحالية والمستقبلية دون تعديل كل دالة على حدة.
+  document.addEventListener('click',function(e){
+    var el=e.target;
+    if(!el) return;
+    var tag=el.tagName;
+    var focusable=(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')&&!el.disabled&&!el.readOnly&&el.type!=='checkbox'&&el.type!=='radio'&&el.type!=='button';
+    if(!focusable) return;
+    if(document.activeElement!==el){
+      // نظّف أي backdrop عالق ثم أعِد التركيز
+      var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
+      try{ el.focus({preventScroll:true}); }catch(_){ try{el.focus();}catch(__){}
+      }
+    }
+  },true);
 })();
 
 /* ══════════════════════════════════════════════════════
@@ -36307,8 +36329,19 @@ setTimeout(function(){
 
   // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
   var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },0); } },
-    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },0); } },
+    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{
+                         var _tab=document.querySelector('#sec-patients .tabs .tab.active');
+                         var _pf=(_tab&&_tab.textContent.trim()==='اليوم')?'today':'all';
+                         var _ps=document.getElementById('pts-srch-inp');
+                         renderPatients(_pf,(_ps&&_ps.value)||'');updateBadges();updateDashboard();
+                       }catch(e){} },0); } },
+    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{
+                         var _pill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+                         var _rf=_pill?_pill.getAttribute('data-filter'):'today';
+                         var _rs=document.getElementById('req-srch-inp');
+                         renderRequestsFiltered(_rf,(_rs&&_rs.value)||'');
+                         updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();
+                       }catch(e){} },0); } },
     invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
     packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
     inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
@@ -37318,8 +37351,23 @@ var _LAN_SYNC_KEYS= ['patients','requests','invoices','doctors','testGroups',
 
 // ⭐ خريطة إعادة الرسم لكل مفتاح — تُستخدم بعد تطبيق أي تحديث وارد
 var _LAN_RENDER = {
-  patients:        function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },
-  requests:        function(){ try{renderRequests();updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();}catch(e){} },
+  patients:        function(){ try{
+                     // احترم تبويب المرضى النشط (الكل/اليوم) بدل الافتراضي
+                     var _tab=document.querySelector('#sec-patients .tabs .tab.active');
+                     var _pf=(_tab&&_tab.textContent.trim()==='اليوم')?'today':'all';
+                     var _ps=document.getElementById('pts-srch-inp');
+                     renderPatients(_pf,(_ps&&_ps.value)||'');
+                     updateBadges();updateDashboard();
+                   }catch(e){} },
+  requests:        function(){ try{
+                     // ⭐ احترم الفلتر النشط بدل عرض كل الطلبات من أول يوم
+                     //    (كان renderRequests() يمرّر 'all' فتظهر كل الطلبات عند المزامنة)
+                     var _pill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+                     var _rf=_pill?_pill.getAttribute('data-filter'):'today';
+                     var _rs=document.getElementById('req-srch-inp');
+                     renderRequestsFiltered(_rf,(_rs&&_rs.value)||'');
+                     updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();
+                   }catch(e){} },
   invoices:        function(){ try{renderInvoices();}catch(e){} },
   doctors:         function(){ try{renderDoctors();}catch(e){} },
   testGroups:      function(){ try{renderTestsDB();}catch(e){} },
