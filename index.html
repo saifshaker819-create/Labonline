@@ -8390,7 +8390,7 @@ function getSubCats(cat){
   return merged.filter(s=>s!=='Other').concat(['Other']);
 }
 // إرجاع كل المجاميع الفرعية المستخدمة فعلياً في قاعدة البيانات
-function getAllUsedSubCats(){ const s=new Set(); tests.forEach(t=>{ if(t.subCat) s.add(t.subCat); }); return [...s]; }
+
 const CAT_AR={'All':'الكل','Hematology':'هيماتولوجيا','Blood Gases':'غازات الدم','Biochemistry':'كيمياء حيوية','Hormones':'هرمونات','Immunology':'مناعة','Vitamins & Minerals':'فيتامينات','Tumor Markers':'أورام','Infections':'أمراض معدية','Urinalysis':'بول','Microbiology':'ميكروبيولوجيا','Stool':'براز','Special':'خاص','Calculated':'محسوبة'};
 
 // ============================================================
@@ -9360,9 +9360,9 @@ function startAdminListeners(){
   // ══════════════════════════════════════════════════════
   fbDb.ref('sync_config/' + myUsername + '/enabled').on('value', snap => {
     try {
-      const val = snap.val();
-      if (val === null || val === undefined) return;
-      const enabled = !!val;
+      // ⭐ (طلب المستخدم) — مزامنة بيانات Firebase معطّلة نهائياً. نتجاهل أي
+      //    محاولة تفعيل من الإدارة، ونُبقيها OFF دائماً. (المحادثات/الدخول تعمل)
+      const enabled = false;
 
       // تحديث حالة SyncManager
       if (typeof SyncManager !== 'undefined') {
@@ -9382,11 +9382,7 @@ function startAdminListeners(){
       // إشعار الواجهة بتغيير الحالة
       window.dispatchEvent(new CustomEvent('syncmanager:statuschange', { detail: { enabled } }));
 
-      if (enabled) {
-        showNotif('☁️ مزامنة', 'تم تفعيل المزامنة السحابية من الإدارة', 'success');
-      } else {
-        showNotif('💾 محلي', 'تم إيقاف المزامنة السحابية من الإدارة', 'warning');
-      }
+      // ⭐ المزامنة السحابية معطّلة دائماً — لا نعرض إشعاراً متكرراً بذلك.
     } catch(e) { console.warn('[sync_config listener]', e); }
   });
 }
@@ -9604,6 +9600,32 @@ function nav(p){
 // ============================================================
 function openModal(id){document.getElementById(id).classList.add('open');if(window._applyAutoLang)requestAnimationFrame(window._applyAutoLang);}
 function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='m-wizard'){try{if(window.SmartRec)SmartRec.reset();}catch(e){}}}
+
+// ⭐⭐ إصلاح فقدان التركيز بعد الحذف/استلام النتيجة (Electron + Vercel) ⭐⭐
+// السبب: بعد confirm() ثم إعادة بناء الجدول عبر innerHTML — يبقى التركيز
+// "يتيماً" فلا يظهر مؤشر في الحقول إلا بعد الخروج من النافذة والعودة.
+// الحل: تنظيف أي backdrop عالق + إعادة ضبط التركيز إلى نافذة المستند.
+function _restoreAppFocus(){
+  try{
+    // 1) أزل أي بقايا overlay قد تمنع الأحداث/التركيز
+    var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
+    // 2) أزّل التركيز عن أي عنصر مُزال ثم أعِد تفعيل النافذة
+    if(document.activeElement && document.activeElement.blur) {
+      try{ document.activeElement.blur(); }catch(_){}
+    }
+    // 3) إعادة تنشيط نافذة المستند — يعيد قدرة الحقول على استقبال التركيز
+    if(typeof window.focus==='function'){ window.focus(); }
+    // 4) لمسة على body لإعادة ضبط سلسلة التركيز في Chromium
+    if(document.body){
+      var _hadTabindex=document.body.hasAttribute('tabindex');
+      if(!_hadTabindex) document.body.setAttribute('tabindex','-1');
+      document.body.focus({preventScroll:true});
+      document.body.blur();
+      if(!_hadTabindex) document.body.removeAttribute('tabindex');
+    }
+  }catch(e){}
+}
+window._restoreAppFocus=_restoreAppFocus;
 document.querySelectorAll('.moverlay').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});});
 
 // ============================================================
@@ -10624,10 +10646,6 @@ function renderWizRightPanel(){
   updateWizTotal();
 }
 
-function renderWizSelTags(){
-  const el=document.getElementById('wiz-sel-tags');
-  if(el) el.innerHTML='';
-}
 
 function filterWizTests(cat){
   if(cat) currentTestCat=cat;
@@ -11024,9 +11042,6 @@ function _showMorePatients(){
   const f=(activeTab&&activeTab.textContent.trim()==='اليوم')?'today':'all';
   renderPatients(f,(srchEl&&srchEl.value)||'',window._idbSearchTemp?[...patients,...window._idbSearchTemp]:null);
 }
-function _ptHasDoneReq(patientId){
-  return requests.some(r=>r.patientId===patientId&&r.status==='done');
-}
 function openPatientPortalByPatient(patientId){
   // إيجاد آخر طلب مكتمل للمريض
   const done=[...requests].filter(r=>r.patientId===patientId&&r.status==='done')
@@ -11064,7 +11079,18 @@ function searchPatients(v){
     }catch{}
   },80);
 }
-function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا المريض؟')){patients=patients.filter(p=>p.id!==id);save('patients',patients);renderAll();updateBadges();showNotif('تم الحذف','تم حذف المريض','success');}}
+function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا المريض؟')){
+  patients=patients.filter(p=>p.id!==id);save('patients',patients);
+  // ⭐ بدل renderAll() (١١ جدول) — ارسم فقط ما يتأثر بحذف المريض
+  const _activeTab=document.querySelector('#sec-patients .tabs .tab.active');
+  const _f=(_activeTab&&_activeTab.textContent.trim()==='اليوم')?'today':'all';
+  const _srchEl=document.getElementById('pts-srch-inp');
+  renderPatients(_f,(_srchEl&&_srchEl.value)||'');
+  updateBadges();updateDashboard();
+  showNotif('تم الحذف','تم حذف المريض','success');
+  // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
+  setTimeout(_restoreAppFocus,0);
+}}
 function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;renderWizStep();openModal('m-wizard');}
 
 // ── دوال التقويم ────────────────────────────────────────────
@@ -11571,34 +11597,6 @@ function genTubeBarcode(code){
   return svg;
 }
 
-function getTubeColors(testIds){
-  // أنواع التيوبات الشائعة حسب نوع التحليل
-  const map={
-    // أحمر/ذهبي — Chemistry
-    chemistry:  {color:'#FFD700',label:'كيمياء'},
-    // أرجواني — CBC
-    hematology: {color:'#9B59B6',label:'CBC'},
-    // أزرق — تخثر
-    coagulation:{color:'#3498DB',label:'تخثر'},
-    // أخضر — هرمونات / فيتامين
-    immunology: {color:'#27AE60',label:'هرمون'},
-    // رمادي — سكر
-    glucose:    {color:'#95A5A6',label:'سكر'},
-  };
-  const tubes=new Set();
-  const result=[];
-  const tests_db_local=typeof testsDb!=='undefined'?testsDb:[];
-  testIds.forEach(tid=>{
-    const t=tests_db_local.find(x=>x.id===tid);
-    const cat=(t?.category||t?.cat||'').toLowerCase();
-    if((cat.includes('chem')||cat.includes('كيمياء')||cat.includes('وظ'))&&!tubes.has('chemistry')){tubes.add('chemistry');result.push(map.chemistry);}
-    else if((cat.includes('hema')||cat.includes('دم')||cat.includes('cbc'))&&!tubes.has('hematology')){tubes.add('hematology');result.push(map.hematology);}
-    else if((cat.includes('coag')||cat.includes('تخثر'))&&!tubes.has('coagulation')){tubes.add('coagulation');result.push(map.coagulation);}
-    else if((cat.includes('immun')||cat.includes('هرمون')||cat.includes('endo'))&&!tubes.has('immunology')){tubes.add('immunology');result.push(map.immunology);}
-    else if((cat.includes('gluc')||cat.includes('سكر'))&&!tubes.has('glucose')){tubes.add('glucose');result.push(map.glucose);}
-  });
-  return result.slice(0,4);
-}
 
 // ============================================================
 // REQUESTS
@@ -11881,7 +11879,17 @@ function searchReq(v){
   const filter=activeTab?.getAttribute('data-filter')||'today';
   renderRequestsFiltered(filter,v);
 }
-function deleteReq(id){if(confirm('حذف هذا الطلب؟')){requests=requests.filter(r=>r.id!==id);save('requests',requests);renderRequests();updateBadges();updateDashboard();showNotif('تم الحذف','تم حذف الطلب');}}
+function deleteReq(id){if(confirm('حذف هذا الطلب؟')){
+  requests=requests.filter(r=>r.id!==id);save('requests',requests);
+  // ⭐ إصلاح: احترم الفلتر النشط بدل عرض كل الطلبات (كان renderRequests() يمرّر 'all')
+  const _activePill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+  const _f=_activePill?_activePill.getAttribute('data-filter'):'today';
+  const _srchEl=document.getElementById('req-srch-inp');
+  renderRequestsFiltered(_f,(_srchEl&&_srchEl.value)||'');
+  updateBadges();updateDashboard();showNotif('تم الحذف','تم حذف الطلب');
+  // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
+  setTimeout(_restoreAppFocus,0);
+}}
 function goToResult(id){
   currentReqId=id;
   window._goToResultCalled=true;
@@ -12934,7 +12942,7 @@ function editPatientFromResults(){
   _wizEditPatientOnly=true;
   renderWizStep(); openModal('m-wizard');
 }
-function saveDraft(){const req=collectResults();if(!req)return;req.status='inprogress';save('requests',requests);showNotif('تم الحفظ','تم حفظ المسودة ✅','success');}
+
 function finalizeResult(){
   const req=collectResults();if(!req)return;
   // 🔎 Delta Check — فحص التجاوزات قبل الاعتماد النهائي (إدخال يدوي)
@@ -13969,21 +13977,7 @@ function toggleNotifPanel(e){
 
 // إشعارات النظام المحلية (مخزون منخفض، انتهاء صلاحية)
 const _sysNotifs={};
-function _addSysNotif(key,title,body,type){
-  const session=getSession(); if(!session) return;
-  const id='sys-'+key;
-  const storKey=NOTIFS_KEY+'_'+session.username;
-  let list=JSON.parse(localStorage.getItem(storKey)||'[]');
-  // تحقق بالـ id فقط — إذا موجود بالفعل لا تضيفه مرة ثانية خلال نفس الجلسة
-  if(_sysNotifs[id]) return;
-  _sysNotifs[id]=true;
-  if(list.find(n=>n.id===id)) return;
-  list.unshift({id,title,body,type,date:new Date().toLocaleDateString('ar'),read:false,sys:true});
-  localStorage.setItem(storKey,JSON.stringify(list));
-  renderNotifPanel(); updateNotifDot();
-  // صوت تنبيه
-  playNotifSound();
-}
+// (أُزيلت الدالة الميتة _addSysNotif — لم تكن مُستدعاة من أي مكان)
 
 // تشغيل فحص المخزون عند بدء البرنامج وبشكل دوري
 function startInventoryMonitor(){
@@ -14089,7 +14083,7 @@ function updateNotifDot(){
   if(dot) dot.style.display=unread>0?'block':'none';
 }
 
-function cleanupOldNotifs(){}  // لم تعد ضرورية مع Firebase
+
 
 function adminSendNotif(){
   const title=(document.getElementById('adm-notif-title').value||'').trim();
@@ -15234,7 +15228,7 @@ function buildPrintHTML(req, opts){
     </body></html>`;
 }
 
-function getCatDeviceName(cat){ return ''; }
+// (أُزيلت الدالة الميتة getCatDeviceName — لم تكن مُستدعاة)
 
 // ============================================================
 // CALC TEST PRINT PAGE — صفحة منفردة للتحليل المحسوب
@@ -17433,8 +17427,11 @@ function updateDashboard(){
   </tr>`).join('')||'<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text2)">لا توجد طلبات بعد</td></tr>';
   const alertsDiv=document.getElementById('dash-alerts');
   const criticals=[];
+  // ⭐ فهرسة التحاليل مرة واحدة (Map) بدل tests.find() لكل نتيجة — تسريع كبير
+  const _testMap=new Map();
+  for(let _i=0;_i<tests.length;_i++){ _testMap.set(tests[_i].id, tests[_i]); }
   requests.filter(r=>r.status==='done').forEach(r=>{
-    r.tests.forEach(tid=>{const t=tests.find(x=>x.id===tid);const val=r.results[tid];
+    r.tests.forEach(tid=>{const t=_testMap.get(tid);const val=r.results[tid];
       if(t&&val&&t.minVal!==null){const _vR=(typeof val==='string'&&(val.charAt(0)==='<'||val.charAt(0)==='>'))?parseFloat(val.substring(1).trim()):parseFloat(val); const v=_vR; if(v>t.maxVal*1.2||v<t.minVal*0.8)criticals.push({req:r,test:t,val});}
     });
   });
@@ -19095,17 +19092,6 @@ function _checkPublicUrlStatus(){
   }
 }
 
-function _pasteCurrentUrl(){
-  var o=window.location.origin;
-  var p=window.location.pathname;
-  if(!o||o==='null'||o.startsWith('file')){
-    showNotif('تنبيه','الملف مفتوح محلياً — هذا الرابط لن يعمل على أجهزة أخرى!\nارفع الملف على خادم ويب أولاً.','warning');
-    return;
-  }
-  var url=o+p;
-  var el=document.getElementById('st-public-url');
-  if(el){ el.value=url; _checkPublicUrlStatus(); }
-}
 function changeBillingCurrency(val){settings.currency=val;save('settings',settings);_syncCurrencySelectors();renderBillingTests();renderBillingCalc&&renderBillingCalc();}
 function _syncCurrencySelectors(){
   const cur=settings.currency||'IQD';
@@ -21591,7 +21577,7 @@ let activeMsgListener = null;
 let voiceRecorder = null;
 let isRecording   = false;
 let recordedChunks= [];
-let voiceStartTime= 0, voiceDuration=0, voiceTimer=null;
+let voiceStartTime= 0, voiceDuration=0, voiceTimer=null, _recCountTimer=null;
 let meUsername    = '';
 let meLabName     = '';
 
@@ -22033,8 +22019,8 @@ function startRec(){
     voiceTimer=setInterval(()=>voiceDuration=(Date.now()-voiceStartTime)/1000, 100);
     const btn=document.getElementById('voice-rec-btn');
     if(btn){ btn.innerHTML='⏹ <span id="rec-time">0ث</span>'; btn.classList.add('recording'); }
-    // عداد
-    setInterval(()=>{
+    // عداد — ⭐ يُخزَّن في متغير ليُلغى في stopRec (كان يتسرّب سابقاً)
+    _recCountTimer=setInterval(()=>{
       const el=document.getElementById('rec-time');
       if(el) el.textContent=Math.round((Date.now()-voiceStartTime)/1000)+'ث';
     }, 1000);
@@ -22044,6 +22030,7 @@ function stopRec(){
   if(voiceRecorder&&isRecording) voiceRecorder.stop();
   isRecording=false;
   clearInterval(voiceTimer);
+  clearInterval(_recCountTimer); _recCountTimer=null; // ⭐ إيقاف عدّاد الوقت (كان يتسرّب)
   const btn=document.getElementById('voice-rec-btn');
   if(btn){ btn.innerHTML='🎤 صوت'; btn.classList.remove('recording'); }
 }
@@ -22503,16 +22490,7 @@ function _openLabWhatsApp(){
   window.open('https://wa.me/'+labPhone+'?text='+msg,'_blank');
 }
 
-function _isBetter(t,valNow,valPrev,gender,age){
-  const ref=getPatientRef(t,gender,age);
-  if(ref.min===null) return null;
-  const wasOutside=valPrev<ref.min||valPrev>ref.max;
-  const isNowNormal=valNow>=ref.min&&valNow<=ref.max;
-  if(wasOutside&&isNowNormal) return true;
-  const wasHigh=valPrev>ref.max, isLessHigh=valNow<valPrev;
-  const wasLow=valPrev<ref.min, isLessLow=valNow>valPrev;
-  return (wasHigh&&isLessHigh)||(wasLow&&isLessLow);
-}
+
 
 function chatTime(ts){
   if(!ts) return '';
@@ -22528,7 +22506,7 @@ function esc(s){
 }
 // للتوافق مع الكود القديم
 function escHtml(s){ return esc(s); }
-function formatChatTime(ts){ return chatTime(ts); }
+
 
 // إغلاق نتائج البحث عند النقر خارجها
 document.addEventListener('click', e=>{
@@ -24109,14 +24087,7 @@ const EMPTY_LABEL = 'فارغ';
 function _isEmptyVal(v){ return v===EMPTY_VAL; }
 function _displayValForReport(v){ return _isEmptyVal(v) ? '' : v; }
 // Return options array with "فارغ" prepended (for select fields only)
-function _withEmptyOption(opts){
-  if(!Array.isArray(opts)) return opts;
-  if(opts[0]===EMPTY_VAL) return opts;
-  return [EMPTY_VAL, ...opts];
-}
 // Return the visible label for a given option value
-function _optLabel(v){ return v===EMPTY_VAL ? EMPTY_LABEL : v; }
-
 const UA_FIELDS = {
   physical: {
     label: 'Physical Examination',
@@ -28529,265 +28500,6 @@ function toggleWqTvMenu(){
   }
 }
 
-/* ── شاشة الانتظار — وضع الانعكاس اللاسلكي — تم الحذف ── */
-function openWaitScreenMirror_REMOVED(){
-  // نفتح نافذة كاملة الشاشة محسّنة للـ Cast/Miracast
-  var win = window.open('', 'MedLabWaitMirror',
-    'width='+screen.width+',height='+screen.height+',toolbar=0,menubar=0,scrollbars=0,resizable=1,left=0,top=0');
-  if(!win){
-    alert('⚠️ السماح بالنوافذ المنبثقة مطلوب\nيرجى السماح بها من شريط العنوان ثم اضغط مجدداً');
-    return;
-  }
-  window._waitMirrorWin = win;
-
-  // بناء عنوان URL للصفحة الحالية (للـ QR Code)
-  var pageUrl = window.location.href;
-  var yr = new Date().getFullYear();
-
-  win.document.open();
-  win.document.write('<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8">'
-  +'<meta name="viewport" content="width=device-width,initial-scale=1">'
-  +'<title>شاشة الانتظار — انعكاس</title>'
-  +'<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">'
-  +'<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>'
-  +'<style>'
-  +'*{margin:0;padding:0;box-sizing:border-box;}'
-  +'body{font-family:Cairo,sans-serif;background:#04080f;color:#fff;height:100vh;direction:rtl;overflow:hidden;display:flex;flex-direction:column;}'
-  +'body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at 10% 20%,rgba(0,212,255,0.07) 0%,transparent 50%),radial-gradient(ellipse at 90% 80%,rgba(123,47,255,0.07) 0%,transparent 50%);pointer-events:none;z-index:0;}'
-  +'.hdr{position:relative;z-index:2;background:rgba(4,8,20,0.98);border-bottom:2px solid rgba(0,212,255,0.25);padding:14px 36px;display:flex;justify-content:space-between;align-items:center;}'
-  +'.logo{display:flex;align-items:center;gap:12px}'
-  +'.logo-ic{width:48px;height:48px;background:linear-gradient(135deg,#00d4ff,#8b3fff);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 0 20px rgba(0,212,255,0.4);}'
-  +'.logo h1{font-size:22px;font-weight:900;color:#00d4ff;line-height:1.1}'
-  +'.logo p{font-size:11px;color:rgba(255,255,255,0.4)}'
-  +'.cast-badge{display:flex;align-items:center;gap:8px;background:rgba(0,255,157,0.08);border:1px solid rgba(0,255,157,0.25);border-radius:20px;padding:7px 16px;font-size:12px;font-weight:700;color:#00ff9d}'
-  +'.cast-dot{width:8px;height:8px;background:#00ff9d;border-radius:50%;animation:pulse 2.5s infinite;}'
-  +'@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}'
-  +'.clock{font-size:28px;font-weight:900;color:#fff;letter-spacing:2px;direction:ltr}'
-  +'.date-lbl{font-size:11px;color:rgba(255,255,255,0.35);text-align:center;margin-top:2px}'
-  +'.counters{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 36px;background:rgba(0,0,0,0.12);border-bottom:1px solid rgba(255,255,255,0.05);}'
-  +'.cnt{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:10px;text-align:center;}'
-  +'.cnt .n{font-size:34px;font-weight:900;line-height:1;}'
-  +'.cnt .l{font-size:12px;color:rgba(255,255,255,0.45);margin-top:4px;}'
-  +'.cp .n{color:#ffcc00;} .ci .n{color:#00d4ff;} .cd .n{color:#00e87a;} .ct .n{color:#a78bfa;}'
-  +'.main{position:relative;z-index:1;flex:1;display:flex;gap:0;overflow:hidden;}'
-  +'.tbl-area{flex:1;padding:0 16px 0 0;overflow:hidden;display:flex;flex-direction:column;}'
-  +'table{width:100%;border-collapse:collapse;table-layout:fixed;}'
-  +'.thead-tbl th{padding:12px 14px;text-align:right;font-size:13px;font-weight:700;color:rgba(0,212,255,0.8);}'
-  +'td{padding:13px 14px;border-bottom:1px solid rgba(255,255,255,0.04);vertical-align:middle;}'
-  +'tr:hover td{background:rgba(0,212,255,0.025);}'
-  +'.pill{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:18px;font-size:13px;font-weight:800;}'
-  +'.pp{background:rgba(255,214,10,0.12);color:#ffcc00;border:1px solid rgba(255,214,10,0.3);}'
-  +'.pi{background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.3);}'
-  +'.pd{background:rgba(0,232,122,0.12);color:#00e87a;border:1px solid rgba(0,232,122,0.3);}'
-  +'.empty-msg{text-align:center;padding:60px;color:rgba(255,255,255,0.18);font-size:18px;}'
-  // لوحة الـ Cast
-  +'.cast-panel{width:220px;background:rgba(0,0,0,0.3);border-right:1px solid rgba(0,212,255,0.1);padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;}'
-  +'.cast-section{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:13px;}'
-  +'.cast-title{font-size:11px;font-weight:800;color:rgba(0,212,255,0.7);margin-bottom:10px;letter-spacing:0.5px;}'
-  +'.cast-step{font-size:11px;color:rgba(255,255,255,0.55);line-height:1.8;}'
-  +'.cast-step b{color:#fff;}'
-  +'.qr-box{display:flex;justify-content:center;margin-top:8px;}'
-  +'#qr-container canvas,#qr-container img{border-radius:8px !important;}'
-  +'.cast-btn{display:flex;align-items:center;gap:8px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:9px 12px;cursor:pointer;font-family:Cairo,sans-serif;font-size:11px;font-weight:700;color:var(--primary,#00d4ff);width:100%;text-align:right;transition:background 0.15s;margin-bottom:6px;}'
-  +'.cast-btn:hover{background:rgba(0,212,255,0.18);}'
-  +'.cast-btn .icon{font-size:16px;}'
-  // footer
-  +'.footer{position:relative;z-index:2;background:rgba(4,8,20,0.97);border-top:1px solid rgba(0,212,255,0.1);padding:7px 32px;display:flex;justify-content:space-between;align-items:center;font-size:11px;color:rgba(255,255,255,0.3);}'
-  +'.live{display:inline-flex;align-items:center;gap:6px;color:rgba(0,232,122,0.7);font-weight:700;}'
-  +'.ldot{width:7px;height:7px;background:#00e87a;border-radius:50%;animation:pulse 2s infinite;}'
-  +'</style></head><body>'
-  // Header
-  +'<div class="hdr">'
-  +'<div class="logo"><div class="logo-ic">🔬</div><div><h1>شاشة قاعة الانتظار</h1><p>MedLab Pro — وضع الانعكاس اللاسلكي</p></div></div>'
-  +'<div style="text-align:center"><div class="clock" id="wsclock">--:--:--</div><div class="date-lbl" id="wsdate"></div></div>'
-  +'<div class="cast-badge"><div class="cast-dot"></div>📡 انعكاس نشط</div>'
-  +'</div>'
-  // Counters
-  +'<div class="counters">'
-  +'<div class="cnt cp"><div class="n" id="wsp">0</div><div class="l">⏳ انتظار</div></div>'
-  +'<div class="cnt ci"><div class="n" id="wsi">0</div><div class="l">🔬 جاري التحليل</div></div>'
-  +'<div class="cnt cd"><div class="n" id="wsd">0</div><div class="l">✅ جاهز</div></div>'
-  +'<div class="cnt ct"><div class="n" id="wst">0</div><div class="l">📋 إجمالي اليوم</div></div>'
-  +'</div>'
-  // Main area
-  +'<div class="main">'
-  // Cast panel (right side)
-  +'<div class="cast-panel">'
-  +'<div class="cast-section">'
-  +'<div class="cast-title">📡 الانعكاس اللاسلكي</div>'
-  +'<button class="cast-btn" onclick="startCast()"><span class="icon">🔵</span>Chromecast / Cast</button>'
-  +'<button class="cast-btn" onclick="startPresent()"><span class="icon">🖥️</span>مشاركة الشاشة</button>'
-  +'<div class="cast-step" style="margin-top:6px">للـ <b>Miracast</b>: اضغط <b>Win+K</b> واختر التلفاز</div>'
-  +'</div>'
-  +'<div class="cast-section">'
-  +'<div class="cast-title">📱 QR للتلفاز الذكي</div>'
-  +'<div class="cast-step">افتح الرابط من التلفاز:</div>'
-  +'<div class="qr-box"><div id="qr-container"></div></div>'
-  +'<div class="cast-step" style="margin-top:8px;font-size:10px;word-break:break-all;color:rgba(0,212,255,0.5)" id="qr-url"></div>'
-  +'</div>'
-  +'<div class="cast-section">'
-  +'<div class="cast-title">ℹ️ تعليمات سريعة</div>'
-  +'<div class="cast-step">'
-  +'<b>Chromecast:</b> اضغط الزر أعلاه<br>'
-  +'<b>Miracast:</b> Win+K ← اختر التلفاز<br>'
-  +'<b>Apple TV:</b> Control Center ← Screen Mirror<br>'
-  +'<b>Smart TV:</b> امسح QR أعلاه'
-  +'</div>'
-  +'</div>'
-  +'</div>'
-  // Table area
-  +'<div class="tbl-area" id="wsbody"><div class="empty-msg">جارٍ التحميل...</div></div>'
-  +'</div>'
-  // Footer
-  +'<div class="footer">'
-  +'<span class="live"><span class="ldot"></span> البيانات حية</span>'
-  +'<span>⏳ انتظار &nbsp;|&nbsp; 🔬 جاري التحليل &nbsp;|&nbsp; ✅ جاهز</span>'
-  +'<span>MedLab Pro &copy; '+yr+'</span>'
-  +'</div>'
-  // Script
-  +'<script>'
-  +'function tick(){var n=new Date();'
-  +'var c=document.getElementById("wsclock");var d=document.getElementById("wsdate");'
-  +'if(c)c.textContent=n.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});'
-  +'if(d)d.textContent=n.toLocaleDateString("ar-EG",{weekday:"long",year:"numeric",month:"long",day:"numeric"});}'
-  +'tick();setInterval(tick,1000);'
-  // ── نظام التمرير السلس (marquee) ──
-  +'var _mSpd=0.5,_mRaf=null,_mPos=0,_mTotalH=0,_mInner=null,_mLastRows="";'
-  +'function _buildMirrorMarquee(rows){'
-  +'var b=document.getElementById("wsbody");'
-  +'if(!b)return;'
-  +'if(!rows){'
-  +'b.innerHTML="<div class=\\"empty-msg\\">🔬 لا توجد طلبات اليوم</div>";'
-  +'_mInner=null;_mPos=0;_mTotalH=0;return;'
-  +'}'
-  +'var theadHTML='
-  +'"<table class=\\"thead-tbl\\" style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\">"'
-  +'"<thead><tr>"'
-  +'"<th style=\\"width:5%\\">#</th>"'
-  +'"<th style=\\"width:15%\\">رقم الطلب</th>"'
-  +'"<th style=\\"width:36%\\">اسم المريض</th>"'
-  +'"<th style=\\"width:27%\\">التحاليل</th>"'
-  +'"<th style=\\"width:17%\\">الحالة</th>"'
-  +'</tr></thead></table>";'
-  +'var rowsHTML="<table style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\">"'
-  +'"<colgroup><col style=\\"width:5%\\"><col style=\\"width:15%\\"><col style=\\"width:36%\\"><col style=\\"width:27%\\"><col style=\\"width:17%\\"></colgroup>"'
-  +'+"<tbody>"+rows+"</tbody></table>";'
-  +'b.innerHTML='
-  +'"<div style=\\"display:flex;flex-direction:column;height:100%;\\">"'
-  +'"<div style=\\"background:rgba(4,8,20,0.98);padding:4px 0;\\">"+theadHTML+"</div>"'
-  +'"<div id=\\"mir-scroll-clip\\" style=\\"flex:1;overflow:hidden;position:relative;\\">"'
-  +'"<div id=\\"mir-scroll-inner\\" style=\\"position:absolute;top:0;left:0;right:0;will-change:transform;\\">"'
-  +'+"<div id=\\"mir-orig\\">"+rowsHTML+"</div>"'
-  +'+"<div id=\\"mir-dup\\">"+rowsHTML+"</div>"'
-  +'"</div></div></div>";'
-  +'_mInner=document.getElementById("mir-scroll-inner");'
-  +'_mPos=0;'
-  +'if(_mInner)_mInner.style.transform="translateY(0)";'
-  +'setTimeout(function(){'
-  +'var orig=document.getElementById("mir-orig");'
-  +'_mTotalH=orig?orig.offsetHeight:0;'
-  +'},60);'
-  +'}'
-  +'function _mirScrollTick(){'
-  +'if(_mSpd>0&&_mInner&&_mTotalH>0){'
-  +'_mPos+=_mSpd;'
-  +'if(_mPos>=_mTotalH)_mPos=0;'
-  +'_mInner.style.transform="translateY(-"+_mPos+"px)";'
-  +'}'
-  +'_mRaf=requestAnimationFrame(_mirScrollTick);'
-  +'}'
-  +'_mRaf=requestAnimationFrame(_mirScrollTick);'
-  // QR Code generation
-  +'window.addEventListener("load",function(){'
-  +'var url="'+pageUrl+'";'
-  +'var qc=document.getElementById("qr-container");'
-  +'var qu=document.getElementById("qr-url");'
-  +'if(qu) qu.textContent=url;'
-  +'if(qc && typeof QRCode !== "undefined"){'
-  +'new QRCode(qc,{text:url,width:160,height:160,colorDark:"#00d4ff",colorLight:"#04080f",correctLevel:QRCode.CorrectLevel.M});'
-  +'}'
-  +'});'
-  // Chromecast
-  +'function startCast(){'
-  +'if(navigator.presentation && navigator.presentation.defaultRequest){'
-  +'var req = new PresentationRequest([window.location.href]);'
-  +'req.start().catch(function(e){alert("Cast: "+e.message);});'
-  +'}else{'
-  +'alert("📡 للـ Cast:\\n١. في Chrome: اضغط ⋮ ← أدوات إضافية ← إرسال\\n٢. اختر التلفاز من القائمة\\n٣. اختر \\"إرسال علامة التبويب\\" أو \\"إرسال الشاشة\\"");'
-  +'}'
-  +'}'
-  // Screen Share
-  +'function startPresent(){'
-  +'if(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia){'
-  +'navigator.mediaDevices.getDisplayMedia({video:true}).then(function(stream){'
-  +'var v=document.createElement("video");'
-  +'v.srcObject=stream;v.play();'
-  +'v.style.cssText="position:fixed;top:0;left:0;width:1px;height:1px;opacity:0.01;";'
-  +'document.body.appendChild(v);'
-  +'alert("✅ مشاركة الشاشة نشطة\\nيمكنك الآن عرض هذه النافذة على التلفاز عبر Miracast أو Smart TV");'
-  +'}).catch(function(e){if(e.name!=="AbortError")alert("خطأ: "+e.message);});'
-  +'}else{'
-  +'alert("⚠️ مشاركة الشاشة غير مدعومة في هذا المتصفح");'
-  +'}'
-  +'}'
-  // Data listener mirror
-  +'window.addEventListener("message",function(e){'
-  +'if(!e.data||e.data.type!=="WQ_UPDATE")return;'
-  +'var c=e.data.cnt;'
-  +'document.getElementById("wsp").textContent=c.pending;'
-  +'document.getElementById("wsi").textContent=c.inprogress;'
-  +'document.getElementById("wsd").textContent=c.done;'
-  +'document.getElementById("wst").textContent=c.total;'
-  +'if(typeof e.data.scrollSpeed==="number"){_mSpd=e.data.scrollSpeed;}'
-  // ── أعد بناء فقط إذا تغير المحتوى ──
-  +'var newRows=e.data.rows||"";'
-  +'if(newRows!==_mLastRows){'
-  +'_mLastRows=newRows;'
-  +'_buildMirrorMarquee(newRows||null);'
-  +'}'
-  +'});'
-  +'<\/script></body></html>');
-  win.document.close();
-
-  // ربط بيانات الانعكاس
-  window._waitMirrorWin = win;
-  setTimeout(function(){
-    _pushMirrorData();
-  }, 800);
-  if(window._wsMirrorInterval) clearInterval(window._wsMirrorInterval);
-  window._wsMirrorInterval = setInterval(function(){
-    if(!window._waitMirrorWin||window._waitMirrorWin.closed){ clearInterval(window._wsMirrorInterval); return; }
-    _pushMirrorData();
-  }, 5000);
-}
-
-function _pushMirrorData(){
-  var win = window._waitMirrorWin;
-  if(!win || win.closed) return;
-  var today = new Date().toISOString().slice(0,10);
-  var todayReqs = requests.filter(function(r){ return (r.date||'').slice(0,10)===today; });
-  var filteredReqs = _wsFilterRequests(todayReqs);
-  var cnt = {
-    pending:    todayReqs.filter(function(r){ return r.status==='pending'; }).length,
-    inprogress: todayReqs.filter(function(r){ return r.status==='inprogress'; }).length,
-    done:       todayReqs.filter(function(r){ return r.status==='done'; }).length,
-    total:      todayReqs.length
-  };
-  var rows = '';
-  if(filteredReqs.length > 0){
-    rows = filteredReqs.map(function(r,i){
-        var sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[r.status]||'-';
-        var sC={pending:'pp',inprogress:'pi',done:'pd'}[r.status]||'';
-        var tn=(r.testNames||r.tests.map(function(tid){ var t=tests.find(function(x){ return x.id===tid; }); return t?t.nameEn:''; }).filter(Boolean)).slice(0,3).join('، ')||'-';
-        return '<tr><td style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:700">'+(i+1)+'</td>'
-          +'<td style="font-size:16px;font-weight:900;color:#00d4ff">'+r.id+'</td>'
-          +'<td style="font-size:19px;font-weight:800">'+(r.patientName||'-')+'</td>'
-          +'<td style="font-size:13px;color:rgba(255,255,255,0.5)">'+tn+'</td>'
-          +'<td><span class="pill '+sC+'">'+sL+'</span></td></tr>';
-      }).join('');
-  }
-  try{ win.postMessage({type:'WQ_UPDATE', rows:rows, cnt:cnt, scrollSpeed:_wsGetScrollSpeed()}, '*'); }catch(e){}
-}
 
 // Hook into nav() to init features
 const _origNav = typeof nav === 'function' ? nav : null;
@@ -31953,17 +31665,24 @@ function _lisRefreshMedlabUiLight(){
   _lisUiRefreshTimer=setTimeout(function(){
     _lisUiRefreshTimer=null;
     try{
+      // ⭐ حماية التركيز: إذا كان المستخدم يكتب في أي حقل إدخال الآن،
+      //    لا تعِد بناء أي جدول (innerHTML يُفقد التركيز) — أجّل التحديث.
+      var _ae=document.activeElement;
+      var _typing=_ae&&(_ae.tagName==='INPUT'||_ae.tagName==='SELECT'||_ae.tagName==='TEXTAREA')&&!_ae.readOnly&&_ae.type!=='checkbox';
       // حدّث شارة/وميض زر "نتائج الأجهزة" دائماً (خفيف جداً — قراءة فقط)
       if(typeof _updateDeviceReqBadge==='function') _updateDeviceReqBadge();
-      // أعد رسم جدول الطلبات فقط إذا كان قسم الطلبات ظاهراً الآن
+      // أعد رسم جدول الطلبات فقط إذا كان قسم الطلبات ظاهراً الآن — وليس أثناء الكتابة
       var reqSec=document.getElementById('sec-requests');
       var reqVisible=reqSec && (reqSec.classList.contains('active') ||
                      (reqSec.offsetParent!==null));
-      if(reqVisible && typeof renderRequestsFiltered==='function'){
+      if(!_typing && reqVisible && typeof renderRequestsFiltered==='function'){
         var actPill=document.querySelector('#sec-requests .req-pill[data-filter].active');
         var f=(actPill && actPill.getAttribute('data-filter'))||'today';
         var srchEl=document.getElementById('req-srch-inp');
         renderRequestsFiltered(f, srchEl?srchEl.value:'');
+      } else if(_typing && reqVisible){
+        // أعِد المحاولة لاحقاً بعد أن يتوقف المستخدم عن الكتابة
+        if(typeof _lisRefreshMedlabUiLight==='function') setTimeout(_lisRefreshMedlabUiLight, 1200);
       }
       // حدّث لوحة المعلومات فقط إذا كانت ظاهرة (updateDashboard ثقيلة)
       var dashSec=document.getElementById('sec-dashboard');
@@ -35223,13 +34942,6 @@ table tr:hover td{background:rgba(255,255,255,.015)}
 const _D=${dataJson};
 function toast(m,ms=2500){const t=document.getElementById('TT');t.textContent=m;t.classList.add('sh');setTimeout(()=>t.classList.remove('sh'),ms)}
 function tog(i){const c=document.getElementById('vc'+i);if(c)c.classList.toggle('op')}
-function itp(v,t){
-  if(!v||v==='—'||v==='-') return{c:'nd'};
-  const n=parseFloat(v);
-  if(isNaN(n)){const l=(v+'').toLowerCase();if(/neg|سلبي/.test(l))return{c:'ok'};if(/pos|إيجابي/.test(l))return{c:'hi'};return{c:'nd'};}
-  const lo=parseFloat(t.minVal),hi=parseFloat(t.maxVal);
-  if(!isNaN(hi)&&n>hi)return{c:'hi'};if(!isNaN(lo)&&n<lo)return{c:'lo'};if(!isNaN(lo)||!isNaN(hi))return{c:'ok'};return{c:'nd'};
-}
 function dlPDF(i){
   var btn=document.getElementById('pb'+i);
   if(btn){btn.classList.add('ld');btn.disabled=true;}
@@ -35433,10 +35145,6 @@ const NEON_TRAIL          = 3;    // trailing glow length
 const NEON_PAUSE          = 650;  // pause at end before restart
 
 /* ── بناء جزيئات عائمة ── */
-function _wnbMakeParticles(containerId) {
-  // الجزيئات معطلة لتحسين الأداء
-  return;
-}
 
 /* ── cancel tokens لإيقاف سلاسل الأنيميشن القديمة ── */
 const _wnbTokens = {};
@@ -35628,6 +35336,24 @@ document.addEventListener('DOMContentLoaded', () => {
       },450);
     });
   },{passive:true});
+
+  // ⭐⭐ شبكة أمان عالمية لفقدان التركيز ⭐⭐
+  // إذا نُقر على حقل إدخال ولم يستقبل التركيز فعلياً (بسبب حالة "التركيز اليتيم"
+  // بعد confirm()/إعادة بناء DOM) — نفرض التركيز عليه فوراً. يغطي كل عمليات
+  // الحذف/الاستلام الحالية والمستقبلية دون تعديل كل دالة على حدة.
+  document.addEventListener('click',function(e){
+    var el=e.target;
+    if(!el) return;
+    var tag=el.tagName;
+    var focusable=(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')&&!el.disabled&&!el.readOnly&&el.type!=='checkbox'&&el.type!=='radio'&&el.type!=='button';
+    if(!focusable) return;
+    if(document.activeElement!==el){
+      // نظّف أي backdrop عالق ثم أعِد التركيز
+      var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
+      try{ el.focus({preventScroll:true}); }catch(_){ try{el.focus();}catch(__){}
+      }
+    }
+  },true);
 })();
 
 /* ══════════════════════════════════════════════════════
@@ -36573,6 +36299,34 @@ setTimeout(function(){
 
   // ── Apply Event to local IDB ──────────────────────────
 
+  // ⭐ رسم خفيف مُوجَّه: بدل renderAll() (١١ جدول) عند وصول سجل مزامنة،
+  //    نرسم فقط قائمة النوع المتأثر — وفقط إذا كان قسمها ظاهراً ولا يكتب المستخدم.
+  //    هذا يمنع التجميد اللحظي وفقدان التركيز عند كل تحديث وارد.
+  function _syncLightRender(kind){
+    setTimeout(function(){
+      try{
+        var _ae=document.activeElement;
+        var _typing=_ae&&(_ae.tagName==='INPUT'||_ae.tagName==='SELECT'||_ae.tagName==='TEXTAREA')&&!_ae.readOnly&&_ae.type!=='checkbox';
+        if(_typing) return; // لا تُعِد بناء أي جدول أثناء الكتابة
+        var map={
+          billing:        { sec:'sec-billing',  fn:'renderBillingHistory' },
+          cultureRecords: { sec:'sec-culture',  fn:'renderCultureList' },
+          uaRecords:      { sec:'sec-ua',       fn:'renderUAList' },
+          stoolExamRecords:{sec:'sec-stool-exam',fn:'renderStoolList' },
+          semenRecords:   { sec:'sec-semen-exam',fn:'renderSemenList' },
+          phoneBook:      { sec:null,           fn:'renderPhoneBook' }
+        };
+        var m=map[kind]; if(!m) return;
+        // ارسم فقط إذا كان القسم ظاهراً (أو لا قسم له مثل دليل الهاتف)
+        var visible=true;
+        if(m.sec){ var s=document.getElementById(m.sec); visible=s&&(s.classList.contains('active')||s.offsetParent!==null); }
+        if(visible && typeof window[m.fn]==='function'){ window[m.fn](); }
+      }catch(e){}
+    },0);
+  }
+  // إتاحته عالمياً ليستخدمه بلوك المزامنة عبر LAN (سكربت منفصل)
+  try{ window._syncLightRender = _syncLightRender; }catch(e){}
+
   // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
   var _SM_KEY_MAP = {
     patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{renderPatients();updateBadges();updateDashboard();}catch(e){} },0); } },
@@ -36581,14 +36335,14 @@ setTimeout(function(){
     packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
     inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
     doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} },0); } },
-    billing:         { g:'billingRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
+    billing:         { g:'billingRecords',   fn:function(){ _syncLightRender('billing'); } },
     testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} },0); } },
     qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} },0); } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ setTimeout(function(){ try{renderAll();}catch(e){} },0); } }
+    cultureRecords:  { g:'cultureRecords',   fn:function(){ _syncLightRender('cultureRecords'); } },
+    uaRecords:       { g:'uaRecords',        fn:function(){ _syncLightRender('uaRecords'); } },
+    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ _syncLightRender('stoolExamRecords'); } },
+    semenRecords:    { g:'semenRecords',     fn:function(){ _syncLightRender('semenRecords'); } },
+    phoneBook:       { g:'phoneBook',        fn:function(){ _syncLightRender('phoneBook'); } }
   };
 
   // تحديث المتغير العالمي + كاش الذاكرة فوراً
@@ -37086,13 +36840,10 @@ setTimeout(function(){
 
 /** تحقق هل المزامنة مفعّلة لهذا المستخدم */
 function _isSyncEnabled(username) {
-  try {
-    var users = typeof getAdminUsers === 'function'
-      ? getAdminUsers()
-      : JSON.parse(localStorage.getItem('medlab_admin_users') || '[]');
-    var u = users.find(function(x) { return x.username === username; });
-    return u ? !!u.firebaseSync : false;
-  } catch(e) { return false; }
+  // ⭐ (طلب المستخدم) — تعطيل مزامنة بيانات Firebase بين الحاسبات نهائياً.
+  //    البديل موجود في قسم الربط (LAN). هذا لا يؤثر على تسجيل الدخول أو
+  //    الصلاحيات أو المحادثات أو الإشعارات — تلك تبقى تعمل عبر Firebase.
+  return false;
 }
 
 /** تهيئة SyncManager بعد تسجيل الدخول */
@@ -37505,28 +37256,6 @@ function _savePrinter(key, value){
   if(typeof save==='function') save('settings', settings);
 }
 function _saveLabelSize(){
-  var w=parseFloat(document.getElementById('st-label-w')?.value)||57;
-  var h=parseFloat(document.getElementById('st-label-h')?.value)||30;
-  settings.labelW=Math.max(20,Math.min(200,w));
-  settings.labelH=Math.max(10,Math.min(200,h));
-  if(typeof save==='function') save('settings',settings);
-}
-function _setLabelPreset(w,h){
-  var iw=document.getElementById('st-label-w');
-  var ih=document.getElementById('st-label-h');
-  if(iw) iw.value=w;
-  if(ih) ih.value=h;
-  _saveLabelSize();
-}
-function _loadLabelSizeUI(){
-  var iw=document.getElementById('st-label-w');
-  var ih=document.getElementById('st-label-h');
-  if(iw) iw.value=settings.labelW||57;
-  if(ih) ih.value=settings.labelH||30;
-}
-
-// حفظ حجم الملصق
-function _saveLabelSize(){
   const w=parseFloat(document.getElementById('st-label-w')?.value)||57;
   const h=parseFloat(document.getElementById('st-label-h')?.value)||30;
   settings.labelW=Math.max(20,Math.min(200,w));
@@ -37555,10 +37284,6 @@ function _saveAutoCBC(val){
 }
 
 // ─── طباعة مباشرة عبر iframe بدون واجهة ────────────────
-function _printViaIframeSilent(html, isBarcode){
-  // طباعة صامتة — بدون واجهة طابعة
-  _printViaIframe(html, isBarcode);
-}
 
 // ════════════════════════════════════════════════════════════
 // LIS — قفل الأزرار بكلمة السر SsAaIiFf@100
@@ -37623,12 +37348,12 @@ var _LAN_RENDER = {
   packages:        function(){ try{renderPackages();}catch(e){} },
   inventory:       function(){ try{renderInventory();}catch(e){} },
   qc:              function(){ try{renderQC();}catch(e){} },
-  billing:         function(){ try{renderAll();}catch(e){} },
-  cultureRecords:  function(){ try{renderAll();}catch(e){} },
-  uaRecords:       function(){ try{renderAll();}catch(e){} },
-  stoolExamRecords:function(){ try{renderAll();}catch(e){} },
-  semenRecords:    function(){ try{renderAll();}catch(e){} },
-  phoneBook:       function(){ try{renderAll();}catch(e){} }
+  billing:         function(){ if(window._syncLightRender)window._syncLightRender('billing'); },
+  cultureRecords:  function(){ if(window._syncLightRender)window._syncLightRender('cultureRecords'); },
+  uaRecords:       function(){ if(window._syncLightRender)window._syncLightRender('uaRecords'); },
+  stoolExamRecords:function(){ if(window._syncLightRender)window._syncLightRender('stoolExamRecords'); },
+  semenRecords:    function(){ if(window._syncLightRender)window._syncLightRender('semenRecords'); },
+  phoneBook:       function(){ if(window._syncLightRender)window._syncLightRender('phoneBook'); }
 };
 function _lanRender(key){
   var f = _LAN_RENDER[key];
