@@ -9528,7 +9528,7 @@ function nav(p){
   if(p==='results'){
     if(!window._goToResultCalled) currentReqId=null;
     window._goToResultCalled=false;
-    loadResultsDropdown();
+    // ⚡ الأزرار خفيفة — تُضبط فوراً
     const _canPrint = typeof hasPermission==='function' ? hasPermission('print') : true;
     ['finalizeAndPrint','downloadPDF','shareWhatsApp'].forEach(fn=>{
       document.querySelectorAll(`#sec-results button[onclick*="${fn}"]`).forEach(btn=>{
@@ -9537,6 +9537,9 @@ function nav(p){
     });
     const cbcBtn = document.querySelector('#sec-results button[onclick*="printCBCBlank"]');
     if(cbcBtn) cbcBtn.style.display = _canPrint ? '' : 'none';
+    // ⚡ بناء القائمة وجدول النتائج (الثقيل) يُؤجَّل إلى ما بعد رسم الإطار
+    //    كي يظهر قسم النتائج فوراً بمجرد الضغط على «حفظ وإنشاء الطلب».
+    requestAnimationFrame(function(){ setTimeout(function(){ try{ loadResultsDropdown(); }catch(e){} }, 0); });
   }
   if(p==='print') loadPrintDropdown();
   if(p==='reports'){renderReports();if(typeof phcInit==='function')phcInit();}
@@ -18531,16 +18534,93 @@ var SmartRec = (function(){
   function clearMuted(){ getConfig(); cfg.muted=[]; _persist(); _renderMuted(); }
   function unmute(mk){ getConfig(); cfg.muted=cfg.muted.filter(function(x){return x!==mk;}); _persist(); _renderMuted(); }
 
+  // ── بناء قاعدة جديدة عبر نافذة بحث في قاعدة التحاليل ──────────
+  // حالة مؤقتة أثناء بناء القاعدة (chips مختارة)
+  var _rb = { trig:[], targ:[] };   // كل عنصر: {code, name}
+
   function addRulePrompt(){
-    var label=prompt('اسم القاعدة (مثال: ملف السكري):'); if(label===null) return;
-    var trig=prompt('كود/أكواد التحليل المُشغِّل (افصل بينها بفاصلة):\nمثال: TSH'); if(trig===null) return;
-    var targ=prompt('كود/أكواد التحاليل المقترحة (افصل بينها بفاصلة):\nمثال: FT3,FT4'); if(targ===null) return;
-    var splt=function(s){ return String(s||'').split(',').map(function(x){return x.trim();}).filter(Boolean); };
-    var tr=splt(trig), tg=splt(targ);
-    if(!tr.length || !tg.length){ try{showNotif('غير مكتمل','يجب إدخال مُشغِّل واحد وهدف واحد على الأقل','error');}catch(e){} return; }
+    // تصفير الحالة والحقول
+    _rb = { trig:[], targ:[] };
+    var nm=document.getElementById('sr-rule-name'); if(nm) nm.value='';
+    var ts=document.getElementById('sr-trig-search'); if(ts) ts.value='';
+    var gs=document.getElementById('sr-targ-search'); if(gs) gs.value='';
+    var tr=document.getElementById('sr-trig-results'); if(tr){ tr.style.display='none'; tr.innerHTML=''; }
+    var gr=document.getElementById('sr-targ-results'); if(gr){ gr.style.display='none'; gr.innerHTML=''; }
+    _renderRuleChips('trig'); _renderRuleChips('targ');
+    var ov=document.getElementById('m-smartrec-rule'); if(ov) ov.classList.add('open');
+    setTimeout(function(){ try{ if(nm) nm.focus(); }catch(e){} }, 50);
+  }
+
+  // بحث حيّ داخل قاعدة التحاليل (tests) لأحد الحقلين
+  function searchTests(which){
+    var inp=document.getElementById('sr-'+which+'-search');
+    var box=document.getElementById('sr-'+which+'-results');
+    if(!inp||!box) return;
+    var q=_up(inp.value);
+    if(typeof tests==='undefined'||!tests){ box.style.display='none'; return; }
+    var chosen=_rb[which].map(function(x){return _up(x.code);});
+    var list=tests.filter(function(t){
+      if(!t||!t.code) return false;
+      if(chosen.indexOf(_up(t.code))>=0) return false;   // مختار أصلاً
+      if(!q) return true;                                 // فارغ = أظهر الكل
+      var hay=_up((t.code||'')+' '+(t.nameEn||'')+' '+(t.nameShort||''));
+      return hay.indexOf(q)>=0;
+    }).slice(0,40);
+    if(!list.length){
+      box.innerHTML='<div style="padding:10px;font-size:11px;color:var(--text2);text-align:center">لا نتائج</div>';
+      box.style.display='block'; return;
+    }
+    box.innerHTML=list.map(function(t){
+      return '<div style="padding:8px 11px;cursor:pointer;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:8px;align-items:center" '+
+        'onmousedown="event.preventDefault();SmartRec.pickTest(\''+which+'\',\''+_esc(t.code)+'\')" '+
+        'onmouseover="this.style.background=\'rgba(0,212,255,0.08)\'" onmouseout="this.style.background=\'\'">'+
+        '<span style="font-size:12px;font-weight:700;color:var(--text)">'+_esc(t.nameEn||t.code)+'</span>'+
+        '<span style="font-size:10px;color:var(--primary);font-weight:800">'+_esc(t.code)+'</span>'+
+      '</div>';
+    }).join('');
+    box.style.display='block';
+  }
+
+  // اختيار تحليل من نتائج البحث → إضافته كـ chip
+  function pickTest(which, code){
+    var t=_findByCode(code); if(!t) return;
+    if(_rb[which].some(function(x){return _up(x.code)===_up(t.code);})) return;
+    _rb[which].push({ code:t.code, name:(t.nameEn||t.code) });
+    var inp=document.getElementById('sr-'+which+'-search'); if(inp){ inp.value=''; }
+    var box=document.getElementById('sr-'+which+'-results'); if(box){ box.style.display='none'; box.innerHTML=''; }
+    _renderRuleChips(which);
+    try{ if(inp) inp.focus(); }catch(e){}
+  }
+
+  function removeRuleChip(which, code){
+    _rb[which]=_rb[which].filter(function(x){return _up(x.code)!==_up(code);});
+    _renderRuleChips(which);
+  }
+
+  function _renderRuleChips(which){
+    var box=document.getElementById('sr-'+which+'-chips'); if(!box) return;
+    if(!_rb[which].length){ box.innerHTML='<span style="font-size:11px;color:var(--text2)">لم تُختر تحاليل بعد.</span>'; return; }
+    var col = which==='trig' ? 'rgba(255,215,107,0.15)' : 'rgba(0,212,255,0.15)';
+    var brd = which==='trig' ? 'rgba(255,215,107,0.4)'  : 'rgba(0,212,255,0.4)';
+    box.innerHTML=_rb[which].map(function(x){
+      return '<span style="display:inline-flex;align-items:center;gap:6px;background:'+col+';border:1px solid '+brd+';border-radius:20px;padding:4px 11px;font-size:11px;font-weight:700">'+
+        _esc(x.name)+' <span style="font-size:9px;opacity:0.7">('+_esc(x.code)+')</span>'+
+        '<span style="cursor:pointer;color:#ff6b6b;font-weight:900" onclick="SmartRec.removeRuleChip(\''+which+'\',\''+_esc(x.code)+'\')">✕</span></span>';
+    }).join('');
+  }
+
+  // حفظ القاعدة المبنية
+  function commitRule(){
+    var nm=document.getElementById('sr-rule-name');
+    var label=nm?nm.value.trim():'';
+    var tr=_rb.trig.map(function(x){return x.code;});
+    var tg=_rb.targ.map(function(x){return x.code;});
+    if(!tr.length || !tg.length){ try{showNotif('غير مكتمل','اختر تحليلاً مُشغِّلاً واحداً وتحليلاً مقترحاً واحداً على الأقل','error');}catch(e){} return; }
+    if(!label) label='قاعدة مخصّصة';
     getConfig();
-    cfg.rules.push({ id:'r_'+Date.now().toString(36), trigger:tr, target:tg, label:(label||'قاعدة مخصّصة') });
+    cfg.rules.push({ id:'r_'+Date.now().toString(36), trigger:tr, target:tg, label:label });
     _persist(); _renderRules();
+    var ov=document.getElementById('m-smartrec-rule'); if(ov) ov.classList.remove('open');
     try{ showNotif('تمت الإضافة','أُضيفت قاعدة اقتراح جديدة','success'); }catch(e){}
   }
 
@@ -18548,7 +18628,8 @@ var SmartRec = (function(){
     getConfig:getConfig, saveConfig:saveConfig, renderSettingsUI:renderSettingsUI,
     analyze:analyze, reset:reset,
     acceptCurrent:acceptCurrent, skipCurrent:skipCurrent, neverCurrent:neverCurrent,
-    removeRule:removeRule, addRulePrompt:addRulePrompt, clearMuted:clearMuted, unmute:unmute
+    removeRule:removeRule, addRulePrompt:addRulePrompt, clearMuted:clearMuted, unmute:unmute,
+    searchTests:searchTests, pickTest:pickTest, removeRuleChip:removeRuleChip, commitRule:commitRule
   };
 })();
 window.SmartRec = SmartRec;
@@ -33082,6 +33163,43 @@ async function _fsa_buildDownloadBackup(){
     <div class="mftr">
       <button class="btn btn-s" onclick="closeModal('m-forced-backup-admin')">إلغاء</button>
       <button class="btn btn-p" onclick="triggerForcedBackup()">🚀 إرسال طلب النسخة الاحتياطي</button>
+    </div>
+  </div>
+</div>
+
+<!-- 💡 SmartRec: نافذة إضافة قاعدة اقتراح (بحث في قاعدة التحاليل) -->
+<div class="moverlay" id="m-smartrec-rule">
+  <div class="modal" style="max-width:600px;max-height:92vh;overflow-y:auto">
+    <div class="modal-hdr"><div class="modal-title">🎯 قاعدة اقتراح جديدة</div><button class="modal-cls" onclick="closeModal('m-smartrec-rule')">✕</button></div>
+    <div class="modal-body" style="max-height:74vh;overflow-y:auto">
+      <div class="fg">
+        <label class="fl">اسم القاعدة <span class="req">*</span></label>
+        <input class="fc" id="sr-rule-name" placeholder="مثال: ملف السكري" autocomplete="off">
+      </div>
+
+      <!-- المُشغِّل -->
+      <div style="background:rgba(255,215,107,0.06);border:1px solid rgba(255,215,107,0.3);border-radius:10px;padding:12px;margin-top:12px">
+        <div style="font-size:12px;font-weight:800;color:#ffd76b;margin-bottom:8px">⚡ التحاليل المُشغِّلة <span style="font-weight:600;color:var(--text2)">(عند اختيار أحدها يظهر الاقتراح)</span></div>
+        <div id="sr-trig-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div style="position:relative">
+          <input class="fc" id="sr-trig-search" placeholder="🔍 ابحث في قاعدة التحاليل..." autocomplete="off" oninput="SmartRec.searchTests('trig')" onfocus="SmartRec.searchTests('trig')">
+          <div id="sr-trig-results" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:var(--card,#111a2e);border:1px solid var(--border);border-radius:8px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.4)"></div>
+        </div>
+      </div>
+
+      <!-- الهدف -->
+      <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.3);border-radius:10px;padding:12px;margin-top:12px">
+        <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:8px">💡 التحاليل المقترحة <span style="font-weight:600;color:var(--text2)">(التي ستُقترح)</span></div>
+        <div id="sr-targ-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+        <div style="position:relative">
+          <input class="fc" id="sr-targ-search" placeholder="🔍 ابحث في قاعدة التحاليل..." autocomplete="off" oninput="SmartRec.searchTests('targ')" onfocus="SmartRec.searchTests('targ')">
+          <div id="sr-targ-results" style="display:none;position:absolute;z-index:50;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:var(--card,#111a2e);border:1px solid var(--border);border-radius:8px;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.4)"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ftr">
+      <button class="btn btn-s" onclick="closeModal('m-smartrec-rule')">إلغاء</button>
+      <button class="btn btn-p" onclick="SmartRec.commitRule()">✅ حفظ القاعدة</button>
     </div>
   </div>
 </div>
