@@ -9606,23 +9606,10 @@ function closeModal(id){document.getElementById(id).classList.remove('open');if(
 // "يتيماً" فلا يظهر مؤشر في الحقول إلا بعد الخروج من النافذة والعودة.
 // الحل: تنظيف أي backdrop عالق + إعادة ضبط التركيز إلى نافذة المستند.
 function _restoreAppFocus(){
+  // تنظيف أي overlay عالق قد يمنع الأحداث بعد الحذف. لا نلمس التركيز إطلاقاً
+  // (لمس التركيز برمجياً بعد confirm يُنتج حالة "تركيز جزئي" تبتلع المسافة).
   try{
-    // 1) أزل أي بقايا overlay قد تمنع الأحداث/التركيز
     var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
-    // 2) أزّل التركيز عن أي عنصر مُزال ثم أعِد تفعيل النافذة
-    if(document.activeElement && document.activeElement.blur) {
-      try{ document.activeElement.blur(); }catch(_){}
-    }
-    // 3) إعادة تنشيط نافذة المستند — يعيد قدرة الحقول على استقبال التركيز
-    if(typeof window.focus==='function'){ window.focus(); }
-    // 4) لمسة على body لإعادة ضبط سلسلة التركيز في Chromium
-    if(document.body){
-      var _hadTabindex=document.body.hasAttribute('tabindex');
-      if(!_hadTabindex) document.body.setAttribute('tabindex','-1');
-      document.body.focus({preventScroll:true});
-      document.body.blur();
-      if(!_hadTabindex) document.body.removeAttribute('tabindex');
-    }
   }catch(e){}
 }
 window._restoreAppFocus=_restoreAppFocus;
@@ -11080,16 +11067,18 @@ function searchPatients(v){
   },80);
 }
 function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا المريض؟')){
-  patients=patients.filter(p=>p.id!==id);save('patients',patients);
-  // ⭐ بدل renderAll() (١١ جدول) — ارسم فقط ما يتأثر بحذف المريض
-  const _activeTab=document.querySelector('#sec-patients .tabs .tab.active');
-  const _f=(_activeTab&&_activeTab.textContent.trim()==='اليوم')?'today':'all';
-  const _srchEl=document.getElementById('pts-srch-inp');
-  renderPatients(_f,(_srchEl&&_srchEl.value)||'');
-  updateBadges();updateDashboard();
-  showNotif('تم الحذف','تم حذف المريض','success');
-  // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
-  setTimeout(_restoreAppFocus,0);
+  // ⭐ نفّذ الحذف على stack جديد (بعد إغلاق confirm) لمنع "التركيز اليتيم"
+  setTimeout(function(){
+    patients=patients.filter(p=>p.id!==id);save('patients',patients);
+    // بدل renderAll() (١١ جدول) — ارسم فقط ما يتأثر بحذف المريض
+    var _activeTab=document.querySelector('#sec-patients .tabs .tab.active');
+    var _f=(_activeTab&&_activeTab.textContent.trim()==='اليوم')?'today':'all';
+    var _srchEl=document.getElementById('pts-srch-inp');
+    renderPatients(_f,(_srchEl&&_srchEl.value)||'');
+    updateBadges();updateDashboard();
+    showNotif('تم الحذف','تم حذف المريض','success');
+    _restoreAppFocus();
+  },0);
 }}
 function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;renderWizStep();openModal('m-wizard');}
 
@@ -11880,15 +11869,19 @@ function searchReq(v){
   renderRequestsFiltered(filter,v);
 }
 function deleteReq(id){if(confirm('حذف هذا الطلب؟')){
-  requests=requests.filter(r=>r.id!==id);save('requests',requests);
-  // ⭐ إصلاح: احترم الفلتر النشط بدل عرض كل الطلبات (كان renderRequests() يمرّر 'all')
-  const _activePill=document.querySelector('#sec-requests .req-pill[data-filter].active');
-  const _f=_activePill?_activePill.getAttribute('data-filter'):'today';
-  const _srchEl=document.getElementById('req-srch-inp');
-  renderRequestsFiltered(_f,(_srchEl&&_srchEl.value)||'');
-  updateBadges();updateDashboard();showNotif('تم الحذف','تم حذف الطلب');
-  // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
-  setTimeout(_restoreAppFocus,0);
+  // ⭐ نفّذ الحذف وإعادة الرسم على stack جديد (بعد إغلاق confirm تماماً).
+  //    التنفيذ المتزامن داخل معالج confirm يُسبّب "تركيز يتيم" في Chromium
+  //    (المؤشر يظهر لكن لا يكتب حتى الخروج والعودة). التأجيل يمنع ذلك.
+  setTimeout(function(){
+    requests=requests.filter(r=>r.id!==id);save('requests',requests);
+    // احترم الفلتر النشط بدل عرض كل الطلبات (كان renderRequests() يمرّر 'all')
+    var _activePill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+    var _f=_activePill?_activePill.getAttribute('data-filter'):'today';
+    var _srchEl=document.getElementById('req-srch-inp');
+    renderRequestsFiltered(_f,(_srchEl&&_srchEl.value)||'');
+    updateBadges();updateDashboard();showNotif('تم الحذف','تم حذف الطلب');
+    _restoreAppFocus();
+  },0);
 }}
 function goToResult(id){
   currentReqId=id;
@@ -35337,23 +35330,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   },{passive:true});
 
-  // ⭐⭐ شبكة أمان عالمية لفقدان التركيز ⭐⭐
-  // إذا نُقر على حقل إدخال ولم يستقبل التركيز فعلياً (بسبب حالة "التركيز اليتيم"
-  // بعد confirm()/إعادة بناء DOM) — نفرض التركيز عليه فوراً. يغطي كل عمليات
-  // الحذف/الاستلام الحالية والمستقبلية دون تعديل كل دالة على حدة.
-  document.addEventListener('click',function(e){
-    var el=e.target;
-    if(!el) return;
-    var tag=el.tagName;
-    var focusable=(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')&&!el.disabled&&!el.readOnly&&el.type!=='checkbox'&&el.type!=='radio'&&el.type!=='button';
-    if(!focusable) return;
-    if(document.activeElement!==el){
-      // نظّف أي backdrop عالق ثم أعِد التركيز
-      var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
-      try{ el.focus({preventScroll:true}); }catch(_){ try{el.focus();}catch(__){}
-      }
-    }
-  },true);
+  // (أُزيلت شبكة أمان التركيز التي كانت تُركّز الحقول برمجياً — كانت تُنتج
+  //  حالة "تركيز جزئي" تبتلع مفتاح المسافة أثناء الكتابة بعد الحذف)
 })();
 
 /* ══════════════════════════════════════════════════════
