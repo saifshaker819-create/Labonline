@@ -7333,9 +7333,19 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
 
   if(window.MutationObserver){
     var _moTimer1;
+    var _hasFieldCC=function(n){
+      if(!n||n.nodeType!==1) return false;
+      var t=n.tagName;
+      if(t==='INPUT'||t==='TEXTAREA') return true;
+      return !!(n.querySelector && n.querySelector('input,textarea'));
+    };
     var mo = new MutationObserver(function(muts){
-      var hasNew = muts.some(function(m){ return m.addedNodes.length>0; });
-      if(hasNew){ clearTimeout(_moTimer1); _moTimer1=setTimeout(applyAll, 300); }
+      // لا نعيد التطبيق إلا عند إضافة حقول فعلية (يتفادى كسر IME على Windows
+      // عند إعادة بناء الجداول بعد الحذف/نتيجة الجهاز)
+      var hasNewField=muts.some(function(m){
+        return Array.prototype.some.call(m.addedNodes||[], _hasFieldCC);
+      });
+      if(hasNewField){ clearTimeout(_moTimer1); _moTimer1=setTimeout(applyAll, 300); }
     });
     document.addEventListener('DOMContentLoaded', function(){
       mo.observe(document.body, {childList:true, subtree:true});
@@ -7375,6 +7385,13 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
   function _apply(el, lang){
     if(!el) return;
     if(el.tagName==='SELECT'||el.type==='hidden'||el.type==='number'||el.type==='date'||el.type==='color'||el.type==='file') return;
+    // ⭐⭐ إصلاح جذري (Windows): لا تلمس حقلاً هو قيد التركيز الآن — إعادة ضبط
+    //    lang/الأحداث على العنصر المركّز تكسر محرك الإدخال (IME) في Chromium/Electron
+    //    على Windows فيفقد الحقل قدرته على استقبال التركيز حتى تُنشَّط النافذة خارجياً.
+    if(el===document.activeElement) return;
+    // ⭐ تفادي العمل المكرر: إن كان الحقل مُعالَجاً بنفس اللغة مسبقاً فلا تُعِد ربط الأحداث
+    if(el._kbLangApplied===lang && el._kbFocusBound) return;
+    el._kbLangApplied=lang;
     el.setAttribute('lang', lang);
     // إزالة أي listener قديم وإضافة جديد
     if(el._kbFocusBound) el.removeEventListener('focus', el._kbFocusBound);
@@ -7412,9 +7429,21 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
   // مراقبة إضافة عناصر جديدة للـ DOM (مودالات ديناميكية)
   if(window.MutationObserver){
     var _moTimer2;
+    // ⭐ يفحص إن كانت العقدة المضافة (أو أحفادها) تحتوي حقل إدخال حقيقي
+    var _hasField=function(n){
+      if(!n||n.nodeType!==1) return false;
+      var t=n.tagName;
+      if(t==='INPUT'||t==='TEXTAREA') return true;
+      return !!(n.querySelector && n.querySelector('input,textarea'));
+    };
     var _mo = new MutationObserver(function(muts){
-      var hasNew = muts.some(function(m){ return m.addedNodes.length>0; });
-      if(hasNew){ clearTimeout(_moTimer2); _moTimer2=setTimeout(_run, 300); }
+      // ⭐⭐ إصلاح جذري: لا نُطلق إعادة تطبيق اللغة إلا إذا أُضيفت حقول إدخال فعلاً.
+      //    إعادة بناء جداول (مثل جدول الطلبات بعد الحذف/نتيجة الجهاز) لا تحتوي حقولاً،
+      //    وكان تشغيل _run عليها يكسر IME/التركيز على Windows بلا أي داعٍ.
+      var hasNewField=muts.some(function(m){
+        return Array.prototype.some.call(m.addedNodes||[], _hasField);
+      });
+      if(hasNewField){ clearTimeout(_moTimer2); _moTimer2=setTimeout(_run, 300); }
     });
     document.addEventListener('DOMContentLoaded', function(){
       _mo.observe(document.body, {childList:true, subtree:true});
@@ -7602,15 +7631,6 @@ const DB={
     try{
       const pk=this._pfx()+k;
       _MC[pk]=v; // حفظ في الكاش فوراً (بدون تأخير)
-
-      // ── SyncManager hook ──────────────────────────────
-      // أرسل التغييرات للمزامنة — مع منع الحلقة أثناء تطبيق حدث وارد
-      if(window._smDBHook && typeof window._smDBHook === 'function'){
-        if(typeof SyncManager !== 'undefined' && !SyncManager._applying){
-          try{ window._smDBHook(k, v); }catch(_){}
-        }
-      }
-      // ──────────────────────────────────────────────────
 
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
@@ -8405,7 +8425,7 @@ let inventory=[];
 let qcRecords=[];
 let settings={};
 
-// SyncManager Setter Registry — يُتيح تحديث let variables من خارج script block
+// Setter Registry — يُتيح تحديث let variables من خارج script block (تستخدمه مزامنة LAN)
 window._smSetters = window._smSetters || {};
 window._smSetters['patients']        = function(v){ patients         = v; };
 window._smSetters['requests']        = function(v){ requests         = v; };
@@ -9354,37 +9374,6 @@ function startAdminListeners(){
   });
 
   console.log('[MedLab Pro] ✅ Admin listeners started for:', myUsername);
-
-  // ══════════════════════════════════════════════════════
-  // ⑩ مراقبة تغيير حالة المزامنة من Admin
-  // ══════════════════════════════════════════════════════
-  fbDb.ref('sync_config/' + myUsername + '/enabled').on('value', snap => {
-    try {
-      // ⭐ (طلب المستخدم) — مزامنة بيانات Firebase معطّلة نهائياً. نتجاهل أي
-      //    محاولة تفعيل من الإدارة، ونُبقيها OFF دائماً. (المحادثات/الدخول تعمل)
-      const enabled = false;
-
-      // تحديث حالة SyncManager
-      if (typeof SyncManager !== 'undefined') {
-        SyncManager.setEnabled(enabled);
-      }
-
-      // تحديث في localStorage (لتظل فعّالة بعد إعادة التحميل)
-      try {
-        const users = JSON.parse(localStorage.getItem('medlab_admin_users') || '[]');
-        const u = users.find(x => x.username === myUsername);
-        if (u && u.firebaseSync !== enabled) {
-          u.firebaseSync = enabled;
-          localStorage.setItem('medlab_admin_users', JSON.stringify(users));
-        }
-      } catch(e) {}
-
-      // إشعار الواجهة بتغيير الحالة
-      window.dispatchEvent(new CustomEvent('syncmanager:statuschange', { detail: { enabled } }));
-
-      // ⭐ المزامنة السحابية معطّلة دائماً — لا نعرض إشعاراً متكرراً بذلك.
-    } catch(e) { console.warn('[sync_config listener]', e); }
-  });
 }
 // ── نهاية مستمعات الأدمن ──────────────────────────────────
 
@@ -9526,7 +9515,9 @@ function nav(p){
     _loadCBCTemplateSel();
   }
   if(p==='results'){
-    if(!window._goToResultCalled) currentReqId=null;
+    // ⚡ هل وصلنا عبر «حفظ وإنشاء الطلب» (wizFinish) لطلب محدد؟
+    const _fromWizard = !!window._goToResultCalled;
+    if(!_fromWizard) currentReqId=null;
     window._goToResultCalled=false;
     // ⚡ الأزرار خفيفة — تُضبط فوراً
     const _canPrint = typeof hasPermission==='function' ? hasPermission('print') : true;
@@ -9537,13 +9528,19 @@ function nav(p){
     });
     const cbcBtn = document.querySelector('#sec-results button[onclick*="printCBCBlank"]');
     if(cbcBtn) cbcBtn.style.display = _canPrint ? '' : 'none';
-    // ⚡ بناء القائمة وجدول النتائج (الثقيل) يُؤجَّل إلى ما بعد رسم الإطار
-    //    كي يظهر قسم النتائج فوراً بمجرد الضغط على «حفظ وإنشاء الطلب».
-    requestAnimationFrame(function(){ setTimeout(function(){ try{ loadResultsDropdown(); }catch(e){} }, 0); });
+    if(_fromWizard){
+      // ✅ قادمون من إنشاء طلب لمريض محدد: حمّل القائمة وحدّد الطلب فوراً
+      //    (بدون تأجيل) كي يُفتح المريض مباشرةً في واجهة إدخال النتائج.
+      try{ loadResultsDropdown(); }catch(e){}
+    } else {
+      // ⚡ تصفح يدوي عادي: أجّل البناء الثقيل إلى ما بعد رسم الإطار
+      //    كي يظهر قسم النتائج فوراً دون تجميد.
+      requestAnimationFrame(function(){ setTimeout(function(){ try{ loadResultsDropdown(); }catch(e){} }, 0); });
+    }
   }
   if(p==='print') loadPrintDropdown();
   if(p==='reports'){renderReports();if(typeof phcInit==='function')phcInit();}
-  if(p==='dashboard') updateDashboard();
+  if(p==='dashboard') updateDashboard(true);
   if(p==='billing'){renderBillingTests();loadBillingPtDropdown();renderBillingHistory();_syncCurrencySelectors();}
   if(p==='database'){resetDbAuth();updateDbStats();setTimeout(loadAutoBackupUI,120);if(typeof _fsaUpdateIndicator==='function') setTimeout(()=>_fsaUpdateIndicator(!!_fsaDirHandle),150);}
   if(p==='culture') renderCultureList();
@@ -9604,31 +9601,204 @@ function nav(p){
 function openModal(id){document.getElementById(id).classList.add('open');if(window._applyAutoLang)requestAnimationFrame(window._applyAutoLang);}
 function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='m-wizard'){try{if(window.SmartRec)SmartRec.reset();}catch(e){}}}
 
-// ⭐⭐ إصلاح فقدان التركيز بعد الحذف/استلام النتيجة (Electron + Vercel) ⭐⭐
-// السبب: بعد confirm() ثم إعادة بناء الجدول عبر innerHTML — يبقى التركيز
-// "يتيماً" فلا يظهر مؤشر في الحقول إلا بعد الخروج من النافذة والعودة.
-// الحل: تنظيف أي backdrop عالق + إعادة ضبط التركيز إلى نافذة المستند.
+// ⭐⭐⭐ الإصلاح الجذري لفقدان التركيز بعد الحذف/استلام النتيجة (Electron + Chromium) ⭐⭐⭐
+// ─────────────────────────────────────────────────────────────────────────────
+// السبب الحقيقي (Root Cause):
+//   استدعاء confirm()/alert() الأصلية بشكل *متزامن* داخل معالج click يجعل
+//   Chromium/Electron يفقد "تنشيط النافذة" (window activation) وتركيز المستند
+//   (document focus) بشكل غير متزامن. وبعد إغلاق النافذة نُعيد بناء الجدول عبر
+//   innerHTML فيُتلَف العنصر صاحب التركيز ويصبح التركيز "يتيماً" على عقدة محذوفة.
+//   النتيجة: الحقول لا تُنقر، والمسافة/التحديد بالأزرق لا يعملان إلا بعد الضغط
+//   خارج البرنامج والعودة (لأن ذلك يُعيد تنشيط النافذة).
+//
+// الحل الجذري:
+//   1) دالة _restoreAppFocus موثوقة تُعيد تنشيط النافذة + سلسلة التركيز في Chromium
+//      عبر عنصر مؤقت قابل للتركيز (الطريقة الوحيدة التي تُعيد caret/selection فعلياً).
+//   2) اعتراض window.confirm / window.alert عالمياً بحيث تُستدعى _restoreAppFocus
+//      تلقائياً بعد *كل* نافذة أصلية — يغطي جميع نقاط الحذف (~45) دون تعديل أي دالة،
+//      ويغطي أي نقاط مستقبلية تلقائياً.
+// ─────────────────────────────────────────────────────────────────────────────
 function _restoreAppFocus(){
   try{
     // 1) أزل أي بقايا overlay قد تمنع الأحداث/التركيز
     var rb=document.getElementById('rr-backdrop'); if(rb) rb.classList.remove('show');
-    // 2) أزّل التركيز عن أي عنصر مُزال ثم أعِد تفعيل النافذة
-    if(document.activeElement && document.activeElement.blur) {
-      try{ document.activeElement.blur(); }catch(_){}
+
+    // 2) أزّل التركيز عن أي عنصر يتيم/محذوف
+    var ae=document.activeElement;
+    if(ae && ae!==document.body && ae.blur){ try{ ae.blur(); }catch(_){} }
+
+    // 3) أعِد تنشيط نافذة المستند (يرفع علم hasFocus في Chromium)
+    if(typeof window.focus==='function'){ try{ window.focus(); }catch(_){} }
+
+    // 4) ⭐ انقل التركيز للمرساة الثابتة (لا تُحذف أبداً) — يبقي keyboard focus
+    //    داخل النافذة ويعيد ضبط سلسلة التركيز في Chromium (caret/selection).
+    if(window._anchorFocus){
+      window._anchorFocus();
+    } else {
+      var probe=document.createElement('input');
+      probe.type='text';
+      probe.setAttribute('aria-hidden','true');
+      probe.tabIndex=-1;
+      probe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+      document.body.appendChild(probe);
+      try{ probe.focus({preventScroll:true}); }catch(_){ try{probe.focus();}catch(__){} }
+      requestAnimationFrame(function(){
+        try{ probe.blur(); }catch(_){}
+        try{ if(probe.parentNode) probe.parentNode.removeChild(probe); }catch(_){}
+      });
     }
-    // 3) إعادة تنشيط نافذة المستند — يعيد قدرة الحقول على استقبال التركيز
-    if(typeof window.focus==='function'){ window.focus(); }
-    // 4) لمسة على body لإعادة ضبط سلسلة التركيز في Chromium
-    if(document.body){
-      var _hadTabindex=document.body.hasAttribute('tabindex');
-      if(!_hadTabindex) document.body.setAttribute('tabindex','-1');
-      document.body.focus({preventScroll:true});
-      document.body.blur();
-      if(!_hadTabindex) document.body.removeAttribute('tabindex');
+
+    // 5) ⭐ شبكة أمان: إجبار Chromium على إعادة تركيب طبقة العرض (repaint).
+    //    تعالج الحالة التي يبقى فيها عرض المؤشر/التحديد مجمّداً حتى لو كان
+    //    تسريع العتاد معطّلاً على جهاز عميل معيّن. تغيير طفيف غير مرئي على body
+    //    يُجبر إعادة الرسم دون أي أثر بصري.
+    _forceRepaint();
+
+    // 6) ⭐⭐⭐ الإصلاح الجذري (Windows): استعادة keyboard focus على مستوى
+    //    نافذة Electron الأصلية. التشخيص أثبت أن document.hasFocus()===false
+    //    بعد الحذف/النتيجة، أي أن النافذة فقدت التركيز على مستوى نظام Windows
+    //    (لا يُصلَح من داخل الصفحة). نطلب من العملية الرئيسية إعادة فرض التركيز.
+    _winRefocus();
+  }catch(e){}
+}
+// طلب إعادة فرض keyboard focus من عملية Electron الرئيسية (Windows fix)
+function _winRefocus(){
+  try{
+    if(window.electronAPI && typeof window.electronAPI.refocus==='function'){
+      window.electronAPI.refocus();
+      // استدعاء مؤجل ثانٍ: أحياناً يكتمل استرداد التركيز على مستوى Windows
+      // بعد اكتمال دورة الأحداث وإعادة بناء DOM
+      setTimeout(function(){
+        try{ window.electronAPI.refocus(); }catch(_){}
+      }, 60);
     }
   }catch(e){}
 }
+// ⭐ استعادة "لطيفة" لمسارات نتائج الأجهزة (غير المتزامنة):
+//   - لا تعمل الرمشة إطلاقاً إذا كان المستخدم يكتب في حقل الآن (لا نقاطعه)
+//   - لا تعمل الرمشة إذا كان التركيز سليماً أصلاً (hasFocus===true)
+//   الرمشة العنيفة (refocus) تُحجز فقط لحالة فقدان التركيز الفعلي بعد الحذف.
+function _softRestoreFocus(){
+  try{
+    var ae=document.activeElement;
+    var typing = ae && (ae.tagName==='INPUT'||ae.tagName==='TEXTAREA') &&
+                 !ae.readOnly && !ae.disabled;
+    // المستخدم يكتب الآن؟ لا نلمس شيئاً إطلاقاً.
+    if(typing && document.hasFocus()) return;
+    // التركيز سليم ولا أحد يكتب؟ يكفي repaint خفيف بلا رمشة.
+    if(document.hasFocus()){ if(window._forceRepaint) _forceRepaint(); return; }
+    // التركيز مفقود فعلاً ولا أحد يكتب → استعادة كاملة (بما فيها الرمشة).
+    if(window._anchorFocus) _anchorFocus();
+    if(window._forceRepaint) _forceRepaint();
+    _winRefocus();
+  }catch(e){}
+}
+window._softRestoreFocus=_softRestoreFocus;
+window._winRefocus=_winRefocus;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⭐⭐⭐ الحل الوقائي الجذري لفقدان keyboard focus على Windows ⭐⭐⭐
+// ─────────────────────────────────────────────────────────────────────────────
+// السبب الجذري الحقيقي (أثبته التشخيص):
+//   عند الضغط على زر داخل صف (حذف/إجراء) ثم إعادة بناء الجدول عبر innerHTML،
+//   يُحذف الزر *وهو يحمل التركيز*. في Electron/Windows، حذف العنصر المركَّز
+//   يُسقط keyboard focus عن النافذة بأكملها (hasFocus=false) فلا تستقبل الحقول
+//   أي إدخال حتى تُنشَّط النافذة يدوياً (نقرة خارجية + رجوع).
+//
+// الحل: عنصر "مرساة تركيز" ثابت دائم لا يُحذف أبداً. قبل أي إعادة بناء DOM
+//   ننقل التركيز إليه، فيبقى keyboard focus داخل النافذة ولا يضيع إطلاقاً.
+// ─────────────────────────────────────────────────────────────────────────────
+(function _installFocusAnchor(){
+  function _make(){
+    if(document.getElementById('_focus-anchor')) return;
+    var a=document.createElement('input');
+    a.id='_focus-anchor';
+    a.type='text';
+    a.setAttribute('aria-hidden','true');
+    a.tabIndex=-1;
+    a.style.cssText='position:fixed;bottom:0;right:0;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0;margin:0;';
+    document.body.appendChild(a);
+  }
+  if(document.body) _make();
+  else document.addEventListener('DOMContentLoaded', _make);
+
+  // نقل التركيز للمرساة فوراً — يبقي keyboard focus داخل النافذة
+  window._anchorFocus=function(){
+    try{
+      var a=document.getElementById('_focus-anchor');
+      if(!a){ _make(); a=document.getElementById('_focus-anchor'); }
+      if(a){ a.focus({preventScroll:true}); }
+    }catch(e){}
+  };
+
+  // اعتراض وقائي: عند الضغط (بالماوس) على أي زر داخل جدول/صف قد يُعاد بناؤه،
+  // ننقل التركيز للمرساة *قبل* أن يُحذف الزر. capture=true ليسبق أي معالج آخر.
+  document.addEventListener('mousedown', function(e){
+    var t=e.target;
+    if(!t) return;
+    // أزرار القائمة الدائرية (rri/rrt) وأي زر داخل صف طلبات/جدول
+    var btn=t.closest && t.closest('.rri,.rrt,.rrw button,#requests-body button,#res-entry-tbody button,.mtbl button,table button');
+    if(btn){
+      // انقل التركيز للمرساة الآمنة فوراً — الزر قد يُحذف بعد لحظات
+      if(window._anchorFocus) window._anchorFocus();
+    }
+  }, true);
+})();
+// إجبار إعادة رسم/تركيب الصفحة (يعيد تفعيل عرض caret + selection في Electron)
+function _forceRepaint(){
+  // ⚠️ ملاحظة مهمة: لا نضع transform على <body> إطلاقاً.
+  // أي transform (غير none) على body يجعله "containing block" لكل عنصر
+  // position:fixed بداخله، فتتموضع النوافذ المنبثقة (.moverlay) نسبةً لـ body
+  // بدل الشاشة — فتظهر منزاحة حسب التمرير ومقصوصة بدل الوسط. كان هذا سبب
+  // مشكلة "النوافذ المنبثقة لا تظهر في الوسط" بعد تحديثات التركيز.
+  // البديل الآمن: إعادة رسم لا تلمس body ولا تكسر position:fixed.
+  try{
+    var ae=document.activeElement;
+    // إعادة رسم خفيفة عبر لمسة على العنصر المركّز فقط (إن وُجد ومناسب)،
+    // دون أي تأثير على منظومة التخطيط العامة.
+    if(ae && ae!==document.body && ae.style){
+      var p=ae.style.opacity;
+      ae.style.opacity='0.9999';
+      void ae.offsetHeight;
+      requestAnimationFrame(function(){
+        try{ ae.style.opacity=p||''; }catch(_){}
+      });
+    }
+  }catch(e){}
+}
+window._forceRepaint=_forceRepaint;
 window._restoreAppFocus=_restoreAppFocus;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// اعتراض confirm/alert الأصليتين — يضمن استعادة التركيز بعد كل نافذة native
+// دون الحاجة لتعديل أي من دوال الحذف الحالية أو المستقبلية.
+// ═══════════════════════════════════════════════════════════════════════════
+(function _patchNativeDialogs(){
+  if(window._nativeDialogsPatched) return;
+  window._nativeDialogsPatched=true;
+
+  var _origConfirm=window.confirm.bind(window);
+  window.confirm=function(msg){
+    var r;
+    try{ r=_origConfirm(msg); }
+    finally{
+      // بعد إغلاق النافذة مباشرة: استعادة فورية + تأكيد بعد إعادة بناء DOM المحتملة
+      _restoreAppFocus();
+      setTimeout(_restoreAppFocus, 0);
+    }
+    return r;
+  };
+
+  var _origAlert=window.alert.bind(window);
+  window.alert=function(msg){
+    try{ _origAlert(msg); }
+    finally{
+      _restoreAppFocus();
+      setTimeout(_restoreAppFocus, 0);
+    }
+  };
+})();
+
 document.querySelectorAll('.moverlay').forEach(m=>{m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});});
 
 // ============================================================
@@ -10902,19 +11072,6 @@ function wizFinish(){
     status:payStatus, date:today
   });
   save('invoices',invoices);
-
-  // ✅ ضمان وصول الطلب مع المريض لجميع الأجهزة:
-  // إذا كانت المزامنة مفعّلة، أرسل الطلب والفاتورة صراحةً بعد 200ms
-  // (بعد أن تكون debounce timers للـ patients قد أطلقت، لضمان ترتيب الوصول)
-  if(typeof SyncManager !== 'undefined' && SyncManager.isEnabled()){
-    setTimeout(function(){
-      try{
-        SyncManager.pushUpsert('requests', req).catch(function(){});
-        var inv = invoices.find(function(i){ return i.reqId===rqid; });
-        if(inv) SyncManager.pushUpsert('invoices', inv).catch(function(){});
-      }catch(_){}
-    }, 200);
-  }
 
   closeModal('m-wizard');
   showNotif('تم الإنشاء',`${rqid} — ${pt.name} | ${total} ${settings.currency||''} — ${payStatus} ✅`,'success');
@@ -17409,7 +17566,14 @@ function _expReportPrint(){
 // ============================================================
 // DASHBOARD
 // ============================================================
-function updateDashboard(){
+function updateDashboard(force){
+  // ⚡ لا تُعِد بناء لوحة التحكم (عمليات O(n) ثقيلة على كل الطلبات) إذا كانت
+  //    غير ظاهرة. عند الانتقال إليها لاحقاً يستدعيها nav('dashboard') فتتحدّث.
+  //    force=true يتجاوز هذا الفحص (يُستخدم من nav نفسه).
+  if(!force){
+    var _dsec=document.getElementById('sec-dashboard');
+    if(!_dsec || !_dsec.classList.contains('active')) return;
+  }
   const today=new Date().toISOString().split('T')[0];
   document.getElementById('ds-today').textContent=patients.filter(p=>p.lastVisit===today||p.registered===today).length;
   document.getElementById('ds-done').textContent=requests.filter(r=>r.status==='done'&&(r.resultDate===today||r.date===today)).length;
@@ -27007,6 +27171,12 @@ function _printViaIframe(html, isBarcode){
     }
     setTimeout(function(){
       try{ document.body.removeChild(iframe); }catch(e){}
+      // ⭐⭐ الإصلاح الجذري: بعد إزالة iframe الطباعة يبقى التركيز محبوساً في
+      //    نافذة الـ iframe المحذوفة، فلا تستقبل حقول النص التركيز في Electron
+      //    (الأزرار تعمل لأنها تستجيب للنقر لا للتركيز). نُعيد التركيز للنافذة
+      //    الرئيسية صراحةً. هذا هو السبب الحقيقي لتعطّل الحقول بعد استقبال نتيجة
+      //    الجهاز (الطباعة التلقائية للـ CBC) وبعد أي طباعة.
+      if(typeof _restoreAppFocus==='function') _restoreAppFocus();
     }, 2000);
   }, 0);
 }
@@ -27051,6 +27221,10 @@ function _printViaIframe(html, isBarcode){
   // دالة تطبيق اللغة على عنصر واحد
   function applyLang(el, lang){
     if(!el) return;
+    // ⭐ idempotent: إن كانت اللغة مطبّقة مسبقاً لا نُعِد ضبط السمات
+    //    (إعادة ضبط lang/inputmode/imeMode بلا داعٍ تُعيد تهيئة IME على Windows)
+    if(el._alLang===lang) return;
+    el._alLang=lang;
     el.setAttribute('lang', lang);
     if(lang === 'en'){
       el.setAttribute('dir', 'ltr');
@@ -30936,6 +31110,8 @@ function cbcFlush(sampleId){
       var _actPill=document.querySelector('#sec-requests .req-pill[data-filter].active');
       if(_actPill && _actPill.getAttribute('data-filter')==='devnew' && typeof renderRequestsFiltered==='function'){
         renderRequestsFiltered('devnew');
+        // ⭐ استعادة لطيفة: لا ترمش ولا تقاطع الكتابة إن كان التركيز سليماً
+        if(typeof _softRestoreFocus==='function'){ setTimeout(_softRestoreFocus,0); }
       }
     }catch(_){}
     lisAddLog('ok','CBC نُقل للمريض: '+(targetPatient?targetPatient.name:sid));
@@ -30967,6 +31143,9 @@ function cbcFlush(sampleId){
           if(typeof save==='function') save('requests',requests);
           if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(_){} }
           if(typeof renderRequests==='function'){ try{ renderRequests(); }catch(_){} }
+          // ⭐ استعادة لطيفة: لا ترمش ولا تقاطع الكتابة إن كان التركيز سليماً
+          //    (نتائج الأجهزة غير متزامنة فلا يغطيها اعتراض confirm)
+          if(typeof _softRestoreFocus==='function'){ setTimeout(_softRestoreFocus,0); }
         }catch(_){}
         setTimeout(function(){ printCBCFromDevice(_autoCBCReqId); }, 800);
       }
@@ -36208,1145 +36387,7 @@ setTimeout(function(){
 </script>
 
 <script>
-// ╔══════════════════════════════════════════════════════════════════════════════╗
-// ║        MedLab Pro — Firebase IDB SyncManager v1.0                          ║
-// ║  نظام المزامنة عبر Firebase كوسيط مؤقت + IDB كقاعدة بيانات محلية دائمة   ║
-// ╚══════════════════════════════════════════════════════════════════════════════╝
-(function(global) {
-  'use strict';
-
-  const SM_VERSION         = '1.0.0';
-  const SM_IDB_NAME        = 'medlab_syncmgr';
-  const SM_IDB_VER         = 1;
-  const SM_STORE_PENDING   = 'pending_events';
-  const SM_STORE_SEEN      = 'seen_events';
-  const SM_STORE_DEVICES   = 'known_devices';
-
-  const SM_SYNC_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  const FB_PATH_EVENTS  = (u) => 'sync_events/'  + u;
-  const FB_PATH_DEVICES = (u) => 'sync_devices/' + u;
-
-  // ── State ────────────────────────────────────────────
-  let _smDb       = null;
-  let _fbDb       = null;
-  let _username   = '';
-  let _deviceId   = '';
-  let _enabled    = false;
-  let _online     = navigator.onLine;
-  let _listening  = false;
-  let _evtRef     = null;
-  let _evtCb      = null;
-  let _heartTimer = null;
-
-  // ── UUID ─────────────────────────────────────────────
-  function _uuid() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-      const r = Math.random() * 16 | 0;
-      return (c==='x' ? r : (r&0x3|0x8)).toString(16);
-    });
-  }
-
-  function _log()  { console.log('[SyncMgr]',  ...arguments); }
-  function _warn() { console.warn('[SyncMgr]', ...arguments); }
-
-  // شاشة تشخيص مرئية — تفوّض لـ _smDebugToBox الخارجية
-  function _smDebugLog(msg) {
-    if (typeof _smDebugToBox === 'function') { _smDebugToBox(msg); return; }
-    var box = document.getElementById('_sm_debug_box');
-    if (!box) return;
-    var t = new Date().toLocaleTimeString('ar');
-    var line = document.createElement('div');
-    line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.08);color:#0f0';
-    line.textContent = t + ' — ' + msg;
-    box.insertBefore(line, box.firstChild);
-    while (box.children.length > 40) box.removeChild(box.lastChild);
-  }
-
-  // ── SyncManager IDB ──────────────────────────────────
-  function _openSMDB() {
-    if (_smDb) return Promise.resolve(_smDb);
-    return new Promise(function(res, rej) {
-      var req = indexedDB.open(SM_IDB_NAME, SM_IDB_VER);
-      req.onupgradeneeded = function(e) {
-        var db = e.target.result;
-        if (!db.objectStoreNames.contains(SM_STORE_PENDING)) {
-          var ps = db.createObjectStore(SM_STORE_PENDING, { keyPath: 'id' });
-          ps.createIndex('by_ts', 'ts');
-        }
-        if (!db.objectStoreNames.contains(SM_STORE_SEEN)) {
-          db.createObjectStore(SM_STORE_SEEN, { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains(SM_STORE_DEVICES)) {
-          db.createObjectStore(SM_STORE_DEVICES, { keyPath: 'id' });
-        }
-      };
-      req.onsuccess = function(e) { _smDb = e.target.result; res(_smDb); };
-      req.onerror   = function(e) { rej(e); };
-    });
-  }
-
-  function _getPending() {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_PENDING, 'readonly');
-        var req = tx.objectStore(SM_STORE_PENDING).index('by_ts').getAll();
-        req.onsuccess = function() { res(req.result || []); };
-        req.onerror   = function() { res([]); };
-      });
-    });
-  }
-
-  function _removePending(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).delete(id);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _addPending(evt) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_PENDING, 'readwrite');
-        tx.objectStore(SM_STORE_PENDING).put(evt);
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _hasSeen(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx  = db.transaction(SM_STORE_SEEN, 'readonly');
-        var req = tx.objectStore(SM_STORE_SEEN).get(id);
-        req.onsuccess = function() { res(!!req.result); };
-        req.onerror   = function() { res(false); };
-      });
-    });
-  }
-
-  function _markSeen(id) {
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx = db.transaction(SM_STORE_SEEN, 'readwrite');
-        tx.objectStore(SM_STORE_SEEN).put({ id: id, ts: Date.now() });
-        tx.oncomplete = res; tx.onerror = res;
-      });
-    });
-  }
-
-  function _cleanOldSeen() {
-    var cutoff = Date.now() - 48 * 3600 * 1000;
-    return _openSMDB().then(function(db) {
-      return new Promise(function(res) {
-        var tx    = db.transaction(SM_STORE_SEEN, 'readwrite');
-        var store = tx.objectStore(SM_STORE_SEEN);
-        var req   = store.getAll();
-        req.onsuccess = function() {
-          (req.result || []).forEach(function(item) {
-            if (item.ts < cutoff) store.delete(item.id);
-          });
-          tx.oncomplete = res; tx.onerror = res;
-        };
-      });
-    });
-  }
-
-  // ── App IDB (medlab_idb) ─────────────────────────────
-  // يستخدم IDB.get/IDB.set مباشرة — تتعامل مع ضغط LZS تلقائياً
-  function _readAppIDB(key) {
-    // IDB هو الـ singleton المعرّف في التطبيق ويدعم LZS
-    if (typeof IDB !== 'undefined' && typeof IDB.get === 'function') {
-      return IDB.get(key).then(function(v) {
-        return v; // IDB.get يرجع القيمة مفكوكة الضغط مباشرة
-      }).catch(function() { return null; });
-    }
-    return Promise.resolve(null);
-  }
-
-  function _writeAppIDB(key, value) {
-    // IDB.set يحفظ مع ضغط LZS ويحدّث _MC cache تلقائياً
-    if (typeof IDB !== 'undefined' && typeof IDB.set === 'function') {
-      return IDB.set(key, value).then(function() {}).catch(function() {});
-    }
-    return Promise.resolve();
-  }
-
-  // ── Device ID ─────────────────────────────────────────
-  function _getDeviceId() {
-    if (_deviceId) return _deviceId;
-    var id = localStorage.getItem('_sm_device_id');
-    if (!id) {
-      id = 'dev_' + _uuid().slice(0,8) + '_' + Date.now().toString(36);
-      localStorage.setItem('_sm_device_id', id);
-    }
-    _deviceId = id;
-    return id;
-  }
-
-  function _registerDevice() {
-    if (!_fbDb || !_username) return;
-    var path = FB_PATH_DEVICES(_username) + '/' + _getDeviceId();
-    _fbDb.ref(path).set({ id: _getDeviceId(), ts: Date.now(), online: true })
-      .catch(function(){});
-    _fbDb.ref(path + '/online').onDisconnect().set(false);
-    clearInterval(_heartTimer);
-    _heartTimer = setInterval(function() {
-      if (_fbDb && _username && _enabled)
-        _fbDb.ref(path + '/ts').set(Date.now()).catch(function(){});
-    }, 60000);
-  }
-
-  function _getOtherDevices() {
-    if (!_fbDb || !_username) return Promise.resolve([]);
-    return _fbDb.ref(FB_PATH_DEVICES(_username)).once('value').then(function(snap) {
-      var val    = snap.val() || {};
-      var cutoff = Date.now() - 5 * 60 * 1000;
-      return Object.keys(val).filter(function(id) {
-        return id !== _getDeviceId() && val[id] && val[id].ts > cutoff;
-      });
-    }).catch(function() { return []; });
-  }
-
-  // ── Apply Event to local IDB ──────────────────────────
-
-  // ⭐ رسم خفيف مُوجَّه: بدل renderAll() (١١ جدول) عند وصول سجل مزامنة،
-  //    نرسم فقط قائمة النوع المتأثر — وفقط إذا كان قسمها ظاهراً ولا يكتب المستخدم.
-  //    هذا يمنع التجميد اللحظي وفقدان التركيز عند كل تحديث وارد.
-  function _syncLightRender(kind){
-    setTimeout(function(){
-      try{
-        var _ae=document.activeElement;
-        var _typing=_ae&&(_ae.tagName==='INPUT'||_ae.tagName==='SELECT'||_ae.tagName==='TEXTAREA')&&!_ae.readOnly&&_ae.type!=='checkbox';
-        if(_typing) return; // لا تُعِد بناء أي جدول أثناء الكتابة
-        var map={
-          billing:        { sec:'sec-billing',  fn:'renderBillingHistory' },
-          cultureRecords: { sec:'sec-culture',  fn:'renderCultureList' },
-          uaRecords:      { sec:'sec-ua',       fn:'renderUAList' },
-          stoolExamRecords:{sec:'sec-stool-exam',fn:'renderStoolList' },
-          semenRecords:   { sec:'sec-semen-exam',fn:'renderSemenList' },
-          phoneBook:      { sec:null,           fn:'renderPhoneBook' }
-        };
-        var m=map[kind]; if(!m) return;
-        // ارسم فقط إذا كان القسم ظاهراً (أو لا قسم له مثل دليل الهاتف)
-        var visible=true;
-        if(m.sec){ var s=document.getElementById(m.sec); visible=s&&(s.classList.contains('active')||s.offsetParent!==null); }
-        if(visible && typeof window[m.fn]==='function'){ window[m.fn](); }
-      }catch(e){}
-    },0);
-  }
-  // إتاحته عالمياً ليستخدمه بلوك المزامنة عبر LAN (سكربت منفصل)
-  try{ window._syncLightRender = _syncLightRender; }catch(e){}
-
-  // خريطة: مفتاح IDB → اسم المتغير العالمي + دالة رسم
-  var _SM_KEY_MAP = {
-    patients:        { g:'patients',         fn:function(){ setTimeout(function(){ try{
-                         var _tab=document.querySelector('#sec-patients .tabs .tab.active');
-                         var _pf=(_tab&&_tab.textContent.trim()==='اليوم')?'today':'all';
-                         var _ps=document.getElementById('pts-srch-inp');
-                         renderPatients(_pf,(_ps&&_ps.value)||'');updateBadges();updateDashboard();
-                       }catch(e){} },0); } },
-    requests:        { g:'requests',         fn:function(){ setTimeout(function(){ try{
-                         var _pill=document.querySelector('#sec-requests .req-pill[data-filter].active');
-                         var _rf=_pill?_pill.getAttribute('data-filter'):'today';
-                         var _rs=document.getElementById('req-srch-inp');
-                         renderRequestsFiltered(_rf,(_rs&&_rs.value)||'');
-                         updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();
-                       }catch(e){} },0); } },
-    invoices:        { g:'invoices',         fn:function(){ setTimeout(function(){ try{renderInvoices();}catch(e){} },0); } },
-    packages:        { g:'packages',         fn:function(){ setTimeout(function(){ try{renderPackages();}catch(e){} },0); } },
-    inventory:       { g:'inventory',        fn:function(){ setTimeout(function(){ try{renderInventory();}catch(e){} },0); } },
-    doctors:         { g:'doctors',          fn:function(){ setTimeout(function(){ try{renderDoctors();}catch(e){} },0); } },
-    billing:         { g:'billingRecords',   fn:function(){ _syncLightRender('billing'); } },
-    testGroups:      { g:'testGroups',       fn:function(){ setTimeout(function(){ try{renderTestsDB();}catch(e){} },0); } },
-    qc:              { g:'qcRecords',        fn:function(){ setTimeout(function(){ try{renderQC();}catch(e){} },0); } },
-    cultureRecords:  { g:'cultureRecords',   fn:function(){ _syncLightRender('cultureRecords'); } },
-    uaRecords:       { g:'uaRecords',        fn:function(){ _syncLightRender('uaRecords'); } },
-    stoolExamRecords:{ g:'stoolExamRecords', fn:function(){ _syncLightRender('stoolExamRecords'); } },
-    semenRecords:    { g:'semenRecords',     fn:function(){ _syncLightRender('semenRecords'); } },
-    phoneBook:       { g:'phoneBook',        fn:function(){ _syncLightRender('phoneBook'); } }
-  };
-
-  // تحديث المتغير العالمي + كاش الذاكرة فوراً
-  function _smUpdateGlobal(key, idbKey, data) {
-    var meta = _SM_KEY_MAP[key];
-    if (!meta || !Array.isArray(data)) return;
-    // setter registry: يحدّث let variable في script block الصحيح
-    if (window._smSetters && typeof window._smSetters[key] === 'function') {
-      window._smSetters[key](data);
-      _smDebugLog('✅ setter[' + key + '] = ' + data.length + ' عنصر');
-    } else {
-      _smDebugLog('⚠️ no setter: ' + key);
-    }
-    if (typeof _MC !== 'undefined') _MC[idbKey] = data;
-  }
-
-  // ══════════════════════════════════════════════════════════════
-  // Firebase يحوّل المصفوفات المتداخلة إلى Objects عند الاسترجاع
-  // مثال: ['h001','h002'] → {0:'h001', 1:'h002'}
-  // هذه الدالة تُعيد تحويلها لمصفوفات حقيقية بشكل متكرر
-  // ══════════════════════════════════════════════════════════════
-  function _fixFirebaseArrays(obj) {
-    if (obj === null || obj === undefined) return obj;
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) {
-      return obj.map(_fixFirebaseArrays);
-    }
-    // اكتشاف: هل هذا Object بمفاتيح أرقام متتالية تبدأ من 0؟ → مصفوفة
-    var keys = Object.keys(obj);
-    if (keys.length > 0) {
-      var isArr = keys.every(function(k) { return /^\d+$/.test(k); });
-      if (isArr) {
-        var maxIdx = Math.max.apply(null, keys.map(Number));
-        // تحقق إضافي: المؤشرات متسلسلة (0,1,2,...,n) وليس فجوات كبيرة
-        if (maxIdx === keys.length - 1) {
-          var arr = new Array(keys.length);
-          keys.forEach(function(k) { arr[Number(k)] = _fixFirebaseArrays(obj[k]); });
-          return arr;
-        }
-      }
-    }
-    // Object عادي — نُصلح القيم الداخلية فقط
-    var result = {};
-    keys.forEach(function(k) { result[k] = _fixFirebaseArrays(obj[k]); });
-    return result;
-  }
-
-  function _applyEvent(evt, ackAfter) {
-    return _hasSeen(evt.id).then(function(seen) {
-      if (seen) { _log('Duplicate skipped:', evt.id); _smDebugLog('مكرر تجاهل: ' + evt.id.slice(0,8)); return; }
-      _log('Applying event:', evt.type, evt.key, evt.id);
-      _smDebugLog('تطبيق: ' + evt.type + ' / ' + evt.key);
-
-      // ✅ إصلاح: Firebase يحوّل arrays إلى objects — نُعيدها لمصفوفات حقيقية
-      if (evt.record)  evt.record = _fixFirebaseArrays(evt.record);
-      if (evt.data)    evt.data   = _fixFirebaseArrays(evt.data);
-
-      var p;
-      if      (evt.type === 'UPSERT_RECORD') p = _applyUpsert(evt);
-      else if (evt.type === 'DELETE_RECORD') p = _applyDelete(evt);
-      else if (evt.type === 'SET_ALL')       p = _applySetAll(evt);
-      else return;
-      return p.then(function() {
-        return _markSeen(evt.id);
-      }).then(function() {
-        _notifyApp(evt.key);
-        if (ackAfter) return _acknowledgeEvent(evt);
-      }).catch(function(e) { _warn('Apply error:', e); });
-    });
-  }
-
-  // نستخدم SyncManager._applying كـ flag مشترك
-
-  function _applyUpsert(evt) {
-    if (!evt.key || !evt.record) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-
-    // اقرأ من _MC إذا كانت تحتوي بيانات فعلية
-    var current = null;
-    if (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) {
-      current = _MC[idbKey].slice();
-    }
-    var readP = (current !== null) ? Promise.resolve(current) : _readAppIDB(idbKey);
-
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var idx = cur.findIndex(function(x) { return x && x.id === evt.record.id; });
-      if (idx >= 0) {
-        cur[idx] = evt.record;
-      } else {
-        cur.push(evt.record);
-      }
-
-      // حدّث _MC فوراً
-      if (typeof _MC !== 'undefined') _MC[idbKey] = cur;
-
-      // حدّث setter (patients/requests/...) فوراً
-      _smUpdateGlobal(evt.key, idbKey, cur);
-
-      // احفظ في IDB + DB بدون إطلاق hook (SyncManager._applying = true يمنعه)
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, cur);
-      } finally {
-        SyncManager._applying = false;
-      }
-
-      // ✅ حدّث prevState للمفتاح هذا فقط إذا لم يكن هناك timer معلّق
-      // (timer معلّق = المستخدم لديه تعديل محلي لم يُرسَل بعد — لا نُلغيه)
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer) {
-        if (window._smPrevState) window._smPrevState[evt.key] = cur.slice();
-      }
-      // لا نستدعي clearTimeout هنا أبداً — لا نُلغي تعديلات المستخدم المحلية
-
-      return Promise.resolve();
-    });
-  }
-
-  function _applyDelete(evt) {
-    if (!evt.key || !evt.recordId) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) return;
-      var filtered = cur.filter(function(x) { return x && x.id !== evt.recordId; });
-      if (typeof _MC !== 'undefined') _MC[idbKey] = filtered;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, filtered);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, filtered);
-      // حدّث prevState فقط إذا لا يوجد timer محلي معلّق
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer && window._smPrevState) window._smPrevState[evt.key] = filtered.slice();
-      return Promise.resolve();
-    });
-  }
-
-  function _applySetAll(evt) {
-    if (!evt.key || !Array.isArray(evt.data)) return Promise.resolve();
-    var idbKey = 'mlab2_' + _username + '_' + evt.key;
-    var current = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0) ? _MC[idbKey].slice() : null;
-    var readP = current ? Promise.resolve(current) : _readAppIDB(idbKey);
-    return readP.then(function(cur) {
-      if (!Array.isArray(cur)) cur = [];
-      var remoteMap = new Map();
-      evt.data.forEach(function(x) { if (x && x.id) remoteMap.set(x.id, x); });
-      var localOnly = cur.filter(function(x) { return x && x.id && !remoteMap.has(x.id); });
-      var merged = Array.from(remoteMap.values()).concat(localOnly);
-      if (typeof _MC !== 'undefined') _MC[idbKey] = merged;
-      SyncManager._applying = true;
-      try {
-        if (typeof DB !== 'undefined') DB.set(evt.key, merged);
-      } finally {
-        SyncManager._applying = false;
-      }
-      _smUpdateGlobal(evt.key, idbKey, merged);
-      var hasPendingTimer = window._smSaveTimers && window._smSaveTimers[evt.key];
-      if (!hasPendingTimer && window._smPrevState) window._smPrevState[evt.key] = merged.slice();
-      return Promise.resolve();
-    });
-  }
-
-  // ── Acknowledge ───────────────────────────────────────
-  // حذف الحدث من Firebase بعد 30 ثانية (وقت كافٍ لكل الأجهزة)
-  function _acknowledgeEvent(evt) {
-    if (!_fbDb || !_username || !evt.fbKey) return Promise.resolve();
-    var path = FB_PATH_EVENTS(_username) + '/' + evt.fbKey;
-    // احذف بعد 30 ثانية
-    setTimeout(function() {
-      if (_fbDb) _fbDb.ref(path).remove().catch(function() {});
-    }, 30000);
-    return Promise.resolve();
-  }
-
-  // ── Push event to Firebase ────────────────────────────
-  function _pushToFB(evt) {
-    return new Promise(function(res, rej) {
-      var ref = _fbDb.ref(FB_PATH_EVENTS(_username)).push();
-      evt.fbKey = ref.key;
-      ref.set(Object.assign({}, evt, { ack: {} })).then(function() {
-        _log('Pushed:', evt.id, evt.type, evt.key);
-        _smDebugLog('أُرسل: ' + evt.type + ' / ' + evt.key);
-        res();
-      }).catch(function(e) {
-        _warn('Push error:', e);
-        _smDebugLog('فشل الإرسال: ' + e.message);
-        rej(e);
-      });
-    });
-  }
-
-  function _pushEvent(evt) {
-    evt.id           = evt.id || _uuid();
-    evt.originDevice = _getDeviceId();
-    evt.ts           = Date.now();
-    evt.username     = _username;
-
-    return _markSeen(evt.id).then(function() {
-      if (!_online || !_fbDb || !_enabled) {
-        return _addPending(evt).then(function() {
-          _log('Queued offline:', evt.id);
-        });
-      }
-      return _pushToFB(evt).catch(function(e) {
-        _warn('Push failed, queuing:', e);
-        return _addPending(evt);
-      });
-    });
-  }
-
-  // ── Flush pending ─────────────────────────────────────
-  function _flushPending() {
-    if (!_online || !_fbDb || !_enabled) return Promise.resolve();
-    return _getPending().then(function(pending) {
-      if (!pending.length) return;
-      _log('Flushing', pending.length, 'pending events');
-      var chain = Promise.resolve();
-      pending.forEach(function(evt) {
-        chain = chain.then(function() {
-          return _pushToFB(evt).then(function() {
-            return _removePending(evt.id);
-          }).catch(function(e) {
-            _warn('Flush failed for:', evt.id, e);
-            return Promise.reject(e); // stop chain on error
-          });
-        });
-      });
-      return chain.catch(function() {});
-    });
-  }
-
-  // ── Full sync ─────────────────────────────────────────
-  function _fullSync() {
-    if (!_fbDb || !_username || !_enabled) return Promise.resolve();
-    _log('Full sync start for:', _username);
-    return _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val();
-      if (!val) { _log('Full sync: no remote events'); return; }
-      var events = Object.values(val);
-      // تجاهل الأحداث الصادرة من هذا الجهاز نفسه
-      events = events.filter(function(evt) {
-        return evt && evt.originDevice !== _getDeviceId();
-      });
-      _log('Full sync: found', events.length, 'applicable events');
-      var chain = Promise.resolve();
-      events.forEach(function(evt) {
-        chain = chain.then(function() { return _applyEvent(evt, false); });
-      });
-      return chain;
-    }).then(function() {
-      return _flushPending();
-    }).then(function() {
-      // ── إعادة رسم كاملة بعد استلام كل البيانات من Firebase ──
-      // هذا يحل مشكلة قائمة المرضى الفارغة عند الجهاز الثاني
-      setTimeout(function() {
-        try {
-          if (typeof renderAll        === 'function') renderAll();
-          if (typeof updateDashboard  === 'function') updateDashboard();
-          if (typeof updateBadges     === 'function') updateBadges();
-          if (typeof loadResultsDropdown === 'function') loadResultsDropdown();
-          if (typeof loadPrintDropdown   === 'function') loadPrintDropdown();
-          _smDebugLog('✅ إعادة رسم بعد fullSync');
-        } catch(e) { _warn('Re-render after fullSync failed:', e); }
-      }, 300);
-    }).catch(function(e) { _warn('Full sync error:', e); });
-  }
-
-  // ── Live sync ─────────────────────────────────────────
-  var _keepaliveTimer = null;
-  var _connMonitorStarted = false;
-
-  function _pollPendingEvents() {
-    if (!_fbDb || !_username || !_enabled) return;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(s) {
-      var val = s.val();
-      if (!val) return;
-      var keys = Object.keys(val);
-      if (keys.length > 0) _smDebugLog('📡 poll: ' + keys.length + ' حدث');
-      keys.forEach(function(fbKey) {
-        var evt = val[fbKey];
-        if (!evt || !evt.id) return;
-        if (evt.originDevice === _getDeviceId()) return;
-        evt.fbKey = fbKey;
-        _applyEvent(evt, true).catch(function(){});
-      });
-    }).catch(function(){});
-  }
-
-  function _startLive() {
-    if (!_fbDb || !_username || !_enabled || _listening) return;
-    _listening = true;
-
-    try { _fbDb.ref(FB_PATH_EVENTS(_username)).keepSynced(true); } catch(e) {}
-
-    // ── listener رئيسي: يستلم الأحداث الجديدة ──
-    _evtRef = _fbDb.ref(FB_PATH_EVENTS(_username));
-    _evtCb  = _evtRef.on('child_added', function(snap) {
-      var evt = snap.val();
-      if (!evt || !evt.id) return;
-      if (evt.originDevice === _getDeviceId()) return; // نحن أرسلناها
-      evt.fbKey = snap.key;
-      _smDebugLog('📥 ' + evt.type + '/' + evt.key);
-      _applyEvent(evt, true).catch(function(e) { _warn('apply error:', e); });
-    }, function(err) {
-      _warn('listener error:', err.message);
-      _listening = false;
-      setTimeout(_startLive, 5000);
-    });
-
-    // ── مراقبة الاتصال: poll عند إعادة الاتصال ──
-    if (!_connMonitorStarted) {
-      _connMonitorStarted = true;
-      _fbDb.ref('.info/connected').on('value', function(snap) {
-        _smDebugLog(snap.val() ? '🟢 متصل' : '🔴 منقطع');
-        if (snap.val()) _pollPendingEvents();
-      });
-    }
-
-    // ── keepalive: poll كل 5 ثوانٍ لمنع Firebase sleep ──
-    clearInterval(_keepaliveTimer);
-    _keepaliveTimer = setInterval(_pollPendingEvents, 5000);
-
-    _log('Live sync started');
-    _smDebugLog('✅ listener + poll/5s');
-  }
-
-  function _stopLive() {
-    if (_evtRef && _evtCb) { _evtRef.off('child_added', _evtCb); }
-    _evtRef = null; _evtCb = null; _listening = false;
-    _log('Live sync stopped');
-  }
-
-  // ── Auto cleanup Firebase ─────────────────────────────
-  function _autoClean() {
-    if (!_fbDb || !_username || !_enabled || !_online) return;
-    var cutoff = Date.now() - 3600 * 1000;
-    _fbDb.ref(FB_PATH_EVENTS(_username)).once('value').then(function(snap) {
-      var val = snap.val() || {};
-      var removes = Object.keys(val).filter(function(k) {
-        return val[k].ts && val[k].ts < cutoff;
-      }).map(function(k) {
-        return _fbDb.ref(FB_PATH_EVENTS(_username) + '/' + k).remove();
-      });
-      if (removes.length) {
-        Promise.all(removes).then(function() {
-          _log('Cleaned', removes.length, 'old Firebase events');
-        });
-      }
-    }).catch(function() {});
-  }
-
-  // ── Notify App ────────────────────────────────────────
-  function _notifyApp(key) {
-    var meta = _SM_KEY_MAP[key];
-    var labels = {
-      patients:'المرضى', requests:'الطلبات', invoices:'الفواتير',
-      packages:'الباقات', inventory:'المخزون', doctors:'الأطباء',
-      billing:'الفوترة', testGroups:'مجموعات التحاليل', qc:'ضبط الجودة',
-      cultureRecords:'مزارع', uaRecords:'تحليل البول', stoolExamRecords:'تحليل البراز',
-      semenRecords:'تحليل المنوي', phoneBook:'دليل الهاتف'
-    };
-    // رسم فوري
-    if (meta) { try { meta.fn(); } catch(e) {} }
-    // ✅ عند وصول requests أو patients: أعد تحميل قائمة النتائج وقائمة الطباعة دائماً
-    if (key === 'requests' || key === 'patients') {
-      setTimeout(function() {
-        try { if(typeof loadResultsDropdown==='function') loadResultsDropdown(); } catch(e){}
-        try { if(typeof loadPrintDropdown==='function') loadPrintDropdown(); } catch(e){}
-        // إذا صفحة إدخال النتائج مفتوحة، أعد تحميل النتيجة الحالية
-        try {
-          var sel = document.getElementById('res-req-sel');
-          if (sel && sel.value && typeof loadResultEntry === 'function') loadResultEntry();
-        } catch(e){}
-      }, 150);
-    }
-    // badges + dashboard
-    try { if(typeof updateBadges==='function') updateBadges(); } catch(e){}
-    try { if(typeof updateDashboard==='function') updateDashboard(); } catch(e){}
-    // إشعار
-    try {
-      if (typeof showNotif === 'function')
-        showNotif('🔄', (labels[key]||key), 'info');
-    } catch(e) {}
-  }
-
-  // ════════════════════════════════════════════════════════
-  // PUBLIC API
-  // ════════════════════════════════════════════════════════
-  var SyncManager = {
-
-    version: SM_VERSION,
-    _applying: false, // flag لمنع حلقة DB.set → hook → Firebase → DB.set
-
-    init: function(fbDb, username, enabled) {
-      _fbDb     = fbDb;
-      _username = username;
-      _enabled  = !!enabled;
-
-      var self = this;
-      return _openSMDB().then(function() {
-        _log('Init: user=' + username + ', enabled=' + enabled + ', device=' + _getDeviceId());
-        _smDebugLog('init: ' + username + ' | enabled:' + enabled + ' | dev:' + _getDeviceId().slice(-6));
-
-        if (!_enabled) { _log('Sync disabled — IDB only mode'); _smDebugLog('مزامنة معطّلة'); return; }
-        if (!_fbDb)    { _warn('Firebase not available'); _smDebugLog('Firebase غير متاح!'); return; }
-
-        _registerDevice();
-
-        return _cleanOldSeen().then(function() {
-          _autoClean();
-          return _fullSync();
-        }).then(function() {
-          _startLive();
-        });
-      }).then(function() {
-        window.addEventListener('online',  function() { _online = true;  self._onOnline(); });
-        window.addEventListener('offline', function() { _online = false; _log('Offline — queuing events'); });
-        setInterval(_autoClean, 30 * 60 * 1000);
-        _log('SyncManager ready');
-      });
-    },
-
-    _onOnline: function() {
-      _log('Online — flushing pending');
-      _flushPending().then(function() {
-        if (!_listening) _startLive();
-        _registerDevice();
-      });
-    },
-
-    setEnabled: function(val) {
-      _enabled = !!val;
-      if (_enabled) {
-        _registerDevice();
-        _flushPending();
-        _startLive();
-      } else {
-        _stopLive();
-        clearInterval(_heartTimer);
-      }
-      _log('Sync enabled:', _enabled);
-    },
-
-    isEnabled:  function() { return _enabled; },
-    isOnline:   function() { return _online; },
-    getDeviceId: function() { return _getDeviceId(); },
-
-    /** إرسال حدث UPSERT (إضافة أو تعديل record) */
-    pushUpsert: function(key, record) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'UPSERT_RECORD', key: key, record: record });
-    },
-
-    /** إرسال حدث DELETE (حذف record) */
-    pushDelete: function(key, recordId) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      return _pushEvent({ type: 'DELETE_RECORD', key: key, recordId: recordId });
-    },
-
-    /** إرسال مصفوفة كاملة (SET_ALL) */
-    pushSetAll: function(key, data) {
-      if (!SM_SYNC_KEYS.includes(key) || !_enabled) return Promise.resolve();
-      if (!Array.isArray(data) || !data.length) return Promise.resolve();
-      return _pushEvent({ type: 'SET_ALL', key: key, data: data });
-    },
-
-    /** الاستماع لأحداث التحديث */
-    onUpdate: function(cb) {
-      window.addEventListener('syncmanager:update', function(e) { cb(e.detail.key); });
-    },
-
-    /** عدد الأحداث المعلّقة */
-    pendingCount: function() {
-      return _getPending().then(function(p) { return p.length; });
-    },
-
-    destroy: function() {
-      _stopLive();
-      clearInterval(_heartTimer);
-    }
-  };
-
-  global.SyncManager = SyncManager;
-
-})(window);
-
-// ════════════════════════════════════════════════════════════════
-// دمج SyncManager مع تدفق التطبيق
-// ════════════════════════════════════════════════════════════════
-
-/** تحقق هل المزامنة مفعّلة لهذا المستخدم */
-function _isSyncEnabled(username) {
-  // ⭐ (طلب المستخدم) — تعطيل مزامنة بيانات Firebase بين الحاسبات نهائياً.
-  //    البديل موجود في قسم الربط (LAN). هذا لا يؤثر على تسجيل الدخول أو
-  //    الصلاحيات أو المحادثات أو الإشعارات — تلك تبقى تعمل عبر Firebase.
-  return false;
-}
-
-/** تهيئة SyncManager بعد تسجيل الدخول */
-async function initSyncManager() {
-  var session = typeof getSession === 'function' ? getSession() : null;
-  if (!session || !session.username) return;
-
-  var username = session.username;
-  var enabled  = _isSyncEnabled(username);
-
-  // انتظر Firebase أن يكون جاهزاً
-  var ok = false;
-  try { ok = await (typeof loadFirebase === 'function' ? loadFirebase() : Promise.resolve(false)); } catch(e) {}
-
-  var fbInstance = (ok && typeof fbDb !== 'undefined') ? fbDb : null;
-
-  try {
-    await SyncManager.init(fbInstance, username, enabled);
-
-    // إضافة مؤشر المزامنة في الواجهة — دائماً حتى بعد Refresh
-    _renderSyncIndicator(enabled);
-    _renderSyncDebugPanel();
-
-    console.log('[SyncManager] Initialized for user:', username, '| enabled:', enabled,
-      '| device:', SyncManager.getDeviceId());
-  } catch(e) {
-    console.warn('[SyncManager] Init failed:', e);
-    // حتى لو فشل Firebase — أظهر المؤشر كـ محلي
-    try { _renderSyncIndicator(false); } catch(_) {}
-  }
-}
-
-/** شاشة تشخيص المزامنة المرئية */
-function _renderSyncDebugPanel() {
-  var old = document.getElementById('_sm_debug_panel');
-  if (old) old.remove();
-
-  var panel = document.createElement('div');
-  panel.id = '_sm_debug_panel';
-  // البوكس مخفي افتراضياً — فقط div#_sm_debug_box موجود للكتابة
-  panel.style.cssText = [
-    'position:fixed','bottom:60px','left:8px','right:8px',
-    'max-height:220px','background:rgba(0,0,0,.92)',
-    'border:1px solid rgba(0,212,255,.4)','border-radius:10px',
-    'z-index:99999','overflow:hidden','font-family:monospace',
-    'display:none','flex-direction:column'  // مخفي افتراضياً
-  ].join(';');
-
-  // زر إظهار/إخفاء البوكس في الشريط العلوي
-  var toggleBtn = document.createElement('button');
-  toggleBtn.id = '_sm_toggle_btn';
-  // الزر ظاهر بشكل خافت — غير قابل للضغط — يُبقي Firebase نشطاً
-  toggleBtn.style.cssText = 'position:fixed;bottom:6px;left:6px;z-index:100000;background:rgba(0,0,0,.3);border:1px solid rgba(0,212,255,.15);border-radius:20px;color:rgba(0,212,255,.35);font-size:7px;padding:1px 5px;cursor:default;font-family:monospace;pointer-events:none;user-select:none;';
-  toggleBtn.textContent = '⚡';
-  toggleBtn.onclick = function(e){ e.preventDefault(); e.stopPropagation(); return false; };
-  document.body.appendChild(toggleBtn);
-
-  // رأس الشاشة
-  var hdr = document.createElement('div');
-  hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:rgba(0,212,255,.12);border-bottom:1px solid rgba(0,212,255,.3)';
-  hdr.innerHTML = '<span style="font-size:11px;font-weight:700;color:#00d4ff">🔧 تشخيص المزامنة</span>' +
-    '<span style="font-size:10px;color:rgba(255,255,255,.5)">جهاز: ' + (SyncManager.getDeviceId()||'').slice(-8) + '</span>' +
-    '<button onclick="document.getElementById(&quot;_sm_debug_panel&quot;).remove()" style="background:none;border:none;color:#ff2244;font-size:14px;cursor:pointer;padding:0 4px">✕</button>';
-  panel.appendChild(hdr);
-
-  // زر اختبار الإرسال
-  var testBtn = document.createElement('div');
-  testBtn.style.cssText = 'padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;gap:8px';
-  testBtn.innerHTML = '<button onclick="_smTestSend()" style="flex:1;padding:5px;background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.4);border-radius:6px;color:#00d4ff;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">📤 اختبار إرسال</button>' +
-    '<button onclick="_smTestCheck()" style="flex:1;padding:5px;background:rgba(139,63,255,.15);border:1px solid rgba(139,63,255,.4);border-radius:6px;color:#a78bfa;font-size:10px;font-weight:700;cursor:pointer;font-family:monospace">🔍 فحص Firebase</button>';
-  panel.appendChild(testBtn);
-
-  // صندوق الرسائل
-  var box = document.createElement('div');
-  box.id = '_sm_debug_box';
-  box.style.cssText = 'flex:1;overflow-y:auto;padding:6px 10px;';
-  panel.appendChild(box);
-
-  panel.style.display = 'none'; // مخفي افتراضياً
-  document.body.appendChild(panel);
-
-  // ضمان وجود _sm_debug_box في DOM حتى تعمل _smDebugLog
-  if (!document.getElementById('_sm_debug_box')) {
-    var hiddenBox = document.createElement('div');
-    hiddenBox.id = '_sm_debug_box';
-    hiddenBox.style.display = 'none';
-    document.body.appendChild(hiddenBox);
-  }
-}
-
-/** اختبار إرسال حدث تجريبي */
-function _smTestSend() {
-  if (typeof SyncManager === 'undefined' || !SyncManager.isEnabled()) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ المزامنة غير مفعّلة لهذا الحساب';
-      box.insertBefore(l, box.firstChild);
-    }
-    return;
-  }
-  var testRecord = { id: 'test_' + Date.now(), _test: true, _updatedAt: Date.now() };
-  SyncManager.pushUpsert('patients', testRecord).then(function() {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#00e87a;padding:2px 0';
-      l.textContent = '✅ أُرسل حدث تجريبي — انتظر الجهاز الآخر';
-      box.insertBefore(l, box.firstChild);
-    }
-  }).catch(function(e) {
-    var box = document.getElementById('_sm_debug_box');
-    if (box) {
-      var l = document.createElement('div');
-      l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-      l.textContent = '❌ فشل: ' + e.message;
-      box.insertBefore(l, box.firstChild);
-    }
-  });
-}
-
-/** فحص Firebase مباشرة */
-function _smTestCheck() {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-
-  var session = typeof getSession === 'function' ? getSession() : null;
-  var username = session ? session.username : '?';
-  var path = 'sync_events/' + username;
-
-  var info = document.createElement('div');
-  info.style.cssText = 'font-size:10px;color:#ffcc00;padding:2px 0';
-  info.textContent = '🔍 فحص: ' + path;
-  box.insertBefore(info, box.firstChild);
-
-  if (typeof fbDb === 'undefined' || !fbDb) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ fbDb = null — Firebase غير مهيّأ';
-    box.insertBefore(l, box.firstChild);
-    return;
-  }
-
-  // فحص auth
-  var authLbl = document.createElement('div');
-  authLbl.style.cssText = 'font-size:10px;color:#a0a0a0;padding:2px 0';
-  var authUser = (typeof fbAuth !== 'undefined' && fbAuth && fbAuth.currentUser);
-  authLbl.textContent = 'Auth: ' + (authUser ? '✅ ' + authUser.uid.slice(0,8) : '❌ غير مسجّل');
-  box.insertBefore(authLbl, box.firstChild);
-
-  // اقرأ sync_events
-  fbDb.ref(path).once('value').then(function(snap) {
-    var val = snap.val();
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:10px;color:#00e87a;padding:2px 0';
-    l.textContent = '📦 sync_events: ' + (val ? Object.keys(val).length + ' حدث' : 'فارغ');
-    box.insertBefore(l, box.firstChild);
-  }).catch(function(e) {
-    var l = document.createElement('div');
-    l.style.cssText = 'font-size:11px;color:#ff2244;padding:2px 0';
-    l.textContent = '❌ قراءة Firebase: ' + e.message;
-    box.insertBefore(l, box.firstChild);
-  });
-}
-
-/** عرض مؤشر حالة المزامنة في الشريط العلوي */
-function _renderSyncIndicator(enabled) {
-  var existing = document.getElementById('sm-status-badge');
-  if (existing) existing.remove();
-
-  var topbarActions = document.querySelector('.topbar-actions');
-  if (!topbarActions) return;
-
-  var badge = document.createElement('div');
-  badge.id = 'sm-status-badge';
-  badge.style.cssText = [
-    'display:flex','align-items:center','gap:5px',
-    'padding:5px 12px','border-radius:16px','font-size:10px',
-    'font-weight:700','cursor:default','transition:all .3s',
-    enabled
-      ? 'background:rgba(0,232,122,.12);border:1px solid rgba(0,232,122,.35);color:#00e87a'
-      : 'background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.4)'
-  ].join(';');
-
-  var dot = document.createElement('span');
-  dot.id = 'sm-dot';
-  dot.style.cssText = 'width:7px;height:7px;border-radius:50%;background:' +
-    (enabled ? '#00e87a' : 'rgba(255,255,255,.3)') +
-    ';' + (enabled ? 'animation:pulse 2s infinite' : '');
-
-  var lbl = document.createElement('span');
-  lbl.id = 'sm-lbl';
-  lbl.textContent = enabled ? '☁️ مزامنة' : '💾 محلي';
-
-  badge.appendChild(dot);
-  badge.appendChild(lbl);
-
-  // أدرج قبل أول زر
-  topbarActions.insertBefore(badge, topbarActions.firstChild);
-
-  // استمع لتغيير الحالة (عند تفعيل/تعطيل المزامنة من admin)
-  window.addEventListener('syncmanager:statuschange', function(e) {
-    var en = e.detail.enabled;
-    badge.style.background = en ? 'rgba(0,232,122,.12)' : 'rgba(255,255,255,.06)';
-    badge.style.borderColor = en ? 'rgba(0,232,122,.35)' : 'rgba(255,255,255,.12)';
-    badge.style.color = en ? '#00e87a' : 'rgba(255,255,255,.4)';
-    dot.style.background = en ? '#00e87a' : 'rgba(255,255,255,.3)';
-    dot.style.animation  = en ? 'pulse 2s infinite' : '';
-    lbl.textContent = en ? '☁️ مزامنة' : '💾 محلي';
-  });
-
-  // مؤشر offline
-  window.addEventListener('offline', function() {
-    dot.style.background = '#ffcc00';
-    lbl.textContent      = '⚡ بلا إنترنت';
-    badge.style.color    = '#ffcc00';
-  });
-  window.addEventListener('online', function() {
-    var isEn = SyncManager.isEnabled();
-    dot.style.background = isEn ? '#00e87a' : 'rgba(255,255,255,.3)';
-    lbl.textContent = isEn ? '☁️ مزامنة' : '💾 محلي';
-    badge.style.color = isEn ? '#00e87a' : 'rgba(255,255,255,.4)';
-  });
-}
-
-/**
- * hook على save() لإرسال الأحداث تلقائياً عند كل تعديل
- * يُنفَّذ بعد تهيئة التطبيق بالكامل
- */
-function _hookSaveForSync() {
-  if (window._smHooked) return;
-  window._smHooked = true;
-
-  var SM_KEYS = [
-    'patients','requests','invoices','packages','inventory',
-    'doctors','billing','testGroups','qc','cultureRecords',
-    'uaRecords','stoolExamRecords','semenRecords','phoneBook'
-  ];
-
-  // ── prevState: snapshot لكل مفتاح بعد آخر إرسال ────────────
-  var _smPrevState = {};
-  window._smPrevState = _smPrevState;
-
-  // ── الـ hook: يُستدعى من DB.set عند كل تعديل ───────────────
-  window._smDBHook = function(k, v) {
-    if (!SyncManager.isEnabled()) return;
-    if (!SM_KEYS.includes(k)) return;
-    if (!Array.isArray(v)) return;
-
-    // debounce 80ms per key — وقت كافٍ لجمع التغييرات المتزامنة
-    window._smSaveTimers = window._smSaveTimers || {};
-    // لا نلغي timer موجود إذا كان مصدره تعديل مستخدم محلي
-    // نستخدم snapshot فوري من v لتجنب تغيرها قبل انتهاء الـ debounce
-    var vSnapshot = v.slice();
-    clearTimeout(window._smSaveTimers[k]);
-    window._smSaveTimers[k] = setTimeout(function() {
-      // استخدم snapshot المأخوذ وقت الاستدعاء لا وقت التنفيذ
-      var current = vSnapshot;
-      var prev    = _smPrevState[k] || [];
-      var prevMap = {};
-      prev.forEach(function(x){ if(x && x.id) prevMap[x.id] = x; });
-      var currIds = new Set();
-      current.forEach(function(x){ if(x && x.id) currIds.add(x.id); });
-
-      var toUpsert = [];
-      current.forEach(function(record) {
-        if (!record || !record.id) return;
-        var oldRec = prevMap[record.id];
-        if (!oldRec) {
-          toUpsert.push(record);
-        } else if (JSON.stringify(record) !== JSON.stringify(oldRec)) {
-          toUpsert.push(record);
-        }
-      });
-
-      // أرسل كل ما تغيّر
-      toUpsert.forEach(function(record) {
-        _smDebugToBox('📤 ' + k + ' #' + (record.id||'').slice(-6));
-        SyncManager.pushUpsert(k, record).catch(function(e){
-          _smDebugToBox('❌ ' + e.message);
-        });
-      });
-
-      // DELETE: عناصر محذوفة من الطرف المحلي
-      prev.forEach(function(record) {
-        if (!record || !record.id) return;
-        if (!currIds.has(record.id)) {
-          _smDebugToBox('🗑️ حذف: ' + k + ' #' + (record.id||'').slice(-6));
-          SyncManager.pushDelete(k, record.id).catch(function(){});
-        }
-      });
-
-      // ✅ حدّث prevState بعد الإرسال فقط
-      _smPrevState[k] = current.slice();
-    }, 80);
-  };
-
-  // ── بناء prevState الأولي ────────────────────────────────────
-  var _gMap = {
-    patients:'patients', requests:'requests', invoices:'invoices',
-    doctors:'doctors', packages:'packages', inventory:'inventory',
-    qc:'qcRecords', testGroups:'testGroups', uaRecords:'uaRecords',
-    stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
-    billing:'billingRecords', cultureRecords:'cultureRecords', phoneBook:'phoneBook'
-  };
-
-  function _rebuildPrevState(force) {
-    SM_KEYS.forEach(function(k) {
-      // لا تُعِد بناء مفتاح له timer معلّق — يعني هناك تعديل محلي لم يُرسَل بعد
-      if (!force && window._smSaveTimers && window._smSaveTimers[k]) return;
-      try {
-        var idbKey = (typeof DB !== 'undefined') ? (DB._pfx() + k) : ('mlab2__' + k);
-        var val = (typeof _MC !== 'undefined' && Array.isArray(_MC[idbKey]) && _MC[idbKey].length > 0)
-          ? _MC[idbKey]
-          : window[_gMap[k] || k];
-        if (Array.isArray(val) && val.length > 0) _smPrevState[k] = val.slice();
-      } catch(_) {}
-    });
-    var loaded = SM_KEYS.filter(function(k){ return (_smPrevState[k]||[]).length > 0; });
-    _smDebugToBox('✅ hook جاهز | ' + loaded.join(','));
-  }
-
-  // بناء أولي بعد 800ms (بعد اكتمال startApp + IDB)
-  setTimeout(function(){ _rebuildPrevState(true); }, 800);
-  // إعادة بناء دورية كل 30 ثانية — فقط للمفاتيح التي لا يوجد timer معلق عليها
-  setInterval(function(){ _rebuildPrevState(false); }, 30000);
-}
-
-// دالة مساعدة للكتابة في صندوق التشخيص من خارج IIFE
-function _smDebugToBox(msg) {
-  var box = document.getElementById('_sm_debug_box');
-  if (!box) return;
-  var t = new Date().toLocaleTimeString('ar');
-  var line = document.createElement('div');
-  line.style.cssText = 'font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.06);color:#0f0';
-  line.textContent = t + ' — ' + msg;
-  box.insertBefore(line, box.firstChild);
-  while (box.children.length > 50) box.removeChild(box.lastChild);
-}
-
-// ── تشغيل SyncManager عند جاهزية التطبيق ────────────────────
-window.addEventListener('load', function() {
-  var _smInitDone = false;
-
-  function _tryInitSync() {
-    if (_smInitDone) return;
-    var session = typeof getSession === 'function' ? getSession() : null;
-    if (!session || !session.username) return;
-    _smInitDone = true;
-    initSyncManager().then(function() {
-      _hookSaveForSync();
-    });
-  }
-
-  // الطريقة 1: hook على startApp
-  var _origStartApp = window.startApp;
-  if (typeof _origStartApp === 'function') {
-    window.startApp = function() {
-      _origStartApp.apply(this, arguments);
-      setTimeout(_tryInitSync, 2000);
-    };
-  }
-
-  // الطريقة 2: fallback — إذا كانت الجلسة موجودة مسبقاً (Refresh)
-  setTimeout(function() {
-    if (!_smInitDone) _tryInitSync();
-  }, 2500);
-
-  // الطريقة 3: محاولة أخيرة بعد 5 ثواني
-  setTimeout(function() {
-    if (!_smInitDone) _tryInitSync();
-  }, 5000);
-});
+// ── (أُزيل نظام SyncManager السحابي عبر Firebase بالكامل — يُستخدم بدله ربط LAN المباشر بين الحاسبات) ──
 
 // ═══════════════════════════════════════════════════════
 // إدارة الطابعات
@@ -37685,18 +36726,36 @@ function _lanUpdateStatus(){
   }
 }
 
-// بث التغيير لجميع الأجهزة المرتبطة
-function lanBroadcast(key, data){
+// ⚡ الإرسال الفعلي للرسالة (يُنفَّذ خارج مسار الواجهة لتفادي التجميد)
+function _lanEmit(key, data){
+  // بناء الرسالة (JSON.stringify للمصفوفة كاملة) — العملية الأثقل، لكنها الآن
+  // تُنفَّذ داخل setTimeout(0) فلا تُجمّد الواجهة لحظة إنشاء الطلب/الحفظ.
   var msg = JSON.stringify({type:'sync', key:key, data:data, from:_lanDeviceId, ts:Date.now()});
   if(_lanMode==='server'){
-    // السيرفير يبث للعملاء عبر Electron IPC (main process يملك WebSocket clients الحقيقية)
     if(window.electronAPI && window.electronAPI.lanBroadcast){
       window.electronAPI.lanBroadcast(msg);
     }
   } else if(_lanMode==='client' && _lanWS && _lanWS.readyState===1){
-    // العميل يرسل للسيرفير
     try{ _lanWS.send(msg); }catch(e){}
   }
+}
+
+// ⚡ بثّ التغيير لجميع الأجهزة — غير محجوب (non-blocking) + دمج للنداءات المتتالية.
+//    كان JSON.stringify للمصفوفة كاملة يُنفَّذ متزامناً عند كل save() فيجمّد
+//    الواجهة عند إنشاء الطلب (3 حفظات متتالية: patients+requests+invoices).
+//    الآن: نؤجّل ونجمع حفظات نفس المفتاح خلال 120ms ونرسل أحدث نسخة مرة واحدة.
+var _lanBcTimers = {};   // مؤقّت لكل مفتاح
+var _lanBcLatest = {};   // أحدث بيانات لكل مفتاح بانتظار الإرسال
+function lanBroadcast(key, data){
+  // نحتفظ بمرجع أحدث نسخة (لا ننسخها — النسخ مكلف؛ الإرسال يقرأها لاحقاً)
+  _lanBcLatest[key] = data;
+  if(_lanBcTimers[key]) return; // مؤقّت قائم أصلاً — سيُرسل الأحدث عند إطلاقه
+  _lanBcTimers[key] = setTimeout(function(){
+    var d = _lanBcLatest[key];
+    delete _lanBcTimers[key];
+    delete _lanBcLatest[key];
+    try{ _lanEmit(key, d); }catch(e){ console.warn('[LAN] broadcast',key,e); }
+  }, 120);
 }
 
 // معالجة الرسالة الواردة
