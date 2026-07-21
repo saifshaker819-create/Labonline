@@ -5721,6 +5721,10 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div style="font-size:22px">🧬</div><div style="font-weight:800;font-size:12px">Roche cobas c 111</div>
               <div style="font-size:10px;color:var(--text2)">كيمياء — Serial (USB/RS-232)</div>
             </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('roche_e411','Roche cobas e 411','astm')" data-v="roche_e411">
+              <div style="font-size:22px">🧪</div><div style="font-weight:800;font-size:12px">Roche cobas e 411</div>
+              <div style="font-size:10px;color:var(--text2)">هرمونات/مناعة — Serial (USB/RS-232)</div>
+            </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('sysmex','Sysmex XN/XE','astm')" data-v="sysmex">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Sysmex</div>
               <div style="font-size:10px;color:var(--text2)">XN-1000, XE-2100</div>
@@ -5879,6 +5883,23 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               • <b style="color:var(--text)">ابقِ السرعة 9600</b> · الإعدادات N_8_1 (None parity · 8 bit · 1 stop) — افتراضي الجهاز.<br>
               • في الجهاز: <span style="color:var(--primary)">Utilities → Configuration → Host Settings</span> · Communication = <b>REALTIME</b> · البروتوكول ASTM.<br>
               • البرنامج سيرسل ACK لكل إطار تلقائياً (مطلوب ليُرسل الجهاز النتائج).
+            </div>
+            <div id="wiz-e411-serial-hint" style="display:none;margin-top:10px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🧪 <b style="color:var(--primary)">Roche/Hitachi cobas e 411</b> (حسب دليل الشركة v2.2 — الفصل B/D):<br>
+              • وصّل كابل <b style="color:var(--text)">RS-232C (D-SUB9)</b> بمنفذ الجهاز المكتوب عليه <b style="color:var(--text)">"HOST"</b> (يسار الجهاز — الفصل B، الشكل B-1).<br>
+              • الكابل <b style="color:var(--text)">Null-Modem</b>: 2↔3 (RXD/TXD متقاطع) و 5↔5 (SG) — الطول الأقصى 15 متر (الشكل B-2).<br>
+              • الإعدادات الافتراضية: <b style="color:var(--text)">9600</b> · 8bit,NONE,1Stop — يمكن ضبط 19200/9600/4800 من شاشة الجهاز.<br>
+              • في الجهاز: <span style="color:var(--primary)">Utility → System → Host Communication Setting</span> · Host Communication = <b>On</b> · Automatic Result Upload = <b>Yes</b>.<br>
+              • أدخِل <b style="color:var(--text)">Host Code</b> لكل تحليل في <span style="color:var(--primary)">Host Test Code Setting</span> — إلزامي لرفع النتائج (الفصل B-5). ضع نفس الرقم في عمود «القناة» بجدول الربط.<br>
+              • اختر أدناه صيغة البروتوكول المفعّلة على الجهاز (Protocol Type في شاشته):
+              <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span style="color:var(--text)">نوع البروتوكول:</span>
+                <select id="wiz-e411-type" class="fc" style="max-width:220px;display:inline-block">
+                  <option value="cobas">cobas® type (الأشيع)</option>
+                  <option value="elecsys">Elecsys® type</option>
+                </select>
+              </div>
+              • يدعم البرنامج الرد على الاستعلامات (Order Inquiry) والإرسال المبادر (Batch) — سيرسل ACK لكل إطار تلقائياً.
             </div>
           </div>
 
@@ -29257,6 +29278,9 @@ function lisWizSelectVendor(vendor,name,proto){
   // ⭐ cobas c 111: يتصل عبر Serial (كابل USB↔RS-232) حسب دليل الشركة (الفصل 5).
   const c111Hint=document.getElementById('wiz-c111-serial-hint');
   if(c111Hint) c111Hint.style.display=vendor==='roche_c111'?'block':'none';
+  // ⭐ cobas e 411: يتصل عبر Serial (RS-232C/D-SUB9) حسب دليل الشركة (الفصل B).
+  const e411Hint=document.getElementById('wiz-e411-serial-hint');
+  if(e411Hint) e411Hint.style.display=vendor==='roche_e411'?'block':'none';
   document.getElementById('wiz-btn-next').disabled=false;
 }
 
@@ -29384,6 +29408,10 @@ async function lisWizFinish(){
     rxCount:0,
     // 🩸 Zybio: الرد ACK^R01 إلزامي حسب دليل الشركة (3.8.1)
     sendAck:(_wizVendor==='zybio'),
+    // 🧪 cobas e 411: صيغة البروتوكول المختارة على شاشة الجهاز (cobas/elecsys)
+    e411Type:(_wizVendor==='roche_e411'
+      ? ((document.getElementById('wiz-e411-type')?.value)||'cobas')
+      : undefined),
     _wizConn:_wizConn,
   };
 
@@ -29610,17 +29638,20 @@ async function _pushResultsToDeviceLocal(_remote){
     const devObj=(lisDevices||[]).find(d=>d.id===devId)||{};
     const devName=devObj.name||devId;
     const isC111=(devObj.vendor==='roche_c111');  // cobas c 111 عبر Serial (ASTM)
+    const isE411=(devObj.vendor==='roche_e411');  // cobas e 411 عبر Serial (ASTM)
     lisAddLog('info','📤 إرسال '+byDevice[devId].length+' تحليل إلى '+devName+' (عينة '+sampleId+')');
     try{
       let res;
-      if(isC111){
-        // ── cobas c 111: ASTM Push (TSDWN^BATCH) — الأكواد رقمية (channel/HAC) ──
+      if(isC111||isE411){
+        // ── cobas c111/e411: ASTM Push (TSDWN^BATCH) — الأكواد رقمية (channel/HAC) ──
+        //    نفس قناة c111PushOrder؛ main.js يوجّهها لبناء e411 حسب vendor الجهاز.
+        const _dn=isE411?'e411':'c111';
         if(!window.electronAPI || !window.electronAPI.c111PushOrder){
           failMsgs.push(devName+': c111PushOrder غير مفعّل في preload');
           lisAddLog('err','❌ c111PushOrder غير متاح في preload!');
           continue;
         }
-        // c111 يحتاج كوداً رقمياً: نستخدم channel إن وُجد، وإلا code إن كان رقماً
+        // الجهاز يحتاج كوداً رقمياً: نستخدم channel إن وُجد، وإلا code إن كان رقماً
         const c111Tests=byDevice[devId].map(t=>{
           let hac='';
           if(t.channel && /^\d+$/.test(String(t.channel).trim())) hac=String(t.channel).trim();
@@ -29629,7 +29660,7 @@ async function _pushResultsToDeviceLocal(_remote){
         }).filter(Boolean);
         if(!c111Tests.length){
           failMsgs.push(devName+': لا أكواد رقمية (HAC) — أضِف رقم القناة في جدول الربط');
-          lisAddLog('warn','⚠️ '+devName+': لا أكواد رقمية صالحة لـ c111 (راجع عمود القناة)');
+          lisAddLog('warn','⚠️ '+devName+': لا أكواد رقمية صالحة لـ '+_dn+' (راجع عمود القناة)');
           continue;
         }
         res=await window.electronAPI.c111PushOrder({
@@ -30022,10 +30053,12 @@ async function lisConnectSerialDevice(dev){
         path:     portPath,
         baudRate: baud,
         name:     dev.name,
-        // ⭐ cobas c 111: مرّر البصمة لتفعيل محرك ASTM الكامل + اسم البرنامج للرؤوس
-        vendor:   dev.vendor === 'roche_c111' ? 'roche_c111' : (dev.vendor || ''),
-        dataBits: 8, parity: 'none', stopBits: 1,   // N_8_1 — افتراضي cobas c111
+        // ⭐ cobas c 111 / e 411: مرّر البصمة لتفعيل محرك ASTM الكامل + اسم البرنامج للرؤوس
+        vendor:   (dev.vendor === 'roche_c111' || dev.vendor === 'roche_e411') ? dev.vendor : (dev.vendor || ''),
+        dataBits: 8, parity: 'none', stopBits: 1,   // N_8_1 — افتراضي cobas c111/e411
         systemId: (typeof labSettings!=='undefined' && labSettings && labSettings.systemId) ? labSettings.systemId : 'MedLabPro',
+        // 🧪 e411: صيغة البروتوكول (cobas/elecsys) — يُهمَل لغير e411
+        e411Type: dev.vendor === 'roche_e411' ? (dev.e411Type || 'cobas') : undefined,
       });
       if(!openRes.ok){
         lisAddLog('err','[Electron] فشل فتح Serial: '+openRes.error);
@@ -30420,13 +30453,16 @@ async function lisHandleHl7Query(info){
 // معزول تماماً — لا يمسّ HL7/MAGLUMI/BC-5000.
 // ═══════════════════════════════════════════════════════════════
 async function lisHandleC111Query(info){
+  // 🧪 e411 يأتي عبر نفس الحدث لكن بعلم isE411 — الرد يمرّ عبر نفس القناة
+  //    (main.js يوجّهه لـ e411 حسب queryId). منطق الهول بلود يخصّ c111 فقط.
+  const _isE411Q = !!(info && info.isE411);
   const sidRaw = String(info.sampleId||'').trim();
-  // 🩸 تيوب الهول بلود يحمل الرقم ببادئة 9 → نرجع للرقم الأصلي للبحث عن المريض
-  const _isWbTube = !!(sidRaw && sidRaw.charAt(0)===C111_WB_PREFIX &&
+  // 🩸 تيوب الهول بلود يحمل الرقم ببادئة 9 → نرجع للرقم الأصلي للبحث عن المريض (c111 فقط)
+  const _isWbTube = !_isE411Q && !!(sidRaw && sidRaw.charAt(0)===C111_WB_PREFIX &&
                        _bcCleanCode(sidRaw).length>6);
   const sid = _isWbTube ? _c111BaseSidFromWb(sidRaw) : sidRaw;
   if(_isWbTube) lisAddLog('astm','🩸 تيوب EDTA (تراكمي) — '+sidRaw+' → المريض '+sid);
-  lisAddLog('astm','🔍 cobas c111 يطلب طلبات العينة — SID:'+sid);
+  lisAddLog('astm','🔍 '+(_isE411Q?'cobas e411':'cobas c111')+' يطلب طلبات العينة — SID:'+sid);
 
   let testsToSend = [];
   try {
@@ -30518,11 +30554,12 @@ async function lisHandleC111Query(info){
       tests:    testsToSend,
       systemId: (typeof labSettings!=='undefined' && labSettings && labSettings.systemId) ? labSettings.systemId : 'MedLabPro',
     });
+    const _dn = _isE411Q ? 'cobas e411' : 'cobas c111';
     if(res && res.ok){
-      if(testsToSend.length) lisAddLog('ok','✅ أُرسلت '+testsToSend.length+' طلبات لـ cobas c111 — SID:'+sid+' ('+testsToSend.map(t=>t.code).join(', ')+')');
-      else lisAddLog('warn','⚠️ لا طلبات للعينة '+sid+' — رُدّ Z على c111');
+      if(testsToSend.length) lisAddLog('ok','✅ أُرسلت '+testsToSend.length+' طلبات لـ '+_dn+' — SID:'+sid+' ('+testsToSend.map(t=>t.code).join(', ')+')');
+      else lisAddLog('warn','⚠️ لا طلبات للعينة '+sid+' — رُدّ (لا طلبات) على '+_dn);
     } else {
-      lisAddLog('err','❌ فشل إرسال الطلبات لـ c111: '+(res&&res.error||'غير معروف'));
+      lisAddLog('err','❌ فشل إرسال الطلبات لـ '+_dn+': '+(res&&res.error||'غير معروف'));
     }
   } else {
     lisAddLog('err','❌ c111QueryResponse غير متاح في preload!');
@@ -30855,10 +30892,19 @@ function lisParseASTM(raw,deviceName,devObj){
       case 'R':{
         const testCode=lisParseTestCode(fields[2]||'');
         const rawVal=(fields[3]||'').trim();
+        // 🧪 هل الجهاز e411؟ (للتعامل مع القيم الكيفية ذات الإشارة السالبة)
+        const _isE411 = !!(devObj && devObj.vendor === 'roche_e411');
         // ── تنظيف القيمة: بعض الأجهزة ترسل رقم + حرف وحدة مثل '4.50T' أو '9.5E1' ──
         // استخراج الرقم من أي موضع في القيمة (3.63T او 171T او 3.63H او T)
         const _nm=rawVal.match(/([<>]?\s*\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/);
         let value=_nm?_nm[1].replace(/\s/g,''):rawVal;
+        // ⭐ e411 فقط: النتائج الكيفية تُرسَل بإشارة (الدليل §E — Result record):
+        //    "1"=Positive · "0"=Border · "-1"=Negative (متبوعة أحياناً بـ ^COI).
+        //    الـ regex العام لا يلتقط "-" القائدة، فنعالجها هنا معزولةً لـ e411.
+        if(_isE411){
+          const _q=rawVal.match(/^\s*(-?\d+(?:\.\d+)?)/);
+          if(_q) value=_q[1];
+        }
         // ⭐ c111 فقط: حذف الكسور + التقريب لأسفل لأقرب مضاعف لـ ٥
         //    107.12 → 105 | 98 → 95 | 123.10 → 120 | 55.40 → 55
         if(_isC111){
@@ -30941,7 +30987,10 @@ function lisParseASTM(raw,deviceName,devObj){
   });
 }
 function lisParseTestCode(raw){
-  const clean=(raw||'').replace(/\^+/g,' ').trim();
+  // ⭐ e411 Universal Test ID: ^^^<code>//not  أو  ^^^<code>/2/pre-diluted
+  //    (cobas type يفصل بـ /) و ^^^<code>^<dil>^<pre> (Elecsys type يفصل بـ ^).
+  //    نحوّل كلا الفاصلين إلى مسافة ثم نلتقط أول رمز صالح (الكود عادةً رقمي).
+  const clean=(raw||'').replace(/[\^\/]+/g,' ').trim();
   const parts=clean.split(/\s+/);
   return (parts.find(p=>p.length>0&&p.length<20&&/^[A-Z0-9\-]+$/i.test(p))||raw).toUpperCase();
 }
