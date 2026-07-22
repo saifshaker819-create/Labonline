@@ -11524,6 +11524,76 @@ function _bcToLatinDigits(s){
 }
 function _bcCleanCode(v){ return _bcToLatinDigits(v).replace(/[^0-9A-Za-z]/g,''); }
 
+// ══════════════════════════════════════════════════════════
+// 🔖 مولّد باركود Code128B يرسم مباشرة على canvas بإحداثيات بكسل
+//    صحيحة (integer) — يُرجع dataURL PNG جاهز للطباعة.
+// ─────────────────────────────────────────────────────────────
+// سبب وجوده: المسار القديم كان يولّد SVG بأشرطة عرضها كسري (1.8px)
+// ثم يُحمّله في new Image() ويرسترته إلى PNG. تلك الرسترة المزدوجة
+// تُكمّم عرض الأشرطة الكسرية عشوائياً حسب نمط الرقم، فبعض الأرقام
+// تخرج أشرطتها النحيفة مندمجة/باهتة فيرفضها القارئ (مريض يُقرأ
+// والذي بعده لا). الحل: عرض وحدة صحيح ثابت + إحداثيات صحيحة، فلا
+// يوجد تكميم كسري إطلاقاً، وكل شريط يبدأ وينتهي على بكسل كامل.
+// ملاحظة: نفس جداول الترميز المُختبَرة — لا تغيير في المنطق، الرسم فقط.
+// ══════════════════════════════════════════════════════════
+function _genBarcode128Canvas(text, opts){
+  opts = opts || {};
+  var MODULE_PX = Math.max(1, Math.round(opts.modulePx || 3)); // عرض الوحدة (بكسل صحيح)
+  var h   = Math.max(1, Math.round(opts.height || 120));       // ارتفاع الأشرطة (بكسل)
+  var PAD = Math.max(0, Math.round((opts.quietModules!=null?opts.quietModules:10) * MODULE_PX)); // منطقة هادئة
+  var C128chars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+  var C128widths=[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
+    [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
+    [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
+    [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
+    [3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],
+    [1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],
+    [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
+    [3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],
+    [3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
+    [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],
+    [1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],
+    [1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],
+    [2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],
+    [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
+    [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
+    [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
+    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]];
+  var START_B=104, STOP=[2,3,3,1,1,1,2];
+  var codes=[START_B], check=START_B;
+  for(var i=0;i<text.length;i++){
+    var idx=C128chars.indexOf(text[i]);
+    if(idx<0) continue;
+    codes.push(idx);
+    check+=(i+1)*idx;
+  }
+  codes.push(check%103);
+  var bars=[];
+  codes.forEach(function(c){ C128widths[c].forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); }); });
+  STOP.forEach(function(w,ii){ bars.push({w:w,dark:ii%2===0}); });
+  bars.push({w:2,dark:false});
+  // العرض الكلي = مجموع الوحدات × عرض الوحدة الصحيح + منطقتان هادئتان
+  var modulesTotal=bars.reduce(function(s,b){return s+b.w;},0);
+  var W = modulesTotal*MODULE_PX + PAD*2;
+  var H = h;
+  try{
+    var cv=document.createElement('canvas');
+    cv.width=W; cv.height=H;
+    var ctx=cv.getContext('2d');
+    ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#000';
+    var x=PAD; // يتراكم بمضاعفات صحيحة فقط → لا كسور، لا تنعيم
+    bars.forEach(function(b){
+      var bw=b.w*MODULE_PX;
+      if(b.dark) ctx.fillRect(x,0,bw,H);
+      x+=bw;
+    });
+    return cv.toDataURL('image/png');
+  }catch(e){ return null; }
+}
+
 function _genBarcode128Global(text, opts){
   opts = opts || {};
   var BAR_W = opts.barW || 1.8;   // عرض الوحدة الثابت (نفس قيمة ورقة التحاليل)
@@ -11715,8 +11785,11 @@ function printTubeLabel(reqId, copies, tubeKind){
   // طباعة صامتة مباشرة عبر Electron (بالصورة النقطية)
   var barcodeP=(typeof settings!=='undefined'&&settings.printerBarcode)||'';
   if(window.electronAPI&&window.electronAPI.printContent&&barcodeP){
-    _svgToPng(barcodeSvg, function(pngUrl){
-      // إن نجح التحويل نطبع الصورة، وإلا نرجع للـ SVG كخطة بديلة
+    // 🔖 الباركود يُرسم مباشرة على canvas بإحداثيات بكسل صحيحة (بلا رسترة
+    //    SVG المزدوجة) → أشرطة حادّة تُقرأ لكل الأرقام. عرض الوحدة 3px
+    //    عند ارتفاع متناسب مع ارتفاع الباركود المطلوب (_barPxH).
+    function _finishPrint(pngUrl){
+      // إن نجح التوليد نطبع الصورة، وإلا نرجع للـ SVG (رسترة) كخطة بديلة
       var _htmlToPrint = pngUrl
         ? _buildLabelHTML('<img class="bc-img" src="'+pngUrl+'"/>')
         : html;
@@ -11731,7 +11804,15 @@ function printTubeLabel(reqId, copies, tubeKind){
         }).catch(function(e){console.warn('printContent err:',e);
           if(_i+1<_lblCopies) setTimeout(function(){_printCopy(_i+1);},350);});
       })(0);
-    });
+    }
+    // ① المسار الأساسي: رسم مباشر على canvas بعرض وحدة صحيح (يُقرأ دائماً)
+    var _pngDirect=null;
+    try{
+      _pngDirect=_genBarcode128Canvas(barcodeId, { modulePx:3, height:Math.max(60,Math.round(_barPxH*3)), quietModules:10 });
+    }catch(e){ _pngDirect=null; }
+    if(_pngDirect){ _finishPrint(_pngDirect); return; }
+    // ② خطة بديلة: رسترة الـ SVG القديمة (فقط إن فشل canvas لأي سبب)
+    _svgToPng(barcodeSvg, function(pngUrl){ _finishPrint(pngUrl); });
     return;
   }
   // fallback: iframe صامت
