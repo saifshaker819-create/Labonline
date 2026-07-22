@@ -9936,7 +9936,13 @@ function openPrintModal(rid){
   if(!currentReqId){
     const inp=document.getElementById('print-search-inp');
     if(inp&&inp.value){
-      const found=[...requests].reverse().find(r=>r.status==='done'&&r.patientName.toLowerCase().includes(inp.value.toLowerCase()));
+      // ⚡ بحث عكسي بلا نسخ كل المصفوفة
+      const _q=inp.value.toLowerCase();
+      let found;
+      for(let _i=requests.length-1;_i>=0;_i--){
+        const _r=requests[_i];
+        if(_r.status==='done'&&_r.patientName.toLowerCase().includes(_q)){ found=_r; break; }
+      }
       if(found) currentReqId=found.id;
     }
   }
@@ -11225,7 +11231,7 @@ function _showMorePatients(){
 }
 function openPatientPortalByPatient(patientId){
   // إيجاد آخر طلب مكتمل للمريض
-  const done=[...requests].filter(r=>r.patientId===patientId&&r.status==='done')
+  const done=requests.filter(r=>r.patientId===patientId&&r.status==='done')
     .sort((a,b)=>new Date(b.resultDate||b.date)-new Date(a.resultDate||a.date));
   if(!done.length){showNotif('تنبيه','لا يوجد طلب مكتمل لهذا المريض','error');return;}
   openPatientPortal(done[0].id);
@@ -11977,12 +11983,17 @@ function renderRequestsFiltered(filter='today',srch=''){
   const today=new Date().toISOString().split('T')[0];
   const tbody=document.getElementById('requests-body');
   if(!tbody) return;
-  let list=[...requests].reverse();
-  if(filter==='today') list=list.filter(r=>r.date===today);
-  else if(filter==='pending') list=list.filter(r=>r.status==='pending'&&r.date===today);
-  else if(filter==='inprogress') list=list.filter(r=>r.status==='inprogress'&&r.date===today);
-  else if(filter==='done') list=list.filter(r=>r.status==='done'&&r.date===today);
-  else if(filter==='devnew') list=list.filter(r=>_reqShowsInDevicePanel(r));
+  // ⚡ فلترة أولاً ثم النسخ/العكس — بدل نسخ كل الطلبات المتراكمة عند كل رسم.
+  //   (كان [...requests].reverse() ينسخ الآلاف قبل الفلترة → تجمّد يزداد مع تراكم البيانات)
+  let filtered;
+  if(filter==='today') filtered=requests.filter(r=>r.date===today);
+  else if(filter==='pending') filtered=requests.filter(r=>r.status==='pending'&&r.date===today);
+  else if(filter==='inprogress') filtered=requests.filter(r=>r.status==='inprogress'&&r.date===today);
+  else if(filter==='done') filtered=requests.filter(r=>r.status==='done'&&r.date===today);
+  else if(filter==='devnew') filtered=requests.filter(r=>_reqShowsInDevicePanel(r));
+  else filtered=requests.slice();   // 'all' أو غيره — كل الطلبات
+  // اعكس الترتيب (الأحدث أولاً) على القائمة المفلترة الصغيرة فقط
+  let list=filtered.slice().reverse();
   if(srch){const q=srch.trim().toLowerCase();list=list.filter(r=>(r.patientName||'').toLowerCase().includes(q)||(r.id||'').toLowerCase().includes(q));}
   if(!list.length){
     const _emptyMsg=filter==='devnew'
@@ -14062,7 +14073,8 @@ function filterPrintSearch(v){
   const box=document.getElementById('print-search-results');
   if(!v||v.length<1){box.style.display='none';return;}
   const q=v.toLowerCase();
-  const doneReqs=[...requests].reverse().filter(r=>r.status==='done'&&r.patientName.toLowerCase().includes(q)).slice(0,15);
+  // ⚡ فلترة أولاً ثم عكس القائمة الصغيرة — بدل نسخ+عكس كل المصفوفة المتراكمة
+  const doneReqs=requests.filter(r=>r.status==='done'&&r.patientName.toLowerCase().includes(q)).reverse().slice(0,15);
   // Group by patient name
   const seen={};
   const grouped=[];
@@ -17683,7 +17695,8 @@ function updateDashboard(force){
   document.getElementById('ds-revenue').textContent=invoices.filter(i=>i.date===today).reduce((s,i)=>s+i.total,0);
   document.getElementById('ds-currency-lbl').textContent=settings.currency||'IQD';
   const tbody=document.getElementById('dash-req-body');
-  const recent=[...requests].reverse().slice(0,5);
+  // ⚡ آخر 5 طلبات بدون نسخ/عكس كل المصفوفة — نأخذ آخر 5 ثم نعكسها فقط
+  const recent=requests.slice(-5).reverse();
   tbody.innerHTML=recent.map(r=>`<tr>
     <td><span class="bdg bdg-p">${r.id}</span></td>
     <td style="color:#000;font-weight:900;font-size:11px">${r.patientName}</td>
@@ -26481,9 +26494,11 @@ function printCBCFromDevice(reqId){
   let req=requests.find(function(r){return r.id===reqId;});
   // fallback: ابحث عن آخر طلب CBC محفوظ بأي حال
   if(!req||!(req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams))){
-    req=[...requests].reverse().find(function(r){
-      return (r.id===reqId||!reqId)&&(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams));
-    });
+    // ⚡ بحث عكسي بلا نسخ كل المصفوفة
+    for(var _i=requests.length-1;_i>=0;_i--){
+      var _r=requests[_i];
+      if((_r.id===reqId||!reqId)&&(_r.cbcData||(_r.resultDetails&&_r.resultDetails.CBC&&_r.resultDetails.CBC.cbcParams))){ req=_r; break; }
+    }
   }
   if(!req){showNotif('خطأ','الطلب غير موجود','error');return;}
   const cbcParams=req.cbcData||(req.resultDetails&&req.resultDetails.CBC&&req.resultDetails.CBC.cbcParams);
@@ -31201,9 +31216,11 @@ function cbcFlush(sampleId){
     });
     // ثانياً: ابحث عن آخر طلب CBC محفوظ لتحديثه
     if(!targetReq){
-      targetReq=[...requests].reverse().find(function(r){
-        return r.patientId===targetPatient.id&&(r.tests||[]).some(function(t){return t==='CBC'||t==='h001';});
-      });
+      // ⚡ بحث عكسي بلا نسخ كل المصفوفة
+      for(var _ti=requests.length-1;_ti>=0;_ti--){
+        var _tr=requests[_ti];
+        if(_tr.patientId===targetPatient.id&&(_tr.tests||[]).some(function(t){return t==='CBC'||t==='h001';})){ targetReq=_tr; break; }
+      }
     }
     // لا يوجد أي طلب — أنشئ جديداً
     if(!targetReq){
