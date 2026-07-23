@@ -5629,6 +5629,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <option value="sysmex">Sysmex (XN / XE)</option>
             <option value="mindray">Mindray (BC / BS)</option>
             <option value="mindray_bs230">Mindray BS-230 (Chemistry)</option>
+            <option value="mindray_bc30s">Mindray BC-30s (CBC)</option>
+            <option value="mindray_bc6000">Mindray BC-6000 Series (CBC)</option>
             <option value="zybio">Zybio (Z60 / Z3)</option>
             <option value="biobase">Biobase</option>
             <option value="rayto">Rayto</option>
@@ -5806,6 +5808,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div class="wiz-card" onclick="lisWizSelectVendor('mindray_bs230','Mindray BS-230','hl7')" data-v="mindray_bs230">
               <div style="font-size:22px">🧫</div><div style="font-weight:800;font-size:12px">Mindray BS-230</div>
               <div style="font-size:10px;color:var(--text2)">كيمياء — HL7 عبر الشبكة</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('mindray_bc30s','Mindray BC-30s','hl7')" data-v="mindray_bc30s">
+              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Mindray BC-30s</div>
+              <div style="font-size:10px;color:var(--text2)">دم (CBC) — HL7 عبر الشبكة</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('mindray_bc6000','Mindray BC-6000','hl7')" data-v="mindray_bc6000">
+              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Mindray BC-6000</div>
+              <div style="font-size:10px;color:var(--text2)">دم (CBC) — HL7 عبر الشبكة</div>
             </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('zybio','Zybio Z60','hl7')" data-v="zybio">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z60 / Z3</div>
@@ -6023,6 +6033,32 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               • الجهاز هو من <b style="color:var(--text)">يتصل بالبرنامج</b> بعد التشغيل، ويعيد المحاولة تلقائياً إذا فشل.<br>
               • البرنامج يرد <b style="color:var(--text)">ACK^R01</b> تلقائياً على كل نتيجة (إلزامي حسب الدليل).<br>
               • نتائج الكنترول (QC) تُتجاهل تلقائياً ولا تُحفظ كنتيجة مريض.<br>
+              • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
+            </div>
+            <div id="wiz-bc30s-hint" style="display:none;margin-top:12px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🩸 <b style="color:var(--primary)">Mindray BC-30s</b> (حسب دليل الشركة — HL7 Communication Protocol):<br>
+              • في الجهاز: <span style="color:var(--primary)">Setup → Communication</span> — أدخل <b style="color:var(--text)">IP الحاسوب</b> + <b style="color:var(--text)">Port</b> نفسه.<br>
+              • ⚠️ <b style="color:var(--warn,#ffb020)">مهم جداً</b>: اختر البروتوكول <b style="color:var(--text)">HL7</b> وليس <b style="color:var(--text)">8ID/10ID</b> — الأخير لا يعمل عبر الشبكة.<br>
+              • البروتوكول: <b style="color:var(--text)">HL7 v2.3.1</b> عبر <b style="color:var(--text)">MLLP</b> · الترميز <b style="color:var(--text)">UTF-8 (UNICODE)</b>.<br>
+              • الجهاز هو من <b style="color:var(--text)">يتصل بالبرنامج</b>، والبرنامج سيرفر ينتظر (القسم 1).<br>
+              • النتائج: الجهاز يرسل <b style="color:var(--text)">ORU^R01</b> والبرنامج يرد <b style="color:var(--text)">ACK^R01</b> (القسم 1.1.1).<br>
+              • الاستعلام: الجهاز يرسل <b style="color:var(--text)">ORM^O01</b> والبرنامج يرد <b style="color:var(--text)">ORR^O02</b> (القسم 1.1.2).<br>
+              • <b style="color:var(--warn,#ffb020)">الكنترول (QC)</b> — رسائل <b style="color:var(--text)">MSH-11 = Q</b> — تُتجاهل تلقائياً ولا تُحفظ كنتائج مرضى.<br>
+              • الهيستوغرام وبيانات الرسم (OBX نوع ED) تُتجاهل تلقائياً — تُحفظ نتائج التحاليل فقط.<br>
+              • الجهاز يُرسل نبضة <b style="color:var(--text)">heartbeat</b> كل ٣ ثوانٍ — أمر طبيعي ويُهمَل تلقائياً.<br>
+              • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
+            </div>
+            <div id="wiz-bc6000-hint" style="display:none;margin-top:12px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🩸 <b style="color:var(--primary)">Mindray BC-6000 Series</b> (حسب دليل الشركة — P/N: 046-012058-00):<br>
+              • في الجهاز: <span style="color:var(--primary)">Setup → Communication → LIS</span> — أدخل <b style="color:var(--text)">IP الحاسوب</b> + <b style="color:var(--text)">Port</b> نفسه.<br>
+              • البروتوكول: <b style="color:var(--text)">HL7 v2.3.1</b> عبر <b style="color:var(--text)">MLLP</b> · الترميز <b style="color:var(--text)">UTF-8 (UNICODE)</b> (القسم 1.2.2).<br>
+              • ⚠️ <b style="color:var(--warn,#ffb020)">مهم</b>: فعّل <b style="color:var(--text)">Synchronous response</b> في الجهاز ليكمل الإرسال بعد وصول ACK (القسم 1.1.2).<br>
+              • النتائج: الجهاز يرسل <b style="color:var(--text)">ORU^R01</b> والبرنامج يرد <b style="color:var(--text)">ACK^R01</b> (القسم 1.2.4).<br>
+              • الاستعلام: الجهاز يرسل <b style="color:var(--text)">ORM^O01</b> والبرنامج يرد <b style="color:var(--text)">ORR^O02</b> خلال <b style="color:var(--text)">١٠ ثوانٍ</b> (القسم 1.1.2 و 1.2.6.6).<br>
+              • رقم العينة يُقرأ من <b style="color:var(--text)">OBR-3</b> للنتائج ومن <b style="color:var(--text)">ORC-3</b> للاستعلام (القسم 1.2.6.5).<br>
+              • <b style="color:var(--warn,#ffb020)">الكنترول (QC)</b> — رسائل <b style="color:var(--text)">MSH-11 = Q</b> — تُتجاهل تلقائياً ولا تُحفظ كنتائج مرضى (القسم 1.2.6.3).<br>
+              • الهيستوغرام وبيانات الرسم (OBX نوع <b style="color:var(--text)">ED</b> وأكواد 15xxx) تُتجاهل تلقائياً — تُحفظ نتائج التحاليل فقط.<br>
+              • رايات الإنذار (12xxx مثل Leucocytosis / Anemia) لا تُحفظ كنتائج رقمية.<br>
               • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
             </div>
             <div id="wiz-bs230-hint" style="display:none;margin-top:12px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
@@ -26148,6 +26184,59 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   // النموذج 5 — مدمج وسريع بعمودين جنبًا إلى جنب
   // ══════════════════════════════════════════════════════════
   if(tpl==='5'){
+    // ══════════════════════════════════════════════════════════
+    // 🩸 BC-6000 — الرسوم البيانية ورايات الإنذار (النموذج ٥ حصراً)
+    // ──────────────────────────────────────────────────────────
+    // دليل BC-6000 (الملحق B، البند ٤ و ٥): الهيستوغرام والـ Scattergram
+    // يُرسَلان كصور BMP بترميز Base64 داخل OBX من نوع ED.
+    // تُعرض هنا فقط — بقية النماذج (١ و٢ و٣ و٤ و٦) لا تتأثر إطلاقاً.
+    // إن لم يُرسل الجهاز صوراً (أو كان جهازاً آخر) لا يظهر أي فراغ.
+    var _g=(req&&req.cbcGraphics)||[];
+    var _al=(req&&req.cbcAlarms)||[];
+    // ترتيب منطقي حسب الدليل: RBC ثم PLT (هيستوغرام) ثم DIFF/BASO/RET/NRBC/WNB
+    // 🩸 BC-5000/BC-5150 (دليل 3107 HL7، جدول ٥.٨): أكواد مختلفة عن BC-6000
+    //    15000 WBC Histogram · 15008 WBC BMP · 15050 RBC · 15100 PLT
+    //    15200/15201 WBC DIFF Scattergram
+    var _gOrder=['15000','15008','15050','15100','15200','15201',
+                 '15056','15116','15250','15300','15301','15302','15350','15600'];
+    var _gLabel={
+      // BC-5000 / BC-5150
+      '15000':'WBC Histogram','15008':'WBC Histogram',
+      '15050':'RBC Histogram','15100':'PLT Histogram',
+      '15201':'WBC DIFF Scattergram',
+      // BC-6000
+      '15056':'RBC Histogram','15116':'PLT Histogram',
+      '15200':'WBC DIFF Scattergram','15250':'BASO Scattergram',
+      '15300':'RET Scattergram','15301':'PLT-O Scattergram',
+      '15302':'RET-EXT Scattergram','15350':'NRBC Scattergram',
+      '15600':'WNB Scattergram'
+    };
+    var _gSorted=_g.slice().sort(function(a,b){
+      var ia=_gOrder.indexOf(a.code), ib=_gOrder.indexOf(b.code);
+      return (ia<0?99:ia)-(ib<0?99:ib);
+    });
+    // شبكة الصور: عمودان — عرض مضبوط ليطابق عمودَي الجدول أعلاه
+    var _gHTML='';
+    if(_gSorted.length){
+      var _cells='';
+      _gSorted.forEach(function(g){
+        var _lbl=_gLabel[g.code]||g.name||g.code;
+        _cells+='<div class="gcard">'
+          +'<div class="gttl">'+_lbl+'</div>'
+          +'<img class="gimg" src="data:image/bmp;base64,'+g.b64+'" alt="'+_lbl+'">'
+          +'</div>';
+      });
+      _gHTML='<div class="gwrap"><div class="ghdr">Histograms &amp; Scattergrams</div>'
+        +'<div class="ggrid">'+_cells+'</div></div>';
+    }
+    // رايات الإنذار — شريط مدمج أسفل الرسوم
+    var _alHTML='';
+    if(_al.length){
+      var _chips=_al.map(function(a){
+        return '<span class="achip">'+String(a.name||a.code).replace(/[<>]/g,'')+'</span>';
+      }).join('');
+      _alHTML='<div class="awrap"><span class="attl">⚑ Flags:</span>'+_chips+'</div>';
+    }
     const half1=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%'];
     const half2=['RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
     function buildCol(keys,hdrColor){
@@ -26162,8 +26251,8 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       r+='</tbody></table>';
       return r;
     }
-    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:13px;font-weight:900;color:#fff;background:'+tableColor+';padding:4px;margin:4px 0;border-radius:4px;}.pt-strip{display:flex;justify-content:space-between;align-items:center;background:'+tableColor+'11;border:1.5px solid '+tableColor+'55;border-radius:5px;padding:6px 12px;margin:5px 0;}.pt-main{display:flex;flex-direction:column;gap:3px;}.pt-r{display:flex;gap:6px;font-size:11px;}.pt-k{color:#667;font-weight:600;min-width:48px;}.pt-v{font-weight:800;color:#1a2035;font-size:13px;}.pt-ids{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}.idc{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;}.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px;}.col-hdr{font-size:11px;font-weight:800;padding:3px 7px;border-radius:4px 4px 0 0;color:#fff;text-align:center;}.foot{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:3px;display:flex;justify-content:space-between;font-size:10px;color:#666;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-strip"><div class="pt-main"><div class="pt-r"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div><div class="pt-r"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-r"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div></div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div><div class="idc">WB-CBC+DIFF</div></div></div><div class="cols"><div><div class="col-hdr" style="background:#1565c0">WBC Differential</div>'+buildCol(half1,'#1565c0')+'</div><div><div class="col-hdr" style="background:#b71c1c">RBC / PLT Indices</div>'+buildCol(half2,'#b71c1c')+'</div></div><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:13px;font-weight:900;color:#fff;background:'+tableColor+';padding:4px;margin:4px 0;border-radius:4px;}.pt-strip{display:flex;justify-content:space-between;align-items:center;background:'+tableColor+'11;border:1.5px solid '+tableColor+'55;border-radius:5px;padding:6px 12px;margin:5px 0;}.pt-main{display:flex;flex-direction:column;gap:3px;}.pt-r{display:flex;gap:6px;font-size:11px;}.pt-k{color:#667;font-weight:600;min-width:48px;}.pt-v{font-weight:800;color:#1a2035;font-size:13px;}.pt-ids{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}.idc{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;}.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px;}.col-hdr{font-size:11px;font-weight:800;padding:3px 7px;border-radius:4px 4px 0 0;color:#fff;text-align:center;}.foot{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:3px;display:flex;justify-content:space-between;font-size:10px;color:#666;}.gwrap{margin-top:7px;page-break-inside:avoid;}.ghdr{font-size:11px;font-weight:800;color:#fff;background:'+tableColor+';padding:3px 8px;border-radius:4px 4px 0 0;text-align:center;}.ggrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;border:1px solid '+tableColor+'44;border-top:none;border-radius:0 0 4px 4px;padding:5px;}.gcard{border:1px solid #dfe3ea;border-radius:3px;background:#fff;padding:3px;text-align:center;page-break-inside:avoid;}.gttl{font-size:9px;font-weight:700;color:#445;margin-bottom:2px;}.gimg{width:100%;height:auto;max-height:105px;object-fit:contain;display:block;image-rendering:auto;}.awrap{margin-top:5px;padding:4px 8px;border:1px solid #e0a800;background:#fff8e1;border-radius:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;page-break-inside:avoid;}.attl{font-size:10px;font-weight:800;color:#8a6100;}.achip{font-size:9px;font-weight:700;color:#8a6100;background:#ffe9a8;border:1px solid #e8c76a;border-radius:9px;padding:1px 7px;}';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-strip"><div class="pt-main"><div class="pt-r"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div><div class="pt-r"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-r"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div></div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div><div class="idc">WB-CBC+DIFF</div></div></div><div class="cols"><div><div class="col-hdr" style="background:#1565c0">WBC Differential</div>'+buildCol(half1,'#1565c0')+'</div><div><div class="col-hdr" style="background:#b71c1c">RBC / PLT Indices</div>'+buildCol(half2,'#b71c1c')+'</div></div>'+_alHTML+_gHTML+'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -29144,6 +29233,22 @@ const LIS_DEFAULT_MAPPINGS=[
   // CRP (اختياري حسب موديل الجهاز)
   {deviceCode:'72426-1', medlabCode:'CRP',  name:'CRP (Zybio)',    device:'all',note:'Zybio Z60'},
   {deviceCode:'12008',   medlabCode:'CRP',  name:'Hs-CRP (Zybio)', device:'all',note:'Zybio Z60'},
+  // ── 🩸 Mindray BC-6000 Series — أكواد الدليل (جدول 10 · P/N 046-012058-00) ──
+  // ⚠️ مهم: أكواد BC-6000 تختلف رقمياً عن Zybio رغم تشابه التحاليل:
+  //   WBC 6690-2 (لا 6790-2) · MPV 32623-1 (لا 33623-1)
+  //   PDW 32207-3 (لا 33207-3) · RDW-SD 21000-5 (لا 22000-5) · PCT 10002 (لا 12003)
+  // لذلك تُضاف هنا مستقلة — ولا تُعدَّل أكواد Zybio إطلاقاً.
+  // بقية الأكواد (RBC 789-8 · HGB 718-7 · HCT 4544-3 · PLT 777-3 · MCV 787-2 ·
+  // MCH 785-6 · MCHC 786-4 · RDW-CV 788-0 · NEU/LYM/MON/EOS/BAS) مشتركة
+  // ومُعرَّفة أعلاه فلا حاجة لتكرارها.
+  {deviceCode:'6690-2',  medlabCode:'WBC',  name:'WBC (BC-6000)',     device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'12227-5', medlabCode:'WBC',  name:'WBC corr (BC-6000)',device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'21000-5', medlabCode:'RDWSD',name:'RDW-SD (BC-6000)',  device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'32623-1', medlabCode:'MPV',  name:'MPV (BC-6000)',     device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'32207-3', medlabCode:'PDW',  name:'PDW (BC-6000)',     device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'10002',   medlabCode:'PCT',  name:'PCT (BC-6000)',     device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'10014',   medlabCode:'PLCR', name:'P-LCR (BC-6000)',   device:'all',note:'Mindray BC-6000'},
+  {deviceCode:'10013',   medlabCode:'PLCC', name:'P-LCC (BC-6000)',   device:'all',note:'Mindray BC-6000'},
   // Vitamins
   {deviceCode:'VITD',medlabCode:'VITD',name:'Vitamin D',device:'all',note:''},
   {deviceCode:'25OHD',medlabCode:'VITD',name:'Vitamin D 25-OH',device:'all',note:''},
@@ -29382,6 +29487,12 @@ function lisWizShowConnFields(){
   // 🧫 BS-230: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
   const bHint=document.getElementById('wiz-bs230-hint');
   if(bHint) bHint.style.display=(_wizVendor==='mindray_bs230'&&_wizConn==='tcpserver')?'block':'none';
+  // 🩸 BC-30s: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
+  const cHint=document.getElementById('wiz-bc30s-hint');
+  if(cHint) cHint.style.display=(_wizVendor==='mindray_bc30s'&&_wizConn==='tcpserver')?'block':'none';
+  // 🩸 BC-6000: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
+  const sHint=document.getElementById('wiz-bc6000-hint');
+  if(sHint) sHint.style.display=(_wizVendor==='mindray_bc6000'&&_wizConn==='tcpserver')?'block':'none';
 }
 
 function lisWizBuildSummary(){
@@ -29435,7 +29546,9 @@ async function lisWizFinish(){
     vendor:_wizVendor,
     // 🩸 Zybio Z60/Z3 جهاز دم (CBC) — بقية الأجهزة تبقى كما هي
     // 🧫 BS-230 جهاز كيمياء (chemistry) حسب دليل الشركة
-    type:(_wizVendor==='zybio'?'hematology':'chemistry'),
+    // 🩸 BC-30s جهاز دم (CBC) حسب دليل الشركة (OBR-24 = HM)
+    // 🩸 BC-6000 جهاز دم (CBC) حسب دليل الشركة (OBR-24 = HM — جدول 7)
+    type:((_wizVendor==='zybio'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000')?'hematology':'chemistry'),
     conn:connMap[_wizConn],
     protocol:_wizProtocol,
     baud,
@@ -29447,7 +29560,9 @@ async function lisWizFinish(){
     rxCount:0,
     // 🩸 Zybio: الرد ACK^R01 إلزامي حسب دليل الشركة (3.8.1)
     // 🧫 BS-230: الرد ACK^R01 إلزامي أيضاً + يدعم استعلام QRY^Q02
-    sendAck:(_wizVendor==='zybio'||_wizVendor==='mindray_bs230'),
+    // 🩸 BC-30s: الرد ACK^R01 إلزامي حسب الدليل (1.1.1 و 4.6.2)
+    // 🩸 BC-6000: الرد ACK^R01 إلزامي حسب الدليل (1.2.4 و 1.2.6.2)
+    sendAck:(_wizVendor==='zybio'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'),
     // 🧪 cobas e 411: صيغة البروتوكول المختارة على شاشة الجهاز (cobas/elecsys)
     e411Type:(_wizVendor==='roche_e411'
       ? ((document.getElementById('wiz-e411-type')?.value)||'cobas')
@@ -29931,6 +30046,10 @@ function lisAutoFillDevice(){
     zybio:   {name:'Zybio Z60',          proto:'hl7',  conn:'tcpserver', port:'5100'},
     // 🧫 Mindray BS-230: جهاز صامت — يتصل بالبرنامج (LIS Server) عبر HL7
     mindray_bs230:{name:'Mindray BS-230',proto:'hl7',  conn:'tcpserver', port:'5100'},
+    // 🩸 Mindray BC-30s: جهاز دم (CBC) — يتصل بالبرنامج (LIS Server) عبر HL7
+    mindray_bc30s:{name:'Mindray BC-30s',proto:'hl7',  conn:'tcpserver', port:'5100'},
+    // 🩸 Mindray BC-6000 Series: جهاز دم (CBC) — HL7 v2.3.1 عبر MLLP (الدليل 1.2)
+    mindray_bc6000:{name:'Mindray BC-6000',proto:'hl7', conn:'tcpserver', port:'5100'},
     biobase: {name:'Biobase',            proto:'astm', conn:'serial'},
     rayto:   {name:'Rayto',              proto:'astm', conn:'serial'},
     other:   {name:'',                   proto:'astm', conn:'serial'},
@@ -31120,6 +31239,32 @@ const CBC_PARAMS_MAP = {
 const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
 function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
 function cbcNormalizeCode(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+// ═══════════════════════════════════════════════════════════════
+// 🩸 BC-6000 — تخزين الرسوم البيانية ورايات الإنذار مع عينة الـ CBC
+// ─────────────────────────────────────────────────────────────
+// معزول تماماً: يُستدعى فقط عندما يرسل الجهاز مقاطع ED (صور) أو رايات IS.
+// الأجهزة الأخرى لا ترسلها فلا تُنشأ الحقول أصلاً ويبقى سلوكها كما هو.
+// تُحفظ في نفس بفر الـ CBC لتُفلَش مع النتائج إلى الطلب الصحيح.
+function cbcAttachExtras(sampleId, graphics, alarms, patName){
+  if(!sampleId) return;
+  if(!(graphics&&graphics.length)&&!(alarms&&alarms.length)) return;
+  if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
+  const buf=_cbcBuffer[sampleId];
+  if(graphics&&graphics.length){
+    if(!buf.graphics) buf.graphics=[];
+    graphics.forEach(function(g){
+      // لا تُكرّر نفس الكود إن أُعيد إرساله
+      if(!buf.graphics.some(function(x){return x.code===g.code;})) buf.graphics.push(g);
+    });
+  }
+  if(alarms&&alarms.length){
+    if(!buf.alarms) buf.alarms=[];
+    alarms.forEach(function(a){
+      if(!buf.alarms.some(function(x){return x.code===a.code;})) buf.alarms.push(a);
+    });
+  }
+}
+
 function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   if(!sampleId) return;
   if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
@@ -31210,6 +31355,10 @@ function cbcFlush(sampleId){
     // ── حفظ CBC بدون المساس بالتحاليل الأخرى ──────────────
     // نحفظ بيانات CBC الجديدة
     targetReq.cbcData=buf.params;
+    // 🩸 BC-6000: الرسوم البيانية ورايات الإنذار — تُحفظ فقط إن وُجدت.
+    // الأجهزة الأخرى لا ترسلها فلا يُضاف أي حقل ويبقى شكل الطلب كما هو.
+    if(buf.graphics&&buf.graphics.length) targetReq.cbcGraphics=buf.graphics;
+    if(buf.alarms&&buf.alarms.length)     targetReq.cbcAlarms=buf.alarms;
     // دمج نتيجة CBC فقط — لا نبني results من الصفر
     if(!targetReq.results) targetReq.results={};
     if(!targetReq.resultDetails) targetReq.resultDetails={};
@@ -31323,9 +31472,73 @@ function lisParseHL7(raw,deviceName){
   });
 
   // ── المرور الثاني: معالجة OBX بعد معرفة SID ──
+  // 🩸 BC-5000/BC-5150 — الرسوم البيانية والتعليقات (النموذج ٥ حصراً)
+  //    تُجمَّع هنا ثم تُسلَّم لـ cbcAttachExtras بعد انتهاء المرور.
+  const _bcG=[];   // صور BMP/Base64 (هيستوغرام + Scattergram)
+  const _bcA=[];   // التعليقات/رايات الإنذار المرفوعة (T)
   segs.forEach(function(seg){
     const f=seg.split('|');
     if(f[0]!=='OBX') return;
+
+    // ═══════════════════════════════════════════════════════════════
+    // 🩸 BC-5000 (3107 HL7) — الرسوم البيانية + التعليقات
+    // ───────────────────────────────────────────────────────────────
+    // مأخوذ حرفياً من دليل الشركة المرفق:
+    //
+    // (١) الرسوم — القسم ٦.٢ «Binary Data Communication» + جدول ٥.٨:
+    //     نوع OBX-2 = 'ED'، وحقل OBX-5 على الشكل:
+    //       "^Image^BMP^Base64^<بيانات>"            ← صورة جاهزة للعرض ✅
+    //       "^Application^Octer-stream^Base64^<..>" ← ثنائي خام (يُتجاهل)
+    //     الأكواد (جدول ٥.٨): 15000 WBC Histogram · 15050 RBC Histogram
+    //     15100 PLT Histogram · 15008 WBC BMP · 15200/15201 DIFF Scattergram
+    //     ⚠️ الدليل يكتبها «Octer-stream» (وليس Octet) — نتحقق من Image/BMP
+    //        فقط فلا يهمّ الإملاء، ونتجاهل الخام تلقائياً.
+    //
+    // (٢) التعليقات — جدول ٥.٨ «Flags of Abnormal Blood Cell Differential
+    //     or Morphology» + القسم ٦: نوع OBX-2 = 'IS'، والقيمة 'T' = true
+    //     (الراية مرفوعة) و 'F' = false (تُهمَل). مثال الدليل:
+    //       OBX|27|IS|12045^Multiple alerts^99MRC||T||||||F
+    //     الأكواد: 12011..12016 و 12045..12052 بترميز 99MRC،
+    //     بالإضافة إلى LOINC: 34165-1 و 15192-8.
+    //
+    // 🔒 معزول تماماً: لا يدخل النتائج (results/cbcAddParam) إطلاقاً،
+    //    و return يمنع وصول هذه المقاطع للمنطق الحالي فلا يتغيّر سلوك
+    //    أي جهاز آخر — MAGLUMI/CL-900i/Zybio لا يُرسلون ED ولا 12xxx.
+    // ═══════════════════════════════════════════════════════════════
+    const _t2=(f[2]||'').trim().toUpperCase();
+    const _c3=(f[3]||'').split('^');
+    const _cd=(_c3[0]||'').trim();
+    const _nm=(_c3[1]||'').trim();
+
+    if(_t2==='ED'){
+      const _p=(f[5]||'').split('^');
+      // [0]=فارغ [1]=Image [2]=BMP [3]=Base64 [4..]=البيانات
+      if(_p.length>=5&&/^image$/i.test((_p[1]||'').trim())
+         &&/^bmp$/i.test((_p[2]||'').trim())
+         &&/^base64$/i.test((_p[3]||'').trim())){
+        const _b64=(_p.slice(4).join('^')||'').trim().replace(/\s/g,'');
+        // سقف حجم (١.٥ مليون حرف ≈ 1MB) + فحص سلامة Base64
+        if(_b64&&_b64.length<=1500000&&/^[A-Za-z0-9+/=]+$/.test(_b64)){
+          if(!_bcG.some(function(x){return x.code===_cd;})){
+            _bcG.push({code:_cd,name:_nm,b64:_b64});
+          }
+        }
+      }
+      return;   // ED لا يدخل النتائج أبداً
+    }
+
+    const _BC5K_FLAGS={
+      '34165-1':'Imm Granulocytes?','15192-8':'Atypical Lymphs?'
+    };
+    if(_t2==='IS'&&(/^12\d{3}$/.test(_cd)||_BC5K_FLAGS[_cd])){
+      const _v=(f[5]||'').trim().toUpperCase();
+      if(_v==='T'||_v==='TRUE'||_v==='Y'||_v==='1'){
+        if(!_bcA.some(function(x){return x.code===_cd;})){
+          _bcA.push({code:_cd,name:_BC5K_FLAGS[_cd]||_nm||_cd});
+        }
+      }
+      return;   // التعليقات لا تدخل النتائج أبداً
+    }
 
     // ── استخراج كود التحليل ──
     // MAGLUMI يرسل: OBX|1||Vit B12 III||442^|...
@@ -31367,13 +31580,46 @@ function lisParseHL7(raw,deviceName){
       });
     }
   });
+
+  // ── 🩸 BC-5000: تسليم الرسوم والتعليقات لمخزن CBC (النموذج ٥) ─────────
+  // نستخدم نفس المسار المُجرَّب (cbcAttachExtras → cbcGraphics/cbcAlarms)
+  // بلا أي منطق تخزين جديد. لا يُنفَّذ إطلاقاً إن لم يُرسل الجهاز شيئاً،
+  // فيبقى شكل الطلب وسلوك بقية الأجهزة كما هو تماماً.
+  try{
+    if((_bcG.length||_bcA.length)&&typeof cbcAttachExtras==='function'){
+      const _sid=pid.id||'HL7';
+      cbcAttachExtras(_sid,_bcG,_bcA,pid.name);
+      if(_bcG.length) lisAddLog('ok','🖼️ '+deviceName+' — استُلمت '+_bcG.length+' صورة بيانية (SID:'+_sid+')');
+      if(_bcA.length) lisAddLog('warn','🚩 '+deviceName+' — تعليقات الجهاز: '+_bcA.map(function(a){return a.name;}).join(' · '));
+    }
+  }catch(_){}
 }
 
 // ── استخدام البيانات المحللة مسبقاً من main.js ──────────────────────────────
 // تُستدعى عندما يرسل main.js حقل parsed مع البيانات
 // تتجنب إعادة تحليل HL7 وتضمن استخدام patientId الصحيح من PID
 function lisParseHL7Parsed(parsed, deviceName, devObj){
-  if(!parsed||!parsed.results||!parsed.results.length) return;
+  if(!parsed) return;
+  // ── 🩸 BC-6000: التقاط الرسوم والرايات قبل أي خروج مبكر ───────────────
+  // قد يُرسل الجهاز الصور في رسالة منفصلة بلا نتائج رقمية (الملحق B البند ٤)،
+  // وحينها كان الشرط أدناه سيُسقطها. نلتقطها أولاً ثم نُكمل طبيعياً.
+  // معزول: لا يعمل إلا إذا كانت المصفوفات غير فارغة — وهي فارغة لكل جهاز آخر.
+  // ولا نحفظ شيئاً لرسائل الكنترول (QC) لأنها ليست بيانات مريض.
+  try{
+    if(!parsed.isQC && parsed.patientId &&
+       ((parsed.graphics&&parsed.graphics.length)||(parsed.alarms&&parsed.alarms.length))){
+      if(typeof cbcAttachExtras==='function'){
+        cbcAttachExtras(parsed.patientId,parsed.graphics||[],parsed.alarms||[],parsed.patientName);
+      }
+      if(parsed.graphics&&parsed.graphics.length){
+        lisAddLog('ok','🖼️ '+deviceName+' — استُلمت '+parsed.graphics.length+' صورة بيانية (SID:'+parsed.patientId+')');
+      }
+      if(parsed.alarms&&parsed.alarms.length){
+        lisAddLog('warn','🚩 '+deviceName+' — رايات إنذار: '+parsed.alarms.map(function(a){return a.name;}).join(' · '));
+      }
+    }
+  }catch(_){}
+  if(!parsed.results||!parsed.results.length) return;
   // ── 🩸 Zybio — رسائل الكنترول (QC) لا تُحفظ كنتائج مريض ─────────────
   // دليل الشركة (3.8.2): عندما MSH-11 = 'Q' تكون الرسالة نتيجة Quality
   // Control (L-J / X-B) وليست عينة مريض. نسجّلها في السجل فقط.
@@ -31404,6 +31650,13 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
   // 🧫 BS-230 فقط: تفعيل قواعد التقريب (نفس فكرة c111 بقوائم مستقلة)
   var _isBS230Dev=!!(devObj&&devObj.vendor==='mindray_bs230');
 
+  // ⚠️ نتائج بلا رقم عينة — ستُحفظ تحت 'HL7' ولن تلتصق بأي مريض
+  if(_isBS230Dev&&!parsed.patientId){
+    lisAddLog('warn','⚠️ BS-230: وصلت '+parsed.results.length
+      +' نتيجة بلا رقم عينة (OBR-2/OBR-3 و PID فارغة) — لن ترتبط بأي مريض. '
+      +'تأكّد أن الجهاز يقرأ الباركود ويُرسله.');
+  }
+
   parsed.results.forEach(function(obx){
     const codeWithSpaces=(obx.testName||obx.testCode||'').trim().toUpperCase();
     const code=codeWithSpaces.replace(/\s+/g,'');
@@ -31431,12 +31684,28 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
       const normFlag=(_fg==='N'||_fg==='N-N')?'':_fg.startsWith('L')?'L':_fg.startsWith('H')?'H':_fg;
       cbcAddParam(parsed.patientId||'HL7', code, value, obx.unit, obx.refRange, normFlag, parsed.patientName);
     } else {
+      // 🧫 BS-230: الربط يتم برقم التحليل (OBX-3) وليس بالاسم (OBX-4).
+      // نجرّب الرقم أولاً ثم الاسم، حتى لا تضيع النتيجة إذا كان الربط
+      // مُعرَّفاً بالرقم في جدول التعيينات.
+      var _mlc;
+      if(_isBS230Dev){
+        var _tno=(obx.testCode||'').trim();
+        _mlc = (_tno?lisResolveCode(_tno):'') || lisResolveCode(codeWithSpaces) || lisResolveCode(code);
+        if(!_mlc){
+          // ⚠️ نتيجة وصلت لكنها غير مربوطة بأي تحليل — لن تظهر للمستخدم
+          lisAddLog('warn','⚠️ BS-230: نتيجة غير مربوطة — رقم التحليل ['
+            +(_tno||'?')+'] الاسم ['+codeWithSpaces+'] = '+value
+            +' · أضف الربط من قسم «ربط التحاليل» وإلا لن تظهر النتيجة');
+        }
+      } else {
+        _mlc = lisResolveCode(codeWithSpaces)||lisResolveCode(code);
+      }
       lisIngestResult({
         id:'lr'+Date.now()+Math.random().toString(36).slice(2,5),
         sampleId:   parsed.patientId||'HL7',
         patName:    parsed.patientName||'',
         deviceCode: codeWithSpaces,
-        medlabCode: lisResolveCode(codeWithSpaces)||lisResolveCode(code),
+        medlabCode: _mlc,
         value, unit:obx.unit||'', refRange:obx.refRange||'', flags:obx.flag||'',
         status:'final', device:deviceName, protocol:'HL7',
         datetime:new Date().toISOString(), transferred:false,
