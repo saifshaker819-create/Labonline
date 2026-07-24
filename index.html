@@ -4553,6 +4553,19 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
               </div>
 
+              <!-- ═══ اختيار نموذج تقرير النتائج العامة ═══ -->
+              <div style="background:rgba(0,140,255,0.05);border:1px solid rgba(0,140,255,0.35);border-radius:10px;padding:14px">
+                <div style="font-size:12px;font-weight:800;color:#2b9bff;margin-bottom:10px">📄 نموذج تقرير النتائج العامة</div>
+                <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). أربعة تصاميم حديثة ومرتبة.</div>
+                <select id="st-report-template" class="fc" style="width:100%;font-size:12px;font-weight:700" onchange="_saveReportTemplate(this.value)">
+                  <option value="1">📄 النموذج 1 — كلاسيكي (التصميم الحالي)</option>
+                  <option value="2">🎯 النموذج 2 — عصري بشارات ملوّنة وتمييز جانبي للقيم الشاذة</option>
+                  <option value="3">✨ النموذج 3 — أنيق مينيمال بأحرف متباعدة وخطوط رفيعة</option>
+                  <option value="4">🗂️ النموذج 4 — بطاقات لكل قسم بعناوين ملوّنة</option>
+                </select>
+                <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,140,255,0.15);border-color:rgba(0,140,255,0.5);color:#2b9bff" onclick="_previewReportTemplate()">👁️ معاينة النموذج المختار</button>
+              </div>
+
               <!-- اختيار الطابعات -->
               <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px">
                 <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">🖨️ اختيار الطابعات</div>
@@ -9667,6 +9680,7 @@ function nav(p){
     const togAC=document.getElementById('tog-auto-cbc');
     if(togAC){ if(settings.autoPrintCBC) togAC.classList.add('on'); else togAC.classList.remove('on'); }
     _loadCBCTemplateSel();
+    _loadReportTemplateSel();
   }
   if(p==='results'){
     // ⚡ هل وصلنا عبر «حفظ وإنشاء الطلب» (wizFinish) لطلب محدد؟
@@ -14775,13 +14789,157 @@ function buildPrintHTML(req, opts){
   // ─── رأس الأعمدة — مكبّر درجة ونصف ──────────────────────
   const colHdrFs = pfsN;
   const colHdrTextColor = settings.colorStripText || stripColor;
-  const colHdr=`
+  let colHdr=`
   <div style="margin:0 6px 2px;display:flex;direction:ltr;padding:4px 0;border-bottom:2px solid ${stripColor};border-top:1px solid #aab8c8;align-items:center;background:${stripColor}18">
     <div style="flex:4;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;letter-spacing:0.5px;padding-right:4px;padding-left:18px;text-decoration:underline;text-underline-offset:3px">Test</div>
     <div style="flex:2;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;text-align:left;letter-spacing:0.5px;padding-left:4px;text-decoration:underline;text-underline-offset:3px">Result</div>
     <div style="flex:3;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;text-align:left;letter-spacing:0.5px;padding-left:6px;text-decoration:underline;text-underline-offset:3px">Reference</div>
     <div style="flex:2;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;text-align:center;letter-spacing:0.5px;text-decoration:underline;text-underline-offset:3px">Last Result</div>
   </div>`;
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  📋 نماذج تقارير النتائج العامة (Report Templates 1–4)
+  //  النموذج 1 = التصميم الكلاسيكي الحالي (بدون أي تغيير).
+  //  النماذج 2–4 = تصاميم حديثة احترافية — تعيد تنسيق «عنوان القسم» و«صف التحليل»
+  //  و«رأس الأعمدة» فقط، دون المساس بالرأس/التذييل/بيانات المريض/الترقيم/التوقيع.
+  //  كل الحسابات (H/L، الألوان، المدى، الوحدة، السابقة) تبقى كما هي — النماذج
+  //  تستقبل النتائج الجاهزة فقط وتغلّفها بتصميم مختلف.
+  // ═══════════════════════════════════════════════════════════════════════
+  const RTPL = String(settings.reportTemplate||'1');
+  // ألوان مساعدة مشتقة (بدون تعديل الإعدادات)
+  const _tplAccent = sectionColor;         // لون القسم/التمييز
+  const _tplStrip  = stripColor;           // لون الشريط
+  // رأس أعمدة بديل حسب النموذج (colHdr الأصلي يبقى للنموذج 1)
+  (function(){
+    if(RTPL==='2'){
+      // شريط داكن ممتلئ بزوايا ناعمة
+      colHdr=`
+      <div style="margin:0 6px 4px;display:flex;direction:ltr;padding:6px 10px;border-radius:8px;background:${_tplStrip};align-items:center;box-shadow:0 1px 0 rgba(0,0,0,0.15)">
+        <div style="flex:4;font-size:${colHdrFs}px;font-weight:900;color:#ffffff;letter-spacing:0.6px;padding-left:14px">Test</div>
+        <div style="flex:2;font-size:${colHdrFs}px;font-weight:900;color:#ffffff;text-align:left;letter-spacing:0.6px">Result</div>
+        <div style="flex:3;font-size:${colHdrFs}px;font-weight:900;color:#ffffff;text-align:left;letter-spacing:0.6px;padding-left:6px">Reference</div>
+        <div style="flex:2;font-size:${colHdrFs}px;font-weight:900;color:#ffffff;text-align:center;letter-spacing:0.6px">Previous</div>
+      </div>`;
+    } else if(RTPL==='3'){
+      // خطوط رفيعة راقية + حروف كبيرة متباعدة (بدون خلفية)
+      colHdr=`
+      <div style="margin:0 6px 2px;display:flex;direction:ltr;padding:5px 0 6px;border-bottom:1.5px solid ${_tplStrip};align-items:flex-end">
+        <div style="flex:4;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};letter-spacing:1.6px;text-transform:uppercase;padding-left:16px">Test</div>
+        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:left;letter-spacing:1.6px;text-transform:uppercase">Result</div>
+        <div style="flex:3;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:left;letter-spacing:1.6px;text-transform:uppercase;padding-left:6px">Reference</div>
+        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:center;letter-spacing:1.6px;text-transform:uppercase">Previous</div>
+      </div>`;
+    } else if(RTPL==='4'){
+      // بطاقات: رأس أعمدة خفيف بخلفية رمادية فاتحة وحواف دائرية
+      colHdr=`
+      <div style="margin:0 6px 6px;display:flex;direction:ltr;padding:6px 12px;border-radius:9px;background:#f1f4f8;border:1px solid #e2e8f0;align-items:center">
+        <div style="flex:4;font-size:${colHdrFs-1}px;font-weight:900;color:#334155;letter-spacing:0.5px;padding-left:12px">Test</div>
+        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:900;color:#334155;text-align:left;letter-spacing:0.5px">Result</div>
+        <div style="flex:3;font-size:${colHdrFs-1}px;font-weight:900;color:#334155;text-align:left;letter-spacing:0.5px;padding-left:6px">Reference</div>
+        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:900;color:#334155;text-align:center;letter-spacing:0.5px">Previous</div>
+      </div>`;
+    }
+  })();
+
+  // ── باني عنوان القسم حسب النموذج ──
+  // parentCat/cat لإظهار اسم الجهاز كما في الأصل
+  function _tplSectionHeader(cat, catTests){
+    const _parentCat=catTests[0]&&catTests[0].cat||cat;
+    const _devName=settings.sectionDevices&&(settings.sectionDevices[_parentCat]||settings.sectionDevices[cat]);
+    const _devColor=settings.colorDevice||'#0055cc';
+    const _devFs=Math.max((settings.deviceFontSize?parseInt(settings.deviceFontSize):pfsN)-1,7);
+    const devHtml=_devName?`<div style="font-size:${_devFs}px;color:${_devColor};font-weight:700;letter-spacing:0.4px;text-decoration:underline;text-underline-offset:2px">⚙ ${_devName}</div>`:'';
+    const title=cat.toLowerCase();
+    if(RTPL==='2'){
+      // شارة ملونة بزوايا ناعمة على يسار العنوان
+      return `<div style="margin:7px 6px 2px;direction:ltr;display:flex;align-items:center;gap:9px;padding:0 6px">
+        <span style="display:inline-block;width:6px;height:18px;border-radius:3px;background:${_tplAccent}"></span>
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:capitalize;letter-spacing:0.4px;white-space:nowrap">${title}</div>
+        <div style="flex:1;height:1px;background:linear-gradient(90deg,${_tplAccent}55,transparent)"></div>
+        ${devHtml}
+      </div>`;
+    } else if(RTPL==='3'){
+      // عنوان أنيق داخل شريط خفيف بحرف كبير متباعد
+      return `<div style="margin:8px 6px 3px;direction:ltr;padding:4px 12px;background:${_tplAccent}0d;border-left:3px solid ${_tplAccent};border-radius:0 5px 5px 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:1.4px;white-space:nowrap">${title}</div>
+        ${devHtml}
+      </div>`;
+    } else if(RTPL==='4'){
+      // رأس بطاقة: العنوان داخل شريط علوي للبطاقة (الصفوف ستكون داخل بطاقة)
+      return `<div style="margin:9px 6px 0;direction:ltr;padding:6px 14px;background:${_tplAccent};border-radius:9px 9px 0 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:#ffffff;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap">${title}</div>
+        ${devHtml?`<div style="filter:brightness(0) invert(1);opacity:0.92">${devHtml}</div>`:''}
+      </div>`;
+    }
+    // النموذج 1 — التصميم الأصلي تماماً
+    return `<div style="margin:4px 6px 0;direction:ltr">
+      <div style="padding:3px 10px 2px">
+        <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px">${title}</div>
+      </div>
+      ${devHtml?`<div style="padding:0 10px 2px">${devHtml}</div>`:''}
+    </div>`;
+  }
+
+  // ── باني صف تحليل حسب النموذج ──
+  // p = { name, resultBox, flag, refHtml, prevHtml, bullet, isAbn }
+  function _tplRow(p){
+    const bullet = p.bullet!==undefined ? p.bullet : '●';
+    if(RTPL==='2'){
+      // صف بخلفية متناوبة خفيفة + شريط تمييز يسار عند الشذوذ
+      const edge = p.isAbn ? `border-left:3px solid ${p.abnColor||'#cc0000'}` : 'border-left:3px solid transparent';
+      return `
+      <div style="margin:0 6px;display:flex;align-items:center;direction:ltr;padding:3px 0 3px 8px;${edge};border-radius:4px">
+        <div style="flex:4;font-size:${pfs};font-weight:700;color:#111;padding-top:1px">${p.name}</div>
+        <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
+          <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
+        </div>
+        <div style="flex:3;padding:0 4px 0 6px">${p.refHtml}</div>
+        <div style="flex:2;padding:0 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      </div>`;
+    } else if(RTPL==='3'){
+      // صف نظيف بمسافات مريحة وبدون رموز — يعتمد على المحاذاة الدقيقة
+      return `
+      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:3px 0">
+        <div style="flex:4;font-size:${pfs};font-weight:600;color:#1a1a1a;padding-top:2px;padding-left:16px">${p.name}</div>
+        <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
+          <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
+        </div>
+        <div style="flex:3;padding:1px 4px 0 6px">${p.refHtml}</div>
+        <div style="flex:2;padding:1px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      </div>`;
+    } else if(RTPL==='4'){
+      // صف داخل بطاقة — سيُغلَّف لاحقاً بحاوية البطاقة
+      return `
+      <div style="display:flex;align-items:center;direction:ltr;padding:4px 14px">
+        <div style="flex:4;font-size:${pfs};font-weight:700;color:#1e293b;padding-top:1px">${p.name}</div>
+        <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
+          <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
+        </div>
+        <div style="flex:3;padding:0 4px 0 6px">${p.refHtml}</div>
+        <div style="flex:2;padding:0 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      </div>`;
+    }
+    // النموذج 1 — الصف الأصلي تماماً
+    return `
+      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
+        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
+          ${bullet} ${p.name}
+        </div>
+        <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
+          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
+          <div style="display:flex;align-items:center;gap:2px">${p.resultBox}${p.flag}</div>
+        </div>
+        <div style="flex:3;padding:2px 4px 0 6px">${p.refHtml}</div>
+        <div style="flex:2;padding:2px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      </div>`;
+  }
+  // فاصل الصفوف حسب النموذج (النماذج 2/4 تدير حدودها داخلياً)
+  function _tplRowSep(){
+    if(RTPL==='3'){ return `<div style="margin:0 6px;border-top:1px solid #eef1f5"></div>`; }
+    if(RTPL==='2'||RTPL==='4'){ return ''; }
+    // النموذج 1 يستخدم فواصله الأصلية عبر settings.div_test_* (تُدار في مكانها)
+    return null; // null = اترك المنطق الأصلي
+  }
 
   // ─── نتائج التحاليل ────────────────────────────────────
   // catChunks: مصفوفة كل عنصر = HTML كامل لمجموعة فرعية واحدة (بدون فاصل سابق)
@@ -14815,12 +14973,9 @@ function buildPrintHTML(req, opts){
       else if(_catDotted) _catDividerHtml = `<div style="margin:5px 6px;border-top:2px dotted #aab8c8"></div>`;
       else                _catDividerHtml = `<div style="margin:4px 6px;border-top:1px dotted #aab8c8"></div>`;
     }
-    _chunkHtml+=`<div style="margin:4px 6px 0;direction:ltr">
-      <div style="padding:3px 10px 2px">
-        <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px">${cat.toLowerCase()}</div>
-      </div>
-      ${(()=>{const _parentCat=catTests[0]&&catTests[0].cat||cat;const _devName=settings.sectionDevices&&(settings.sectionDevices[_parentCat]||settings.sectionDevices[cat]);const _devColor=settings.colorDevice||'#0055cc';const _devFs=Math.max((settings.deviceFontSize?parseInt(settings.deviceFontSize):pfsN)-1,7);return _devName?`<div style="font-size:${_devFs}px;color:${_devColor};font-weight:700;padding:0 10px 2px;letter-spacing:0.4px;text-decoration:underline;text-underline-offset:2px">⚙ ${_devName}</div>`:'';})()}
-    </div>`;
+    _chunkHtml+=_tplSectionHeader(cat, catTests);
+    // النموذج 4 (بطاقات): افتح حاوية البطاقة بعد رأس القسم
+    if(RTPL==='4'){ _chunkHtml+=`<div style="margin:0 6px 2px;direction:ltr;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 9px 9px;overflow:hidden;background:#fff">`; }
 
     catTests.forEach((t,tIdx)=>{
       const val = req.results[t.id]||'';
@@ -14876,20 +15031,21 @@ function buildPrintHTML(req, opts){
           const inpResultBox=`<div style="border:1.5px solid ${inpBoxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${inpValColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${inpVal}</span></div>`;
           const inpShowUnit = inpUnit && inpUnit!=='qualitative';
           const inpRefHtml = `<div style="display:block;font-size:${pfs}">${inpRefTxt==='—'?`<span style="font-size:${pfs}">—</span>`:`<span style="font-size:${pfs};font-weight:600;color:#000">${inpRefTxt}</span>${inpShowUnit?`&nbsp;&nbsp;<span style="font-size:${pfs};font-weight:600;color:#444">${inpUnit}</span>`:''}`}</div>`;
-          _chunkHtml+=`
-      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
-          ● ${inpName}
-        </div>
-        <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
-          <div style="display:flex;align-items:center;gap:2px">${inpResultBox}${inpFlag}</div>
-        </div>
-        <div style="flex:3;padding:2px 4px 0 6px">${inpRefHtml}</div>
-        <div style="flex:2"></div>
-      </div>`;
-          if(settings.div_test_dotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
-          else if(settings.div_test_solid) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
+          _chunkHtml+=_tplRow({
+            name: inpName,
+            resultBox: inpResultBox,
+            flag: inpFlag,
+            refHtml: inpRefHtml,
+            prevHtml: '',
+            bullet: '○',
+            isAbn: (inpIsHigh||inpIsLow),
+            abnColor: inpValColor
+          });
+          const _inpSep=_tplRowSep();
+          if(_inpSep===null){
+            if(settings.div_test_dotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
+            else if(settings.div_test_solid) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
+          } else { _chunkHtml+=_inpSep; }
         });
       }
 
@@ -15027,18 +15183,16 @@ function buildPrintHTML(req, opts){
       // مربع النتيجة — القيمة فقط بدون وحدة
       const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${displayValFull}</span></div>`;
 
-      _chunkHtml+=`
-      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
-          ● ${t.nameShort&&t.nameShort.trim()?t.nameShort.trim():t.nameEn}
-        </div>
-        <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
-          <div style="display:flex;align-items:center;gap:2px">${resultBox}${flagLetter}</div>
-        </div>
-        <div style="flex:3;padding:2px 4px 0 6px">${refWithUnit}</div>
-        <div style="flex:2;padding:2px 4px;text-align:center;font-size:${pfs};font-weight:600">${prevHtml}</div>
-      </div>`;
+      _chunkHtml+=_tplRow({
+        name: (t.nameShort&&t.nameShort.trim()?t.nameShort.trim():t.nameEn),
+        resultBox: resultBox,
+        flag: flagLetter,
+        refHtml: refWithUnit,
+        prevHtml: prevHtml,
+        bullet: '●',
+        isAbn: (isHigh||isLow||isQualAbnormal),
+        abnColor: valColor
+      });
       // فاصل بين تحليل وتحليل
       const _testDotted=settings.div_test_dotted;
       const _testSolid=settings.div_test_solid;
@@ -15049,11 +15203,18 @@ function buildPrintHTML(req, opts){
       const testsWithResults = catTests.filter(tt => { const v=req.results[tt.id]||''; return v && v.trim()!==''; });
       const isLastTestInCat = t.id === testsWithResults[testsWithResults.length-1]?.id;
       const skipTestSep = hasSectionSep && isLastTestInCat;
-      if(!skipTestSep){
-        if(_testSolid)       _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
-        else if(_testDotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
+      const _mainSep=_tplRowSep();
+      if(_mainSep===null){
+        if(!skipTestSep){
+          if(_testSolid)       _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
+          else if(_testDotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
+        }
+      } else if(_mainSep!=='' && !isLastTestInCat){
+        _chunkHtml+=_mainSep;
       }
     });
+    // النموذج 4 (بطاقات): أغلق حاوية البطاقة بعد آخر صف
+    if(RTPL==='4'){ _chunkHtml+=`</div>`; }
     // أضف الـ chunk إلى المصفوفة وإلى body
     // ⭐ كل chunk يحمل: cat (اسم المجموعة) + html (المحتوى) + catDividerHtml (فاصل المجموعة)
     // الـ body المباشر (للـ blankBody) يحتوي على الفاصل بشكل صحيح كما كان (لا يتأثر)
@@ -18985,7 +19146,10 @@ function loadSettings(){
   if(settings.currency){const sel=document.getElementById('st-currency');if(sel){for(let o of sel.options){if(o.value===settings.currency){o.selected=true;break;}}}}
   // نموذج CBC
   const cbcTplSel=document.getElementById('st-cbc-template');
-  if(cbcTplSel) cbcTplSel.value=settings.cbcTemplate||'1';  document.getElementById('sb-labname').textContent='🏥 '+(settings.name||'المختبر');
+  if(cbcTplSel) cbcTplSel.value=settings.cbcTemplate||'1';
+  const repTplSel=document.getElementById('st-report-template');
+  if(repTplSel) repTplSel.value=settings.reportTemplate||'1';
+  document.getElementById('sb-labname').textContent='🏥 '+(settings.name||'المختبر');
   document.getElementById('sb-director').textContent=settings.dir||'';
   // Images
   if(settings.headerImg){document.getElementById('header-img-show').src=settings.headerImg;document.getElementById('header-img-preview').style.display='block';}
@@ -26018,6 +26182,105 @@ function _saveCBCTemplate(val){
 function _loadCBCTemplateSel(){
   const sel=document.getElementById('st-cbc-template');
   if(sel&&typeof settings==='object') sel.value=settings.cbcTemplate||'1';
+}
+
+/* ─── نموذج تقرير النتائج العامة (Report Templates 1–4) ─── */
+function _saveReportTemplate(val){
+  if(typeof settings==='object') settings.reportTemplate=val;
+  if(typeof saveSettings==='function') saveSettings();
+  try{ showNotif('✅ تم الحفظ','تم اختيار نموذج التقرير رقم '+val,'success'); }catch(e){}
+}
+function _loadReportTemplateSel(){
+  const sel=document.getElementById('st-report-template');
+  if(sel&&typeof settings==='object') sel.value=settings.reportTemplate||'1';
+}
+function _previewReportTemplate(){
+  // معاينة حية: نبني تقريراً تجريبياً بالنموذج المختار عبر buildPrintHTML نفسها
+  // مع بيانات وهمية — دون المساس بأي طلب حقيقي.
+  const tpl=(document.getElementById('st-report-template')||{}).value||settings.reportTemplate||'1';
+  const _prevTplSaved = settings.reportTemplate;
+  settings.reportTemplate = tpl; // مؤقتاً للمعاينة فقط
+  try{
+    // تحاليل تجريبية من قاعدة التحاليل الفعلية (أول عدة تحاليل عامة) لضمان واقعية المعاينة
+    let demoTestObjs = (Array.isArray(tests)?tests:[]).filter(function(t){
+      return t && !t.isSpecialExam && !t.isCalc;
+    });
+    // اختر تحاليل من مجموعات فرعية مختلفة لإظهار تعدد الأقسام
+    const bySub={};
+    demoTestObjs.forEach(function(t){ const k=t.subCat||t.cat||'General'; (bySub[k]=bySub[k]||[]).push(t); });
+    const pickedTests=[];
+    Object.keys(bySub).slice(0,3).forEach(function(k){ bySub[k].slice(0,3).forEach(function(t){ pickedTests.push(t); }); });
+    let demoTests = pickedTests.length? pickedTests : demoTestObjs.slice(0,6);
+
+    // إن لم توجد تحاليل في القاعدة — أنشئ تحاليل وهمية بسيطة
+    let _synthetic=false;
+    if(!demoTests.length){
+      _synthetic=true;
+      demoTests=[
+        {id:'_d1',code:'GLU',nameEn:'Glucose (F)',nameShort:'Glucose',unit:'mg/dL',subCat:'Biochemistry',cat:'Biochemistry',minVal:70,maxVal:110,refM:'70 – 110'},
+        {id:'_d2',code:'UREA',nameEn:'Blood Urea',nameShort:'Urea',unit:'mg/dL',subCat:'Kidney Functions',cat:'Kidney Functions',minVal:15,maxVal:45,refM:'15 – 45'},
+        {id:'_d3',code:'CREAT',nameEn:'Creatinine',nameShort:'Creat.',unit:'mg/dL',subCat:'Kidney Functions',cat:'Kidney Functions',minVal:0.6,maxVal:1.3,refM:'0.6 – 1.3'},
+        {id:'_d4',code:'CHOL',nameEn:'Cholesterol',nameShort:'Chol.',unit:'mg/dL',subCat:'Lipid Profile',cat:'Lipid Profile',minVal:0,maxVal:200,refM:'< 200'},
+        {id:'_d5',code:'TG',nameEn:'Triglycerides',nameShort:'TG',unit:'mg/dL',subCat:'Lipid Profile',cat:'Lipid Profile',minVal:0,maxVal:150,refM:'< 150'}
+      ];
+      // احقنها مؤقتاً في مصفوفة tests كي تجدها buildPrintHTML عبر tests.find
+      demoTests.forEach(function(t){ tests.push(t); });
+    }
+
+    // مريض وهمي
+    const demoPt={
+      id:'DEMO-1', patientId:'DEMO-1', barcode:'123456',
+      title:'Mr.', gender:'male', ageVal:35, ageDisplay:'35 Y', dob:''
+    };
+    const _hadDemoPt = patients.some(function(p){return p.id==='DEMO-1';});
+    if(!_hadDemoPt) patients.push(demoPt);
+
+    // نتائج وهمية — بعضها ضمن المدى وبعضها شاذ لإظهار التمييز اللوني
+    const demoResults={};
+    demoTests.forEach(function(t,i){
+      let v;
+      const mn=(t.minVal!=null?t.minVal:0), mx=(t.maxVal!=null?t.maxVal:100);
+      if(i%4===0){ v=(mx + Math.max(1,(mx-mn)*0.4)); }        // مرتفع (H)
+      else if(i%4===2){ v=(mn - Math.max(1,(mx-mn)*0.3)); }    // منخفض (L)
+      else { v=((mn+mx)/2); }                                   // طبيعي
+      if(v<0) v=Math.abs(v);
+      demoResults[t.id]=String(Math.round(v*10)/10);
+    });
+
+    const demoReq={
+      id:'DEMO-REQ-1', patientId:'DEMO-1', patientName:'Ahmed Khalid Al-Rashidi',
+      doctorName:'Dr. Omar Saleh', date:new Date().toISOString().slice(0,10),
+      resultDate:new Date().toISOString().slice(0,10),
+      tests:demoTests.map(function(t){return t.id;}),
+      results:demoResults, status:'done', pageGroups:[]
+    };
+
+    const html=buildPrintHTML(demoReq,{});
+
+    // تنظيف البيانات الوهمية المحقونة
+    if(_synthetic){ tests.splice(tests.length-demoTests.length, demoTests.length); }
+    if(!_hadDemoPt){ const ix=patients.findIndex(function(p){return p.id==='DEMO-1';}); if(ix>-1) patients.splice(ix,1); }
+
+    // اعرض داخل overlay + iframe (نفس أسلوب معاينة CBC)
+    const blob=new Blob([html],{type:'text/html'});
+    const blobUrl=URL.createObjectURL(blob);
+    var old=document.getElementById('_rep_preview_overlay');
+    if(old) old.remove();
+    var overlay=document.createElement('div');
+    overlay.id='_rep_preview_overlay';
+    overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px;';
+    overlay.innerHTML='<div style="width:100%;max-width:860px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="color:#fff;font-size:14px;font-weight:700">📄 معاينة نموذج التقرير — النموذج '+tpl+'</span>'
+      +'<button onclick="document.getElementById(\'_rep_preview_overlay\').remove();URL.revokeObjectURL(\''+blobUrl+'\')" style="background:rgba(255,34,68,0.2);border:1px solid rgba(255,34,68,0.5);color:#ff4466;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:700">✕ إغلاق</button>'
+      +'</div>'
+      +'<iframe src="'+blobUrl+'" style="width:100%;max-width:860px;flex:1;border:none;border-radius:8px;background:#fff;min-height:calc(100vh - 80px)"></iframe>';
+    document.body.appendChild(overlay);
+  }catch(e){
+    console.error('[ReportTemplate preview]',e);
+    try{ showNotif('⚠️ خطأ','تعذّرت المعاينة: '+e.message,'error'); }catch(_){}
+  }finally{
+    settings.reportTemplate = _prevTplSaved; // استرجاع القيمة المحفوظة الأصلية
+  }
 }
 
 function _previewCBCTemplate(){
