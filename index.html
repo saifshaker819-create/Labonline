@@ -3030,6 +3030,18 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         if(typeof lisRenderRaw==='function') lisRenderRaw();
         return;
       }
+      // ── 🧿 Chorus TRIO: رسائل صادرة (رد J-List) — تُعرض فقط ──────────
+      if(d.chorusOut){
+        lisAddLog('astm','📤 Chorus TRIO — رد صادر:\n'+String(d.data||''));
+        if(typeof lisRenderRaw==='function') lisRenderRaw();
+        return;
+      }
+      // ── 🧿 Chorus TRIO: تشخيص وارد (بايتات خام / ENQ / نهاية) ────────
+      if(d.chorusIn){
+        lisAddLog('astm','🧿 Chorus: '+String(d.data||''));
+        if(typeof lisRenderRaw==='function') lisRenderRaw();
+        return;
+      }
       // إذا أرسل main.js بيانات محللة مسبقاً استخدمها مباشرةً
       // isCBC: يُوجّه للمسار الصحيح حتى لو كان patientId فارغاً
       if(d.parsed && (d.parsed.patientId || d.parsed.isCBC)){
@@ -5710,6 +5722,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <option value="astm">ASTM E1394 (الأشيع)</option>
             <option value="hl7">HL7 v2.x</option>
             <option value="csv">CSV</option>
+            <option value="chorus">Chorus TRIO (ثنائي — DIESSE)</option>
           </select>
         </div>
         <div class="fg" id="lis-baud-row">
@@ -5816,6 +5829,10 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div class="wiz-card" onclick="lisWizSelectVendor('mindray_bc6000','Mindray BC-6000','hl7')" data-v="mindray_bc6000">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Mindray BC-6000</div>
               <div style="font-size:10px;color:var(--text2)">دم (CBC) — HL7 عبر الشبكة</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('diesse_chorus','DIESSE Chorus TRIO','chorus')" data-v="diesse_chorus">
+              <div style="font-size:22px">🧿</div><div style="font-weight:800;font-size:12px">DIESSE Chorus TRIO</div>
+              <div style="font-size:10px;color:var(--text2)">مناعة/أمصال — Serial (RS-232)</div>
             </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('zybio','Zybio Z60','hl7')" data-v="zybio">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z60 / Z3</div>
@@ -5968,6 +5985,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 </select>
               </div>
               • يدعم البرنامج الرد على الاستعلامات (Order Inquiry) والإرسال المبادر (Batch) — سيرسل ACK لكل إطار تلقائياً.
+            </div>
+            <div id="wiz-chorus-serial-hint" style="display:none;margin-top:10px;background:rgba(255,193,7,0.07);border:1px solid rgba(255,193,7,0.3);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🧿 <b style="color:#ffc107">DIESSE Chorus TRIO</b> (حسب دليل الشركة Rev 1.3 — القسم 5.6):<br>
+              • وصّل الكابل بمنفذ الجهاز الخلفي المكتوب عليه <b style="color:var(--text)">"HOST"</b> (الشكل 5، رقم 6 — وليس EXT-SERV).<br>
+              • ⚠️ <b style="color:#ffc107">تنبيه مهم:</b> الكابل <b style="color:var(--text)">مستقيم 1:1 (Straight)</b> — «Standard Serial Cable» حسب §5.6.2 — <b style="color:#ff6b6b">وليس Null-Modem</b> المتقاطع المستخدم مع cobas c111/e411. استخدام كابل متقاطع هنا يعني عدم وصول أي بيانات إطلاقاً.<br>
+              • الإعدادات المصنعية: <b style="color:var(--text)">38400</b> baud · 8 bit · بلا parity · 1 stop bit.<br>
+              • لتغيير السرعة يلزم فنّي الشركة (شاشة Service بكلمة مرور): 38400=0 · 19200=1 · 9600=2 · 57600=7.<br>
+              • البروتوكول ثنائي خاص بـ DIESSE (STX/N/CMD/CS) — ليس ASTM ولا HL7. البرنامج يرد تلقائياً بـ EOT على كل إطار.<br>
+              • <b style="color:var(--text)">لجلب قائمة العمل:</b> بشاشة الجهاز افتح <span style="color:var(--primary)">C-List</span> ← أدخل أرقام العينات ← اضغط <b style="color:var(--text)">Host</b>.<br>
+              • <b style="color:var(--text)">لإرسال النتائج:</b> بنافذة النتائج أو من <span style="color:var(--primary)">Archive</span> اضغط <b style="color:var(--text)">Host</b>.<br>
+              • ضع <b style="color:var(--text)">رقم التحليل (Test ID)</b> في عمود «القناة» بجدول الربط — الجهاز يتعامل بالأرقام لا بالأسماء.
             </div>
           </div>
 
@@ -26216,18 +26244,55 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       return (ia<0?99:ia)-(ib<0?99:ib);
     });
     // شبكة الصور: عمودان — عرض مضبوط ليطابق عمودَي الجدول أعلاه
+    // ⚠️ نستخدم <table> وليس CSS Grid: محرّك الطباعة في بعض النسخ لا يدعم
+    //    Grid فتنهار الأعمدة وتصبح صورة واحدة في كل سطر. الجدول يعمل في كل
+    //    المحرّكات ويضمن صورتين في كل صف دائماً.
+    // ── 📐 حجم الصور: يتكيّف مع عددها لتبقى النتائج والرسوم في ورقة واحدة ──
+    //    الجهاز يُرسل صوراً صغيرة (≈200×200)، فبدل تركها ضائعة وسط خلية
+    //    كبيرة نُكبّرها لملء الخلية مع الحفاظ على نسبة الأبعاد.
+    //    صفّان (٣-٤ صور) = ارتفاع أقل · صف واحد (١-٢) = ارتفاع أكبر.
+    var _gRows=Math.ceil(_gSorted.length/2);
+    var _gH=(_gRows<=1)?230:(_gRows===2)?104:(_gRows===3)?72:56;
+
+    // ── 🎨 خلفية الرسوم: سوداء (كما يُرسلها الجهاز) أو مقلوبة لبيضاء ──────
+    //    settings.cbcGraphInvert:
+    //      'off'   = بلا تغيير — الأصدق، ومطابق لورقة الجهاز (الافتراضي)
+    //      'histo' = قلب الهيستوغرامات فقط وترك الـ Scattergram أسود ✅ موصى به
+    //      'all'   = قلب كل الصور
+    //    نستخدم invert(1) hue-rotate(180deg) معاً: الأولى تقلب الإضاءة
+    //    (أسود→أبيض) والثانية تُعيد الأصباغ لقرب أصلها، فلا يصير الأحمر
+    //    سماوياً ولا الأخضر بنفسجياً. الـ Scattergram يُستثنى افتراضياً لأن
+    //    ألوان مجموعاته (LYM/NEU/MON) لها دلالة تشخيصية لا يصح العبث بها.
+    var _gInvMode=(typeof settings!=='undefined'&&settings.cbcGraphInvert)||'histo';
+    var _gFilter='filter:invert(1) hue-rotate(180deg);-webkit-filter:invert(1) hue-rotate(180deg);';
+    var _gInv='';
+    if(_gInvMode==='all')        _gInv='.gimg{'+_gFilter+'}';
+    else if(_gInvMode==='histo') _gInv='.gimg.ginv{'+_gFilter+'}';
+
     var _gHTML='';
     if(_gSorted.length){
-      var _cells='';
-      _gSorted.forEach(function(g){
-        var _lbl=_gLabel[g.code]||g.name||g.code;
-        _cells+='<div class="gcard">'
-          +'<div class="gttl">'+_lbl+'</div>'
-          +'<img class="gimg" src="data:image/bmp;base64,'+g.b64+'" alt="'+_lbl+'">'
-          +'</div>';
-      });
+      var _rows='';
+      for(var _i=0;_i<_gSorted.length;_i+=2){
+        _rows+='<tr>';
+        for(var _k=_i;_k<_i+2;_k++){
+          if(_k<_gSorted.length){
+            var g=_gSorted[_k];
+            var _lbl=_gLabel[g.code]||g.name||g.code;
+            // الهيستوغرام فقط يأخذ ginv — الـ Scattergram يبقى بألوانه الأصلية
+            var _isScat=/scatter/i.test(_lbl)||/^152|^153|^156/.test(g.code);
+            var _cls='gimg'+((_gInvMode==='histo'&&!_isScat)?' ginv':'');
+            _rows+='<td class="gcell"><div class="gcard">'
+              +'<div class="gttl">'+_lbl+'</div>'
+              +'<img class="'+_cls+'" src="data:image/bmp;base64,'+g.b64+'" alt="'+_lbl+'">'
+              +'</div></td>';
+          } else {
+            _rows+='<td class="gcell"></td>';   // خلية فارغة إذا كان العدد فردياً
+          }
+        }
+        _rows+='</tr>';
+      }
       _gHTML='<div class="gwrap"><div class="ghdr">Histograms &amp; Scattergrams</div>'
-        +'<div class="ggrid">'+_cells+'</div></div>';
+        +'<table class="ggrid"><tbody>'+_rows+'</tbody></table></div>';
     }
     // رايات الإنذار — شريط مدمج أسفل الرسوم
     var _alHTML='';
@@ -26251,7 +26316,7 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
       r+='</tbody></table>';
       return r;
     }
-    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:13px;font-weight:900;color:#fff;background:'+tableColor+';padding:4px;margin:4px 0;border-radius:4px;}.pt-strip{display:flex;justify-content:space-between;align-items:center;background:'+tableColor+'11;border:1.5px solid '+tableColor+'55;border-radius:5px;padding:6px 12px;margin:5px 0;}.pt-main{display:flex;flex-direction:column;gap:3px;}.pt-r{display:flex;gap:6px;font-size:11px;}.pt-k{color:#667;font-weight:600;min-width:48px;}.pt-v{font-weight:800;color:#1a2035;font-size:13px;}.pt-ids{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}.idc{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;}.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px;}.col-hdr{font-size:11px;font-weight:800;padding:3px 7px;border-radius:4px 4px 0 0;color:#fff;text-align:center;}.foot{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:3px;display:flex;justify-content:space-between;font-size:10px;color:#666;}.gwrap{margin-top:7px;page-break-inside:avoid;}.ghdr{font-size:11px;font-weight:800;color:#fff;background:'+tableColor+';padding:3px 8px;border-radius:4px 4px 0 0;text-align:center;}.ggrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;border:1px solid '+tableColor+'44;border-top:none;border-radius:0 0 4px 4px;padding:5px;}.gcard{border:1px solid #dfe3ea;border-radius:3px;background:#fff;padding:3px;text-align:center;page-break-inside:avoid;}.gttl{font-size:9px;font-weight:700;color:#445;margin-bottom:2px;}.gimg{width:100%;height:auto;max-height:105px;object-fit:contain;display:block;image-rendering:auto;}.awrap{margin-top:5px;padding:4px 8px;border:1px solid #e0a800;background:#fff8e1;border-radius:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;page-break-inside:avoid;}.attl{font-size:10px;font-weight:800;color:#8a6100;}.achip{font-size:9px;font-weight:700;color:#8a6100;background:#ffe9a8;border:1px solid #e8c76a;border-radius:9px;padding:1px 7px;}';
+    const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:13px;font-weight:900;color:#fff;background:'+tableColor+';padding:4px;margin:4px 0;border-radius:4px;}.pt-strip{display:flex;justify-content:space-between;align-items:center;background:'+tableColor+'11;border:1.5px solid '+tableColor+'55;border-radius:5px;padding:6px 12px;margin:5px 0;}.pt-main{display:flex;flex-direction:column;gap:3px;}.pt-r{display:flex;gap:6px;font-size:11px;}.pt-k{color:#667;font-weight:600;min-width:48px;}.pt-v{font-weight:800;color:#1a2035;font-size:13px;}.pt-ids{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}.idc{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;}.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:5px;}.col-hdr{font-size:11px;font-weight:800;padding:3px 7px;border-radius:4px 4px 0 0;color:#fff;text-align:center;}.foot{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:3px;display:flex;justify-content:space-between;font-size:10px;color:#666;}.gwrap{margin-top:4px;page-break-inside:avoid;}.ghdr{font-size:11px;font-weight:800;color:#fff;background:'+tableColor+';padding:2px 8px;border-radius:4px 4px 0 0;text-align:center;}.ggrid{width:100%;border-collapse:separate;border-spacing:3px;border:1px solid '+tableColor+'44;border-top:none;border-radius:0 0 4px 4px;table-layout:fixed;}.gcell{width:50%;vertical-align:top;}.gcard{border:1px solid #dfe3ea;border-radius:3px;background:#fff;padding:2px;text-align:center;page-break-inside:avoid;}.gttl{font-size:9px;font-weight:700;color:#445;margin-bottom:1px;}.gimg{display:block;width:100%;height:auto;max-height:'+_gH+'px;margin:0 auto;image-rendering:auto;}'+_gInv+'.awrap{margin-top:5px;padding:4px 8px;border:1px solid #e0a800;background:#fff8e1;border-radius:4px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;page-break-inside:avoid;}.attl{font-size:10px;font-weight:800;color:#8a6100;}.achip{font-size:9px;font-weight:700;color:#8a6100;background:#ffe9a8;border:1px solid #e8c76a;border-radius:9px;padding:1px 7px;}';
     return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-strip"><div class="pt-main"><div class="pt-r"><span class="pt-k">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:16px">'+ptFullName+'</span></div><div class="pt-r"><span class="pt-k">Sex/Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-r"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div></div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div><div class="idc">WB-CBC+DIFF</div></div></div><div class="cols"><div><div class="col-hdr" style="background:#1565c0">WBC Differential</div>'+buildCol(half1,'#1565c0')+'</div><div><div class="col-hdr" style="background:#b71c1c">RBC / PLT Indices</div>'+buildCol(half2,'#b71c1c')+'</div></div>'+_alHTML+_gHTML+'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
@@ -29421,6 +29486,9 @@ function lisWizSelectVendor(vendor,name,proto){
   // ⭐ cobas e 411: يتصل عبر Serial (RS-232C/D-SUB9) حسب دليل الشركة (الفصل B).
   const e411Hint=document.getElementById('wiz-e411-serial-hint');
   if(e411Hint) e411Hint.style.display=vendor==='roche_e411'?'block':'none';
+  // ⭐ Chorus TRIO: Serial (RS-232C) بروتوكول ثنائي خاص — كابل مستقيم لا متقاطع.
+  const chorusHint=document.getElementById('wiz-chorus-serial-hint');
+  if(chorusHint) chorusHint.style.display=vendor==='diesse_chorus'?'block':'none';
   document.getElementById('wiz-btn-next').disabled=false;
 }
 
@@ -29493,6 +29561,11 @@ function lisWizShowConnFields(){
   // 🩸 BC-6000: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
   const sHint=document.getElementById('wiz-bc6000-hint');
   if(sHint) sHint.style.display=(_wizVendor==='mindray_bc6000'&&_wizConn==='tcpserver')?'block':'none';
+  // 🧿 Chorus TRIO: السرعة المصنعية 38400 حسب دليل الشركة §5.6.2 — نختارها تلقائياً
+  if(_wizVendor==='diesse_chorus'&&_wizConn==='serial'){
+    const bd=document.getElementById('wiz-baud');
+    if(bd) bd.value='38400';
+  }
 }
 
 function lisWizBuildSummary(){
@@ -30050,6 +30123,9 @@ function lisAutoFillDevice(){
     mindray_bc30s:{name:'Mindray BC-30s',proto:'hl7',  conn:'tcpserver', port:'5100'},
     // 🩸 Mindray BC-6000 Series: جهاز دم (CBC) — HL7 v2.3.1 عبر MLLP (الدليل 1.2)
     mindray_bc6000:{name:'Mindray BC-6000',proto:'hl7', conn:'tcpserver', port:'5100'},
+    // 🧿 DIESSE Chorus TRIO: مناعة/أمصال — Serial RS-232C ببروتوكول ثنائي
+    //    خاص (§5.6). السرعة المصنعية 38400 والكابل مستقيم (لا Null-Modem).
+    diesse_chorus:{name:'DIESSE Chorus TRIO',proto:'chorus',conn:'serial', baud:'38400'},
     biobase: {name:'Biobase',            proto:'astm', conn:'serial'},
     rayto:   {name:'Rayto',              proto:'astm', conn:'serial'},
     other:   {name:'',                   proto:'astm', conn:'serial'},
@@ -30218,8 +30294,9 @@ async function lisConnectSerialDevice(dev){
         baudRate: baud,
         name:     dev.name,
         // ⭐ cobas c 111 / e 411: مرّر البصمة لتفعيل محرك ASTM الكامل + اسم البرنامج للرؤوس
-        vendor:   (dev.vendor === 'roche_c111' || dev.vendor === 'roche_e411') ? dev.vendor : (dev.vendor || ''),
-        dataBits: 8, parity: 'none', stopBits: 1,   // N_8_1 — افتراضي cobas c111/e411
+        // 🧿 Chorus TRIO: نفس الحقل يفعّل محرّك البروتوكول الثنائي (diesse_chorus)
+        vendor:   (dev.vendor === 'roche_c111' || dev.vendor === 'roche_e411' || dev.vendor === 'diesse_chorus') ? dev.vendor : (dev.vendor || ''),
+        dataBits: 8, parity: 'none', stopBits: 1,   // N_8_1 — يطابق c111/e411 و Chorus TRIO (§5.6.2)
         systemId: (typeof labSettings!=='undefined' && labSettings && labSettings.systemId) ? labSettings.systemId : 'MedLabPro',
         // 🧪 e411: صيغة البروتوكول (cobas/elecsys) — يُهمَل لغير e411
         e411Type: dev.vendor === 'roche_e411' ? (dev.e411Type || 'cobas') : undefined,
@@ -30638,14 +30715,19 @@ async function lisHandleHl7Query(info){
 async function lisHandleC111Query(info){
   // 🧪 e411 يأتي عبر نفس الحدث لكن بعلم isE411 — الرد يمرّ عبر نفس القناة
   //    (main.js يوجّهه لـ e411 حسب queryId). منطق الهول بلود يخصّ c111 فقط.
-  const _isE411Q = !!(info && info.isE411);
+  // 🧿 Chorus TRIO كذلك: نفس القناة بعلم isChorus، والرد يُوجَّه في main.js
+  //    حسب queryId. الجهاز مناعي/أمصال — لا علاقة له بتيوب الهول بلود.
+  const _isE411Q   = !!(info && info.isE411);
+  const _isChorusQ = !!(info && info.isChorus);
   const sidRaw = String(info.sampleId||'').trim();
   // 🩸 تيوب الهول بلود يحمل الرقم ببادئة 9 → نرجع للرقم الأصلي للبحث عن المريض (c111 فقط)
-  const _isWbTube = !_isE411Q && !!(sidRaw && sidRaw.charAt(0)===C111_WB_PREFIX &&
+  const _isWbTube = !_isE411Q && !_isChorusQ && !!(sidRaw && sidRaw.charAt(0)===C111_WB_PREFIX &&
                        _bcCleanCode(sidRaw).length>6);
   const sid = _isWbTube ? _c111BaseSidFromWb(sidRaw) : sidRaw;
   if(_isWbTube) lisAddLog('astm','🩸 تيوب EDTA (تراكمي) — '+sidRaw+' → المريض '+sid);
-  lisAddLog('astm','🔍 '+(_isE411Q?'cobas e411':'cobas c111')+' يطلب طلبات العينة — SID:'+sid);
+  const _devLabel = _isChorusQ ? 'Chorus TRIO' : (_isE411Q ? 'cobas e411' : 'cobas c111');
+  lisAddLog('astm','🔍 '+_devLabel+' يطلب طلبات العينة — SID:'+sid+
+    (_isChorusQ&&info.storable!=null?(' (خانات متاحة: '+info.storable+')'):''));
 
   let testsToSend = [];
   try {
@@ -30686,7 +30768,10 @@ async function lisHandleC111Query(info){
     // 🩸 هل يوجد تعارض تيوبين فعلاً (تراكمي + سيرم معاً)؟ — نجمع عبر كل الطلبات
     let _wbTot=0, _serumTot=0;
     reqList.forEach(_rq=>{ const _s=_c111SplitReqTests(_rq); _wbTot+=_s.wb.length; _serumTot+=_s.serum.length; });
-    const _reqNeedsSplit = (_wbTot>0 && _serumTot>0);
+    // 🧿 Chorus TRIO: جهاز مناعة/أمصال يعمل بالسيرم فقط ولا يعرف تيوب EDTA.
+    //    تفعيل منطق فصل التيوبين له قد يُسقِط تحاليله بالخطأ إذا كان المريض
+    //    يحمل تحليلاً تراكمياً في نفس الطلب. لذلك نُعطّل الفصل لـ Chorus.
+    const _reqNeedsSplit = (!_isChorusQ && _wbTot>0 && _serumTot>0);
     if(_reqNeedsSplit) lisAddLog('astm','🩸 الطلب يحتاج تيوبين — تيوب '+(_isWbTube?'EDTA (تراكمي)':'سيرم')+' الآن');
 
     if(reqList.length){
@@ -30737,7 +30822,7 @@ async function lisHandleC111Query(info){
       tests:    testsToSend,
       systemId: (typeof labSettings!=='undefined' && labSettings && labSettings.systemId) ? labSettings.systemId : 'MedLabPro',
     });
-    const _dn = _isE411Q ? 'cobas e411' : 'cobas c111';
+    const _dn = _devLabel;
     if(res && res.ok){
       if(testsToSend.length) lisAddLog('ok','✅ أُرسلت '+testsToSend.length+' طلبات لـ '+_dn+' — SID:'+sid+' ('+testsToSend.map(t=>t.code).join(', ')+')');
       else lisAddLog('warn','⚠️ لا طلبات للعينة '+sid+' — رُدّ (لا طلبات) على '+_dn);
@@ -30907,6 +30992,13 @@ function lisOpenTcpGuide(){
 // ═══════════════════════════════════════════════
 function lisParseByProtocol(text,dev){
   const proto=(dev.protocol||'astm').toLowerCase();
+  // 🧿 Chorus TRIO: بروتوكول ثنائي — النتائج تصل جاهزة (parsed) من main.js
+  //    ولا تمرّ من هنا إطلاقاً. لو وصل نص خام لأي سبب (تشخيص/ضوضاء) فلا
+  //    نمرّره لمحلّل ASTM لأنه سيُنتج قراءات خاطئة — نسجّله فقط.
+  if(proto==='chorus'){
+    lisAddLog('astm','🧿 Chorus TRIO — بيانات خام (لا تُحلَّل كنص): '+String(text||'').slice(0,120));
+    return;
+  }
   if(proto==='hl7') lisParseHL7(text,dev.name);
   else if(proto==='csv') lisParseCSV(text,dev.name);
   else lisParseASTM(text,dev.name,dev);
