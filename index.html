@@ -15015,27 +15015,30 @@ function buildPrintHTML(req, opts){
   //   الدمج يبقى «chunk» عادياً فيعمل الترقيم والتجميع اليدوي دون أي تغيير.
   let _renderUnits = sortedGroupKeys.map(k=>[k]);
   if(RTPL==='2'){
-    // عدّ التحاليل ذات النتائج في كل مجموعة
+    // عدّ التحاليل ذات النتائج في كل مجموعة فرعية
     const _cnt = {};
     sortedGroupKeys.forEach(k=>{
       _cnt[k] = grouped[k].filter(t=>{ const v=req.results[t.id]||''; return v && v.trim()!==''; }).length;
     });
     const _units=[]; let _buf=[]; let _bufCount=0;
-    const TARGET=3; // نستهدف ملء صف ~3 بطاقات
+    const ROW_CAP=3; // الصف يحمل ٣ تحاليل كحد أقصى (كل بطاقة = تحليل واحد)
+    const _flush=()=>{ if(_buf.length){ _units.push(_buf); _buf=[]; _bufCount=0; } };
     sortedGroupKeys.forEach(k=>{
       const c=_cnt[k];
-      if(c<=0) return; // لا نتائج — تُتخطى لاحقاً أيضاً
-      if(c>=TARGET){
-        // مجموعة كبيرة: أفرغ المخزن ثم ضعها وحدها
-        if(_buf.length){ _units.push(_buf); _buf=[]; _bufCount=0; }
+      if(c<=0) return; // لا نتائج — تُتخطى
+      if(c>=ROW_CAP){
+        // مجموعة تملأ الصف أو أكبر → أفرغ المخزن ثم ضعها وحدها
+        _flush();
         _units.push([k]);
-      } else {
-        // مجموعة صغيرة: أضفها للمخزن، وأفرغ عند بلوغ الهدف
-        _buf.push(k); _bufCount+=c;
-        if(_bufCount>=TARGET){ _units.push(_buf); _buf=[]; _bufCount=0; }
+        return;
       }
+      // مجموعة صغيرة (١ أو ٢): إن كانت إضافتها ستتجاوز سعة الصف (٣) → أغلق الوحدة الحالية أولاً
+      if(_bufCount + c > ROW_CAP){ _flush(); }
+      _buf.push(k); _bufCount+=c;
+      // إن اكتمل الصف تماماً (٣ تحاليل) → أغلقه
+      if(_bufCount>=ROW_CAP){ _flush(); }
     });
-    if(_buf.length) _units.push(_buf);
+    _flush();
     if(_units.length) _renderUnits=_units;
   }
 
