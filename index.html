@@ -4559,9 +4559,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). أربعة تصاميم حديثة ومرتبة.</div>
                 <select id="st-report-template" class="fc" style="width:100%;font-size:12px;font-weight:700" onchange="_saveReportTemplate(this.value)">
                   <option value="1">📄 النموذج 1 — كلاسيكي (التصميم الحالي)</option>
-                  <option value="2">📋 النموذج 2 — سطري نظيف (بلا خلفيات، موفّر للحبر)</option>
+                  <option value="2">🔵 النموذج 2 — بطاقات بدوائر ملوّنة (نتيجة داخل دائرة)</option>
                   <option value="3">✨ النموذج 3 — أنيق مينيمال بأحرف متباعدة وخطوط رفيعة</option>
-                  <option value="4">📑 النموذج 4 — كتيّبي بنقاط قيادية (هادئ وموفّر للحبر)</option>
+                  <option value="4">↕️ النموذج 4 — أقسام بأسهم اتجاه (عالي/منخفض)</option>
                 </select>
                 <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,140,255,0.15);border-color:rgba(0,140,255,0.5);color:#2b9bff" onclick="_previewReportTemplate()">👁️ معاينة النموذج المختار</button>
               </div>
@@ -14806,22 +14806,23 @@ function buildPrintHTML(req, opts){
   //  تستقبل النتائج الجاهزة فقط وتغلّفها بتصميم مختلف.
   // ═══════════════════════════════════════════════════════════════════════
   const RTPL = String(settings.reportTemplate||'1');
-  // ألوان مساعدة مشتقة (بدون تعديل الإعدادات)
-  const _tplAccent = sectionColor;         // لون القسم/التمييز
-  const _tplStrip  = stripColor;           // لون الشريط
+  // ألوان مساعدة مشتقة من الإعدادات (كل النماذج تخضع لإعدادات الألوان وأحجام الخط)
+  const _tplAccent = sectionColor;         // لون القسم/العناوين (من الإعدادات)
+  const _tplStrip  = stripColor;           // لون الشريط (من الإعدادات)
+  // ألوان الحالة — قابلة للتخصيص من الإعدادات مع قيم افتراضية متوافقة مع النظام
+  const _tplHighColor = settings.colorHigh || '#cc0000'; // عالي
+  const _tplLowColor  = settings.colorLow  || '#0055cc'; // ناصي/منخفض
+  const _tplNormColor = settings.colorNormal || '#111111'; // طبيعي (أسود)
+  // أحجام خطوط مشتقة من الإعدادات (pfs/ptfs/subcatFs) — تُستعمل داخل النماذج الجديدة
+  const _tplValFs = Math.round(pfsN * 1.9);   // حجم قيمة الدائرة = مشتق من حجم خط النتائج
+  const _tplLblFs = Math.max(pfsN - 3, 6);    // حجم كلمة RESULT الصغيرة
   // رأس أعمدة بديل حسب النموذج (colHdr الأصلي يبقى للنموذج 1)
   (function(){
     if(RTPL==='2'){
-      // نموذج 2 «سطري نظيف» — رأس أعمدة بخط سفلي أسود رفيع فقط، بلا خلفية
-      colHdr=`
-      <div style="margin:0 6px 3px;display:flex;direction:ltr;padding:3px 0 5px;border-bottom:1.5px solid #222;align-items:flex-end">
-        <div style="flex:4;font-size:${colHdrFs}px;font-weight:800;color:#111;letter-spacing:0.3px;padding-left:6px">Test</div>
-        <div style="flex:2;font-size:${colHdrFs}px;font-weight:800;color:#111;text-align:left;letter-spacing:0.3px">Result</div>
-        <div style="flex:3;font-size:${colHdrFs}px;font-weight:800;color:#111;text-align:left;letter-spacing:0.3px;padding-left:6px">Reference</div>
-        <div style="flex:2;font-size:${colHdrFs}px;font-weight:800;color:#111;text-align:center;letter-spacing:0.3px">Previous</div>
-      </div>`;
+      // نموذج 2 «بطاقات بدوائر» — لا يستخدم رأس أعمدة (كل تحليل في بطاقة مستقلة)
+      colHdr='';
     } else if(RTPL==='3'){
-      // خطوط رفيعة راقية + حروف كبيرة متباعدة (بدون خلفية)
+      // خطوط رفيعة راقية + حروف كبيرة متباعدة (بدون خلفية) — يخضع للإعدادات
       colHdr=`
       <div style="margin:0 6px 2px;display:flex;direction:ltr;padding:5px 0 6px;border-bottom:1.5px solid ${_tplStrip};align-items:flex-end">
         <div style="flex:4;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};letter-spacing:1.6px;text-transform:uppercase;padding-left:16px">Test</div>
@@ -14830,19 +14831,19 @@ function buildPrintHTML(req, opts){
         <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:center;letter-spacing:1.6px;text-transform:uppercase">Previous</div>
       </div>`;
     } else if(RTPL==='4'){
-      // نموذج 4 «كتيّبي بنقاط قيادية» — رأس أعمدة بحدّين رفيعين علوي وسفلي، بلا خلفية
+      // نموذج 4 «أقسام بأسهم» — رأس أعمدة بلون الشريط من الإعدادات
       colHdr=`
-      <div style="margin:0 6px 4px;display:flex;direction:ltr;padding:4px 0;border-top:1px solid #999;border-bottom:1px solid #999;align-items:center">
-        <div style="flex:4;font-size:${colHdrFs-1}px;font-weight:700;color:#333;letter-spacing:0.8px;text-transform:uppercase;padding-left:6px">Test</div>
-        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:700;color:#333;text-align:left;letter-spacing:0.8px;text-transform:uppercase">Result</div>
-        <div style="flex:3;font-size:${colHdrFs-1}px;font-weight:700;color:#333;text-align:left;letter-spacing:0.8px;text-transform:uppercase;padding-left:6px">Reference</div>
-        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:700;color:#333;text-align:center;letter-spacing:0.8px;text-transform:uppercase">Previous</div>
+      <div style="margin:0 6px 4px;display:flex;direction:ltr;padding:4px 2px;border-bottom:1.5px solid ${_tplStrip};align-items:center">
+        <div style="flex:4;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};padding-left:6px">Test</div>
+        <div style="flex:2;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:left">Result</div>
+        <div style="flex:1.4;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:left">Unit</div>
+        <div style="flex:3;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:left;padding-left:4px">Normal Range</div>
+        <div style="flex:2;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:center">Previous</div>
       </div>`;
     }
   })();
 
   // ── باني عنوان القسم حسب النموذج ──
-  // parentCat/cat لإظهار اسم الجهاز كما في الأصل
   function _tplSectionHeader(cat, catTests){
     const _parentCat=catTests[0]&&catTests[0].cat||cat;
     const _devName=settings.sectionDevices&&(settings.sectionDevices[_parentCat]||settings.sectionDevices[cat]);
@@ -14851,22 +14852,20 @@ function buildPrintHTML(req, opts){
     const devHtml=_devName?`<div style="font-size:${_devFs}px;color:${_devColor};font-weight:700;letter-spacing:0.4px;text-decoration:underline;text-underline-offset:2px">⚙ ${_devName}</div>`:'';
     const title=cat.toLowerCase();
     if(RTPL==='2'){
-      // نموذج 2 «سطري نظيف» — عنوان أسود عريض + خط سفلي رفيع رمادي يمتد بعرض الصفحة (بلا خلفية)
-      return `<div style="margin:9px 6px 1px;direction:ltr;padding:0 6px 3px;border-bottom:1px solid #ccc;display:flex;align-items:baseline;justify-content:space-between;gap:8px">
-        <div style="font-size:${subcatFs};font-weight:800;color:#111;text-transform:capitalize;letter-spacing:0.3px;white-space:nowrap">${title}</div>
+      // نموذج 2 — عنوان اللوحة بأحرف كبيرة بلون القسم من الإعدادات (كما في الصورة: HORMONES PANEL)
+      return `<div style="margin:9px 6px 5px;direction:ltr;padding:0 4px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:0.8px;white-space:nowrap">${title}</div>
         ${devHtml}
       </div>`;
     } else if(RTPL==='3'){
-      // عنوان أنيق داخل شريط خفيف بحرف كبير متباعد
       return `<div style="margin:8px 6px 3px;direction:ltr;padding:4px 12px;background:${_tplAccent}0d;border-left:3px solid ${_tplAccent};border-radius:0 5px 5px 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
         <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:1.4px;white-space:nowrap">${title}</div>
         ${devHtml}
       </div>`;
     } else if(RTPL==='4'){
-      // نموذج 4 «كتيّبي بنقاط قيادية» — عنوان بأحرف صغيرة متباعدة بين خطين نقطيين رفيعين (بلا خلفية)
-      return `<div style="margin:11px 6px 3px;direction:ltr;padding:0 6px;display:flex;align-items:center;gap:10px">
-        <div style="font-size:${subcatFs};font-weight:700;color:#222;text-transform:uppercase;letter-spacing:2px;white-space:nowrap">${title}</div>
-        <div style="flex:1;border-bottom:1px dotted #aaa;transform:translateY(-3px)"></div>
+      // نموذج 4 — عنوان القسم في شريط رمادي فاتح، النص بلون القسم من الإعدادات (كما في الصورة)
+      return `<div style="margin:10px 6px 0;direction:ltr;padding:6px 12px;background:#eef1f4;border:1px solid #dde3ea;border-bottom:none;border-radius:7px 7px 0 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:1px;white-space:nowrap">${title}</div>
         ${devHtml}
       </div>`;
     }
@@ -14879,24 +14878,69 @@ function buildPrintHTML(req, opts){
     </div>`;
   }
 
-  // ── باني صف تحليل حسب النموذج ──
-  // p = { name, resultBox, flag, refHtml, prevHtml, bullet, isAbn }
+  // ── فتح/إغلاق حاوية القسم (للنماذج التي تحتاج تخطيطاً خاصاً) ──
+  function _tplSectionOpen(){
+    if(RTPL==='2'){
+      // شبكة بطاقات مرنة — 3 بطاقات في الصف تقريباً، تلتف تلقائياً
+      return `<div style="display:flex;flex-wrap:wrap;gap:7px;direction:ltr;margin:0 6px 2px;padding:0 0 2px">`;
+    }
+    if(RTPL==='4'){
+      // جسم القسم داخل بطاقة بحدود رمادية (تكملة لرأس القسم)
+      return `<div style="margin:0 6px 2px;direction:ltr;border:1px solid #dde3ea;border-top:none;border-radius:0 0 7px 7px;padding:5px 4px 6px">`;
+    }
+    return '';
+  }
+  function _tplSectionClose(){
+    if(RTPL==='2'||RTPL==='4'){ return `</div>`; }
+    return '';
+  }
+
+  // ── دالة مساعدة: بناء دائرة (donut) بلون الحالة والنتيجة بداخلها (نموذج 2) ──
+  // تعتمد على conic-gradient بلا صور — توفّر الحبر نسبياً وتطبع بدقة.
+  function _tplDonut(value, ringColor){
+    const sz = Math.max(_tplValFs*2.7, 48); // قطر الدائرة مشتق من حجم الخط
+    const thick = Math.max(Math.round(sz*0.13), 5);
+    const inner = sz - thick*2;
+    return `<div style="position:relative;width:${sz}px;height:${sz}px;flex-shrink:0;margin:0 auto">
+      <div style="position:absolute;inset:0;border-radius:50%;background:${ringColor}"></div>
+      <div style="position:absolute;top:${thick}px;left:${thick}px;width:${inner}px;height:${inner}px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1">
+        <div style="font-size:${_tplValFs}px;font-weight:900;color:#111;text-align:center;white-space:nowrap">${value}</div>
+        <div style="font-size:${_tplLblFs}px;font-weight:700;color:#888;letter-spacing:0.5px;margin-top:1px">RESULT</div>
+      </div>
+    </div>`;
+  }
+
+  // ── باني صف/بطاقة تحليل حسب النموذج ──
+  // p = { name, resultBox, flag, refHtml, prevHtml, bullet, isAbn, value, isHigh, isLow, refTxt, unit, prevVal, prevDate }
   function _tplRow(p){
     const bullet = p.bullet!==undefined ? p.bullet : '●';
     if(RTPL==='2'){
-      // نموذج 2 «سطري نظيف» — بلا رموز، بلا خلفية، بلا شرائط.
-      // القيمة الشاذة تظهر بلونها الأصلي داخل الصندوق فقط (H/L). محاذاة دقيقة ومسافات مريحة.
-      return `
-      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:3px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000;padding-top:2px;padding-left:6px">${p.name}</div>
-        <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
-          <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
+      // نموذج 2 «بطاقة بدائرة» — كما في الصورة الأولى تماماً:
+      //  دائرة ملوّنة (أسود=طبيعي، أحمر=عالي، أزرق=ناصي) بداخلها القيمة وأسفلها RESULT،
+      //  ثم القيم الطبيعية + الوحدة، ثم آخر نتيجة (Last Result).
+      const ringColor = p.isHigh ? _tplHighColor : (p.isLow ? _tplLowColor : _tplNormColor);
+      const badge = p.isHigh
+        ? `<span style="font-size:${_tplLblFs}px;font-weight:900;color:#fff;background:${_tplHighColor};border-radius:4px;padding:1px 7px;letter-spacing:0.5px">HIGH</span>`
+        : p.isLow
+        ? `<span style="font-size:${_tplLblFs}px;font-weight:900;color:#fff;background:${_tplLowColor};border-radius:4px;padding:1px 7px;letter-spacing:0.5px">LOW</span>`
+        : '';
+      const refLine = (p.refTxt && p.refTxt!=='—')
+        ? `<div style="font-size:${pfs};font-weight:700;color:#333;text-align:center">${p.refTxt}${p.unit?`&nbsp;<span style="color:#666;font-weight:600">${p.unit}</span>`:''}</div>`
+        : (p.unit?`<div style="font-size:${pfs};font-weight:600;color:#666;text-align:center">${p.unit}</div>`:'');
+      const prevLine = (p.prevVal)
+        ? `<div style="font-size:${ptfs};font-weight:600;color:#555;text-align:center;margin-top:2px">Last: <b style="color:#222">${p.prevVal}</b>${p.prevDate?` <span style="color:#999">(${p.prevDate})</span>`:''}</div>`
+        : '';
+      // عرض البطاقة: يستوعب 3 في الصف مع التفاف تلقائي عند التحاليل الكثيرة
+      return `<div style="flex:1 1 30%;min-width:150px;max-width:33%;box-sizing:border-box;border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <div style="font-size:${subcatFs};font-weight:800;color:${_tplAccent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          ${badge}
         </div>
-        <div style="flex:3;padding:1px 4px 0 6px">${p.refHtml}</div>
-        <div style="flex:2;padding:1px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+        ${_tplDonut(p.value||'—', ringColor)}
+        ${refLine}
+        ${prevLine}
       </div>`;
     } else if(RTPL==='3'){
-      // صف نظيف بمسافات مريحة وبدون رموز — يعتمد على المحاذاة الدقيقة
       return `
       <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:3px 0">
         <div style="flex:4;font-size:${pfs};font-weight:600;color:#1a1a1a;padding-top:2px;padding-left:16px">${p.name}</div>
@@ -14907,19 +14951,22 @@ function buildPrintHTML(req, opts){
         <div style="flex:2;padding:1px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
       </div>`;
     } else if(RTPL==='4'){
-      // نموذج 4 «كتيّبي بنقاط قيادية» — اسم التحليل تتبعه نقاط قيادية أفقية تصل إلى النتيجة.
-      // بلا خلفية إطلاقاً — تصميم كتيّبي أنيق يعتمد على النقاط والمحاذاة فقط.
+      // نموذج 4 «صف بسهم» — كما في الصورة الثانية:
+      //  الاسم | النتيجة عريضة + سهم (▲ أخضر للعالي، ▼ أحمر للناصي) | الوحدة | المدى | السابقة
+      const arrow = p.isHigh
+        ? `<span style="color:#1a9e4b;font-size:${pfs};font-weight:900;margin-left:3px">▲</span>`
+        : p.isLow
+        ? `<span style="color:${_tplHighColor};font-size:${pfs};font-weight:900;margin-left:3px">▼</span>`
+        : `<span style="width:10px;display:inline-block"></span>`;
+      const valColor = p.isHigh||p.isLow ? '#111' : '#333';
+      const valWeight = p.isHigh||p.isLow ? '900' : '600';
       return `
-      <div style="margin:0 6px;display:flex;align-items:center;direction:ltr;padding:3px 0">
-        <div style="flex:4;display:flex;align-items:baseline;padding-left:6px;min-width:0">
-          <span style="font-size:${pfs};font-weight:600;color:#000;white-space:nowrap;flex-shrink:0">${p.name}</span>
-          <span style="flex:1;border-bottom:1px dotted #bbb;margin:0 6px;transform:translateY(-3px)"></span>
-        </div>
-        <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
-          <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
-        </div>
-        <div style="flex:3;padding:0 4px 0 6px">${p.refHtml}</div>
-        <div style="flex:2;padding:0 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      <div style="margin:0 2px;display:flex;align-items:center;direction:ltr;padding:2.5px 6px">
+        <div style="flex:4;font-size:${pfs};font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="flex:2;display:flex;align-items:center;gap:2px;font-size:${pfs};font-weight:${valWeight};color:${valColor}">${p.value||'—'}${arrow}</div>
+        <div style="flex:1.4;font-size:${pfs};font-weight:600;color:#666">${p.unit||''}</div>
+        <div style="flex:3;font-size:${pfs};font-weight:600;color:#555;padding-left:4px">${(p.refTxt&&p.refTxt!=='—')?p.refTxt:''}</div>
+        <div style="flex:2;font-size:${pfs};font-weight:600;color:#555;text-align:center">${p.prevVal||''}</div>
       </div>`;
     }
     // النموذج 1 — الصف الأصلي تماماً
@@ -14936,12 +14983,12 @@ function buildPrintHTML(req, opts){
         <div style="flex:2;padding:2px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
       </div>`;
   }
-  // فاصل الصفوف حسب النموذج (النماذج 2/4 تدير حدودها داخلياً)
+  // فاصل الصفوف حسب النموذج
   function _tplRowSep(){
     if(RTPL==='3'){ return `<div style="margin:0 6px;border-top:1px solid #eef1f5"></div>`; }
-    if(RTPL==='2'||RTPL==='4'){ return ''; }
-    // النموذج 1 يستخدم فواصله الأصلية عبر settings.div_test_* (تُدار في مكانها)
-    return null; // null = اترك المنطق الأصلي
+    if(RTPL==='4'){ return `<div style="margin:0 8px;border-top:1px solid #f0f2f5"></div>`; }
+    if(RTPL==='2'){ return ''; } // البطاقات لا تحتاج فواصل
+    return null; // النموذج 1 — اترك المنطق الأصلي
   }
 
   // ─── نتائج التحاليل ────────────────────────────────────
@@ -14977,6 +15024,7 @@ function buildPrintHTML(req, opts){
       else                _catDividerHtml = `<div style="margin:4px 6px;border-top:1px dotted #aab8c8"></div>`;
     }
     _chunkHtml+=_tplSectionHeader(cat, catTests);
+    _chunkHtml+=_tplSectionOpen();
 
     catTests.forEach((t,tIdx)=>{
       const val = req.results[t.id]||'';
@@ -15040,7 +15088,15 @@ function buildPrintHTML(req, opts){
             prevHtml: '',
             bullet: '○',
             isAbn: (inpIsHigh||inpIsLow),
-            abnColor: inpValColor
+            abnColor: inpValColor,
+            // حقول للنماذج الجديدة:
+            value: inpVal,
+            isHigh: inpIsHigh,
+            isLow: inpIsLow,
+            refTxt: inpRefTxt,
+            unit: (inpShowUnit?inpUnit:''),
+            prevVal: '',
+            prevDate: ''
           });
           const _inpSep=_tplRowSep();
           if(_inpSep===null){
@@ -15184,6 +15240,17 @@ function buildPrintHTML(req, opts){
       // مربع النتيجة — القيمة فقط بدون وحدة
       const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${displayValFull}</span></div>`;
 
+      // ── بيانات إضافية للنماذج الجديدة (دوائر/أسهم) ──
+      // آخر نتيجة (قيمة + تاريخ) لعرضها في النموذج 2/4
+      let _prevVal='', _prevDate='';
+      {
+        const _pf=prevReqs.filter(pr=>pr.results&&pr.results[t.id]!==undefined&&pr.results[t.id]!=='');
+        if(_pf.length){
+          _prevVal=_pf[0].results[t.id];
+          const _rd=_pf[0].resultDate||_pf[0].date||'';
+          try{const d=new Date(_rd);if(!isNaN(d))_prevDate=`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;}catch(e){_prevDate=_rd;}
+        }
+      }
       _chunkHtml+=_tplRow({
         name: (t.nameShort&&t.nameShort.trim()?t.nameShort.trim():t.nameEn),
         resultBox: resultBox,
@@ -15192,7 +15259,15 @@ function buildPrintHTML(req, opts){
         prevHtml: prevHtml,
         bullet: '●',
         isAbn: (isHigh||isLow||isQualAbnormal),
-        abnColor: valColor
+        abnColor: valColor,
+        // حقول للنماذج الجديدة:
+        value: displayValFull,
+        isHigh: isHigh,
+        isLow: (isLow||isQualAbnormal),
+        refTxt: refTxt,
+        unit: (showUnit?unitTxt:''),
+        prevVal: _prevVal,
+        prevDate: _prevDate
       });
       // فاصل بين تحليل وتحليل
       const _testDotted=settings.div_test_dotted;
@@ -15214,6 +15289,7 @@ function buildPrintHTML(req, opts){
         _chunkHtml+=_mainSep;
       }
     });
+    _chunkHtml+=_tplSectionClose();
     // أضف الـ chunk إلى المصفوفة وإلى body
     // ⭐ كل chunk يحمل: cat (اسم المجموعة) + html (المحتوى) + catDividerHtml (فاصل المجموعة)
     // الـ body المباشر (للـ blankBody) يحتوي على الفاصل بشكل صحيح كما كان (لا يتأثر)
