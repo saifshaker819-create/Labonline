@@ -14853,7 +14853,7 @@ function buildPrintHTML(req, opts){
     const title=cat.toLowerCase();
     if(RTPL==='2'){
       // نموذج 2 — عنوان اللوحة بأحرف كبيرة بلون القسم من الإعدادات (كما في الصورة: HORMONES PANEL)
-      return `<div style="margin:6px 0 4px;direction:ltr;padding:0 2px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+      return `<div style="margin:0;direction:ltr;padding:0 2px;display:flex;align-items:flex-end;justify-content:space-between;gap:8px">
         <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:0.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
         ${devHtml}
       </div>`;
@@ -14881,8 +14881,8 @@ function buildPrintHTML(req, opts){
   // ── فتح/إغلاق حاوية القسم (للنماذج التي تحتاج تخطيطاً خاصاً) ──
   function _tplSectionOpen(){
     if(RTPL==='2'){
-      // شبكة بطاقات مرنة — 3 بطاقات في الصف تقريباً، تلتف تلقائياً
-      return `<div style="display:flex;flex-wrap:wrap;gap:7px;direction:ltr;margin:0 6px 2px;padding:0 0 2px">`;
+      // شبكة بطاقات مرنة — 3 بطاقات في الصف، بارتفاع موحّد (stretch) داخل الصف
+      return `<div style="display:flex;flex-wrap:wrap;align-items:stretch;gap:7px;direction:ltr;margin:0 6px 2px;padding:0 0 2px">`;
     }
     if(RTPL==='4'){
       // جسم القسم داخل بطاقة بحدود رمادية (تكملة لرأس القسم)
@@ -14938,22 +14938,30 @@ function buildPrintHTML(req, opts){
         ? `<div style="font-size:${ptfs};font-weight:600;color:#333;text-align:center;margin-top:2px">Last: <b style="color:#000">${p.prevVal}</b>${p.prevDate?` <span style="color:#666">(${p.prevDate})</span>`:''}</div>`
         : '';
       // عرض البطاقة: يستوعب 3 في الصف مع التفاف تلقائي عند التحاليل الكثيرة
-      // البطاقة نفسها
-      const _cardHtml=`<div style="border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+      // البطاقة نفسها — تملأ ارتفاع العمود بالكامل (height:100%) لتتساوى كل البطاقات
+      //  البنية الداخلية: [رأس: الاسم+الشارة] [الدائرة] [منطقة REFERENCE+Last تتمدد لأسفل]
+      //  منطقة المرجع تأخذ المساحة المتبقية (flex:1) فتتساوى حواف البطاقات مهما اختلف المحتوى.
+      const _cardHtml=`<div style="height:100%;box-sizing:border-box;border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:${Math.max(subcatFsN+4,16)}px">
           <div style="font-size:${subcatFs};font-weight:800;color:${_tplAccent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
           ${badge}
         </div>
         ${_tplDonut(p.value||'—', ringColor)}
-        ${refLine}
-        ${prevLine}
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-start">
+          ${refLine}
+          ${prevLine}
+        </div>
       </div>`;
-      // عنوان المجموعة (إن مُرِّر) يظهر فوق أول بطاقة من مجموعتها.
-      // العنصر كله (عنوان + بطاقة) عمود flex بعرض ثلث الصف → ٣ في الصف.
-      const _titleHtml = p.sectionTitle ? p.sectionTitle : '';
+      // عنوان المجموعة (إن مُرِّر) يظهر فوق أول بطاقة من مجموعتها، بارتفاع ثابت تماماً
+      //  (height ثابت وليس min-height) كي تبدأ كل البطاقات من نفس المستوى بالضبط
+      //  فتتساوى ارتفاعات البطاقات في الصف الواحد سواء حملت عنواناً أم لا.
+      const _titleH = Math.max(subcatFsN+9, 22);
+      const _titleHtml = p.sectionTitle
+        ? `<div style="height:${_titleH}px;overflow:hidden;display:flex;align-items:flex-end">${p.sectionTitle}</div>`
+        : `<div style="height:${_titleH}px"></div>`;
       return `<div style="flex:1 1 30%;min-width:150px;max-width:33%;box-sizing:border-box;display:flex;flex-direction:column;page-break-inside:avoid;break-inside:avoid">
         ${_titleHtml}
-        ${_cardHtml}
+        <div style="flex:1;display:flex">${_cardHtml}</div>
       </div>`;
     } else if(RTPL==='3'){
       return `
