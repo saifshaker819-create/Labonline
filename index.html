@@ -14899,13 +14899,13 @@ function buildPrintHTML(req, opts){
   // تعتمد على conic-gradient بلا صور — توفّر الحبر نسبياً وتطبع بدقة.
   function _tplDonut(value, ringColor){
     const sz = Math.max(_tplValFs*2.7, 48); // قطر الدائرة مشتق من حجم الخط
-    const thick = Math.max(Math.round(sz*0.13), 5);
+    const thick = Math.max(Math.round(sz*0.055), 3); // ⭐ حلقة أنحف (كانت 0.13)
     const inner = sz - thick*2;
     return `<div style="position:relative;width:${sz}px;height:${sz}px;flex-shrink:0;margin:0 auto">
       <div style="position:absolute;inset:0;border-radius:50%;background:${ringColor}"></div>
       <div style="position:absolute;top:${thick}px;left:${thick}px;width:${inner}px;height:${inner}px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1">
-        <div style="font-size:${_tplValFs}px;font-weight:900;color:#111;text-align:center;white-space:nowrap">${value}</div>
-        <div style="font-size:${_tplLblFs}px;font-weight:700;color:#888;letter-spacing:0.5px;margin-top:1px">RESULT</div>
+        <div style="font-size:${_tplValFs}px;font-weight:900;color:#000000;text-align:center;white-space:nowrap">${value}</div>
+        <div style="font-size:${_tplLblFs}px;font-weight:700;color:#777;letter-spacing:0.5px;margin-top:1px">RESULT</div>
       </div>
     </div>`;
   }
@@ -14924,11 +14924,18 @@ function buildPrintHTML(req, opts){
         : p.isLow
         ? `<span style="font-size:${_tplLblFs}px;font-weight:900;color:#fff;background:${_tplLowColor};border-radius:4px;padding:1px 7px;letter-spacing:0.5px">LOW</span>`
         : '';
-      const refLine = (p.refTxt && p.refTxt!=='—')
-        ? `<div style="font-size:${pfs};font-weight:700;color:#333;text-align:center">${p.refTxt}${p.unit?`&nbsp;<span style="color:#666;font-weight:600">${p.unit}</span>`:''}</div>`
-        : (p.unit?`<div style="font-size:${pfs};font-weight:600;color:#666;text-align:center">${p.unit}</div>`:'');
+      // ⭐ فوق القيم الطبيعية كلمة REFERENCE
+      const refInner = (p.refTxt && p.refTxt!=='—')
+        ? `<div style="font-size:${pfs};font-weight:700;color:#000;text-align:center">${p.refTxt}${p.unit?`&nbsp;<span style="color:#333;font-weight:600">${p.unit}</span>`:''}</div>`
+        : (p.unit?`<div style="font-size:${pfs};font-weight:600;color:#333;text-align:center">${p.unit}</div>`:'');
+      const refLine = (refInner)
+        ? `<div style="text-align:center;margin-top:2px">
+             <div style="font-size:${_tplLblFs}px;font-weight:800;color:#888;letter-spacing:0.6px">REFERENCE</div>
+             ${refInner}
+           </div>`
+        : '';
       const prevLine = (p.prevVal)
-        ? `<div style="font-size:${ptfs};font-weight:600;color:#555;text-align:center;margin-top:2px">Last: <b style="color:#222">${p.prevVal}</b>${p.prevDate?` <span style="color:#999">(${p.prevDate})</span>`:''}</div>`
+        ? `<div style="font-size:${ptfs};font-weight:600;color:#333;text-align:center;margin-top:2px">Last: <b style="color:#000">${p.prevVal}</b>${p.prevDate?` <span style="color:#666">(${p.prevDate})</span>`:''}</div>`
         : '';
       // عرض البطاقة: يستوعب 3 في الصف مع التفاف تلقائي عند التحاليل الكثيرة
       return `<div style="flex:1 1 30%;min-width:150px;max-width:33%;box-sizing:border-box;border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
@@ -14951,22 +14958,27 @@ function buildPrintHTML(req, opts){
         <div style="flex:2;padding:1px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
       </div>`;
     } else if(RTPL==='4'){
-      // نموذج 4 «صف بسهم» — كما في الصورة الثانية:
-      //  الاسم | النتيجة عريضة + سهم (▲ أخضر للعالي، ▼ أحمر للناصي) | الوحدة | المدى | السابقة
+      // نموذج 4 «صف بسهم»:
+      //  الاسم | النتيجة عريضة + سهم (▲ أحمر للعالي، ▼ أزرق للناصي) | الوحدة | المدى | آخر نتيجة+تاريخ
+      //  كل الألوان صافية (أسود/أحمر/أزرق صافٍ).
       const arrow = p.isHigh
-        ? `<span style="color:#1a9e4b;font-size:${pfs};font-weight:900;margin-left:3px">▲</span>`
+        ? `<span style="color:${_tplHighColor};font-size:${pfs};font-weight:900;margin-left:3px">▲</span>`
         : p.isLow
-        ? `<span style="color:${_tplHighColor};font-size:${pfs};font-weight:900;margin-left:3px">▼</span>`
+        ? `<span style="color:${_tplLowColor};font-size:${pfs};font-weight:900;margin-left:3px">▼</span>`
         : `<span style="width:10px;display:inline-block"></span>`;
-      const valColor = p.isHigh||p.isLow ? '#111' : '#333';
-      const valWeight = p.isHigh||p.isLow ? '900' : '600';
+      const valColor = p.isHigh ? _tplHighColor : (p.isLow ? _tplLowColor : '#000000');
+      const valWeight = p.isHigh||p.isLow ? '900' : '700';
+      // آخر نتيجة مع التاريخ (كباقي التقارير): القيمة ثم التاريخ بينهما مسافة
+      const prevCell = p.prevVal
+        ? `<b style="color:#000">${p.prevVal}</b>${p.prevDate?`<div style="font-size:${Math.max(pfsN-2,7)}px;color:#555;font-weight:600">${p.prevDate}</div>`:''}`
+        : '';
       return `
       <div style="margin:0 2px;display:flex;align-items:center;direction:ltr;padding:2.5px 6px">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="flex:4;font-size:${pfs};font-weight:700;color:#000000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
         <div style="flex:2;display:flex;align-items:center;gap:2px;font-size:${pfs};font-weight:${valWeight};color:${valColor}">${p.value||'—'}${arrow}</div>
-        <div style="flex:1.4;font-size:${pfs};font-weight:600;color:#666">${p.unit||''}</div>
-        <div style="flex:3;font-size:${pfs};font-weight:600;color:#555;padding-left:4px">${(p.refTxt&&p.refTxt!=='—')?p.refTxt:''}</div>
-        <div style="flex:2;font-size:${pfs};font-weight:600;color:#555;text-align:center">${p.prevVal||''}</div>
+        <div style="flex:1.4;font-size:${pfs};font-weight:600;color:#000000">${p.unit||''}</div>
+        <div style="flex:3;font-size:${pfs};font-weight:600;color:#000000;padding-left:4px">${(p.refTxt&&p.refTxt!=='—')?p.refTxt:''}</div>
+        <div style="flex:2;font-size:${pfs};font-weight:600;color:#000000;text-align:center;line-height:1.2">${prevCell}</div>
       </div>`;
     }
     // النموذج 1 — الصف الأصلي تماماً
@@ -14997,8 +15009,42 @@ function buildPrintHTML(req, opts){
   let body='';
   if(!blankBody){
   let _visibleCatCount = 0; // عداد المجموعات المعروضة فعلاً
-  sortedGroupKeys.forEach((cat)=>{
-    const catTests=grouped[cat];
+  // ⭐ وحدات العرض: افتراضياً كل مجموعة فرعية وحدة مستقلة (سلوك جميع النماذج كما هو).
+  //   للنموذج 2 (البطاقات): ندمج المجموعات الفرعية الصغيرة المتجاورة في وحدة واحدة
+  //   كي لا تترك البطاقةُ المفردة صفاً شبه فارغ — تصعد معها مجموعة أخرى بتحليل أو تحليلين.
+  //   الدمج يبقى «chunk» عادياً فيعمل الترقيم والتجميع اليدوي دون أي تغيير.
+  let _renderUnits = sortedGroupKeys.map(k=>[k]);
+  if(RTPL==='2'){
+    // عدّ التحاليل ذات النتائج في كل مجموعة
+    const _cnt = {};
+    sortedGroupKeys.forEach(k=>{
+      _cnt[k] = grouped[k].filter(t=>{ const v=req.results[t.id]||''; return v && v.trim()!==''; }).length;
+    });
+    const _units=[]; let _buf=[]; let _bufCount=0;
+    const TARGET=3; // نستهدف ملء صف ~3 بطاقات
+    sortedGroupKeys.forEach(k=>{
+      const c=_cnt[k];
+      if(c<=0) return; // لا نتائج — تُتخطى لاحقاً أيضاً
+      if(c>=TARGET){
+        // مجموعة كبيرة: أفرغ المخزن ثم ضعها وحدها
+        if(_buf.length){ _units.push(_buf); _buf=[]; _bufCount=0; }
+        _units.push([k]);
+      } else {
+        // مجموعة صغيرة: أضفها للمخزن، وأفرغ عند بلوغ الهدف
+        _buf.push(k); _bufCount+=c;
+        if(_bufCount>=TARGET){ _units.push(_buf); _buf=[]; _bufCount=0; }
+      }
+    });
+    if(_buf.length) _units.push(_buf);
+    if(_units.length) _renderUnits=_units;
+  }
+
+  _renderUnits.forEach((unitKeys)=>{
+    // unitKeys: مصفوفة مفاتيح مجموعات فرعية تُعرض ضمن chunk واحد (عادةً مفتاح واحد)
+    // نجمع تحاليلها ونحدد المفتاح الأساسي للفاصل/اسم الجهاز
+    const _primaryCat = unitKeys[0];
+    const cat = _primaryCat; // توافق مع بقية الشيفرة التي تشير إلى cat
+    const catTests = unitKeys.reduce((acc,k)=>acc.concat(grouped[k]||[]),[]);
 
     // ✅ تحقق أولاً: هل يوجد أي تحليل بنتيجة في هذه المجموعة؟
     const catHasResults = catTests.some(t => {
@@ -15023,10 +15069,18 @@ function buildPrintHTML(req, opts){
       else if(_catDotted) _catDividerHtml = `<div style="margin:5px 6px;border-top:2px dotted #aab8c8"></div>`;
       else                _catDividerHtml = `<div style="margin:4px 6px;border-top:1px dotted #aab8c8"></div>`;
     }
-    _chunkHtml+=_tplSectionHeader(cat, catTests);
-    _chunkHtml+=_tplSectionOpen();
+    // ⭐ للنموذج 2: عنوان كل مجموعة فرعية يُعرض كعنصر flex بعرض كامل داخل الشبكة،
+    //   فتظل البطاقات تملأ الصفوف بينما تفصل العناوين المجموعات.
+    //   لبقية النماذج: عنوان واحد ثم صفوف (كما كان).
+    if(RTPL==='2'){
+      _chunkHtml+=_tplSectionOpen(); // يفتح شبكة flex واحدة للوحدة كاملة
+    } else {
+      _chunkHtml+=_tplSectionHeader(cat, catTests);
+      _chunkHtml+=_tplSectionOpen();
+    }
 
-    catTests.forEach((t,tIdx)=>{
+    // نعرّف الدالة التي تعالج تحليلاً واحداً (تُستدعى ضمن حلقة المفاتيح)
+    const _renderOneTest = (t, tIdx)=>{
       const val = req.results[t.id]||'';
       // Fix 2: Skip tests with no result entered — don't print empty rows
       if(!blankBody && (!val || val.trim()==='')) return;
@@ -15288,7 +15342,22 @@ function buildPrintHTML(req, opts){
       } else if(_mainSep!=='' && !isLastTestInCat){
         _chunkHtml+=_mainSep;
       }
-    });
+    }; // end _renderOneTest
+
+    // ── تشغيل عرض التحاليل ──
+    if(RTPL==='2'){
+      // لكل مجموعة فرعية في الوحدة: عنوان بعرض كامل (عنصر flex) ثم بطاقاتها
+      let _tIdxGlobal=0;
+      unitKeys.forEach((k)=>{
+        const _kTests=(grouped[k]||[]).filter(t=>{ const v=req.results[t.id]||''; return v && v.trim()!==''; });
+        if(!_kTests.length) return;
+        // عنوان المجموعة الفرعية كعنصر flex بعرض كامل داخل الشبكة
+        _chunkHtml+=`<div style="flex:1 1 100%;box-sizing:border-box;margin:6px 0 1px">${_tplSectionHeader(k,(grouped[k]||[]))}</div>`;
+        (grouped[k]||[]).forEach((t)=>{ _renderOneTest(t,_tIdxGlobal++); });
+      });
+    } else {
+      catTests.forEach((t,tIdx)=>{ _renderOneTest(t,tIdx); });
+    }
     _chunkHtml+=_tplSectionClose();
     // أضف الـ chunk إلى المصفوفة وإلى body
     // ⭐ كل chunk يحمل: cat (اسم المجموعة) + html (المحتوى) + catDividerHtml (فاصل المجموعة)
