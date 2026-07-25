@@ -14853,8 +14853,8 @@ function buildPrintHTML(req, opts){
     const title=cat.toLowerCase();
     if(RTPL==='2'){
       // نموذج 2 — عنوان اللوحة بأحرف كبيرة بلون القسم من الإعدادات (كما في الصورة: HORMONES PANEL)
-      return `<div style="margin:9px 6px 5px;direction:ltr;padding:0 4px;display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:0.8px;white-space:nowrap">${title}</div>
+      return `<div style="margin:6px 0 4px;direction:ltr;padding:0 2px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:0.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
         ${devHtml}
       </div>`;
     } else if(RTPL==='3'){
@@ -14938,7 +14938,8 @@ function buildPrintHTML(req, opts){
         ? `<div style="font-size:${ptfs};font-weight:600;color:#333;text-align:center;margin-top:2px">Last: <b style="color:#000">${p.prevVal}</b>${p.prevDate?` <span style="color:#666">(${p.prevDate})</span>`:''}</div>`
         : '';
       // عرض البطاقة: يستوعب 3 في الصف مع التفاف تلقائي عند التحاليل الكثيرة
-      return `<div style="flex:1 1 30%;min-width:150px;max-width:33%;box-sizing:border-box;border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
+      // البطاقة نفسها
+      const _cardHtml=`<div style="border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
           <div style="font-size:${subcatFs};font-weight:800;color:${_tplAccent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
           ${badge}
@@ -14946,6 +14947,13 @@ function buildPrintHTML(req, opts){
         ${_tplDonut(p.value||'—', ringColor)}
         ${refLine}
         ${prevLine}
+      </div>`;
+      // عنوان المجموعة (إن مُرِّر) يظهر فوق أول بطاقة من مجموعتها.
+      // العنصر كله (عنوان + بطاقة) عمود flex بعرض ثلث الصف → ٣ في الصف.
+      const _titleHtml = p.sectionTitle ? p.sectionTitle : '';
+      return `<div style="flex:1 1 30%;min-width:150px;max-width:33%;box-sizing:border-box;display:flex;flex-direction:column;page-break-inside:avoid;break-inside:avoid">
+        ${_titleHtml}
+        ${_cardHtml}
       </div>`;
     } else if(RTPL==='3'){
       return `
@@ -15083,7 +15091,7 @@ function buildPrintHTML(req, opts){
     }
 
     // نعرّف الدالة التي تعالج تحليلاً واحداً (تُستدعى ضمن حلقة المفاتيح)
-    const _renderOneTest = (t, tIdx)=>{
+    const _renderOneTest = (t, tIdx, _secTitleHtml)=>{
       const val = req.results[t.id]||'';
       // Fix 2: Skip tests with no result entered — don't print empty rows
       if(!blankBody && (!val || val.trim()==='')) return;
@@ -15324,7 +15332,8 @@ function buildPrintHTML(req, opts){
         refTxt: refTxt,
         unit: (showUnit?unitTxt:''),
         prevVal: _prevVal,
-        prevDate: _prevDate
+        prevDate: _prevDate,
+        sectionTitle: _secTitleHtml||''
       });
       // فاصل بين تحليل وتحليل
       const _testDotted=settings.div_test_dotted;
@@ -15349,14 +15358,21 @@ function buildPrintHTML(req, opts){
 
     // ── تشغيل عرض التحاليل ──
     if(RTPL==='2'){
-      // لكل مجموعة فرعية في الوحدة: عنوان بعرض كامل (عنصر flex) ثم بطاقاتها
+      // ⭐ لا نضع العنوان كعنصر بعرض كامل (كان يكسر الصف).
+      //   بدلاً: عنوان كل مجموعة فرعية يُمرَّر إلى أول بطاقة من بطاقاتها،
+      //   فتظل جميع البطاقات تتدفق ٣ في الصف، والعنوان يظهر فوق أول بطاقة لكل مجموعة.
       let _tIdxGlobal=0;
       unitKeys.forEach((k)=>{
         const _kTests=(grouped[k]||[]).filter(t=>{ const v=req.results[t.id]||''; return v && v.trim()!==''; });
         if(!_kTests.length) return;
-        // عنوان المجموعة الفرعية كعنصر flex بعرض كامل داخل الشبكة
-        _chunkHtml+=`<div style="flex:1 1 100%;box-sizing:border-box;margin:6px 0 1px">${_tplSectionHeader(k,(grouped[k]||[]))}</div>`;
-        (grouped[k]||[]).forEach((t)=>{ _renderOneTest(t,_tIdxGlobal++); });
+        const _secTitleHtml=_tplSectionHeader(k,(grouped[k]||[]));
+        let _firstInGroup=true;
+        (grouped[k]||[]).forEach((t)=>{
+          const v=req.results[t.id]||'';
+          if(!blankBody && (!v||v.trim()==='')) return; // نحدد أول بطاقة فعلية بنتيجة
+          _renderOneTest(t,_tIdxGlobal++, _firstInGroup?_secTitleHtml:'');
+          _firstInGroup=false;
+        });
       });
     } else {
       catTests.forEach((t,tIdx)=>{ _renderOneTest(t,tIdx); });
