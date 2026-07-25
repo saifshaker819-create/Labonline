@@ -4349,6 +4349,19 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
               </div>
 
+              <!-- ═══ اختيار نموذج تقرير النتائج العامة ═══ -->
+              <div style="background:rgba(0,140,255,0.05);border:1px solid rgba(0,140,255,0.35);border-radius:10px;padding:14px">
+                <div style="font-size:12px;font-weight:800;color:#2b9bff;margin-bottom:10px">📄 نموذج تقرير النتائج العامة</div>
+                <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). أربعة تصاميم حديثة ومرتبة.</div>
+                <select id="st-report-template" class="fc" style="width:100%;font-size:12px;font-weight:700" onchange="_saveReportTemplate(this.value)">
+                  <option value="1">📄 النموذج 1 — كلاسيكي (التصميم الحالي)</option>
+                  <option value="2">🔵 النموذج 2 — بطاقات بدوائر ملوّنة (نتيجة داخل دائرة)</option>
+                  <option value="3">✨ النموذج 3 — أنيق مينيمال بأحرف متباعدة وخطوط رفيعة</option>
+                  <option value="4">↕️ النموذج 4 — أقسام بأسهم اتجاه (عالي/منخفض)</option>
+                </select>
+                <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,140,255,0.15);border-color:rgba(0,140,255,0.5);color:#2b9bff" onclick="_previewReportTemplate()">👁️ معاينة النموذج المختار</button>
+              </div>
+
               <!-- اختيار الطابعات -->
               <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px">
                 <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">🖨️ اختيار الطابعات</div>
@@ -9026,6 +9039,7 @@ function nav(p){
     const togAC=document.getElementById('tog-auto-cbc');
     if(togAC){ if(settings.autoPrintCBC) togAC.classList.add('on'); else togAC.classList.remove('on'); }
     _loadCBCTemplateSel();
+    _loadReportTemplateSel();
   }
   if(p==='results'){
     if(!window._goToResultCalled) currentReqId=null;
@@ -13571,7 +13585,10 @@ function buildPrintHTML(req, opts){
   const _hdrUserH = (typeof settings.hdrImgH==='number' && settings.hdrImgH>=70 && settings.hdrImgH<=230) ? settings.hdrImgH : 170;
   const _hdrImgH = cbcBlank ? 120 : _hdrUserH;
   let hdr='';
-  if(settings.hdrMode==='text'&&showHdr){
+  if(settings.blankHdr&&showHdr){
+    // 📄 ورق مطبوع مسبقاً → مساحة فارغة فقط
+    hdr=`<div style="width:100%;height:${_hdrImgH}px;display:block;background:#fff;line-height:0">&nbsp;</div>`;
+  } else if(settings.hdrMode==='text'&&showHdr){
     // Fix 5: نص مخصص للرأس
     hdr=buildTextHeader(settings);
   } else if(settings.headerImg&&showHdr){
@@ -13596,24 +13613,7 @@ function buildPrintHTML(req, opts){
   function genBarcode128(text){
     const C128 = {
       chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',
-      widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
-              [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
-              [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
-              [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
-              [3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
-              [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],
-              [1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],
-              [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
-              [3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],
-              [3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
-              [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],
-              [1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],
-              [1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],
-              [2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],
-              [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
-              [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
-              [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
-              [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]
+      widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],[1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],[1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],[3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],[3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],[1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],[1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],[2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],[1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],[2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]
     };
     const START_B=104, STOP=[2,3,3,1,1,1,2];
     let codes=[START_B];
@@ -13629,14 +13629,19 @@ function buildPrintHTML(req, opts){
     codes.forEach(c=>{ C128.widths[c].forEach((w,i)=>bars.push({w,dark:i%2===0})); });
     STOP.forEach((w,i)=>bars.push({w,dark:i%2===0}));
     bars.push({w:2,dark:false});
-    const BAR_W=1.8,h=38,PAD=4,totalW=bars.reduce((s,b)=>s+b.w*BAR_W,0)+PAD*2;
+    const BAR_W=1.8,h=38,PAD=Math.ceil(1.8*10),totalW=bars.reduce((s,b)=>s+b.w*BAR_W,0)+PAD*2; // منطقة هادئة ≥10 وحدات
     let x=PAD,rects='';
     bars.forEach(b=>{if(b.dark)rects+='<rect x="'+x+'" y="2" width="'+(b.w*BAR_W)+'" height="'+h+'" fill="#000"/>';x+=b.w*BAR_W;});
     const totalH=h+4;
     return '<svg xmlns="http://www.w3.org/2000/svg" width="'+totalW+'" height="'+totalH+'" viewBox="0 0 '+totalW+' '+totalH+'" style="display:block;background:#fff"><rect width="'+totalW+'" height="'+totalH+'" fill="#fff"/>'+rects+'</svg>';
   }
 
-  const barcodeId = String(pt.barcode||pt.id||req.id||'000000');
+  // تنظيف الباركود من أي رموز غير أبجدرقمية (مثل "-" المتبقية من باركود قديم)
+  // لضمان تطابق الرقم المعروض مع أشرطة الباركود وقابليته للقراءة في القارئ.
+  let barcodeId = (typeof _bcCleanCode==='function'
+                    ? _bcCleanCode(pt.barcode||pt.id||req.id||'000000')
+                    : String(pt.barcode||pt.id||req.id||'000000').replace(/[^0-9A-Za-z]/g,''));
+  if(!barcodeId) barcodeId='000000';
   const barcodeSvg = genBarcode128(barcodeId);
 
   // ─── حقل المريض ───────────────────────────────────────
@@ -13723,7 +13728,7 @@ function buildPrintHTML(req, opts){
   // ─── رأس الأعمدة — مكبّر درجة ونصف ──────────────────────
   const colHdrFs = pfsN;
   const colHdrTextColor = settings.colorStripText || stripColor;
-  const colHdr=`
+  let colHdr=`
   <div style="margin:0 6px 2px;display:flex;direction:ltr;padding:4px 0;border-bottom:2px solid ${stripColor};border-top:1px solid #aab8c8;align-items:center;background:${stripColor}18">
     <div style="flex:4;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;letter-spacing:0.5px;padding-right:4px;padding-left:18px;text-decoration:underline;text-underline-offset:3px">Test</div>
     <div style="flex:2;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;text-align:left;letter-spacing:0.5px;padding-left:4px;text-decoration:underline;text-underline-offset:3px">Result</div>
@@ -13731,14 +13736,273 @@ function buildPrintHTML(req, opts){
     <div style="flex:2;font-size:${colHdrFs}px;font-weight:900;color:${colHdrTextColor};font-family:'Times New Roman',Times,serif;text-align:center;letter-spacing:0.5px;text-decoration:underline;text-underline-offset:3px">Last Result</div>
   </div>`;
 
+  // ═══════════════════════════════════════════════════════════════════════
+  //  📋 نماذج تقارير النتائج العامة (Report Templates 1–4)
+  //  النموذج 1 = التصميم الكلاسيكي الحالي (بدون أي تغيير).
+  //  النماذج 2–4 = تصاميم حديثة احترافية — تعيد تنسيق «عنوان القسم» و«صف التحليل»
+  //  و«رأس الأعمدة» فقط، دون المساس بالرأس/التذييل/بيانات المريض/الترقيم/التوقيع.
+  //  كل الحسابات (H/L، الألوان، المدى، الوحدة، السابقة) تبقى كما هي — النماذج
+  //  تستقبل النتائج الجاهزة فقط وتغلّفها بتصميم مختلف.
+  // ═══════════════════════════════════════════════════════════════════════
+  const RTPL = String(settings.reportTemplate||'1');
+  // ألوان مساعدة مشتقة من الإعدادات (كل النماذج تخضع لإعدادات الألوان وأحجام الخط)
+  const _tplAccent = sectionColor;         // لون القسم/العناوين (من الإعدادات)
+  const _tplStrip  = stripColor;           // لون الشريط (من الإعدادات)
+  // ألوان الحالة — قابلة للتخصيص من الإعدادات مع قيم افتراضية متوافقة مع النظام
+  const _tplHighColor = settings.colorHigh || '#cc0000'; // عالي
+  const _tplLowColor  = settings.colorLow  || '#0055cc'; // ناصي/منخفض
+  const _tplNormColor = settings.colorNormal || '#111111'; // طبيعي (أسود)
+  // أحجام خطوط مشتقة من الإعدادات (pfs/ptfs/subcatFs) — تُستعمل داخل النماذج الجديدة
+  const _tplValFs = Math.round(pfsN * 1.9);   // حجم قيمة الدائرة = مشتق من حجم خط النتائج
+  const _tplLblFs = Math.max(pfsN - 3, 6);    // حجم كلمة RESULT الصغيرة
+  // رأس أعمدة بديل حسب النموذج (colHdr الأصلي يبقى للنموذج 1)
+  (function(){
+    if(RTPL==='2'){
+      // نموذج 2 «بطاقات بدوائر» — لا يستخدم رأس أعمدة (كل تحليل في بطاقة مستقلة)
+      colHdr='';
+    } else if(RTPL==='3'){
+      // خطوط رفيعة راقية + حروف كبيرة متباعدة (بدون خلفية) — يخضع للإعدادات
+      colHdr=`
+      <div style="margin:0 6px 2px;display:flex;direction:ltr;padding:5px 0 6px;border-bottom:1.5px solid ${_tplStrip};align-items:flex-end">
+        <div style="flex:4;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};letter-spacing:1.6px;text-transform:uppercase;padding-left:16px">Test</div>
+        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:left;letter-spacing:1.6px;text-transform:uppercase">Result</div>
+        <div style="flex:3;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:left;letter-spacing:1.6px;text-transform:uppercase;padding-left:6px">Reference</div>
+        <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:center;letter-spacing:1.6px;text-transform:uppercase">Previous</div>
+      </div>`;
+    } else if(RTPL==='4'){
+      // نموذج 4 «أقسام بأسهم» — رأس أعمدة بلون الشريط من الإعدادات
+      colHdr=`
+      <div style="margin:0 6px 4px;display:flex;direction:ltr;padding:4px 2px;border-bottom:1.5px solid ${_tplStrip};align-items:center">
+        <div style="flex:4;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};padding-left:6px">Test</div>
+        <div style="flex:2;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:left">Result</div>
+        <div style="flex:1.4;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:left">Unit</div>
+        <div style="flex:3;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:left;padding-left:4px">Normal Range</div>
+        <div style="flex:2;font-size:${colHdrFs}px;font-weight:700;color:${_tplStrip};text-align:center">Previous</div>
+      </div>`;
+    }
+  })();
+
+  // ── باني عنوان القسم حسب النموذج ──
+  function _tplSectionHeader(cat, catTests){
+    const _parentCat=catTests[0]&&catTests[0].cat||cat;
+    const _devName=settings.sectionDevices&&(settings.sectionDevices[_parentCat]||settings.sectionDevices[cat]);
+    const _devColor=settings.colorDevice||'#0055cc';
+    const _devFs=Math.max((settings.deviceFontSize?parseInt(settings.deviceFontSize):pfsN)-1,7);
+    const devHtml=_devName?`<div style="font-size:${_devFs}px;color:${_devColor};font-weight:700;letter-spacing:0.4px;text-decoration:underline;text-underline-offset:2px">⚙ ${_devName}</div>`:'';
+    const title=cat.toLowerCase();
+    if(RTPL==='2'){
+      // نموذج 2 — عنوان اللوحة بأحرف كبيرة بلون القسم من الإعدادات (كما في الصورة: HORMONES PANEL)
+      return `<div style="margin:0;direction:ltr;padding:0 2px;display:flex;align-items:flex-end;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:0.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
+        ${devHtml}
+      </div>`;
+    } else if(RTPL==='3'){
+      return `<div style="margin:8px 6px 3px;direction:ltr;padding:4px 12px;background:${_tplAccent}0d;border-left:3px solid ${_tplAccent};border-radius:0 5px 5px 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:1.4px;white-space:nowrap">${title}</div>
+        ${devHtml}
+      </div>`;
+    } else if(RTPL==='4'){
+      // نموذج 4 — عنوان القسم في شريط رمادي فاتح، النص بلون القسم من الإعدادات (كما في الصورة)
+      return `<div style="margin:10px 6px 0;direction:ltr;padding:6px 12px;background:#eef1f4;border:1px solid #dde3ea;border-bottom:none;border-radius:7px 7px 0 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:1px;white-space:nowrap">${title}</div>
+        ${devHtml}
+      </div>`;
+    }
+    // النموذج 1 — التصميم الأصلي تماماً
+    return `<div style="margin:4px 6px 0;direction:ltr">
+      <div style="padding:3px 10px 2px">
+        <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px">${title}</div>
+      </div>
+      ${devHtml?`<div style="padding:0 10px 2px">${devHtml}</div>`:''}
+    </div>`;
+  }
+
+  // ── فتح/إغلاق حاوية القسم (للنماذج التي تحتاج تخطيطاً خاصاً) ──
+  function _tplSectionOpen(){
+    if(RTPL==='2'){
+      // شبكة بطاقات مرنة — 3 بطاقات في الصف، بارتفاع موحّد (stretch) داخل الصف
+      return `<div style="display:flex;flex-wrap:wrap;align-items:stretch;gap:7px;direction:ltr;margin:0 6px 2px;padding:0 0 2px">`;
+    }
+    if(RTPL==='4'){
+      // جسم القسم داخل بطاقة بحدود رمادية (تكملة لرأس القسم)
+      return `<div style="margin:0 6px 2px;direction:ltr;border:1px solid #dde3ea;border-top:none;border-radius:0 0 7px 7px;padding:5px 4px 6px">`;
+    }
+    return '';
+  }
+  function _tplSectionClose(){
+    if(RTPL==='2'||RTPL==='4'){ return `</div>`; }
+    return '';
+  }
+
+  // ── دالة مساعدة: بناء دائرة (donut) بلون الحالة والنتيجة بداخلها (نموذج 2) ──
+  // تعتمد على conic-gradient بلا صور — توفّر الحبر نسبياً وتطبع بدقة.
+  function _tplDonut(value, ringColor){
+    const sz = Math.max(_tplValFs*2.7, 48); // قطر الدائرة مشتق من حجم الخط
+    const thick = Math.max(Math.round(sz*0.055), 3); // ⭐ حلقة أنحف (كانت 0.13)
+    const inner = sz - thick*2;
+    return `<div style="position:relative;width:${sz}px;height:${sz}px;flex-shrink:0;margin:0 auto">
+      <div style="position:absolute;inset:0;border-radius:50%;background:${ringColor}"></div>
+      <div style="position:absolute;top:${thick}px;left:${thick}px;width:${inner}px;height:${inner}px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1">
+        <div style="font-size:${_tplValFs}px;font-weight:900;color:#000000;text-align:center;white-space:nowrap">${value}</div>
+        <div style="font-size:${_tplLblFs}px;font-weight:700;color:#777;letter-spacing:0.5px;margin-top:1px">RESULT</div>
+      </div>
+    </div>`;
+  }
+
+  // ── باني صف/بطاقة تحليل حسب النموذج ──
+  // p = { name, resultBox, flag, refHtml, prevHtml, bullet, isAbn, value, isHigh, isLow, refTxt, unit, prevVal, prevDate }
+  function _tplRow(p){
+    const bullet = p.bullet!==undefined ? p.bullet : '●';
+    if(RTPL==='2'){
+      // نموذج 2 «بطاقة بدائرة» — كما في الصورة الأولى تماماً:
+      //  دائرة ملوّنة (أسود=طبيعي، أحمر=عالي، أزرق=ناصي) بداخلها القيمة وأسفلها RESULT،
+      //  ثم القيم الطبيعية + الوحدة، ثم آخر نتيجة (Last Result).
+      const ringColor = p.isHigh ? _tplHighColor : (p.isLow ? _tplLowColor : _tplNormColor);
+      const badge = p.isHigh
+        ? `<span style="font-size:${_tplLblFs}px;font-weight:900;color:#fff;background:${_tplHighColor};border-radius:4px;padding:1px 7px;letter-spacing:0.5px">HIGH</span>`
+        : p.isLow
+        ? `<span style="font-size:${_tplLblFs}px;font-weight:900;color:#fff;background:${_tplLowColor};border-radius:4px;padding:1px 7px;letter-spacing:0.5px">LOW</span>`
+        : '';
+      // ⭐ فوق القيم الطبيعية كلمة REFERENCE
+      const refInner = (p.refTxt && p.refTxt!=='—')
+        ? `<div style="font-size:${pfs};font-weight:700;color:#000;text-align:center">${p.refTxt}${p.unit?`&nbsp;<span style="color:#333;font-weight:600">${p.unit}</span>`:''}</div>`
+        : (p.unit?`<div style="font-size:${pfs};font-weight:600;color:#333;text-align:center">${p.unit}</div>`:'');
+      const refLine = (refInner)
+        ? `<div style="text-align:center;margin-top:2px">
+             <div style="font-size:${_tplLblFs}px;font-weight:800;color:#888;letter-spacing:0.6px">REFERENCE</div>
+             ${refInner}
+           </div>`
+        : '';
+      const prevLine = (p.prevVal)
+        ? `<div style="font-size:${ptfs};font-weight:600;color:#333;text-align:center;margin-top:2px">Last: <b style="color:#000">${p.prevVal}</b>${p.prevDate?` <span style="color:#666">(${p.prevDate})</span>`:''}</div>`
+        : '';
+      // عرض البطاقة: يستوعب 3 في الصف مع التفاف تلقائي عند التحاليل الكثيرة
+      // البطاقة نفسها — تملأ ارتفاع العمود بالكامل (height:100%) لتتساوى كل البطاقات
+      //  البنية الداخلية: [رأس: الاسم+الشارة] [الدائرة] [منطقة REFERENCE+Last تتمدد لأسفل]
+      //  منطقة المرجع تأخذ المساحة المتبقية (flex:1) فتتساوى حواف البطاقات مهما اختلف المحتوى.
+      const _cardHtml=`<div style="width:100%;height:100%;box-sizing:border-box;border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:${Math.max(subcatFsN+4,16)}px">
+          <div style="font-size:${subcatFs};font-weight:800;color:${_tplAccent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+          ${badge}
+        </div>
+        ${_tplDonut(p.value||'—', ringColor)}
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-start">
+          ${refLine}
+          ${prevLine}
+        </div>
+      </div>`;
+      // عنوان المجموعة (إن مُرِّر) يظهر فوق أول بطاقة من مجموعتها، بارتفاع ثابت تماماً
+      //  (height ثابت وليس min-height) كي تبدأ كل البطاقات من نفس المستوى بالضبط
+      //  فتتساوى ارتفاعات البطاقات في الصف الواحد سواء حملت عنواناً أم لا.
+      const _titleH = Math.max(subcatFsN+9, 22);
+      const _titleHtml = p.sectionTitle
+        ? `<div style="height:${_titleH}px;overflow:hidden;display:flex;align-items:flex-end">${p.sectionTitle}</div>`
+        : `<div style="height:${_titleH}px"></div>`;
+      return `<div style="flex:0 0 calc((100% - 14px) / 3);width:calc((100% - 14px) / 3);box-sizing:border-box;display:flex;flex-direction:column;page-break-inside:avoid;break-inside:avoid">
+        ${_titleHtml}
+        <div style="flex:1;display:flex;width:100%">${_cardHtml}</div>
+      </div>`;
+    } else if(RTPL==='3'){
+      return `
+      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:3px 0">
+        <div style="flex:4;font-size:${pfs};font-weight:600;color:#1a1a1a;padding-top:2px;padding-left:16px">${p.name}</div>
+        <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
+          <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
+        </div>
+        <div style="flex:3;padding:1px 4px 0 6px">${p.refHtml}</div>
+        <div style="flex:2;padding:1px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      </div>`;
+    } else if(RTPL==='4'){
+      // نموذج 4 «صف بسهم»:
+      //  الاسم | النتيجة عريضة + سهم (▲ أحمر للعالي، ▼ أزرق للناصي) | الوحدة | المدى | آخر نتيجة+تاريخ
+      //  كل الألوان صافية (أسود/أحمر/أزرق صافٍ).
+      const arrow = p.isHigh
+        ? `<span style="color:${_tplHighColor};font-size:${pfs};font-weight:900;margin-left:3px">▲</span>`
+        : p.isLow
+        ? `<span style="color:${_tplLowColor};font-size:${pfs};font-weight:900;margin-left:3px">▼</span>`
+        : `<span style="width:10px;display:inline-block"></span>`;
+      const valColor = p.isHigh ? _tplHighColor : (p.isLow ? _tplLowColor : '#000000');
+      const valWeight = p.isHigh||p.isLow ? '900' : '700';
+      // آخر نتيجة مع التاريخ (كباقي التقارير): القيمة ثم التاريخ بينهما مسافة
+      const prevCell = p.prevVal
+        ? `<b style="color:#000">${p.prevVal}</b>${p.prevDate?`<div style="font-size:${Math.max(pfsN-2,7)}px;color:#555;font-weight:600">${p.prevDate}</div>`:''}`
+        : '';
+      return `
+      <div style="margin:0 2px;display:flex;align-items:center;direction:ltr;padding:2.5px 6px">
+        <div style="flex:4;font-size:${pfs};font-weight:700;color:#000000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="flex:2;display:flex;align-items:center;gap:2px;font-size:${pfs};font-weight:${valWeight};color:${valColor}">${p.value||'—'}${arrow}</div>
+        <div style="flex:1.4;font-size:${pfs};font-weight:600;color:#000000">${p.unit||''}</div>
+        <div style="flex:3;font-size:${pfs};font-weight:600;color:#000000;padding-left:4px">${(p.refTxt&&p.refTxt!=='—')?p.refTxt:''}</div>
+        <div style="flex:2;font-size:${pfs};font-weight:600;color:#000000;text-align:center;line-height:1.2">${prevCell}</div>
+      </div>`;
+    }
+    // النموذج 1 — الصف الأصلي تماماً
+    return `
+      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
+        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
+          ${bullet} ${p.name}
+        </div>
+        <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
+          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
+          <div style="display:flex;align-items:center;gap:2px">${p.resultBox}${p.flag}</div>
+        </div>
+        <div style="flex:3;padding:2px 4px 0 6px">${p.refHtml}</div>
+        <div style="flex:2;padding:2px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+      </div>`;
+  }
+  // فاصل الصفوف حسب النموذج
+  function _tplRowSep(){
+    if(RTPL==='3'){ return `<div style="margin:0 6px;border-top:1px solid #eef1f5"></div>`; }
+    if(RTPL==='4'){ return `<div style="margin:0 8px;border-top:1px solid #f0f2f5"></div>`; }
+    if(RTPL==='2'){ return ''; } // البطاقات لا تحتاج فواصل
+    return null; // النموذج 1 — اترك المنطق الأصلي
+  }
+
   // ─── نتائج التحاليل ────────────────────────────────────
   // catChunks: مصفوفة كل عنصر = HTML كامل لمجموعة فرعية واحدة (بدون فاصل سابق)
   const catChunks = [];
   let body='';
   if(!blankBody){
   let _visibleCatCount = 0; // عداد المجموعات المعروضة فعلاً
-  sortedGroupKeys.forEach((cat)=>{
-    const catTests=grouped[cat];
+  // ⭐ وحدات العرض: افتراضياً كل مجموعة فرعية وحدة مستقلة (سلوك جميع النماذج كما هو).
+  //   للنموذج 2 (البطاقات): ندمج المجموعات الفرعية الصغيرة المتجاورة في وحدة واحدة
+  //   كي لا تترك البطاقةُ المفردة صفاً شبه فارغ — تصعد معها مجموعة أخرى بتحليل أو تحليلين.
+  //   الدمج يبقى «chunk» عادياً فيعمل الترقيم والتجميع اليدوي دون أي تغيير.
+  let _renderUnits = sortedGroupKeys.map(k=>[k]);
+  if(RTPL==='2'){
+    // عدّ التحاليل ذات النتائج في كل مجموعة فرعية
+    const _cnt = {};
+    sortedGroupKeys.forEach(k=>{
+      _cnt[k] = grouped[k].filter(t=>{ const v=req.results[t.id]||''; return v && v.trim()!==''; }).length;
+    });
+    const _units=[]; let _buf=[]; let _bufCount=0;
+    const ROW_CAP=3; // الصف يحمل ٣ تحاليل كحد أقصى (كل بطاقة = تحليل واحد)
+    const _flush=()=>{ if(_buf.length){ _units.push(_buf); _buf=[]; _bufCount=0; } };
+    sortedGroupKeys.forEach(k=>{
+      const c=_cnt[k];
+      if(c<=0) return; // لا نتائج — تُتخطى
+      if(c>=ROW_CAP){
+        // مجموعة تملأ الصف أو أكبر → أفرغ المخزن ثم ضعها وحدها
+        _flush();
+        _units.push([k]);
+        return;
+      }
+      // مجموعة صغيرة (١ أو ٢): إن كانت إضافتها ستتجاوز سعة الصف (٣) → أغلق الوحدة الحالية أولاً
+      if(_bufCount + c > ROW_CAP){ _flush(); }
+      _buf.push(k); _bufCount+=c;
+      // إن اكتمل الصف تماماً (٣ تحاليل) → أغلقه
+      if(_bufCount>=ROW_CAP){ _flush(); }
+    });
+    _flush();
+    if(_units.length) _renderUnits=_units;
+  }
+
+  _renderUnits.forEach((unitKeys)=>{
+    // unitKeys: مصفوفة مفاتيح مجموعات فرعية تُعرض ضمن chunk واحد (عادةً مفتاح واحد)
+    // نجمع تحاليلها ونحدد المفتاح الأساسي للفاصل/اسم الجهاز
+    const _primaryCat = unitKeys[0];
+    const cat = _primaryCat; // توافق مع بقية الشيفرة التي تشير إلى cat
+    const catTests = unitKeys.reduce((acc,k)=>acc.concat(grouped[k]||[]),[]);
 
     // ✅ تحقق أولاً: هل يوجد أي تحليل بنتيجة في هذه المجموعة؟
     const catHasResults = catTests.some(t => {
@@ -13763,14 +14027,18 @@ function buildPrintHTML(req, opts){
       else if(_catDotted) _catDividerHtml = `<div style="margin:5px 6px;border-top:2px dotted #aab8c8"></div>`;
       else                _catDividerHtml = `<div style="margin:4px 6px;border-top:1px dotted #aab8c8"></div>`;
     }
-    _chunkHtml+=`<div style="margin:4px 6px 0;direction:ltr">
-      <div style="padding:3px 10px 2px">
-        <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px">${cat.toLowerCase()}</div>
-      </div>
-      ${(()=>{const _parentCat=catTests[0]&&catTests[0].cat||cat;const _devName=settings.sectionDevices&&(settings.sectionDevices[_parentCat]||settings.sectionDevices[cat]);const _devColor=settings.colorDevice||'#0055cc';const _devFs=Math.max((settings.deviceFontSize?parseInt(settings.deviceFontSize):pfsN)-1,7);return _devName?`<div style="font-size:${_devFs}px;color:${_devColor};font-weight:700;padding:0 10px 2px;letter-spacing:0.4px;text-decoration:underline;text-underline-offset:2px">⚙ ${_devName}</div>`:'';})()}
-    </div>`;
+    // ⭐ للنموذج 2: عنوان كل مجموعة فرعية يُعرض كعنصر flex بعرض كامل داخل الشبكة،
+    //   فتظل البطاقات تملأ الصفوف بينما تفصل العناوين المجموعات.
+    //   لبقية النماذج: عنوان واحد ثم صفوف (كما كان).
+    if(RTPL==='2'){
+      _chunkHtml+=_tplSectionOpen(); // يفتح شبكة flex واحدة للوحدة كاملة
+    } else {
+      _chunkHtml+=_tplSectionHeader(cat, catTests);
+      _chunkHtml+=_tplSectionOpen();
+    }
 
-    catTests.forEach((t,tIdx)=>{
+    // نعرّف الدالة التي تعالج تحليلاً واحداً (تُستدعى ضمن حلقة المفاتيح)
+    const _renderOneTest = (t, tIdx, _secTitleHtml)=>{
       const val = req.results[t.id]||'';
       // Fix 2: Skip tests with no result entered — don't print empty rows
       if(!blankBody && (!val || val.trim()==='')) return;
@@ -13824,20 +14092,29 @@ function buildPrintHTML(req, opts){
           const inpResultBox=`<div style="border:1.5px solid ${inpBoxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${inpValColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${inpVal}</span></div>`;
           const inpShowUnit = inpUnit && inpUnit!=='qualitative';
           const inpRefHtml = `<div style="display:block;font-size:${pfs}">${inpRefTxt==='—'?`<span style="font-size:${pfs}">—</span>`:`<span style="font-size:${pfs};font-weight:600;color:#000">${inpRefTxt}</span>${inpShowUnit?`&nbsp;&nbsp;<span style="font-size:${pfs};font-weight:600;color:#444">${inpUnit}</span>`:''}`}</div>`;
-          _chunkHtml+=`
-      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
-          ● ${inpName}
-        </div>
-        <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
-          <div style="display:flex;align-items:center;gap:2px">${inpResultBox}${inpFlag}</div>
-        </div>
-        <div style="flex:3;padding:2px 4px 0 6px">${inpRefHtml}</div>
-        <div style="flex:2"></div>
-      </div>`;
-          if(settings.div_test_dotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
-          else if(settings.div_test_solid) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
+          _chunkHtml+=_tplRow({
+            name: inpName,
+            resultBox: inpResultBox,
+            flag: inpFlag,
+            refHtml: inpRefHtml,
+            prevHtml: '',
+            bullet: '○',
+            isAbn: (inpIsHigh||inpIsLow),
+            abnColor: inpValColor,
+            // حقول للنماذج الجديدة:
+            value: inpVal,
+            isHigh: inpIsHigh,
+            isLow: inpIsLow,
+            refTxt: inpRefTxt,
+            unit: (inpShowUnit?inpUnit:''),
+            prevVal: '',
+            prevDate: ''
+          });
+          const _inpSep=_tplRowSep();
+          if(_inpSep===null){
+            if(settings.div_test_dotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
+            else if(settings.div_test_solid) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
+          } else { _chunkHtml+=_inpSep; }
         });
       }
 
@@ -13975,18 +14252,36 @@ function buildPrintHTML(req, opts){
       // مربع النتيجة — القيمة فقط بدون وحدة
       const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${displayValFull}</span></div>`;
 
-      _chunkHtml+=`
-      <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
-          ● ${t.nameShort&&t.nameShort.trim()?t.nameShort.trim():t.nameEn}
-        </div>
-        <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
-          <div style="display:flex;align-items:center;gap:2px">${resultBox}${flagLetter}</div>
-        </div>
-        <div style="flex:3;padding:2px 4px 0 6px">${refWithUnit}</div>
-        <div style="flex:2;padding:2px 4px;text-align:center;font-size:${pfs};font-weight:600">${prevHtml}</div>
-      </div>`;
+      // ── بيانات إضافية للنماذج الجديدة (دوائر/أسهم) ──
+      // آخر نتيجة (قيمة + تاريخ) لعرضها في النموذج 2/4
+      let _prevVal='', _prevDate='';
+      {
+        const _pf=prevReqs.filter(pr=>pr.results&&pr.results[t.id]!==undefined&&pr.results[t.id]!=='');
+        if(_pf.length){
+          _prevVal=_pf[0].results[t.id];
+          const _rd=_pf[0].resultDate||_pf[0].date||'';
+          try{const d=new Date(_rd);if(!isNaN(d))_prevDate=`${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;}catch(e){_prevDate=_rd;}
+        }
+      }
+      _chunkHtml+=_tplRow({
+        name: (t.nameShort&&t.nameShort.trim()?t.nameShort.trim():t.nameEn),
+        resultBox: resultBox,
+        flag: flagLetter,
+        refHtml: refWithUnit,
+        prevHtml: prevHtml,
+        bullet: '●',
+        isAbn: (isHigh||isLow||isQualAbnormal),
+        abnColor: valColor,
+        // حقول للنماذج الجديدة:
+        value: displayValFull,
+        isHigh: isHigh,
+        isLow: (isLow||isQualAbnormal),
+        refTxt: refTxt,
+        unit: (showUnit?unitTxt:''),
+        prevVal: _prevVal,
+        prevDate: _prevDate,
+        sectionTitle: _secTitleHtml||''
+      });
       // فاصل بين تحليل وتحليل
       const _testDotted=settings.div_test_dotted;
       const _testSolid=settings.div_test_solid;
@@ -13997,11 +14292,39 @@ function buildPrintHTML(req, opts){
       const testsWithResults = catTests.filter(tt => { const v=req.results[tt.id]||''; return v && v.trim()!==''; });
       const isLastTestInCat = t.id === testsWithResults[testsWithResults.length-1]?.id;
       const skipTestSep = hasSectionSep && isLastTestInCat;
-      if(!skipTestSep){
-        if(_testSolid)       _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
-        else if(_testDotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
+      const _mainSep=_tplRowSep();
+      if(_mainSep===null){
+        if(!skipTestSep){
+          if(_testSolid)       _chunkHtml+=`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`;
+          else if(_testDotted) _chunkHtml+=`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`;
+        }
+      } else if(_mainSep!=='' && !isLastTestInCat){
+        _chunkHtml+=_mainSep;
       }
-    });
+    }; // end _renderOneTest
+
+    // ── تشغيل عرض التحاليل ──
+    if(RTPL==='2'){
+      // ⭐ لا نضع العنوان كعنصر بعرض كامل (كان يكسر الصف).
+      //   بدلاً: عنوان كل مجموعة فرعية يُمرَّر إلى أول بطاقة من بطاقاتها،
+      //   فتظل جميع البطاقات تتدفق ٣ في الصف، والعنوان يظهر فوق أول بطاقة لكل مجموعة.
+      let _tIdxGlobal=0;
+      unitKeys.forEach((k)=>{
+        const _kTests=(grouped[k]||[]).filter(t=>{ const v=req.results[t.id]||''; return v && v.trim()!==''; });
+        if(!_kTests.length) return;
+        const _secTitleHtml=_tplSectionHeader(k,(grouped[k]||[]));
+        let _firstInGroup=true;
+        (grouped[k]||[]).forEach((t)=>{
+          const v=req.results[t.id]||'';
+          if(!blankBody && (!v||v.trim()==='')) return; // نحدد أول بطاقة فعلية بنتيجة
+          _renderOneTest(t,_tIdxGlobal++, _firstInGroup?_secTitleHtml:'');
+          _firstInGroup=false;
+        });
+      });
+    } else {
+      catTests.forEach((t,tIdx)=>{ _renderOneTest(t,tIdx); });
+    }
+    _chunkHtml+=_tplSectionClose();
     // أضف الـ chunk إلى المصفوفة وإلى body
     // ⭐ كل chunk يحمل: cat (اسم المجموعة) + html (المحتوى) + catDividerHtml (فاصل المجموعة)
     // الـ body المباشر (للـ blankBody) يحتوي على الفاصل بشكل صحيح كما كان (لا يتأثر)
@@ -14062,8 +14385,7 @@ function buildPrintHTML(req, opts){
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${css}</style></head>
     <body>
-    <div id="print-content" style="background:#ffffff;font-family:'Inter',Arial,sans-serif;direction:ltr;width:100%;padding:1mm 3mm 0 3mm;position:relative;">
-      ${_buildWatermarkHTML?_buildWatermarkHTML(false):''}
+    <div id="print-content" style="background:#ffffff;font-family:'Inter',Arial,sans-serif;direction:ltr;width:100%;padding:1mm 3mm 0 3mm">
       ${hdr}${ptBox}<!--BLANK_BODY_PLACEHOLDER-->
       <div id="print-spacer" style="height:${totalFooterH+40}px"></div>
     </div>
@@ -16993,7 +17315,10 @@ function loadSettings(){
   if(settings.currency){const sel=document.getElementById('st-currency');if(sel){for(let o of sel.options){if(o.value===settings.currency){o.selected=true;break;}}}}
   // نموذج CBC
   const cbcTplSel=document.getElementById('st-cbc-template');
-  if(cbcTplSel) cbcTplSel.value=settings.cbcTemplate||'1';  document.getElementById('sb-labname').textContent='🏥 '+(settings.name||'المختبر');
+  if(cbcTplSel) cbcTplSel.value=settings.cbcTemplate||'1';
+  const repTplSel=document.getElementById('st-report-template');
+  if(repTplSel) repTplSel.value=settings.reportTemplate||'1';
+  document.getElementById('sb-labname').textContent='🏥 '+(settings.name||'المختبر');
   document.getElementById('sb-director').textContent=settings.dir||'';
   // Images
   if(settings.headerImg){document.getElementById('header-img-show').src=settings.headerImg;document.getElementById('header-img-preview').style.display='block';}
@@ -24116,6 +24441,105 @@ function _loadCBCTemplateSel(){
   if(sel&&typeof settings==='object') sel.value=settings.cbcTemplate||'1';
 }
 
+/* ─── نموذج تقرير النتائج العامة (Report Templates 1–4) ─── */
+function _saveReportTemplate(val){
+  if(typeof settings==='object') settings.reportTemplate=val;
+  if(typeof saveSettings==='function') saveSettings();
+  try{ showNotif('✅ تم الحفظ','تم اختيار نموذج التقرير رقم '+val,'success'); }catch(e){}
+}
+function _loadReportTemplateSel(){
+  const sel=document.getElementById('st-report-template');
+  if(sel&&typeof settings==='object') sel.value=settings.reportTemplate||'1';
+}
+function _previewReportTemplate(){
+  // معاينة حية: نبني تقريراً تجريبياً بالنموذج المختار عبر buildPrintHTML نفسها
+  // مع بيانات وهمية — دون المساس بأي طلب حقيقي.
+  const tpl=(document.getElementById('st-report-template')||{}).value||settings.reportTemplate||'1';
+  const _prevTplSaved = settings.reportTemplate;
+  settings.reportTemplate = tpl; // مؤقتاً للمعاينة فقط
+  try{
+    // تحاليل تجريبية من قاعدة التحاليل الفعلية (أول عدة تحاليل عامة) لضمان واقعية المعاينة
+    let demoTestObjs = (Array.isArray(tests)?tests:[]).filter(function(t){
+      return t && !t.isSpecialExam && !t.isCalc;
+    });
+    // اختر تحاليل من مجموعات فرعية مختلفة لإظهار تعدد الأقسام
+    const bySub={};
+    demoTestObjs.forEach(function(t){ const k=t.subCat||t.cat||'General'; (bySub[k]=bySub[k]||[]).push(t); });
+    const pickedTests=[];
+    Object.keys(bySub).slice(0,3).forEach(function(k){ bySub[k].slice(0,3).forEach(function(t){ pickedTests.push(t); }); });
+    let demoTests = pickedTests.length? pickedTests : demoTestObjs.slice(0,6);
+
+    // إن لم توجد تحاليل في القاعدة — أنشئ تحاليل وهمية بسيطة
+    let _synthetic=false;
+    if(!demoTests.length){
+      _synthetic=true;
+      demoTests=[
+        {id:'_d1',code:'GLU',nameEn:'Glucose (F)',nameShort:'Glucose',unit:'mg/dL',subCat:'Biochemistry',cat:'Biochemistry',minVal:70,maxVal:110,refM:'70 – 110'},
+        {id:'_d2',code:'UREA',nameEn:'Blood Urea',nameShort:'Urea',unit:'mg/dL',subCat:'Kidney Functions',cat:'Kidney Functions',minVal:15,maxVal:45,refM:'15 – 45'},
+        {id:'_d3',code:'CREAT',nameEn:'Creatinine',nameShort:'Creat.',unit:'mg/dL',subCat:'Kidney Functions',cat:'Kidney Functions',minVal:0.6,maxVal:1.3,refM:'0.6 – 1.3'},
+        {id:'_d4',code:'CHOL',nameEn:'Cholesterol',nameShort:'Chol.',unit:'mg/dL',subCat:'Lipid Profile',cat:'Lipid Profile',minVal:0,maxVal:200,refM:'< 200'},
+        {id:'_d5',code:'TG',nameEn:'Triglycerides',nameShort:'TG',unit:'mg/dL',subCat:'Lipid Profile',cat:'Lipid Profile',minVal:0,maxVal:150,refM:'< 150'}
+      ];
+      // احقنها مؤقتاً في مصفوفة tests كي تجدها buildPrintHTML عبر tests.find
+      demoTests.forEach(function(t){ tests.push(t); });
+    }
+
+    // مريض وهمي
+    const demoPt={
+      id:'DEMO-1', patientId:'DEMO-1', barcode:'123456',
+      title:'Mr.', gender:'male', ageVal:35, ageDisplay:'35 Y', dob:''
+    };
+    const _hadDemoPt = patients.some(function(p){return p.id==='DEMO-1';});
+    if(!_hadDemoPt) patients.push(demoPt);
+
+    // نتائج وهمية — بعضها ضمن المدى وبعضها شاذ لإظهار التمييز اللوني
+    const demoResults={};
+    demoTests.forEach(function(t,i){
+      let v;
+      const mn=(t.minVal!=null?t.minVal:0), mx=(t.maxVal!=null?t.maxVal:100);
+      if(i%4===0){ v=(mx + Math.max(1,(mx-mn)*0.4)); }        // مرتفع (H)
+      else if(i%4===2){ v=(mn - Math.max(1,(mx-mn)*0.3)); }    // منخفض (L)
+      else { v=((mn+mx)/2); }                                   // طبيعي
+      if(v<0) v=Math.abs(v);
+      demoResults[t.id]=String(Math.round(v*10)/10);
+    });
+
+    const demoReq={
+      id:'DEMO-REQ-1', patientId:'DEMO-1', patientName:'Ahmed Khalid Al-Rashidi',
+      doctorName:'Dr. Omar Saleh', date:new Date().toISOString().slice(0,10),
+      resultDate:new Date().toISOString().slice(0,10),
+      tests:demoTests.map(function(t){return t.id;}),
+      results:demoResults, status:'done', pageGroups:[]
+    };
+
+    const html=buildPrintHTML(demoReq,{});
+
+    // تنظيف البيانات الوهمية المحقونة
+    if(_synthetic){ tests.splice(tests.length-demoTests.length, demoTests.length); }
+    if(!_hadDemoPt){ const ix=patients.findIndex(function(p){return p.id==='DEMO-1';}); if(ix>-1) patients.splice(ix,1); }
+
+    // اعرض داخل overlay + iframe (نفس أسلوب معاينة CBC)
+    const blob=new Blob([html],{type:'text/html'});
+    const blobUrl=URL.createObjectURL(blob);
+    var old=document.getElementById('_rep_preview_overlay');
+    if(old) old.remove();
+    var overlay=document.createElement('div');
+    overlay.id='_rep_preview_overlay';
+    overlay.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.82);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:16px;';
+    overlay.innerHTML='<div style="width:100%;max-width:860px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      +'<span style="color:#fff;font-size:14px;font-weight:700">📄 معاينة نموذج التقرير — النموذج '+tpl+'</span>'
+      +'<button onclick="document.getElementById(\'_rep_preview_overlay\').remove();URL.revokeObjectURL(\''+blobUrl+'\')" style="background:rgba(255,34,68,0.2);border:1px solid rgba(255,34,68,0.5);color:#ff4466;border-radius:8px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:700">✕ إغلاق</button>'
+      +'</div>'
+      +'<iframe src="'+blobUrl+'" style="width:100%;max-width:860px;flex:1;border:none;border-radius:8px;background:#fff;min-height:calc(100vh - 80px)"></iframe>';
+    document.body.appendChild(overlay);
+  }catch(e){
+    console.error('[ReportTemplate preview]',e);
+    try{ showNotif('⚠️ خطأ','تعذّرت المعاينة: '+e.message,'error'); }catch(_){}
+  }finally{
+    settings.reportTemplate = _prevTplSaved; // استرجاع القيمة المحفوظة الأصلية
+  }
+}
+
 function _previewCBCTemplate(){
   // نبني بيانات تجريبية للمعاينة
   const demoParams={
@@ -27698,17 +28122,19 @@ function _buildDNAFragPrintHTML(r){
       </div>
     </div>
 
-    <!-- صف أسفل: الصورة + الملاحظات -->
+    <!-- صف أسفل: الصورة + الكليشة التعريفية + الملاحظات -->
     <div style="display:flex;gap:8px;align-items:flex-start;margin-top:3px">
       <!-- صورة المريض أسفل اليسار -->
       <div style="width:210px;height:180px;border:1px solid #b8b8b8;border-radius:4px;overflow:hidden;background:#f9f9f9;flex-shrink:0;display:flex;align-items:center;justify-content:center">
         ${patientImg || '<div style="font-size:10px;color:#aaa;text-align:center;padding:8px"></div>'}
       </div>
-      <!-- ملاحظات -->
-      <div style="flex:1">
-        ${r.note ? `<div style="border:1.5px solid #b8b8b8;padding:5px 10px;border-radius:3px"><span style="font-size:16px;font-weight:800;color:#444">Notes: </span><span style="font-size:16px;color:#333">${r.note}</span></div>` : ''}
+      <!-- الكليشة التعريفية لتحليل تجزؤ الحمض النووي (بجانب الصورة، حجم خط 10) -->
+      <div style="flex:1;font-size:10px;line-height:1.28;color:#222;text-align:justify;border:1px solid #cfcfcf;border-radius:4px;padding:6px 8px;background:#fff">
+        <div style="font-weight:800;font-size:10px;color:${color};margin-bottom:2px;text-align:center;letter-spacing:0.3px">About Sperm DNA Fragmentation Testing</div>
+        Sperm DNA fragmentation testing can be performed at the same time as a semen analysis, but it is a separate and essential test that assesses the DNA quality of sperm. It has little or nothing to do with the parameters that are measured on a routine semen analysis, such as the shape of the sperm or whether the sperm are moving — it is a completely independent variable. Men with otherwise normal semen analyses can have a high degree of DNA damage and men with what was called very poor sperm quality can have very little DNA damage. More importantly, the degree of DNA fragmentation correlates very highly with the inability of the sperm to initiate fertilisation and even if fertilisation occurs, high DNA fragmentation will often results in ceasing embryo development before implantation. Research also shows that even if a pregnancy is achieved, there is a significantly higher likelihood that it will result in miscarriage. A normal sample has less than 15% of the sperm with DNA damage, ideal is less than 10%. A DFI between 16% and 29% is considered a fair fertility potential but becomes poorer as it approaches 27%. Men with extremely poor fertility potential have greater than 30% of their sperm damaged — which means that the likelihood of couples achieving a successful birth is around 1% if more than 30% of a male's sperm are damaged.
       </div>
     </div>
+    ${r.note ? `<div style="border:1.5px solid #b8b8b8;padding:4px 10px;border-radius:3px;margin-top:4px"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.note}</span></div>` : ''}
   </div>
   <div class="dna-footer">${ftrHTML}</div>
   </body></html>`;
