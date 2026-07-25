@@ -5862,6 +5862,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     <div class="mbody" id="iui-modal-body"></div>
     <div class="mftr">
       <button class="btn btn-s" onclick="closeModal('m-iui-exam')">إلغاء</button>
+      <button class="btn btn-s" style="background:rgba(170,0,255,0.14);border-color:rgba(170,0,255,0.5);color:#c77dff" onclick="printIUILabelFromModal(this)" title="طباعة ملصق الباركود">🏷️ طباعة ملصق</button>
       <button class="btn btn-p btn-lg" onclick="saveIUIEntry(false)">💾 حفظ فقط</button>
       <button class="btn btn-ok btn-lg" onclick="saveIUIEntry(true)">💾🖨️ حفظ وطباعة</button>
     </div>
@@ -10840,6 +10841,20 @@ function printSemenLabelFromModal(btnEl){
   var barcodeId=String(pt.barcode||pt.id||ptId||'').replace(/[^0-9A-Za-z]/g,'');
   if(!barcodeId){
     // مريض يدوي غير محفوظ بعد — استخدم الاسم كنص للباركود يتعذّر، لذا نبّه بالحفظ
+    showNotif('تنبيه','احفظ النتيجة أولاً ثم اطبع الملصق (لا يوجد رقم للمريض)','warning');
+    return;
+  }
+  openLabelCopyPopupForPatient(barcodeId, ptName, btnEl);
+}
+
+// طباعة ملصق باركود من واجهة IUI (نفس آلية تحليل السائل المنوي تماماً)
+function printIUILabelFromModal(btnEl){
+  var ptName=(document.getElementById('iui-pt-search')||{}).value.trim();
+  var ptId  =(document.getElementById('iui-pt-id')||{}).value;
+  if(!ptName){ showNotif('تنبيه','اختر المريض أولاً','warning'); return; }
+  var pt=patients.find(function(p){return p.id===ptId;})||{};
+  var barcodeId=String(pt.barcode||pt.id||ptId||'').replace(/[^0-9A-Za-z]/g,'');
+  if(!barcodeId){
     showNotif('تنبيه','احفظ النتيجة أولاً ثم اطبع الملصق (لا يوجد رقم للمريض)','warning');
     return;
   }
@@ -27614,6 +27629,11 @@ function _buildDNAFragModalBody(r){
     <div class="fg" style="margin-bottom:0">
       <div style="font-size:13px;font-weight:900;color:#0077cc;border-bottom:2px solid #0077cc;padding-bottom:4px;margin-bottom:10px">📋 ملاحظات</div>
       <textarea class="fc" id="dnafrag-note" rows="3" placeholder="أي ملاحظات إضافية...">${v('note')}</textarea>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text)">
+        <input type="checkbox" id="dnafrag-show-cliche" style="width:16px;height:16px;cursor:pointer" ${ (r ? (v('showCliche', true)!==false) : true) ? 'checked' : '' }>
+        <span>🧬 إظهار الكليشة التعريفية في التقرير</span>
+      </label>
+      <div style="font-size:10px;color:var(--text2);margin-top:3px;padding-right:24px">عند الإطفاء لن تظهر الكليشة النصية في ورقة التقرير المطبوعة.</div>
     </div>
     <div class="fg" style="margin-bottom:0">
       <div style="font-size:13px;font-weight:900;color:#0077cc;border-bottom:2px solid #0077cc;padding-bottom:4px;margin-bottom:10px">🔬 صورة المجهر (اختياري)</div>
@@ -27802,6 +27822,7 @@ function saveDNAFragEntry(andPrint){
     medHaloPct: pct(mh, total), bigHaloPct: pct(bh, total),
     dfi: dfi, fertility: fertility,
     note: (document.getElementById('dnafrag-note')||{}).value||'',
+    showCliche: (document.getElementById('dnafrag-show-cliche') ? document.getElementById('dnafrag-show-cliche').checked : true),
     patientImg: (document.getElementById('dnafrag-img-data')||{}).value||''
   };
   loadDNAFragRecords();
@@ -28128,11 +28149,11 @@ function _buildDNAFragPrintHTML(r){
       <div style="width:210px;height:180px;border:1px solid #b8b8b8;border-radius:4px;overflow:hidden;background:#f9f9f9;flex-shrink:0;display:flex;align-items:center;justify-content:center">
         ${patientImg || '<div style="font-size:10px;color:#aaa;text-align:center;padding:8px"></div>'}
       </div>
-      <!-- الكليشة التعريفية لتحليل تجزؤ الحمض النووي (بجانب الصورة، حجم خط 10) -->
-      <div style="flex:1;font-size:10px;line-height:1.28;color:#222;text-align:justify;border:1px solid #cfcfcf;border-radius:4px;padding:6px 8px;background:#fff">
+      <!-- الكليشة التعريفية لتحليل تجزؤ الحمض النووي (بجانب الصورة، حجم خط 10) — تظهر فقط إذا كانت مفعّلة -->
+      ${ (r.showCliche !== false) ? `<div style="flex:1;font-size:10px;line-height:1.28;color:#222;text-align:justify;border:1px solid #cfcfcf;border-radius:4px;padding:6px 8px;background:#fff">
         <div style="font-weight:800;font-size:10px;color:${color};margin-bottom:2px;text-align:center;letter-spacing:0.3px">About Sperm DNA Fragmentation Testing</div>
         Sperm DNA fragmentation testing can be performed at the same time as a semen analysis, but it is a separate and essential test that assesses the DNA quality of sperm. It has little or nothing to do with the parameters that are measured on a routine semen analysis, such as the shape of the sperm or whether the sperm are moving — it is a completely independent variable. Men with otherwise normal semen analyses can have a high degree of DNA damage and men with what was called very poor sperm quality can have very little DNA damage. More importantly, the degree of DNA fragmentation correlates very highly with the inability of the sperm to initiate fertilisation and even if fertilisation occurs, high DNA fragmentation will often results in ceasing embryo development before implantation. Research also shows that even if a pregnancy is achieved, there is a significantly higher likelihood that it will result in miscarriage. A normal sample has less than 15% of the sperm with DNA damage, ideal is less than 10%. A DFI between 16% and 29% is considered a fair fertility potential but becomes poorer as it approaches 27%. Men with extremely poor fertility potential have greater than 30% of their sperm damaged — which means that the likelihood of couples achieving a successful birth is around 1% if more than 30% of a male's sperm are damaged.
-      </div>
+      </div>` : '' }
     </div>
     ${r.note ? `<div style="border:1.5px solid #b8b8b8;padding:4px 10px;border-radius:3px;margin-top:4px"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.note}</span></div>` : ''}
   </div>
@@ -28165,6 +28186,7 @@ function printDNAFragReport(id){
       noHaloPct:pct(nh,total),smallHaloPct:pct(sh,total),medHaloPct:pct(mh,total),bigHaloPct:pct(bh,total),
       dfi:dfi, fertility:dfi<15?'Excellent fertility potential':dfi<=30?'Good fertility potential':'Poor fertility potential',
       note:(document.getElementById('dnafrag-note')||{}).value||'',
+      showCliche:(document.getElementById('dnafrag-show-cliche')?document.getElementById('dnafrag-show-cliche').checked:true),
       patientImg:(document.getElementById('dnafrag-img-data')||{}).value||''
     };
   } else {
