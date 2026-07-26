@@ -26166,20 +26166,29 @@ function _buildSemenPrintHTML(r){
   // ── التسميات/المراجع/الترتيب تُقرأ من SEMEN_FIELDS الحيّة (تعديلات المستخدم) ──
   // مع رجوع تلقائي إلى SEMEN_EN/SEMEN_REFS القديمة عند غياب القيمة.
   // بهذا يعكس التقرير المطبوع أي تغيير في: اسم الحقل، القيمة الطبيعية، الترتيب، القسم.
+  // ── الطباعة بالإنكليزية إلزامياً مع احترام تعديلاتك ──
+  // القاعدة: إن كان اسمك المُعدّل لاتينياً (إنكليزياً) نطبعه (تحكّمك الكامل)،
+  // وإن تركت الاسم العربي الافتراضي نطبع الاسم الإنكليزي الثابت من SEMEN_EN.
+  // بهذا لا يظهر أي نص عربي في التقرير أبداً، وتبقى قادراً على تغيير الأسماء إنكليزياً.
+  const _isLatinText=(t)=>{ if(t==null) return false; var s=String(t).trim(); if(!s) return false; return !/[\u0600-\u06FF]/.test(s); };
   const _smLiveLabel=(secKey,fid)=>{
     var sec=SEMEN_FIELDS[secKey];
-    if(sec&&sec.fields){ var f=sec.fields.find(x=>x.id===fid); if(f&&f.label) return f.label; }
-    var en=SEMEN_EN[secKey]; return (en&&en.fields&&en.fields[fid])||fid;
+    if(sec&&sec.fields){ var f=sec.fields.find(x=>x.id===fid); if(f&&_isLatinText(f.label)) return f.label; } // تعديلك الإنكليزي
+    var en=SEMEN_EN[secKey];
+    if(en&&en.fields&&en.fields[fid]) return en.fields[fid];      // الإنكليزي الثابت
+    return fid;                                                    // fallback أخير
   };
   const _smLiveRef=(secKey,fid)=>{
     var sec=SEMEN_FIELDS[secKey];
-    if(sec&&sec.fields){ var f=sec.fields.find(x=>x.id===fid); if(f&&f.ref!=null&&f.ref!=='') return f.ref; }
+    if(sec&&sec.fields){ var f=sec.fields.find(x=>x.id===fid); if(f&&f.ref!=null&&f.ref!==''&&_isLatinText(f.ref)) return f.ref; }
     return SEMEN_REFS[fid]||'';
   };
   const _smLiveSecLabel=(secKey)=>{
     var sec=SEMEN_FIELDS[secKey];
-    if(sec&&sec.label) return sec.label;
-    var en=SEMEN_EN[secKey]; return (en&&en.label)||secKey;
+    if(sec&&_isLatinText(sec.label)) return sec.label;            // تعديلك الإنكليزي للقسم
+    var en=SEMEN_EN[secKey];
+    if(en&&en.label) return en.label;                             // الإنكليزي الثابت
+    return secKey;
   };
   // ترتيب الحقول داخل القسم كما هو محفوظ في SEMEN_FIELDS (يعكس السحب والإفلات)
   const _smLiveFieldOrder=(secKey)=>{
