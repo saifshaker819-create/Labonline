@@ -9297,6 +9297,8 @@ function startApp(){
   setTimeout(()=>showNotif('مرحباً','النظام جاهز للعمل 🔬','success'),500);
   // 📢 تفعيل زر المنادات الصوتية + 🖨️ تهيئة واجهة وضع الطباعة
   try{ if(window.Intercom) Intercom.bindButton(); }catch(e){}
+  // ⌨️ اختصار: الضغط على مسطرة المسافة مرتين بسرعة يفتح/يغلق التحدّث بالمنادات
+  try{ _bindIntercomHotkey(); }catch(e){}
   try{ if(typeof _syncPrintScopeUI==='function') _syncPrintScopeUI(); }catch(e){}
   // تهيئة عداد ESR بعد تعيين المستخدم (لضمان صحة prefix التخزين)
   setTimeout(function(){
@@ -37726,44 +37728,75 @@ function _lisPassConfirm(){
 var Intercom = (function(){
   'use strict';
 
-  var RTC_CONFIG = { iceServers: [] }; // LAN فقط — لا حاجة لـ STUN/TURN
-  var _peers      = {};     // deviceId → { pc, audioEl }
+  // ── إعداد WebRTC — LAN فقط (لا حاجة STUN/TURN) ──────────────────────
+  var RTC_CONFIG = { iceServers: [] };
+
+  // نموذج أحادي الاتجاه لكل جلسة تحدّث (يمنع الصدى والتكرار):
+  //   • «out» = اتصال نُرسِل عبره صوتنا لجهاز آخر (نحن المتكلّم).
+  //   • «in»  = اتصال نستقبل عبره صوت جهاز آخر (نحن المستمع).
+  //   هكذا لا يتفاوض الطرفان بنفس الوقت (لا glare) ولا يعود صوتنا إلينا.
+  var _out        = {};     // remoteId → { pc }              (نبثّ نحوه)
+  var _in         = {};     // remoteId → { pc, audioEl }     (نستقبل منه)
   var _localStream= null;   // ميكروفوننا أثناء التحدث
-  var _active     = false;  // هل نحن حالياً نبثّ (نضغط الزر)؟
-  var _remoteActive = {};   // deviceId → true إذا كان يبثّ لنا صوتاً
+  var _active     = false;  // هل نضغط الزر الآن (نتكلّم)؟
+  var _remoteActive = {};   // remoteId → true إذا يبثّ لنا صوتاً
   var _btnId      = 'intercom-btn';
 
-  // ── أداة إرسال إشارة عبر قناة LAN ──────────────────────────────────
+  function _me(){ return (typeof _lanDeviceId!=='undefined') ? _lanDeviceId : 'me'; }
+
   function _sig(obj){
-    obj.from = (typeof _lanDeviceId!=='undefined') ? _lanDeviceId : 'me';
+    obj.from = _me();
     if(typeof _lanSendRaw==='function') _lanSendRaw(obj);
   }
 
-  // ── هل الربط مفعّل أصلاً؟ ───────────────────────────────────────────
   function _lanReady(){
     return (typeof _lanMode!=='undefined') && (_lanMode==='server' || _lanMode==='client');
   }
 
-  // ── إنشاء/جلب اتصال نظير لجهاز معيّن ────────────────────────────────
-  function _getPeer(remoteId, createOffer){
-    if(_peers[remoteId]) return _peers[remoteId];
+  // ── اتصال صادر (نحن المتكلّم) نحو جهاز مستمع ─────────────────────────
+  function _makeOut(remoteId){
+    if(_out[remoteId]) return _out[remoteId];
+    var pc = new RTCPeerConnection(RTC_CONFIG);
+    var entry = { pc: pc };
+    _out[remoteId] = entry;
+
+    pc.onicecandidate = function(e){
+      if(e.candidate) _sig({ type:'ic:ice', dir:'out', to:remoteId, candidate:e.candidate });
+    };
+    pc.onconnectionstatechange = function(){
+      var st = pc.connectionState;
+      if(st==='failed'||st==='closed'||st==='disconnected') _closeOut(remoteId);
+    };
+    // أضف مسارنا الصوتي (نبثّ فقط — لا نستقبل على هذا الاتصال)
+    if(_localStream){
+      _localStream.getTracks().forEach(function(t){ try{ pc.addTrack(t, _localStream); }catch(_){} });
+    }
+    // نحن مَن يبدأ العرض على الاتصال الصادر
+    pc.createOffer({ offerToReceiveAudio:false })
+      .then(function(o){ return pc.setLocalDescription(o); })
+      .then(function(){ _sig({ type:'ic:offer', to:remoteId, sdp:pc.localDescription }); })
+      .catch(function(e){ console.warn('[Intercom] out offer',e); });
+    return entry;
+  }
+
+  // ── اتصال وارد (نحن المستمع) من جهاز متكلّم ─────────────────────────
+  function _makeIn(remoteId){
+    if(_in[remoteId]) return _in[remoteId];
     var pc = new RTCPeerConnection(RTC_CONFIG);
     var audioEl = document.createElement('audio');
     audioEl.autoplay = true;
     audioEl.setAttribute('playsinline','');
     audioEl.style.display = 'none';
+    audioEl.volume = 1.0;
+    audioEl.muted = _active; // إن كنا نتحدّث الآن، لا تُسمع الوارد حتى نتوقّف
     document.body.appendChild(audioEl);
 
-    var entry = { pc: pc, audioEl: audioEl, remoteId: remoteId };
-    _peers[remoteId] = entry;
+    var entry = { pc: pc, audioEl: audioEl };
+    _in[remoteId] = entry;
 
-    // ICE → أرسلها للطرف الآخر
     pc.onicecandidate = function(e){
-      if(e.candidate){
-        _sig({ type:'ic:ice', to:remoteId, candidate:e.candidate });
-      }
+      if(e.candidate) _sig({ type:'ic:ice', dir:'in', to:remoteId, candidate:e.candidate });
     };
-    // صوت وارد → شغّله
     pc.ontrack = function(e){
       if(e.streams && e.streams[0]){
         audioEl.srcObject = e.streams[0];
@@ -37773,38 +37806,37 @@ var Intercom = (function(){
       }
     };
     pc.onconnectionstatechange = function(){
-      if(pc.connectionState==='failed' || pc.connectionState==='closed' || pc.connectionState==='disconnected'){
-        _remoteActive[remoteId] = false;
-        _refreshBtn();
+      var st = pc.connectionState;
+      if(st==='failed'||st==='closed'||st==='disconnected'){
+        _remoteActive[remoteId] = false; _closeIn(remoteId); _refreshBtn();
       }
     };
-
-    // أضف مسارنا الصوتي إن كنا نبثّ الآن
-    if(_localStream){
-      _localStream.getTracks().forEach(function(t){ try{ pc.addTrack(t, _localStream); }catch(_){} });
-    }
-
-    if(createOffer){
-      pc.createOffer({ offerToReceiveAudio:true })
-        .then(function(offer){ return pc.setLocalDescription(offer); })
-        .then(function(){ _sig({ type:'ic:offer', to:remoteId, sdp:pc.localDescription }); })
-        .catch(function(e){ console.warn('[Intercom] offer',e); });
-    }
     return entry;
   }
 
-  function _closePeer(remoteId){
-    var p = _peers[remoteId];
-    if(!p) return;
+  function _closeOut(remoteId){
+    var p = _out[remoteId]; if(!p) return;
     try{ p.pc.close(); }catch(_){}
-    try{ if(p.audioEl){ p.audioEl.srcObject=null; p.audioEl.remove(); } }catch(_){}
-    delete _peers[remoteId];
+    delete _out[remoteId];
+  }
+  function _closeIn(remoteId){
+    var p = _in[remoteId]; if(!p) return;
+    try{ p.pc.close(); }catch(_){}
+    try{ if(p.audioEl){ p.audioEl.pause(); p.audioEl.srcObject=null; p.audioEl.remove(); } }catch(_){}
+    delete _in[remoteId];
     delete _remoteActive[remoteId];
+  }
+  function _closeAll(){
+    Object.keys(_out).forEach(_closeOut);
+    Object.keys(_in).forEach(_closeIn);
     _refreshBtn();
   }
 
-  function _closeAllPeers(){
-    Object.keys(_peers).forEach(_closePeer);
+  function _muteIncoming(mute){
+    Object.keys(_in).forEach(function(rid){
+      var a = _in[rid] && _in[rid].audioEl;
+      if(a) a.muted = !!mute;
+    });
   }
 
   // ── بدء التحدث (ضغط الزر) ──────────────────────────────────────────
@@ -37818,21 +37850,22 @@ var Intercom = (function(){
       if(typeof showNotif==='function') showNotif('📢 المنادات','الميكروفون غير مدعوم هنا','error');
       return;
     }
-    navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true }, video:false })
+    // قيود قوية لإلغاء الصدى والضوضاء (مهمة جداً عند استخدام السماعات بدل السمّاعة)
+    var constraints = { audio: {
+      echoCancellation: { ideal:true },
+      noiseSuppression: { ideal:true },
+      autoGainControl:  { ideal:true },
+      channelCount: 1
+    }, video:false };
+    navigator.mediaDevices.getUserMedia(constraints)
       .then(function(stream){
         _localStream = stream;
         _active = true;
+        _muteIncoming(true);  // نصف مزدوج: أوقف سماع الوارد أثناء تحدّثنا (يمنع الصدى الصوتي)
         _refreshBtn();
-        // أعلن للجميع أننا نريد التحدث → كل جهاز يبدأ offer نحونا
-        _sig({ type:'ic:announce' });
-        // وأضف مسارنا لأي اتصالات قائمة مسبقاً
-        Object.keys(_peers).forEach(function(rid){
-          var pc = _peers[rid].pc;
-          _localStream.getTracks().forEach(function(t){
-            var has = pc.getSenders().some(function(s){ return s.track===t; });
-            if(!has){ try{ pc.addTrack(t, _localStream); }catch(_){} }
-          });
-        });
+        // أعلن أننا سنتحدّث — كل جهاز آخر يجهّز اتصالاً وارداً (in) لاستقبال صوتنا،
+        // ونحن نُنشئ اتصالاً صادراً (out) لكل جهاز معروف لدينا حالياً.
+        _sig({ type:'ic:talk_start' });
         if(typeof showNotif==='function') showNotif('📢 المنادات','🎙️ تتحدّث الآن — الصوت يُبثّ للحاسبات المتصلة','success');
       })
       .catch(function(e){
@@ -37845,71 +37878,75 @@ var Intercom = (function(){
   function stop(){
     if(!_active) return;
     _active = false;
-    // أزل مسارنا من كل الاتصالات ثم أوقف الميكروفون
+    _muteIncoming(false); // أعد تشغيل سماع الوارد بعد توقّفنا
+    _sig({ type:'ic:talk_stop' });
+    // أغلق كل الاتصالات الصادرة وأوقف الميكروفون
+    Object.keys(_out).forEach(_closeOut);
     if(_localStream){
-      Object.keys(_peers).forEach(function(rid){
-        var pc = _peers[rid].pc;
-        pc.getSenders().forEach(function(s){
-          if(s.track && s.track.kind==='audio'){ try{ pc.removeTrack(s); }catch(_){} }
-        });
-      });
       _localStream.getTracks().forEach(function(t){ try{ t.stop(); }catch(_){} });
       _localStream = null;
     }
-    _sig({ type:'ic:bye' });
     _refreshBtn();
   }
 
   function toggle(){ if(_active) stop(); else start(); }
 
-  // ── استقبال رسائل الإشارة (يُستدعى من _lanHandleMessage) ────────────
+  // ── استقبال رسائل الإشارة (من _lanHandleMessage) ────────────────────
   function onSignal(msg){
     if(!msg || typeof msg.type!=='string' || msg.type.indexOf('ic:')!==0) return false;
     var from = msg.from;
-    if(!from || from === ((typeof _lanDeviceId!=='undefined')?_lanDeviceId:'me')) return true; // تجاهل صدانا
-    // رسائل موجّهة لجهاز محدّد: طبّقها فقط إن كانت لنا
-    if(msg.to && msg.to !== ((typeof _lanDeviceId!=='undefined')?_lanDeviceId:'me')) return true;
+    if(!from || from === _me()) return true;                 // تجاهل صدانا
+    if(msg.to && msg.to !== _me()) return true;              // موجّهة لجهاز آخر
 
-    if(msg.type==='ic:announce'){
-      // الطرف الآخر يريد التحدث → أنشئ اتصالاً واعرض عليه (offer) لاستقبال صوته
-      _getPeer(from, true);
+    if(msg.type==='ic:talk_start'){
+      // جهاز آخر بدأ يتكلّم → جهّز اتصالاً وارداً لاستقبال صوته، وأعلمه أننا جاهزون
+      _makeIn(from);
+      _sig({ type:'ic:ready', to:from });
+      // لو كنا نتكلّم نحن أيضاً في نفس اللحظة → أنشئ اتصالاً صادراً نحوه ليسمعنا
+      if(_active) _makeOut(from);
+    }
+    else if(msg.type==='ic:ready'){
+      // مستمع أعلن جاهزيته لاستقبال صوتنا → أنشئ الاتصال الصادر واعرض عليه
+      if(_active) _makeOut(from);
+    }
+    else if(msg.type==='ic:talk_stop'){
+      // توقّف عن الكلام → أغلق اتصال الاستقبال منه
+      _remoteActive[from] = false;
+      _closeIn(from);
+      _refreshBtn();
     }
     else if(msg.type==='ic:offer'){
-      var entry = _getPeer(from, false);
-      var pc = entry.pc;
+      // عرض وارد = المرسِل هو المتكلّم ونحن المستمع (اتصال in)
+      var ein = _makeIn(from);
+      var pc = ein.pc;
       pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
         .then(function(){ return pc.createAnswer(); })
-        .then(function(answer){ return pc.setLocalDescription(answer); })
+        .then(function(a){ return pc.setLocalDescription(a); })
         .then(function(){ _sig({ type:'ic:answer', to:from, sdp:pc.localDescription }); })
         .catch(function(e){ console.warn('[Intercom] answer',e); });
     }
     else if(msg.type==='ic:answer'){
-      var p = _peers[from];
-      if(p){
-        p.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
+      // ردّ وارد على عرضنا الصادر (اتصال out)
+      var eo = _out[from];
+      if(eo){
+        eo.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp))
           .catch(function(e){ console.warn('[Intercom] setAnswer',e); });
       }
     }
     else if(msg.type==='ic:ice'){
-      var pe = _peers[from];
-      if(pe && msg.candidate){
-        pe.pc.addIceCandidate(new RTCIceCandidate(msg.candidate))
-          .catch(function(e){ /* مرشّح متأخّر — تجاهل */ });
+      // dir من منظور المرسِل: لو أرسلها على اتصاله «out» فهي تخصّ اتصالنا «in» والعكس
+      var target = (msg.dir==='out') ? (_in[from] && _in[from].pc)
+                 : (msg.dir==='in')  ? (_out[from] && _out[from].pc)
+                 : null;
+      if(target && msg.candidate){
+        target.addIceCandidate(new RTCIceCandidate(msg.candidate)).catch(function(){});
       }
-    }
-    else if(msg.type==='ic:bye'){
-      // الطرف الآخر توقّف عن التحدث — إن لم نكن نبثّ نحن أيضاً أغلق الاتصال
-      _remoteActive[from] = false;
-      if(!_active) _closePeer(from);
-      _refreshBtn();
     }
     return true;
   }
 
-  // ── مؤشر الزر بالهيدر ───────────────────────────────────────────────
-  function _anyRemote(){
-    return Object.keys(_remoteActive).some(function(k){ return _remoteActive[k]; });
-  }
+  // ── مؤشر الزر ───────────────────────────────────────────────────────
+  function _anyRemote(){ return Object.keys(_remoteActive).some(function(k){ return _remoteActive[k]; }); }
   function _refreshBtn(){
     var b = document.getElementById(_btnId);
     if(!b) return;
@@ -37925,12 +37962,11 @@ var Intercom = (function(){
     }
   }
 
-  // ── ربط أحداث الزر (Push-to-Talk بالماوس واللمس، مع دعم النقر للتبديل) ──
+  // ── ربط أحداث الزر: Push-to-Talk (ضغط مستمر) ───────────────────────
   function bindButton(){
     var b = document.getElementById(_btnId);
     if(!b || b._icBound) return;
     b._icBound = true;
-    // Push-to-Talk: اضغط باستمرار للتحدث
     b.addEventListener('mousedown', function(e){ e.preventDefault(); start(); });
     b.addEventListener('mouseup',   function(e){ e.preventDefault(); stop();  });
     b.addEventListener('mouseleave',function(){ if(_active) stop(); });
@@ -37943,11 +37979,52 @@ var Intercom = (function(){
     toggle: toggle, start: start, stop: stop,
     onSignal: onSignal, bindButton: bindButton,
     isActive: function(){ return _active; },
-    closeAll: _closeAllPeers,
-    _peers: _peers
+    closeAll: _closeAll
   };
 }());
 window.Intercom = Intercom;
+
+// ⌨️ اختصار لوحة المفاتيح للمنادات: ضغط مسطرة المسافة مرتين بسرعة = بدء التحدّث،
+//    ثم مسطرة المسافة أو Esc = إيقاف. لا يعمل أثناء الكتابة في حقل إدخال.
+var _icLastSpace = 0;
+var _icKbTalking = false;
+function _icTypingTarget(el){
+  if(!el) return false;
+  var tag = (el.tagName||'').toLowerCase();
+  if(tag==='input' || tag==='textarea' || tag==='select') return true;
+  if(el.isContentEditable) return true;
+  return false;
+}
+function _bindIntercomHotkey(){
+  if(window._icHotkeyBound) return;
+  window._icHotkeyBound = true;
+  document.addEventListener('keydown', function(e){
+    var code = e.code || '';
+    var isSpace = (code==='Space' || e.key===' ' || e.keyCode===32);
+    // أثناء التحدّث بالمنادات: المسافة أو Esc توقف
+    if(_icKbTalking){
+      if(isSpace || e.key==='Escape' || e.keyCode===27){
+        e.preventDefault();
+        _icKbTalking = false;
+        try{ if(window.Intercom) Intercom.stop(); }catch(_){}
+      }
+      return;
+    }
+    if(!isSpace) return;
+    if(_icTypingTarget(e.target)) return; // لا تتدخّل أثناء الكتابة
+    var now = Date.now();
+    if(now - _icLastSpace < 450){
+      // ضغطة مزدوجة سريعة → ابدأ التحدّث
+      e.preventDefault();
+      _icLastSpace = 0;
+      try{
+        if(window.Intercom){ Intercom.start(); _icKbTalking = true; }
+      }catch(_){}
+    } else {
+      _icLastSpace = now;
+    }
+  }, true);
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // 🖨️ الطباعة المتزامنة عبر الشبكة + وضع الطباعة (3 خيارات حصرية)
