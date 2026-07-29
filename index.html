@@ -5655,6 +5655,95 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               </div>
             </div>
 
+            <!-- ════════════════════════════════════════════════════════════════════
+     MedLab Pro — واجهة النسخ الاحتياطي عبر Google Drive
+     gdrive-ui.html
+
+     انسخ هذه الكتلة وألصقها داخل  <div id="db-main-content">  في index.html،
+     أنسب مكان: بعد بطاقة "استرداد البيانات" وقبل بطاقة "النسخ الاحتياطي التلقائي".
+     (أي بعد السطر الذي ينتهي بـ  <!-- النسخ الاحتياطي التلقائي --> السابق له)
+     ════════════════════════════════════════════════════════════════════ -->
+
+<!-- ☁️ النسخ الاحتياطي عبر Google Drive -->
+<div id="gdrive-box" style="background:rgba(66,133,244,0.06);border:1.5px solid rgba(66,133,244,0.35);border-radius:14px;padding:22px;margin-bottom:16px">
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <span style="font-size:30px">☁️</span>
+    <div style="flex:1">
+      <div style="font-size:15px;font-weight:800;color:#4285f4">النسخ الاحتياطي السحابي (Google Drive)</div>
+      <div style="font-size:11px;color:var(--text2);margin-top:2px">
+        نسخة مشفّرة تُحفظ في مساحة خاصة ومخفية على حسابك في Google Drive — كواتساب تماماً
+      </div>
+    </div>
+  </div>
+
+  <!-- حالة الاتصال -->
+  <div id="gdrive-status" style="font-size:12px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:8px;color:var(--text2);margin-bottom:14px">
+    ⏳ جارٍ التحقق من الحالة...
+  </div>
+
+  <!-- زر الربط (يظهر عند عدم الربط) -->
+  <button id="gdrive-link-btn" class="btn btn-lg" style="width:100%;background:#4285f4;border-color:#4285f4;color:#fff;display:none;gap:10px;font-weight:800" onclick="gdriveLink()">
+    🔗 ربط Google Drive
+  </button>
+
+  <!-- صندوق الحساب المربوط (يظهر بعد الربط) -->
+  <div id="gdrive-linked-box" style="display:none">
+
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(0,245,147,0.06);border:1px solid rgba(0,245,147,0.25);border-radius:10px;padding:10px 14px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--text2)">👤 الحساب: <b id="gdrive-email" style="color:var(--success)">—</b></span>
+      <button class="btn btn-d btn-sm" style="white-space:nowrap" onclick="gdriveUnlink()">🔌 فصل الحساب</button>
+    </div>
+
+    <!-- معلومات آخر نسخة -->
+    <div id="gdrive-last-info" style="font-size:11px;color:var(--text2);background:rgba(255,255,255,0.04);border-radius:8px;padding:10px 14px;line-height:1.9;margin-bottom:14px">
+      —
+    </div>
+
+    <!-- أزرار النسخ والاسترجاع -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+      <button class="btn btn-ok btn-lg" style="flex:1;min-width:150px" onclick="gdriveBackupNow(false)">
+        ☁️ رفع نسخة احتياطية الآن
+      </button>
+      <button class="btn btn-p btn-lg" style="flex:1;min-width:150px" onclick="gdriveRestore()">
+        📥 استرجاع من Google Drive
+      </button>
+    </div>
+
+    <!-- النسخ التلقائي السحابي -->
+    <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">⏰</span>
+          <div style="font-size:13px;font-weight:700;color:var(--text)">النسخ التلقائي السحابي</div>
+        </div>
+        <div class="tog" id="gdrive-auto-tog" onclick="gdriveToggleAuto(this)"><div class="tog-t"></div></div>
+      </div>
+      <div id="gdrive-auto-status" style="font-size:11px;color:var(--text2);margin-bottom:8px">⚪ غير مفعّل</div>
+      <select id="gdrive-auto-freq" class="fc" style="width:100%;font-size:12px" onchange="_gdSaveAutoSettings()">
+        <option value="daily">يومياً (عند أول فتح كل يوم)</option>
+        <option value="twodays">كل يومين</option>
+        <option value="weekly">أسبوعياً</option>
+      </select>
+    </div>
+
+    <!-- إدارة كلمة مرور التشفير -->
+    <div style="text-align:center">
+      <button class="btn btn-s btn-sm" onclick="gdriveChangePassword()">🔑 تغيير كلمة مرور التشفير</button>
+    </div>
+  </div>
+
+  <!-- ملاحظة أمان -->
+  <div style="font-size:10px;color:var(--text2);background:rgba(255,255,255,0.03);border-radius:8px;padding:10px 14px;line-height:1.9;margin-top:14px">
+    🔒 النسخة مشفّرة بالكامل (AES-256) بكلمة مرور تعرفها أنت فقط. حتى لو وصل أحد لملف Drive لا يستطيع قراءته.
+    كل حساب يرى نسخته فقط — لا يمكن لأي مستخدم آخر الوصول إليها.
+    <b style="color:var(--warning)">احتفظ بكلمة مرور التشفير في مكان آمن — بدونها لا يمكن استرجاع النسخ.</b>
+  </div>
+
+</div>
+<!-- نهاية ☁️ Google Drive -->
+
+
             <!-- النسخ الاحتياطي التلقائي -->
             <div style="background:rgba(255,180,0,0.06);border:1.5px solid rgba(255,180,0,0.3);border-radius:14px;padding:20px;margin-bottom:20px">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
@@ -9317,6 +9406,15 @@ function startApp(){
 
   // تشغيل النسخ الاحتياطي التلقائي المحلي
   setTimeout(initAutoBackup, 4000);
+
+  // ☁️ تهيئة نظام Google Drive: الحالة + عرض الاسترجاع على جهاز جديد + النسخ التلقائي
+  setTimeout(function(){
+    try{
+      if(typeof initGDrive === 'function')          initGDrive();
+      if(typeof _gdOfferRestoreIfNew === 'function') _gdOfferRestoreIfNew();
+      if(typeof _gdMaybeAutoBackup === 'function')   _gdMaybeAutoBackup();
+    }catch(e){ console.warn('[GDrive] init error', e); }
+  }, 4500);
   // تشغيل النقل التلقائي كل دقيقتين إلى IDB
   setTimeout(_startAutoMigration, 6000);
   // تهيئة نظام D:\MedLabPro (FSA)
@@ -21842,6 +21940,7 @@ function verifyDbAuth(){
       document.getElementById('db-main-content').style.display = 'block';
       document.getElementById('db-instructions-btn').style.display = '';
       updateDbStats();
+      if(typeof initGDrive === 'function') initGDrive();
       err.style.display = 'none';
       showNotif('تم التحقق','تم تأكيد الهوية بالرمز السري ✅','success');
       return;
@@ -21876,6 +21975,7 @@ function verifyDbAuth(){
     document.getElementById('db-main-content').style.display = 'block';
     document.getElementById('db-instructions-btn').style.display = '';
     updateDbStats();
+    if(typeof initGDrive === 'function') initGDrive();
     err.style.display = 'none';
     showNotif('تم التحقق','تم تأكيد الهوية بنجاح ✅','success');
     return;
@@ -33755,6 +33855,448 @@ function _fsaUpdateIndicator(connected){
 }
 
 // ── بناء كائن البيانات الكامل ─────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+//  MedLab Pro — نظام النسخ الاحتياطي عبر Google Drive (الواجهة)
+//  gdrive-frontend.js
+//
+//  انسخ محتوى هذا الملف كاملاً وألصقه داخل <script> في index.html
+//  (في أي مكان بعد تعريف DB و _fsaBuildFullBackup و showNotif و IDB —
+//   أنسب مكان: قبل نهاية آخر <script> كبير، مثلاً بجانب دوال fsa*).
+//
+//  يعتمد على:
+//   • window.electronAPI.gdrive*   (من preload)
+//   • _fsaBuildFullBackup()        (موجودة في تطبيقك — تبني النسخة الكاملة)
+//   • pendingImportData + confirmImport()  (موجودة — لتطبيق الاسترجاع)
+//   • showNotif(), DB, IDB
+// ════════════════════════════════════════════════════════════════════════
+
+// ── مفاتيح تخزين محلية (خاصة بكل مستخدم) ─────────────────────────────
+function _gdKey(suffix){ return 'gdrive_' + (DB._user || 'default') + '_' + suffix; }
+function _gdPassKey(){ return _gdKey('encpass'); }        // كلمة مرور التشفير (مخزّنة مبهّمة)
+function _gdAutoKey(){ return _gdKey('auto'); }           // إعداد النسخ التلقائي
+function _gdLastKey(){ return _gdKey('last'); }           // وقت آخر نسخة ناجحة
+function _gdEmailKey(){ return _gdKey('email'); }         // بريد الحساب المربوط
+
+// اسم ملف النسخة داخل appDataFolder — مرتبط بالمستخدم لعزل الحسابات على نفس الإيميل
+function _gdFileName(){
+  var u = (DB._user || 'default').replace(/[^0-9A-Za-z_-]/g, '');
+  return 'medlab_backup_' + u + '.enc';
+}
+
+// ── تعمية بسيطة لكلمة المرور المخزّنة محلياً (ليست حماية قوية،
+//    فقط لمنع القراءة المباشرة من localStorage) ──────────────────────
+function _gdObfuscate(str){
+  try{
+    var salt = 'MedLab#' + (DB._user||'') + '#2025';
+    var out = '';
+    for(var i=0;i<str.length;i++){
+      out += String.fromCharCode(str.charCodeAt(i) ^ salt.charCodeAt(i % salt.length));
+    }
+    return btoa(unescape(encodeURIComponent(out)));
+  }catch(e){ return ''; }
+}
+function _gdDeobfuscate(b64){
+  try{
+    var raw = decodeURIComponent(escape(atob(b64)));
+    var salt = 'MedLab#' + (DB._user||'') + '#2025';
+    var out = '';
+    for(var i=0;i<raw.length;i++){
+      out += String.fromCharCode(raw.charCodeAt(i) ^ salt.charCodeAt(i % salt.length));
+    }
+    return out;
+  }catch(e){ return ''; }
+}
+
+function _gdSavePassword(pw){ try{ localStorage.setItem(_gdPassKey(), _gdObfuscate(pw)); }catch(e){} }
+function _gdGetPassword(){ var v = localStorage.getItem(_gdPassKey()); return v ? _gdDeobfuscate(v) : ''; }
+function _gdHasElectron(){ return !!(window.IS_ELECTRON && window.electronAPI && window.electronAPI.gdriveStatus); }
+
+// ════════════════════════════════════════════════════════════════════
+//  تهيئة القسم + تحديث الحالة
+// ════════════════════════════════════════════════════════════════════
+
+async function initGDrive(){
+  if(!_gdHasElectron()){
+    var box = document.getElementById('gdrive-box');
+    if(box) box.style.display = 'none';   // على المتصفح/الهاتف: أخفِ القسم
+    return;
+  }
+  await refreshGDriveStatus();
+  _gdLoadAutoSettings();
+}
+
+async function refreshGDriveStatus(){
+  if(!_gdHasElectron()) return;
+  var statusEl = document.getElementById('gdrive-status');
+  var linkBtn  = document.getElementById('gdrive-link-btn');
+  var linkedBox= document.getElementById('gdrive-linked-box');
+  var emailEl  = document.getElementById('gdrive-email');
+
+  try{
+    var st = await window.electronAPI.gdriveStatus();
+    if(st && st.linked){
+      if(linkBtn)   linkBtn.style.display   = 'none';
+      if(linkedBox) linkedBox.style.display = 'block';
+      var email = st.email || localStorage.getItem(_gdEmailKey()) || '—';
+      if(st.email) localStorage.setItem(_gdEmailKey(), st.email);
+      if(emailEl)  emailEl.textContent = email;
+      if(statusEl){
+        statusEl.innerHTML = '🟢 مرتبط بحساب: <b style="color:var(--success)">'+email+'</b>';
+      }
+      _gdRefreshLastBackupInfo();
+    } else {
+      if(linkBtn)   linkBtn.style.display   = 'block';
+      if(linkedBox) linkedBox.style.display = 'none';
+      if(statusEl)  statusEl.innerHTML = '⚪ غير مرتبط — اضغط "ربط Google Drive" للبدء';
+    }
+  }catch(e){
+    if(statusEl) statusEl.innerHTML = '⚠️ تعذّر قراءة الحالة: '+e.message;
+  }
+}
+
+// عرض معلومات آخر نسخة على Drive
+async function _gdRefreshLastBackupInfo(){
+  var infoEl = document.getElementById('gdrive-last-info');
+  if(!infoEl) return;
+  infoEl.textContent = '⏳ جارٍ قراءة معلومات آخر نسخة...';
+  try{
+    var res = await window.electronAPI.gdriveInfo({ fileName: _gdFileName() });
+    if(!res.ok){ infoEl.textContent = 'تعذّر: ' + res.error; return; }
+    if(!res.exists){ infoEl.innerHTML = '📭 لا توجد نسخة محفوظة بعد على هذا الحساب'; return; }
+    var d = new Date(res.date || res.modifiedTime);
+    var sizeMB = (res.size/1024/1024).toFixed(2);
+    infoEl.innerHTML =
+      '📦 آخر نسخة: <b style="color:var(--primary)">'+ d.toLocaleString('ar-IQ') +'</b><br>'+
+      '📊 الحجم: '+ sizeMB +' MB &nbsp;•&nbsp; الإصدار: '+ (res.version||'—') +'<br>'+
+      '👥 '+ res.patients +' مريض &nbsp;•&nbsp; 🧪 '+ res.requests +' طلب &nbsp;•&nbsp; 🧾 '+ res.invoices +' فاتورة';
+  }catch(e){ infoEl.textContent = 'خطأ: '+e.message; }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ربط / فصل الحساب
+// ════════════════════════════════════════════════════════════════════
+
+async function gdriveLink(){
+  if(!_gdHasElectron()){
+    showNotif('غير متاح','ربط Google Drive يعمل في نسخة سطح المكتب فقط','warning');
+    return;
+  }
+  showNotif('جارٍ الربط','🌐 افتح المتصفح وسجّل الدخول بحساب Google الخاص بك...','info');
+  try{
+    var res = await window.electronAPI.gdriveLink();
+    if(res && res.ok){
+      if(res.email) localStorage.setItem(_gdEmailKey(), res.email);
+      showNotif('تم الربط','✅ تم ربط حساب Google Drive بنجاح'+(res.email?(' ('+res.email+')'):''),'success');
+      // اطلب كلمة مرور التشفير إن لم تكن محدّدة
+      if(!_gdGetPassword()){
+        _gdPromptSetPassword(function(){ refreshGDriveStatus(); });
+      } else {
+        refreshGDriveStatus();
+      }
+    } else {
+      var msg = (res && res.error) || 'خطأ غير معروف';
+      if(msg === 'oauth_timeout') msg = 'انتهى الوقت — أعد المحاولة وأكمل تسجيل الدخول أسرع';
+      showNotif('فشل الربط','❌ '+msg,'error');
+    }
+  }catch(e){
+    showNotif('فشل الربط','❌ '+e.message,'error');
+  }
+}
+
+async function gdriveUnlink(){
+  if(!confirm('فصل حساب Google Drive؟\nلن تُحذف النسخ الموجودة على حسابك، لكن سيتوقف النسخ التلقائي حتى تعيد الربط.')) return;
+  try{
+    await window.electronAPI.gdriveUnlink();
+    localStorage.removeItem(_gdEmailKey());
+    showNotif('تم الفصل','تم فصل حساب Google Drive','info');
+    refreshGDriveStatus();
+  }catch(e){
+    showNotif('خطأ','تعذّر الفصل: '+e.message,'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  كلمة مرور التشفير
+// ════════════════════════════════════════════════════════════════════
+
+function _gdPromptSetPassword(afterSet){
+  var pw = prompt(
+    '🔐 حدّد كلمة مرور لتشفير نسخك الاحتياطية.\n\n'+
+    '⚠️ مهم جداً: احفظ هذه الكلمة في مكان آمن.\n'+
+    'بدونها لا يمكن استرجاع النسخ إطلاقاً — لا نحن ولا Google نستطيع فكّها.\n\n'+
+    'أدخل كلمة المرور (6 أحرف على الأقل):'
+  );
+  if(pw === null) return;              // ألغى المستخدم
+  if(!pw || pw.length < 6){
+    showNotif('كلمة قصيرة','يجب أن تكون كلمة المرور 6 أحرف على الأقل','warning');
+    return;
+  }
+  var pw2 = prompt('أعد إدخال كلمة المرور للتأكيد:');
+  if(pw2 !== pw){
+    showNotif('عدم تطابق','كلمتا المرور غير متطابقتين — أعد المحاولة','error');
+    return;
+  }
+  _gdSavePassword(pw);
+  showNotif('تم الحفظ','✅ تم حفظ كلمة مرور التشفير على هذا الجهاز','success');
+  if(afterSet) afterSet();
+}
+
+function gdriveChangePassword(){
+  _gdPromptSetPassword(function(){
+    showNotif('تنبيه','ℹ️ النسخ القديمة تبقى بكلمتها السابقة. النسخة القادمة ستستخدم الكلمة الجديدة.','info');
+  });
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  رفع نسخة احتياطية
+// ════════════════════════════════════════════════════════════════════
+
+async function gdriveBackupNow(silent){
+  if(!_gdHasElectron()){
+    if(!silent) showNotif('غير متاح','يعمل في نسخة سطح المكتب فقط','warning');
+    return false;
+  }
+  // تأكد من الربط
+  var st = await window.electronAPI.gdriveStatus();
+  if(!st || !st.linked){
+    if(!silent) showNotif('غير مرتبط','اربط حساب Google Drive أولاً','warning');
+    return false;
+  }
+  // تأكد من كلمة المرور
+  var pw = _gdGetPassword();
+  if(!pw){
+    if(silent) return false;   // لا تقاطع المستخدم في الوضع الصامت
+    _gdPromptSetPassword(function(){ gdriveBackupNow(false); });
+    return false;
+  }
+
+  if(!silent) showNotif('جارٍ النسخ','⏳ يتم بناء النسخة ورفعها إلى Google Drive...','info');
+
+  try{
+    // ابنِ النسخة الكاملة عبر دالة تطبيقك الموجودة
+    var backupObj = await _fsaBuildFullBackup();
+    var payload = JSON.stringify(backupObj);
+    var meta = {
+      version:   (backupObj._version || '1.0.0'),
+      patients:  (backupObj._stats && backupObj._stats.patients)  || 0,
+      requests:  (backupObj._stats && backupObj._stats.requests)  || 0,
+      invoices:  (backupObj._stats && backupObj._stats.invoices)  || 0,
+      userPrefix:(backupObj._userPrefix || DB._pfx()),
+    };
+
+    var res = await window.electronAPI.gdriveBackup({
+      payload:  payload,
+      password: pw,
+      meta:     meta,
+      fileName: _gdFileName(),
+    });
+
+    if(res && res.ok){
+      localStorage.setItem(_gdLastKey(), new Date().toISOString());
+      if(!silent){
+        var sizeMB = (res.size/1024/1024).toFixed(2);
+        showNotif('تم النسخ','✅ رُفعت النسخة إلى Google Drive بنجاح ('+sizeMB+' MB)','success');
+      }
+      _gdRefreshLastBackupInfo();
+      _gdUpdateAutoStatus();
+      return true;
+    } else {
+      var err = (res && res.error) || 'خطأ';
+      if(err === 'not_linked') err = 'الحساب غير مربوط';
+      if(err === 'no_password') err = 'لم تُحدَّد كلمة مرور التشفير';
+      if(!silent) showNotif('فشل النسخ','❌ '+err,'error');
+      return false;
+    }
+  }catch(e){
+    if(!silent) showNotif('فشل النسخ','❌ '+e.message,'error');
+    return false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  استرجاع نسخة
+// ════════════════════════════════════════════════════════════════════
+
+async function gdriveRestore(){
+  if(!_gdHasElectron()){
+    showNotif('غير متاح','يعمل في نسخة سطح المكتب فقط','warning');
+    return;
+  }
+  var st = await window.electronAPI.gdriveStatus();
+  if(!st || !st.linked){
+    showNotif('غير مرتبط','اربط حساب Google Drive أولاً لاسترجاع نسختك','warning');
+    return;
+  }
+
+  // كلمة المرور: من التخزين، أو اطلبها (حالة جهاز جديد)
+  var pw = _gdGetPassword();
+  if(!pw){
+    pw = prompt('🔑 أدخل كلمة مرور التشفير الخاصة بنسخك الاحتياطية:');
+    if(pw === null) return;
+    if(!pw){ showNotif('مطلوب','كلمة المرور مطلوبة للاسترجاع','warning'); return; }
+  }
+
+  if(!confirm('⚠️ سيؤدي الاسترجاع إلى استبدال البيانات الحالية بمحتوى النسخة من Google Drive.\n\nهل تريد المتابعة؟')) return;
+
+  showNotif('جارٍ الاسترجاع','⏳ يتم تنزيل النسخة وفكّ تشفيرها...','info');
+
+  try{
+    var res = await window.electronAPI.gdriveRestore({
+      password: pw,
+      fileName: _gdFileName(),
+    });
+
+    if(!res || !res.ok){
+      var err = (res && res.error) || 'خطأ';
+      if(err === 'no_backup')     err = 'لا توجد نسخة محفوظة على هذا الحساب';
+      if(err === 'wrong_password')err = 'كلمة المرور غير صحيحة — تعذّر فكّ التشفير';
+      if(err === 'not_linked')    err = 'الحساب غير مربوط';
+      showNotif('فشل الاسترجاع','❌ '+err,'error');
+      return;
+    }
+
+    // نجح فكّ التشفير → كلمة المرور صحيحة، احفظها لهذا الجهاز
+    _gdSavePassword(pw);
+
+    var parsed = JSON.parse(res.payload);
+    if(!parsed || !parsed._medlab_backup){
+      showNotif('ملف غير صالح','النسخة لا تحتوي بيانات MedLab صحيحة','error');
+      return;
+    }
+
+    // أعِد استخدام مسار الاستيراد الموجود في تطبيقك:
+    // اضبط pendingImportData ثم استدعِ confirmImport() (نفس منطق ملف D:).
+    pendingImportData = parsed;
+    if(typeof confirmImport === 'function'){
+      confirmImport();
+    } else {
+      showNotif('خطأ','دالة الاستيراد غير متوفرة','error');
+    }
+  }catch(e){
+    showNotif('فشل الاسترجاع','❌ '+e.message,'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  النسخ التلقائي (يومي / كل يومين / أسبوعي)
+// ════════════════════════════════════════════════════════════════════
+
+function _gdLoadAutoSettings(){
+  var cfg = {};
+  try{ cfg = JSON.parse(localStorage.getItem(_gdAutoKey()) || '{}'); }catch(e){}
+  var tog = document.getElementById('gdrive-auto-tog');
+  var sel = document.getElementById('gdrive-auto-freq');
+  if(tog) tog.classList.toggle('on', !!cfg.enabled);
+  if(sel && cfg.freq) sel.value = cfg.freq;
+  _gdUpdateAutoStatus();
+}
+
+function _gdSaveAutoSettings(){
+  var sel = document.getElementById('gdrive-auto-freq');
+  var tog = document.getElementById('gdrive-auto-tog');
+  var cfg = {
+    enabled: tog ? tog.classList.contains('on') : false,
+    freq:    sel ? sel.value : 'daily',
+  };
+  localStorage.setItem(_gdAutoKey(), JSON.stringify(cfg));
+  _gdUpdateAutoStatus();
+}
+
+function gdriveToggleAuto(el){
+  el.classList.toggle('on');
+  if(el.classList.contains('on')){
+    // لتفعيل التلقائي لا بد من ربط + كلمة مرور
+    if(!_gdGetPassword()){
+      el.classList.remove('on');
+      showNotif('مطلوب','حدّد كلمة مرور التشفير أولاً','warning');
+      _gdPromptSetPassword(function(){ el.classList.add('on'); _gdSaveAutoSettings(); });
+      return;
+    }
+  }
+  _gdSaveAutoSettings();
+}
+
+function _gdUpdateAutoStatus(){
+  var el = document.getElementById('gdrive-auto-status');
+  if(!el) return;
+  var cfg = {};
+  try{ cfg = JSON.parse(localStorage.getItem(_gdAutoKey()) || '{}'); }catch(e){}
+  var last = localStorage.getItem(_gdLastKey());
+  var lastTxt = last ? new Date(last).toLocaleString('ar-IQ') : 'لا يوجد';
+  if(cfg.enabled){
+    var freqTxt = cfg.freq==='daily'?'يومياً':(cfg.freq==='twodays'?'كل يومين':'أسبوعياً');
+    el.innerHTML = '🟢 مفعّل ('+freqTxt+') — آخر نسخة: '+lastTxt;
+  } else {
+    el.innerHTML = '⚪ غير مفعّل — آخر نسخة: '+lastTxt;
+  }
+}
+
+// يُستدعى عند بدء التطبيق: ينفّذ النسخ التلقائي إن حان موعده
+async function _gdMaybeAutoBackup(){
+  if(!_gdHasElectron()) return;
+  var cfg = {};
+  try{ cfg = JSON.parse(localStorage.getItem(_gdAutoKey()) || '{}'); }catch(e){}
+  if(!cfg.enabled) return;
+  if(!_gdGetPassword()) return;
+
+  var last = parseInt(new Date(localStorage.getItem(_gdLastKey())||0).getTime()) || 0;
+  var now  = Date.now();
+  var interval =
+    cfg.freq === 'twodays' ? 2*24*60*60*1000 :
+    cfg.freq === 'weekly'  ? 7*24*60*60*1000 :
+                             1*24*60*60*1000;   // daily
+
+  if(now - last < interval) return;   // لم يحن الموعد بعد
+
+  // تأكد من الربط قبل المحاولة
+  try{
+    var st = await window.electronAPI.gdriveStatus();
+    if(!st || !st.linked) return;
+    console.log('[GDrive] auto backup triggered');
+    var ok = await gdriveBackupNow(true);   // صامت
+    if(ok) showNotif('نسخة تلقائية','☁️ تم رفع نسخة احتياطية تلقائية إلى Google Drive','success');
+  }catch(e){ console.warn('[GDrive] auto backup error', e); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  استرجاع تلقائي عند التثبيت على جهاز جديد
+//  (يعرض عرضاً للمستخدم إن وُجدت نسخة والبيانات المحلية فارغة)
+// ════════════════════════════════════════════════════════════════════
+
+async function _gdOfferRestoreIfNew(){
+  if(!_gdHasElectron()) return;
+  try{
+    var st = await window.electronAPI.gdriveStatus();
+    if(!st || !st.linked) return;
+
+    // هل البيانات المحلية شبه فارغة؟ (جهاز جديد)
+    var localEmpty = (typeof patients === 'undefined') || (patients.length === 0);
+    if(!localEmpty) return;
+
+    var info = await window.electronAPI.gdriveInfo({ fileName: _gdFileName() });
+    if(!info.ok || !info.exists) return;
+    if((info.patients||0) === 0) return;
+
+    var d = new Date(info.date || info.modifiedTime).toLocaleString('ar-IQ');
+    if(confirm(
+      '☁️ تم العثور على نسخة احتياطية على حساب Google Drive الخاص بك:\n\n'+
+      '📅 التاريخ: '+d+'\n'+
+      '👥 '+info.patients+' مريض • 🧪 '+info.requests+' طلب • 🧾 '+info.invoices+' فاتورة\n\n'+
+      'بياناتك المحلية فارغة. هل تريد استرجاع هذه النسخة الآن؟'
+    )){
+      gdriveRestore();
+    }
+  }catch(e){ console.warn('[GDrive] offer restore error', e); }
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ربط بدء التطبيق — استدعِ هذه بعد تحميل البيانات
+// ════════════════════════════════════════════════════════════════════
+//  أضِف في مكان بدء التطبيق (بعد اكتمال تحميل patients/requests):
+//     setTimeout(function(){ initGDrive(); _gdOfferRestoreIfNew(); _gdMaybeAutoBackup(); }, 4000);
+//  (تُشرح في دليل التركيب)
+
+
 async function _fsaBuildFullBackup(){
   const pfx = DB._pfx();
   // localStorage
@@ -38146,6 +38688,11 @@ function _syncPrintScopeUI(){
 
 var _lanWS        = null;   // WebSocket (عميل) أو null
 var _lanClients   = new Set(); // WebSocket clients (سيرفير)
+// ⭐ إعادة اتصال تلقائية للعميل (backoff أسّي) — تصمد أمام قطع الراوتر/إعادة تشغيل الخادم
+var _lanClientIP      = null;  // آخر IP خادم اتصلنا به (لإعادة المحاولة)
+var _lanReconnectT    = null;  // مؤقّت إعادة المحاولة
+var _lanReconnectN    = 0;     // عدّاد المحاولات (لحساب مدة الانتظار)
+var _lanManualDisc    = false; // مرفوعة عند القطع اليدوي لمنع إعادة الاتصال
 var _lanMode      = null;   // 'server' | 'client' | null
 var _lanHttpServer= null;
 var _LAN_PORT     = 8797;
@@ -38621,11 +39168,17 @@ function lisLanConnectClient(){
   }
   if(!ip){ showNotif('تنبيه','أدخل IP السيرفير أولاً','warning'); return; }
   if(_lanWS && _lanWS.readyState<2){ _lanWS.close(); }
+  // ⭐ اتصال يدوي جديد: احفظ IP، ألغِ أي إعادة محاولة معلّقة، وصفّر العدّاد
+  _lanClientIP   = ip;
+  _lanManualDisc = false;
+  if(_lanReconnectT){ clearTimeout(_lanReconnectT); _lanReconnectT=null; }
+  _lanReconnectN = 0;
   var wsUrl = 'ws://'+ip+':'+_LAN_PORT;
   try{
     _lanWS = new WebSocket(wsUrl);
     _lanWS.onopen = function(){
       _lanMode='client';
+      _lanReconnectN = 0; // ⭐ نجح الاتصال — صفّر عدّاد backoff
       _lanResetGate(); // ⭐ ابقَ مغلقاً حتى نعرف مَن الأغنى
       _lanUpdateStatus();
       showNotif('🌐 LAN','متصل بالسيرفير: '+ip,'success');
@@ -38635,18 +39188,42 @@ function lisLanConnectClient(){
     _lanWS.onmessage = function(e){ _lanHandleMessage(e.data); };
     _lanWS.onclose = function(){
       _lanMode=null; _lanWS=null; _lanOpenGate(); _lanUpdateStatus();
-      showNotif('LAN','انقطع الاتصال بالسيرفير','warning');
+      // ⭐ قطع يدوي؟ لا تعِد الاتصال. غير ذلك: جدوِل إعادة محاولة مع backoff
+      if(_lanManualDisc){ return; }
+      _lanScheduleReconnect();
     };
     _lanWS.onerror = function(){
       showNotif('LAN خطأ','فشل الاتصال بـ '+ip,'error');
     };
   }catch(e){
     showNotif('LAN خطأ',e.message,'error');
+    if(!_lanManualDisc) _lanScheduleReconnect();
   }
+}
+
+// ⭐ إعادة اتصال العميل مع backoff أسّي: 2s,4s,8s,16s ثم يثبت عند 30s.
+//    يعيد المحاولة إلى ما لا نهاية حتى يرجع الخادم — فلا يبقى العميل مفصولاً بعد القطع.
+function _lanScheduleReconnect(){
+  if(_lanManualDisc || !_lanClientIP) return;
+  if(_lanReconnectT){ clearTimeout(_lanReconnectT); _lanReconnectT=null; }
+  _lanReconnectN++;
+  var delay = Math.min(30000, 1000 * Math.pow(2, Math.min(_lanReconnectN, 5)));
+  _lanReconnectT = setTimeout(function(){
+    _lanReconnectT = null;
+    if(_lanManualDisc || !_lanClientIP) return;
+    if(_lanWS && _lanWS.readyState <= 1) return; // متصل/يتصل بالفعل
+    var ipInp = document.getElementById('lan-server-ip');
+    if(ipInp && !ipInp.value.trim()) ipInp.value = _lanClientIP;
+    lisLanConnectClient();
+  }, delay);
 }
 
 // قطع LAN
 function lisLanDisconnect(){
+  // ⭐ قطع مقصود: امنع إعادة الاتصال التلقائية وألغِ أي محاولة معلّقة
+  _lanManualDisc = true;
+  if(_lanReconnectT){ clearTimeout(_lanReconnectT); _lanReconnectT=null; }
+  _lanReconnectN = 0;
   if(_lanWS){ try{ _lanWS.close(); }catch(e){} _lanWS=null; }
   if(window.electronAPI && window.electronAPI.lanStopServer){
     window.electronAPI.lanStopServer().catch(function(){});
