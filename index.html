@@ -5655,6 +5655,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               </div>
             </div>
 
+
             <!-- ════════════════════════════════════════════════════════════════════
      MedLab Pro — واجهة النسخ الاحتياطي عبر Google Drive
      gdrive-ui.html
@@ -9407,7 +9408,7 @@ function startApp(){
   // تشغيل النسخ الاحتياطي التلقائي المحلي
   setTimeout(initAutoBackup, 4000);
 
-  // ☁️ تهيئة نظام Google Drive: الحالة + عرض الاسترجاع على جهاز جديد + النسخ التلقائي
+  // ☁️ تهيئة نظام Google Drive
   setTimeout(function(){
     try{
       if(typeof initGDrive === 'function')          initGDrive();
@@ -34016,29 +34017,82 @@ async function gdriveUnlink(){
 }
 
 // ════════════════════════════════════════════════════════════════════
-//  كلمة مرور التشفير
+//  كلمة مرور التشفير — نافذة مخصّصة داخل التطبيق
+//  (لا نستخدم prompt() لأنها معطّلة في Electron وترجع null)
 // ════════════════════════════════════════════════════════════════════
 
+// نافذة إدخال عامة: تعيد القيمة عبر callback. confirmMode=true تُظهر حقلين للتأكيد.
+function _gdShowInputModal(opts){
+  // opts = { title, msg, confirm(bool), okText, onOk(value), password(bool) }
+  var old = document.getElementById('gdrive-modal-overlay');
+  if(old) old.remove();
+
+  var ov = document.createElement('div');
+  ov.id = 'gdrive-modal-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:999999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  var inputType = opts.password ? 'password' : 'text';
+  var confirmHtml = opts.confirm
+    ? '<input id="gdrive-modal-input2" type="'+inputType+'" class="fc" placeholder="أعد الإدخال للتأكيد..." style="width:100%;margin-top:10px" autocomplete="off">'
+    : '';
+
+  ov.innerHTML =
+    '<div style="background:var(--card,#0f1830);border:2px solid #4285f4;border-radius:16px;padding:24px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5)">'+
+      '<div style="font-size:17px;font-weight:800;color:#4285f4;margin-bottom:10px">'+ (opts.title||'') +'</div>'+
+      '<div style="font-size:12px;color:var(--text2,#9fb0c9);line-height:1.9;margin-bottom:16px">'+ (opts.msg||'') +'</div>'+
+      '<input id="gdrive-modal-input" type="'+inputType+'" class="fc" placeholder="أدخل هنا..." style="width:100%" autocomplete="off">'+
+      confirmHtml +
+      '<div id="gdrive-modal-err" style="display:none;color:var(--danger,#ff4d6d);font-size:12px;margin-top:10px"></div>'+
+      '<div style="display:flex;gap:10px;margin-top:18px">'+
+        '<button id="gdrive-modal-ok" class="btn btn-ok btn-lg" style="flex:1">'+ (opts.okText||'تأكيد') +'</button>'+
+        '<button id="gdrive-modal-cancel" class="btn btn-d btn-lg" style="flex:1">إلغاء</button>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(ov);
+
+  var inp  = document.getElementById('gdrive-modal-input');
+  var inp2 = document.getElementById('gdrive-modal-input2');
+  var err  = document.getElementById('gdrive-modal-err');
+  setTimeout(function(){ inp.focus(); }, 50);
+
+  function close(){ ov.remove(); }
+  function submit(){
+    var v = (inp.value||'').trim();
+    if(opts.minLen && v.length < opts.minLen){
+      err.textContent = '❌ يجب '+opts.minLen+' أحرف على الأقل';
+      err.style.display = 'block'; return;
+    }
+    if(!v){ err.textContent = '❌ الحقل فارغ'; err.style.display='block'; return; }
+    if(opts.confirm){
+      var v2 = (inp2.value||'').trim();
+      if(v !== v2){ err.textContent = '❌ القيمتان غير متطابقتين'; err.style.display='block'; return; }
+    }
+    close();
+    if(opts.onOk) opts.onOk(v);
+  }
+
+  document.getElementById('gdrive-modal-ok').onclick = submit;
+  document.getElementById('gdrive-modal-cancel').onclick = close;
+  inp.onkeydown = function(e){ if(e.key==='Enter'){ if(opts.confirm && inp2){ inp2.focus(); } else submit(); } };
+  if(inp2) inp2.onkeydown = function(e){ if(e.key==='Enter') submit(); };
+  ov.onclick = function(e){ if(e.target === ov) close(); };
+}
+
 function _gdPromptSetPassword(afterSet){
-  var pw = prompt(
-    '🔐 حدّد كلمة مرور لتشفير نسخك الاحتياطية.\n\n'+
-    '⚠️ مهم جداً: احفظ هذه الكلمة في مكان آمن.\n'+
-    'بدونها لا يمكن استرجاع النسخ إطلاقاً — لا نحن ولا Google نستطيع فكّها.\n\n'+
-    'أدخل كلمة المرور (6 أحرف على الأقل):'
-  );
-  if(pw === null) return;              // ألغى المستخدم
-  if(!pw || pw.length < 6){
-    showNotif('كلمة قصيرة','يجب أن تكون كلمة المرور 6 أحرف على الأقل','warning');
-    return;
-  }
-  var pw2 = prompt('أعد إدخال كلمة المرور للتأكيد:');
-  if(pw2 !== pw){
-    showNotif('عدم تطابق','كلمتا المرور غير متطابقتين — أعد المحاولة','error');
-    return;
-  }
-  _gdSavePassword(pw);
-  showNotif('تم الحفظ','✅ تم حفظ كلمة مرور التشفير على هذا الجهاز','success');
-  if(afterSet) afterSet();
+  _gdShowInputModal({
+    title: '🔐 كلمة مرور التشفير',
+    msg: 'حدّد كلمة مرور لتشفير نسخك الاحتياطية.<br><b style="color:var(--warning,#ffb400)">⚠️ احفظها في مكان آمن — بدونها لا يمكن استرجاع النسخ إطلاقاً.</b>',
+    password: true,
+    confirm: true,
+    minLen: 6,
+    okText: 'حفظ كلمة المرور',
+    onOk: function(pw){
+      _gdSavePassword(pw);
+      showNotif('تم الحفظ','✅ تم حفظ كلمة مرور التشفير على هذا الجهاز','success');
+      if(afterSet) afterSet();
+    }
+  });
 }
 
 function gdriveChangePassword(){
@@ -34128,13 +34182,23 @@ async function gdriveRestore(){
     return;
   }
 
-  // كلمة المرور: من التخزين، أو اطلبها (حالة جهاز جديد)
+  // كلمة المرور: من التخزين، أو اطلبها عبر نافذة مخصّصة (حالة جهاز جديد)
   var pw = _gdGetPassword();
   if(!pw){
-    pw = prompt('🔑 أدخل كلمة مرور التشفير الخاصة بنسخك الاحتياطية:');
-    if(pw === null) return;
-    if(!pw){ showNotif('مطلوب','كلمة المرور مطلوبة للاسترجاع','warning'); return; }
+    _gdShowInputModal({
+      title: '🔑 كلمة مرور التشفير',
+      msg: 'أدخل كلمة مرور التشفير الخاصة بنسخك الاحتياطية (نفس التي حددتها عند إنشاء النسخة).',
+      password: true,
+      okText: 'متابعة الاسترجاع',
+      onOk: function(v){ _gdDoRestore(v); }
+    });
+    return;
   }
+  _gdDoRestore(pw);
+}
+
+async function _gdDoRestore(pw){
+  if(!pw){ showNotif('مطلوب','كلمة المرور مطلوبة للاسترجاع','warning'); return; }
 
   if(!confirm('⚠️ سيؤدي الاسترجاع إلى استبدال البيانات الحالية بمحتوى النسخة من Google Drive.\n\nهل تريد المتابعة؟')) return;
 
