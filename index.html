@@ -1446,6 +1446,18 @@ textarea.fc{resize:vertical;}
 .tab.active{background:linear-gradient(135deg,rgba(0,212,255,0.18),rgba(123,47,255,0.12));color:var(--primary);}
 .tab:hover:not(.active){color:var(--text);}
 .tog{width:42px;height:22px;background:rgba(255,255,255,0.1);border-radius:11px;position:relative;cursor:pointer;transition:all 0.2s;border:1px solid var(--border);flex-shrink:0;}
+/* ── أكورديون قسم قاعدة البيانات ── */
+.db-acc{border:1.5px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden;background:rgba(255,255,255,0.02);}
+.db-acc-hdr{display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;user-select:none;transition:background 0.2s;}
+.db-acc-hdr:hover{background:rgba(255,255,255,0.04);}
+.db-acc-hdr .db-acc-ico{font-size:24px;line-height:1;}
+.db-acc-hdr .db-acc-ttl{flex:1;font-size:14px;font-weight:800;color:var(--text);}
+.db-acc-hdr .db-acc-sub{font-size:11px;color:var(--text2);font-weight:400;margin-top:2px;}
+.db-acc-hdr .db-acc-arrow{font-size:14px;color:var(--text2);transition:transform 0.25s;}
+.db-acc.open .db-acc-arrow{transform:rotate(180deg);}
+.db-acc-body{max-height:0;overflow:hidden;transition:max-height 0.3s ease;}
+.db-acc.open .db-acc-body{max-height:6000px;}
+.db-acc-body-inner{padding:0 18px 18px;}
 .tog.on{background:linear-gradient(90deg,var(--primary),var(--primary-dark));}
 .tog-t{width:16px;height:16px;background:#fff;border-radius:50%;position:absolute;top:2px;right:2px;transition:all 0.2s;box-shadow:0 2px 4px rgba(0,0,0,0.3);}
 .tog.on .tog-t{right:calc(100% - 18px);}
@@ -3897,11 +3909,25 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div style="position:relative;display:inline-block" id="wq-tv-menu-wrap">
             <button class="btn btn-p" onclick="toggleWqTvMenu()" title="خيارات شاشة الانتظار">📺 شاشة الانتظار ▾</button>
             <div id="wq-tv-menu" style="display:none;position:absolute;left:0;top:110%;background:#070d1c;border:1.5px solid rgba(0,212,255,0.25);border-radius:12px;min-width:230px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.7);overflow:hidden">
-              <div onclick="openWaitScreen();toggleWqTvMenu()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid rgba(255,255,255,0.07);transition:background 0.15s" onmouseover="this.style.background='rgba(0,212,255,0.09)'" onmouseout="this.style.background='transparent'">
+              <div onclick="openWaitScreen('tv');toggleWqTvMenu()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid rgba(255,255,255,0.07);transition:background 0.15s" onmouseover="this.style.background='rgba(0,212,255,0.09)'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:18px">📡</span>
+                <div>
+                  <div style="color:var(--success)">بث إلى شاشة التلفزيون</div>
+                  <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:2px">تلقائي وفوري — ملء الشاشة على الشاشة الثانية</div>
+                </div>
+              </div>
+              <div onclick="openWaitScreen('manual');toggleWqTvMenu()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--text);border-bottom:1px solid rgba(255,255,255,0.07);transition:background 0.15s" onmouseover="this.style.background='rgba(0,212,255,0.09)'" onmouseout="this.style.background='transparent'">
                 <span style="font-size:18px">🔌</span>
                 <div>
-                  <div style="color:var(--primary)">ربط بكابل HDMI</div>
-                  <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:2px">نافذة منفصلة — انقلها للشاشة الثانية</div>
+                  <div style="color:var(--primary)">ربط بكابل HDMI (يدوي)</div>
+                  <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:2px">نافذة منفصلة — انقلها للشاشة الثانية بنفسك</div>
+                </div>
+              </div>
+              <div onclick="openTvCast();toggleWqTvMenu()" style="padding:13px 18px;cursor:pointer;display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--text);transition:background 0.15s" onmouseover="this.style.background='rgba(255,193,7,0.09)'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:18px">🎥</span>
+                <div>
+                  <div style="color:#ffca28">بث Google Cast (بدون كابل)</div>
+                  <div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:2px">للتلفزيونات المزوّدة بـ Chromecast — عبر متصفح Chrome</div>
                 </div>
               </div>
 
@@ -4448,6 +4474,49 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                     <input class="fc" id="ftr-txt-note" lang="ar" placeholder="مثال: أوقات العمل، تنبيه، معلومات إضافية...">
                   </div>
                   <div id="ftr-txt-preview" style="margin-top:10px;background:#f5f7fa;border:1px solid #dde4ec;border-radius:8px;padding:8px 14px;font-family:Arial,sans-serif;font-size:11px;color:#444;text-align:center;direction:ltr;display:none"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ٢.٥ - العلامة المائية -->
+        <div class="st-card" id="stc-watermark">
+          <div class="st-card-hdr" onclick="toggleStCard('stc-watermark')">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:22px">💧</span>
+              <div><div class="st-card-title">العلامة المائية</div><div class="st-card-sub">صورة تظهر خلف النصوص في وسط كل تقرير</div></div>
+            </div>
+            <span class="st-card-arrow" id="arr-stc-watermark">▼</span>
+          </div>
+          <div class="st-card-body" id="body-stc-watermark" style="display:none">
+            <div class="fg">
+              <label class="fl">🖼️ صورة العلامة المائية</label>
+              <div style="font-size:10px;color:var(--text2);margin-bottom:6px">تظهر في وسط الورقة خلف النصوص — يُنصح بصورة شفافة PNG</div>
+              <input type="file" id="st-wm-img" accept="image/*" onchange="loadWatermarkImg(this)" class="fc" style="padding:7px">
+              <div id="wm-img-preview" style="margin-top:8px;display:none">
+                <img id="wm-img-show" style="max-height:80px;border-radius:8px;border:1px solid var(--border);width:100%;object-fit:contain;background:repeating-conic-gradient(#ccc 0% 25%,#fff 0% 50%) 0 0/16px 16px;">
+                <button class="btn btn-d btn-sm" style="margin-top:6px" onclick="clearWatermarkImg()">🗑️ إزالة العلامة</button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+              <div class="fg" style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:0">
+                <label class="fl" style="font-size:12px;font-weight:800;color:var(--primary)">🔵 الشفافية</label>
+                <div style="font-size:10px;color:var(--text2);margin-bottom:8px">0 = شفاف تماماً — 100 = معتم (الافتراضي: 15)</div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input type="range" id="st-wm-opacity" min="0" max="100" step="1" value="15" style="flex:1" oninput="document.getElementById('wm-opacity-val').textContent=this.value+'%'">
+                  <span id="wm-opacity-val" style="font-size:13px;font-weight:800;color:var(--primary);min-width:38px;text-align:right">15%</span>
+                  <button class="btn btn-p btn-sm" onclick="saveWatermarkSettings()" style="white-space:nowrap;padding:8px 14px">💾 حفظ</button>
+                </div>
+              </div>
+              <div class="fg" style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:0">
+                <label class="fl" style="font-size:12px;font-weight:800;color:var(--primary)">📐 الحجم (px)</label>
+                <div style="font-size:10px;color:var(--text2);margin-bottom:8px">العرض الافتراضي 794px والارتفاع 620px</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <input type="number" id="st-wm-w" class="fc" min="100" max="1200" step="10" placeholder="794" style="flex:1">
+                  <span style="font-size:11px;color:var(--text2)">×</span>
+                  <input type="number" id="st-wm-h" class="fc" min="100" max="1200" step="10" placeholder="620" style="flex:1">
+                  <button class="btn btn-p btn-sm" onclick="saveWatermarkSettings()" style="white-space:nowrap;padding:8px 14px">💾 حفظ</button>
                 </div>
               </div>
             </div>
@@ -5547,6 +5616,13 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               </div>
             </div>
             <!-- مؤشر المساحة -->
+            <div class="db-acc" id="db-acc-storage">
+              <div class="db-acc-hdr" onclick="dbAccToggle(this)">
+                <span class="db-acc-ico">💾</span>
+                <div class="db-acc-ttl">مؤشر المساحة والتخزين<div class="db-acc-sub">localStorage · IDB · قرص D</div></div>
+                <span class="db-acc-arrow">▼</span>
+              </div>
+              <div class="db-acc-body"><div class="db-acc-body-inner">
             <div style="background:rgba(255,255,255,0.03);border:1.5px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:20px" id="storage-meter-box">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
                 <span style="font-size:12px;font-weight:700;color:var(--text2)">💾 localStorage (نشط)</span>
@@ -5592,6 +5668,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 </div>
               </div>
             </div>
+              </div></div>
+            </div><!-- /db-acc-storage -->
+
+            <!-- ═══ أكورديون: النقل والاسترداد عبر القرص D ═══ -->
+            <div class="db-acc" id="db-acc-disk">
+              <div class="db-acc-hdr" onclick="dbAccToggle(this)">
+                <span class="db-acc-ico">💿</span>
+                <div class="db-acc-ttl">النقل والاسترداد عبر القرص D<div class="db-acc-sub">نقل الحساب · استرداد · إصلاح الباركود</div></div>
+                <span class="db-acc-arrow">▼</span>
+              </div>
+              <div class="db-acc-body"><div class="db-acc-body-inner">
 
             <!-- نقل الحساب إلى جهاز جديد -->
             <div style="display:none;background:rgba(0,245,147,0.05);border:1.5px solid rgba(0,245,147,0.25);border-radius:14px;padding:22px;margin-bottom:16px">
@@ -5654,18 +5741,19 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 <div id="barcode-diag-out" style="display:none;margin-top:12px;background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;font-size:11px;font-family:'Courier New',monospace;color:var(--text);max-height:260px;overflow:auto;direction:ltr;text-align:left;white-space:pre-wrap"></div>
               </div>
             </div>
+              </div></div>
+            </div><!-- /db-acc-disk -->
 
+            <!-- ═══ أكورديون: النسخ السحابي Google Drive (مفتوح افتراضياً) ═══ -->
+            <div class="db-acc open" id="db-acc-gdrive">
+              <div class="db-acc-hdr" onclick="dbAccToggle(this)">
+                <span class="db-acc-ico">☁️</span>
+                <div class="db-acc-ttl">النسخ الاحتياطي السحابي (Google Drive)<div class="db-acc-sub">رفع · استرجاع · نسخ تلقائي سحابي</div></div>
+                <span class="db-acc-arrow">▼</span>
+              </div>
+              <div class="db-acc-body"><div class="db-acc-body-inner">
 
-            <!-- ════════════════════════════════════════════════════════════════════
-     MedLab Pro — واجهة النسخ الاحتياطي عبر Google Drive
-     gdrive-ui.html
-
-     انسخ هذه الكتلة وألصقها داخل  <div id="db-main-content">  في index.html،
-     أنسب مكان: بعد بطاقة "استرداد البيانات" وقبل بطاقة "النسخ الاحتياطي التلقائي".
-     (أي بعد السطر الذي ينتهي بـ  <!-- النسخ الاحتياطي التلقائي --> السابق له)
-     ════════════════════════════════════════════════════════════════════ -->
-
-<!-- ☁️ النسخ الاحتياطي عبر Google Drive -->
+            <!-- ☁️ النسخ الاحتياطي عبر Google Drive -->
 <div id="gdrive-box" style="background:rgba(66,133,244,0.06);border:1.5px solid rgba(66,133,244,0.35);border-radius:14px;padding:22px;margin-bottom:16px">
 
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
@@ -5743,7 +5831,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
 
 </div>
 <!-- نهاية ☁️ Google Drive -->
+              </div></div>
+            </div><!-- /db-acc-gdrive -->
 
+            <!-- ═══ أكورديون: النسخ التلقائي المحلي (تنزيل ملف) ═══ -->
+            <div class="db-acc" id="db-acc-autolocal">
+              <div class="db-acc-hdr" onclick="dbAccToggle(this)">
+                <span class="db-acc-ico">⏰</span>
+                <div class="db-acc-ttl">التنزيل التلقائي المحلي<div class="db-acc-sub">تنزيل ملف نسخة إلى مجلد على الجهاز</div></div>
+                <span class="db-acc-arrow">▼</span>
+              </div>
+              <div class="db-acc-body"><div class="db-acc-body-inner">
 
             <!-- النسخ الاحتياطي التلقائي -->
             <div style="background:rgba(255,180,0,0.06);border:1.5px solid rgba(255,180,0,0.3);border-radius:14px;padding:20px;margin-bottom:20px">
@@ -5777,6 +5875,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 <button class="btn btn-s btn-sm" onclick="selectAutoBackupFolder()" style="white-space:nowrap">📂 تحديد مجلد</button>
               </div>
             </div>
+              </div></div>
+            </div><!-- /db-acc-autolocal -->
 
             <!-- تعليمات النقل -->
             <div style="text-align:center;margin-bottom:20px">
@@ -8023,7 +8123,7 @@ window.load = load;
 // BIG settings on IDB (صور الرأس/التذييل + الحقول المخصصة لتحاليل الإدرار/البراز/المنوي)
 // تذهب مباشرة لـ IDB بمفاتيح مستقلة، ولا تُخزَّن في كائن settings (لتفادي امتلاء localStorage)
 // ══════════════════════════════════════════════════════════════
-const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','hdrImgH','ftrImgH']);
+const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','hdrImgH','ftrImgH','wmImg']);
 const _BIG_MC={};   // كاش ذاكرة فوري لقيم BIG (بدون تأخير)
 
 async function getBig(k){
@@ -9365,6 +9465,15 @@ function startApp(){
       if(showF) showF.src = fImg;
       if(prvF)  prvF.style.display = 'block';
     }
+    const wmImg = getBigCached('wmImg');
+    if(wmImg){
+      settings.wmImg = wmImg;
+    }
+    // watermark
+    const wmOpS=document.getElementById('st-wm-opacity'); if(wmOpS&&typeof settings.wmOpacity==='number') wmOpS.value=settings.wmOpacity; const wmVl=document.getElementById('wm-opacity-val'); if(wmVl) wmVl.textContent=(settings.wmOpacity||15)+'%';
+    const wmWS=document.getElementById('st-wm-w'); if(wmWS&&settings.wmW) wmWS.value=settings.wmW;
+    const wmHS=document.getElementById('st-wm-h'); if(wmHS&&settings.wmH) wmHS.value=settings.wmH;
+    if(settings.wmImg){const ws=document.getElementById('wm-img-show');const wp=document.getElementById('wm-img-preview');if(ws)ws.src=settings.wmImg;if(wp)wp.style.display='block';}
     // 1.5) ارتفاع رأس/تذييل التقرير (في الذاكرة فقط — تُقرأ من IDB)
     const hH = getBigCached('hdrImgH');
     settings.hdrImgH = (typeof hH==='number' && hH>=HDR_FTR_H_MIN && hH<=HDR_FTR_H_MAX) ? hH : HDR_IMG_H_DEFAULT;
@@ -9407,6 +9516,28 @@ function startApp(){
 
   // تشغيل النسخ الاحتياطي التلقائي المحلي
   setTimeout(initAutoBackup, 4000);
+
+  // 🔒 فحص دوري للاشتراك أثناء الجلسة (انتهاء أو تلاعب بالساعة)
+  setTimeout(function(){ _ttSyncServerTime(); }, 5000);
+  setInterval(function(){
+    try{
+      var s = getSession(); if(!s) return;
+      var u = getAdminUsers().find(function(x){ return x.username === s.username; });
+      if(!u) return;
+      _ttSyncServerTime();
+      // ملاحظة: لا نُقفل لمجرد رجوع الساعة (قد تكون بطارية BIOS تالفة).
+      // الحماية الحقيقية أن getTrustedNow لا يسمح بالرجوع للماضي،
+      // فيبقى فحص الانتهاء صحيحاً حتى لو أرجع المستخدم الساعة.
+      if(isSubscriptionExpired(u)){
+        _autoDisableExpiredUser(s.username);
+        clearSession();
+        var b = document.getElementById('expired-banner');
+        if(b) b.classList.add('show');
+      } else {
+        maybeShowExpiryWarning(u);
+      }
+    }catch(e){}
+  }, 30*60*1000);   // كل 30 دقيقة
 
   // ☁️ تهيئة نظام Google Drive
   setTimeout(function(){
@@ -15154,9 +15285,13 @@ function buildPrintHTML(req, opts){
       //  الاسم | النتيجة داخل مستطيل + سهم بجانبه (▲ أحمر للعالي، ▼ أزرق للناصي) | الوحدة | المدى | آخر نتيجة+تاريخ
       //  ⭐ القيمة تُوضع داخل مستطيل (p.resultBox) تماماً كالنموذج الأول الكلاسيكي،
       //     والسهم يظهر بجانب المستطيل مع محاذاة رأسية مضبوطة تناسب مكان النتيجة.
-      const arrow = p.isHigh
+      // ⭐ السهم يظهر فقط للنتائج الرقمية (عالي/ناصي) — لا يظهر مع النتائج غير الرقمية
+      //    مثل Positive / Negative أو أي خيار وصفي (qualitative).
+      const _numHigh = (typeof p.isNumericHigh!=='undefined') ? p.isNumericHigh : (p.isHigh && !p.isQualAbnormal);
+      const _numLow  = (typeof p.isNumericLow!=='undefined')  ? p.isNumericLow  : (p.isLow && !p.isQualAbnormal);
+      const arrow = _numHigh
         ? `<span style="color:${_tplHighColor};font-size:${pfs};font-weight:900;flex-shrink:0">▲</span>`
-        : p.isLow
+        : _numLow
         ? `<span style="color:${_tplLowColor};font-size:${pfs};font-weight:900;flex-shrink:0">▼</span>`
         : `<span style="width:10px;flex-shrink:0;display:inline-block"></span>`;
       // آخر نتيجة مع التاريخ (كباقي التقارير): القيمة ثم التاريخ بينهما مسافة
@@ -15526,6 +15661,9 @@ function buildPrintHTML(req, opts){
         value: displayValFull,
         isHigh: isHigh,
         isLow: (isLow||isQualAbnormal),
+        isQualAbnormal: isQualAbnormal,
+        isNumericLow: isLow,
+        isNumericHigh: isHigh,
         refTxt: refTxt,
         unit: (showUnit?unitTxt:''),
         prevVal: _prevVal,
@@ -19800,6 +19938,7 @@ async function wsStartRecording(){
                 window._waitScreenWin.postMessage({ type:'WQ_VOICE_UPDATE', voice: dataUrl }, '*');
               }
             }catch(_){}
+            try{ _pushTvCastVoice(); }catch(_){}
           }catch(err){
             if(err && err.name === 'QuotaExceededError'){
               showNotif('المساحة ممتلئة','التسجيل أكبر من المساحة المتاحة. حاول تسجيل أقصر.','danger');
@@ -19873,6 +20012,7 @@ function wsDeleteRecording(){
         window._waitScreenWin.postMessage({ type:'WQ_VOICE_UPDATE', voice: null }, '*');
       }
     }catch(_){}
+    try{ _pushTvCastVoice(); }catch(_){}
   }catch(e){
     showNotif('خطأ','تعذر حذف التسجيل','danger');
   }
@@ -19942,6 +20082,8 @@ function saveWaitScreenSettings(){
   save('settings', settings);
   // تحديث شاشة HDMI فوراً بعد الحفظ
   _pushWaitScreenData();
+  // تحديث شاشة البث اللاسلكي (Google Cast) فوراً أيضاً بنفس الإعدادات
+  try{ if(window._tvCastActive){ _pushTvCastData(); _pushTvCastVoice(); } }catch(_){}
   showNotif('تم الحفظ','تم حفظ إعدادات شاشة الانتظار ✅','success');
 }
 
@@ -20262,6 +20404,64 @@ function loadFooterImg(input){
   };
   reader.readAsDataURL(f);
 }
+// ══════════════════════════════════════════════════════
+// WATERMARK — العلامة المائية
+// ══════════════════════════════════════════════════════
+function loadWatermarkImg(input){
+  if(!input.files||!input.files[0]) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const dataUrl=e.target.result;
+    settings.wmImg=dataUrl;
+    setBig('wmImg',dataUrl);
+    const show=document.getElementById('wm-img-show');
+    const prev=document.getElementById('wm-img-preview');
+    if(show) show.src=dataUrl;
+    if(prev) prev.style.display='block';
+    showNotif('تم','تم تحميل العلامة المائية ✅','success');
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+function clearWatermarkImg(){
+  settings.wmImg='';
+  setBig('wmImg','');
+  const show=document.getElementById('wm-img-show');
+  const prev=document.getElementById('wm-img-preview');
+  if(show) show.src='';
+  if(prev) prev.style.display='none';
+  showNotif('تم','تم إزالة العلامة المائية','info');
+}
+function saveWatermarkSettings(){
+  var op=parseInt(document.getElementById('st-wm-opacity')?.value)||15;
+  var ww=parseInt(document.getElementById('st-wm-w')?.value)||794;
+  var wh=parseInt(document.getElementById('st-wm-h')?.value)||620;
+  if(op<0)op=0; if(op>100)op=100;
+  if(ww<100)ww=100; if(ww>1200)ww=1200;
+  if(wh<100)wh=100; if(wh>1200)wh=1200;
+  settings.wmOpacity=op;
+  settings.wmW=ww;
+  settings.wmH=wh;
+  save('settings',settings);
+  showNotif('تم','تم حفظ إعدادات العلامة المائية ✅','success');
+}
+
+// دالة مساعدة: بناء HTML العلامة المائية
+function _buildWatermarkHTML(fixedPos){
+  var img=settings.wmImg||getBigCached('wmImg')||'';
+  if(!img) return '';
+  var op=(typeof settings.wmOpacity==='number'?settings.wmOpacity:15)/100;
+  var ww=(typeof settings.wmW==='number'&&settings.wmW>=100?settings.wmW:794);
+  var wh=(typeof settings.wmH==='number'&&settings.wmH>=100?settings.wmH:620);
+  // العلامة المائية: تتمركز في وسط صفحة A4 الكاملة (297mm ≈ 1122px @ 96dpi)
+  // نستخدم position:fixed حتى تتمركز في وسط الورقة بغض النظر عن حجم المحتوى
+  var style='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:'+ww+'px;height:'+wh+'px;'
+    +'z-index:0;pointer-events:none;'
+    +'-webkit-print-color-adjust:exact;print-color-adjust:exact;'
+    +'mix-blend-mode:multiply;';
+  var imgStyle='width:100%;height:100%;object-fit:contain;opacity:'+op.toFixed(2)+';display:block;mix-blend-mode:multiply;';
+  return '<div style="'+style+'"><img src="'+img+'" style="'+imgStyle+'"></div>';
+}
+
 function clearHeaderImg(){
   settings.headerImg='';
   delBig('headerImg').catch(()=>{});
@@ -20924,6 +21124,107 @@ function saveDeviceTokens(t){}
 const ADMIN_KEY = 'medlab_admin_users'; // احتياطي محلي فقط
 const SESSION_KEY = 'medlab_session';
 
+// ════════════════════════════════════════════════════════════════════
+//  🔒 الوقت الموثوق — حماية من تغيير ساعة الجهاز لتجاوز انتهاء الاشتراك
+// ════════════════════════════════════════════════════════════════════
+//  الفكرة: نخزّن "أعلى وقت شوهد" (high-water mark) بشكل رتيب (monotonic).
+//  إن قرأنا ساعة الجهاز أقل منه بفارق ملموس → المستخدم أرجع الساعة للخلف.
+//  في هذه الحالة نعتمد الوقت المخزّن (لا نسمح بالرجوع)، ونرفع علامة تلاعب.
+//  عند توفّر Firebase نستخدم وقت الخادم كمرجع مطلق ونصحّح به.
+
+const TRUSTED_TIME_KEY = 'medlab_tt_hwm';    // آخر أعلى وقت مؤكَّد
+const TRUSTED_SKEW_KEY = 'medlab_tt_skew';   // فرق بين الخادم والجهاز (إن توفّر)
+let _ttTamperFlag = false;
+
+function _ttReadHWM(){
+  try{ return parseInt(localStorage.getItem(TRUSTED_TIME_KEY) || '0', 10) || 0; }catch(e){ return 0; }
+}
+function _ttWriteHWM(v){
+  try{ localStorage.setItem(TRUSTED_TIME_KEY, String(Math.floor(v))); }catch(e){}
+}
+
+// يُرجع أفضل تقدير "موثوق" للوقت الحالي
+function getTrustedNow(){
+  const sys = Date.now();
+  const hwm = _ttReadHWM();
+  // إن كان الجهاز أقل من أعلى وقت مؤكَّد بأكثر من 5 دقائق → تلاعب بالساعة
+  if(hwm && sys < hwm - 5*60*1000){
+    _ttTamperFlag = true;
+    return hwm;               // لا نسمح بالرجوع للماضي
+  }
+  // الوقت طبيعي أو متقدّم → حدّث أعلى وقت مؤكَّد
+  if(sys > hwm) _ttWriteHWM(sys);
+  return sys;
+}
+
+// عند توفّر Firebase: اجلب وقت الخادم وثبّته كمرجع (يصحّح أي تلاعب)
+function _ttSyncServerTime(){
+  try{
+    if(typeof fbReady === 'undefined' || !fbReady || !fbDb) return;
+    const ref = fbDb.ref('.info/serverTimeOffset');
+    ref.once('value').then(function(snap){
+      const offset = snap.val() || 0;        // فرق خادم Firebase عن ساعة الجهاز
+      const serverNow = Date.now() + offset;  // وقت الخادم الحقيقي
+      if(serverNow > _ttReadHWM()) _ttWriteHWM(serverNow);
+      // إن كانت ساعة الجهاز متأخرة كثيراً عن الخادم → علامة تلاعب
+      if(Date.now() < serverNow - 5*60*1000) _ttTamperFlag = true;
+    }).catch(function(){});
+  }catch(e){}
+}
+
+// فحص انتهاء الاشتراك بالوقت الموثوق (يستبدل now > user.expiry)
+function isSubscriptionExpired(user){
+  if(!user || user.type !== 'temp' || !user.expiry) return false;
+  return getTrustedNow() > user.expiry;
+}
+
+// ════════════════════════════════════════════════════════════════════
+//  ⏰ التنبيه قبل انتهاء الاشتراك (تجديد سلس)
+// ════════════════════════════════════════════════════════════════════
+const EXPIRY_WARN_DAYS = 5;   // يبدأ التنبيه قبل الانتهاء بهذا العدد من الأيام
+
+function _daysLeft(user){
+  if(!user || user.type !== 'temp' || !user.expiry) return Infinity;
+  return Math.ceil((user.expiry - getTrustedNow()) / (24*60*60*1000));
+}
+
+function maybeShowExpiryWarning(user){
+  try{
+    if(!user || user.type !== 'temp' || !user.expiry) return;
+    const left = _daysLeft(user);
+    if(left > EXPIRY_WARN_DAYS || left < 0) return;   // بعيد أو منتهٍ فعلاً
+
+    // لا تُظهر التنبيه أكثر من مرة في اليوم
+    const key = 'medlab_expwarn_' + user.username;
+    const today = new Date().toISOString().split('T')[0];
+    if(localStorage.getItem(key) === today) return;
+    localStorage.setItem(key, today);
+
+    const dayTxt = left <= 0 ? 'اليوم' : (left === 1 ? 'غداً' : ('خلال ' + left + ' أيام'));
+    const wa = 'https://wa.me/9647807632797?text=' +
+      encodeURIComponent('مرحباً، أرغب بتجديد اشتراكي في MedLab Pro (المستخدم: ' + user.username + ')');
+
+    let box = document.getElementById('expiry-warn-toast');
+    if(box) box.remove();
+    box = document.createElement('div');
+    box.id = 'expiry-warn-toast';
+    box.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:999998;background:#0f1830;border:2px solid #ffb400;border-radius:14px;padding:16px 20px;max-width:440px;width:calc(100% - 40px);box-shadow:0 12px 40px rgba(0,0,0,0.5);direction:rtl;font-family:Cairo,sans-serif';
+    box.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">'+
+        '<span style="font-size:28px">⏰</span>'+
+        '<div style="flex:1">'+
+          '<div style="font-size:15px;font-weight:900;color:#ffb400">تنبيه: اشتراكك ينتهي '+dayTxt+'</div>'+
+          '<div style="font-size:12px;color:#9fb0c9;margin-top:2px">جدّد الآن لتجنّب توقّف الحساب عن العمل.</div>'+
+        '</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:8px">'+
+        '<a href="'+wa+'" target="_blank" style="flex:1;text-align:center;padding:10px;background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border-radius:9px;text-decoration:none;font-weight:800;font-size:13px">💬 تجديد عبر واتساب</a>'+
+        '<button onclick="document.getElementById(\'expiry-warn-toast\').remove()" style="padding:10px 16px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#9fb0c9;border-radius:9px;cursor:pointer;font-family:Cairo,sans-serif;font-size:13px">لاحقاً</button>'+
+      '</div>';
+    document.body.appendChild(box);
+  }catch(e){ console.warn('[expiry warn] error', e); }
+}
+
 // ── تشفير كلمة المرور بـ SHA-256 ─────────────────────────
 async function hashPassword(pass){
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass));
@@ -21075,7 +21376,7 @@ function checkAuth(){
 
   if(user){
     // المستخدم موجود محلياً — ادخل فوراً
-    if(user.type==='temp' && Date.now()>user.expiry){
+    if(isSubscriptionExpired(user)){
       _autoDisableExpiredUser(session.username);
       clearSession();
       document.getElementById('login-screen').classList.add('hidden');
@@ -21088,6 +21389,11 @@ function checkAuth(){
     const loggedEl = document.getElementById('sb-logged-user');
     if(loggedEl) loggedEl.textContent = '👤 ' + session.username;
     startApp();
+    // تنبيه قبل الانتهاء + مزامنة وقت الخادم
+    if(user.type==='temp'){
+      setTimeout(()=>{ _ttSyncServerTime(); maybeShowExpiryWarning(user); }, 3000);
+      setTimeout(()=>{ if(isSubscriptionExpired(user)){ _autoDisableExpiredUser(session.username); clearSession(); document.getElementById('expired-banner').classList.add('show'); } }, Math.max(0, user.expiry - getTrustedNow()));
+    }
     // Firebase في الخلفية
     setTimeout(()=>{
       if(navigator.onLine){
@@ -21129,8 +21435,7 @@ function _completeAuthCheck(session){
   if(!user){ clearSession(); showLogin(); return; }
 
   if(user.type === 'temp'){
-    const now = Date.now();
-    if(now > user.expiry){
+    if(isSubscriptionExpired(user)){
       _autoDisableExpiredUser(session.username);
       clearSession();
       document.getElementById('login-screen').classList.add('hidden');
@@ -21141,7 +21446,9 @@ function _completeAuthCheck(session){
       _autoDisableExpiredUser(session.username);
       clearSession();
       document.getElementById('expired-banner').classList.add('show');
-    }, user.expiry - now);
+    }, user.expiry - getTrustedNow());
+    // تنبيه قبل الانتهاء + مزامنة وقت الخادم
+    setTimeout(()=>{ _ttSyncServerTime(); maybeShowExpiryWarning(user); }, 3000);
   }
   DB.setUser(session.username);
   initUserData();
@@ -21225,7 +21532,7 @@ function fixLoginAccount(){
       return;
     }
 
-    if(user.type === 'temp' && user.expiry && Date.now() > user.expiry){
+    if(isSubscriptionExpired(user)){
       err.textContent = '⏰ انتهت صلاحية الحساب. تواصل مع الدعم الفني للتجديد.';
       err.style.background = '';
       err.style.borderColor = '';
@@ -21373,7 +21680,7 @@ function _finalizeLogin(uname, user){
     }
     return;
   }
-  if(user && user.type==='temp' && Date.now()>user.expiry){
+  if(user && isSubscriptionExpired(user)){
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('expired-banner').classList.add('show');
     return;
@@ -21385,7 +21692,9 @@ function _finalizeLogin(uname, user){
   const loggedEl = document.getElementById('sb-logged-user');
   if(loggedEl) loggedEl.textContent = '👤 ' + uname;
   if(user && user.type==='temp'){
-    setTimeout(()=>{ clearSession(); document.getElementById('expired-banner').classList.add('show'); }, user.expiry-Date.now());
+    setTimeout(()=>{ clearSession(); document.getElementById('expired-banner').classList.add('show'); }, user.expiry-getTrustedNow());
+    // تنبيه قبل الانتهاء + مزامنة وقت الخادم
+    setTimeout(()=>{ _ttSyncServerTime(); maybeShowExpiryWarning(user); }, 3000);
   }
   // ── تسجيل دخول Firebase Auth مجهول حتى تعمل قواعد الأمان ──
   function _startAppAfterAuth(){
@@ -24915,6 +25224,7 @@ function _buildCultureHTML(cid){
     @media print{ .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
   <div class="content">
+    ${_buildWatermarkHTML(false)}
     ${hdrHTML}
     ${ptBox}
     ${separator}
@@ -25439,6 +25749,7 @@ function _buildUAPrintHTML(r){
     }
   </style></head><body>
     <div class="ua-content">
+      ${_buildWatermarkHTML(false)}
       ${hdrHTML}
       <div style="border:1.5px solid #b8b8b8;margin:2px 0 2px;padding:3px 10px;background:#fafafa">
         ${uaPtBox}
@@ -26003,6 +26314,7 @@ function _buildStoolPrintHTML(r){
     @media print{ .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="se-content">
+      ${_buildWatermarkHTML(false)}
       ${hdrHTML}
       <div style="border:1.5px solid #b8b8b8;margin:3px 0 4px;padding:4px 10px;background:#fafafa">
         ${_sPtBox}
@@ -27924,6 +28236,7 @@ function _buildSemenPrintHTML(r){
     @media print{ .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="sm-content">
+      ${_buildWatermarkHTML(false)}
       ${hdrHTML}
       <div style="background:${color};color:#fff;padding:3px 12px;text-align:center;font-weight:900;font-size:14px;letter-spacing:1px">
         SEMEN ANALYSIS REPORT (SPERMIOGRAM)
@@ -29054,8 +29367,11 @@ function wqAdvance(rid){
 }
 
 // ── شاشة العرض للمرضى ──
-function openWaitScreen(){
-  var win = window.open('', 'MedLabWaitScreen',
+// mode: 'manual' (افتراضي) نافذة عادية تُسحب يدوياً لكابل HDMI
+//       'tv'      بث تلقائي — يفتحها main.js بملء الشاشة على الشاشة الثانية مباشرة
+function openWaitScreen(mode){
+  var winName = mode==='tv' ? 'MedLabWaitScreenTV' : 'MedLabWaitScreen';
+  var win = window.open('', winName,
     'width='+screen.width+',height='+screen.height+',toolbar=0,menubar=0,scrollbars=0,resizable=1,left=0,top=0');
   if(!win){ alert('⚠️ السماح بالنوافذ المنبثقة مطلوب\nيرجى السماح بها من شريط العنوان ثم اضغط مجدداً'); return; }
   window._waitScreenWin = win;
@@ -29599,7 +29915,115 @@ function _pushWaitScreenData(){
   }catch(e){}
 }
 
-function updateWaitScreen(){ _pushWaitScreenData(); }
+function updateWaitScreen(){ _pushWaitScreenData(); _pushTvCastData(); }
+
+// ═══════════════════════════════════════════════════════════
+// 🎥 بث "شاشة الانتظار" لاسلكياً عبر Google Cast (Chromecast)
+// يركب فوق سيرفر الشبكة المحلي الموجود أصلاً (LAN server) بدون أي
+// تعديل عليه وبدون التأثير على ميزة ربط أكثر من حاسبة — فقط نضيف
+// نوع رسالة جديد (tvcast_update) يتجاهله بقية النظام تلقائياً.
+// الصفحة المستقبِلة (tvcast.html) صفحة مستقلة تُعرض من كروم ثم تُبَث
+// للتلفاز عبر خاصية "Cast" المدمجة في المتصفح — لا علاقة لها بنافذة
+// شاشة الانتظار العادية (popup) ولا تعطّلها.
+// ═══════════════════════════════════════════════════════════
+window._tvCastActive = false; // يُفعَّل فقط بعد ضغط المستخدم على زر البث، لتفادي بثّ غير ضروري بالشبكة
+
+function _pushTvCastData(){
+  if(!window._tvCastActive) return;
+  try{
+    const today = new Date().toISOString().slice(0,10);
+    const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
+    const filteredReqs = _wsFilterRequests(todayReqs);
+    const cnt = {
+      pending:    todayReqs.filter(r=>r.status==='pending').length,
+      inprogress: todayReqs.filter(r=>r.status==='inprogress').length,
+      done:       todayReqs.filter(r=>r.status==='done').length,
+      total:      todayReqs.length
+    };
+    const rows = filteredReqs.map(function(r,i){
+      const tn=(r.testNames||r.tests.map(function(tid){var t=tests.find(function(x){return x.id===tid;});return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
+      return { n:i+1, id:r.id, name:r.patientName||'-', tests:tn, status:r.status };
+    });
+    // قائمة المرضى الجاهزين (لعرض بطاقة النداء + الصوت في شاشة البث اللاسلكي)
+    const doneList = filteredReqs
+      .filter(function(r){ return r.status==='done'; })
+      .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
+    const ws = (settings&&settings.waitScreen)||{};
+    const speakEnabled = ws.speakEnabled !== false;
+    _lanSendRaw({
+      type: 'tvcast_update',
+      rows: rows,
+      cnt: cnt,
+      scrollSpeed: _wsGetScrollSpeed(),
+      doneList: doneList,
+      speakEnabled: speakEnabled,
+      ts: Date.now()
+    });
+  }catch(e){}
+}
+// ⭐ إرسال التسجيل الصوتي المخصص (إن وُجد) إلى شاشة البث اللاسلكي (tvcast.html)
+// تُستدعى عند فتح البث، وعند تسجيل/حذف التسجيل الصوتي من الإعدادات.
+function _pushTvCastVoice(){
+  if(!window._tvCastActive) return;
+  try{
+    var voice = null;
+    try{ voice = localStorage.getItem('medlab_voice_recording'); }catch(_){}
+    _lanSendRaw({ type: 'tvcast_voice_update', voice: voice, ts: Date.now() });
+  }catch(e){}
+}
+// تحديث دوري كل 5 ثوانٍ طالما البث مفعّل (نفس تردد نافذة الانتظار العادية)
+setInterval(function(){ if(window._tvCastActive) _pushTvCastData(); }, 5000);
+
+// فتح البث اللاسلكي (Google Cast) — يشغّل سيرفر الشبكة المحلي إن لم يكن
+// يعمل أصلاً (نفس سيرفر ربط الحاسبات، لا سيرفر جديد ولا تعارض معه)،
+// ثم يفتح صفحة العرض الخاصة بالتلفاز في المتصفح الافتراضي (يُفضّل Chrome).
+function openTvCast(){
+  window._tvCastActive = true;
+  function proceed(ip){
+    var port = _LAN_PORT || 8797;
+    var url  = 'http://'+ip+':'+port+'/tvcast.html';
+    _pushTvCastData();
+    _pushTvCastVoice();
+    if(window.electronAPI && window.electronAPI.openExternal) window.electronAPI.openExternal(url);
+    _tvCastShowLinkModal(url);
+  }
+  function getIpAndProceed(){
+    if(window.electronAPI && window.electronAPI.getLocalIP){
+      window.electronAPI.getLocalIP().then(function(ip){ proceed(ip||'localhost'); }).catch(function(){ proceed('localhost'); });
+    } else { proceed('localhost'); }
+  }
+  if(typeof _lanMode!=='undefined' && _lanMode==='server'){
+    getIpAndProceed();
+  } else {
+    if(typeof lisLanStartServer==='function') lisLanStartServer();
+    setTimeout(getIpAndProceed, 900);
+  }
+}
+
+// نافذة صغيرة تعرض الرابط + خطوات البث، مع زر نسخ
+function _tvCastShowLinkModal(url){
+  var old = document.getElementById('tvcast-link-modal');
+  if(old) old.remove();
+  var box = document.createElement('div');
+  box.id = 'tvcast-link-modal';
+  box.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  box.innerHTML =
+    '<div style="background:#0a1120;border:1.5px solid rgba(255,193,7,0.35);border-radius:16px;padding:22px;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.6)">'+
+      '<div style="font-size:16px;font-weight:900;color:#ffca28;margin-bottom:12px">🎥 بث شاشة الانتظار للتلفاز</div>'+
+      '<div style="font-size:12.5px;color:var(--text2);line-height:2;margin-bottom:14px">'+
+        '١. فُتح الرابط بمتصفحك الافتراضي — تأكد أنه <b style="color:var(--text)">Google Chrome</b><br>'+
+        '٢. إن لم يفتح تلقائياً، انسخ الرابط وألصقه بكروم يدوياً<br>'+
+        '٣. من قائمة كروم (⋮) أعلى اليمين ← <b style="color:var(--text)">بث / Cast</b><br>'+
+        '٤. اختر اسم تلفازك من القائمة'+
+      '</div>'+
+      '<div style="display:flex;gap:8px;align-items:center;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:14px">'+
+        '<input id="tvcast-url-inp" readonly value="'+url+'" style="flex:1;background:transparent;border:none;color:var(--text);font-size:12px;direction:ltr;text-align:left;outline:none">'+
+        '<button class="btn btn-p btn-sm" onclick="var i=document.getElementById(\'tvcast-url-inp\');i.select();document.execCommand(\'copy\');showNotif(\'✅ تم النسخ\',\'الصقه بكروم\',\'success\')">📋 نسخ</button>'+
+      '</div>'+
+      '<button class="btn btn-s" style="width:100%" onclick="document.getElementById(\'tvcast-link-modal\').remove()">إغلاق</button>'+
+    '</div>';
+  document.body.appendChild(box);
+}
 
 /* ── قائمة خيارات التلفاز ── */
 function toggleWqTvMenu(){
@@ -30502,6 +30926,23 @@ async function _pushResultsToDeviceLocal(_remote){
 
   const byDevice={}; // deviceId → [ {code,name,channel,_pid}, ... ]
   const noTarget=[];
+  // ── 🧫 BS-230 فقط: مجموعات إرسال منفصلة للتراكمي بباركود خاص (بادئة 9) ──
+  //   عند الإرسال بزر "إرسال": لو احتوى الطلب على تراكمي + تحاليل سيرم معاً،
+  //   يجب إرسال التراكمي كعينة مستقلة بباركود التراكمي (نفس ملصق التيوب)،
+  //   وباقي التحاليل بالباركود العادي. وإلا يضع الجهاز التراكمي على باركود
+  //   السكر/اليوريا ولا يقرأ باركود التراكمي. معزول تماماً على BS-230.
+  const _bs230A1cSends=[]; // [{deviceId, sampleId, tests:[...]}]
+  // هل يوجد في الطلب تحاليل سيرم (غير تراكمية) مخصَّصة لجهاز BS-230؟
+  const _bs230SerumByDev={}; // deviceId → true إن وُجد تحليل سيرم لهذا الجهاز
+  reqTests.forEach(t=>{
+    if(t.isSpecialExam) return;
+    const _m=(lisMappings||[]).find(m=>_lisMedlabCode(m) && t.code && _lisMedlabCode(m).toUpperCase()===String(t.code).toUpperCase());
+    if(!_m || !_m.pushDevice) return;
+    const _d=(lisDevices||[]).find(d=>d && d.id===_m.pushDevice);
+    if(_d && String(_d.vendor||'').toLowerCase()==='mindray_bs230' && !_c111IsWholeBloodCode(t.code||'')){
+      _bs230SerumByDev[_m.pushDevice]=true;
+    }
+  });
   reqTests.forEach(t=>{
     if(t.isSpecialExam) return; // الفحوص الخاصة (بول/براز/سائل) لا تُرسل
     const mapping=(lisMappings||[]).find(m=>
@@ -30510,6 +30951,34 @@ async function _pushResultsToDeviceLocal(_remote){
     if(!mapping || !mapping.pushDevice){ noTarget.push(t.code||t.name); return; }
     let devCode=mapping.deviceCode||t.code||t.name||'';
     let channel=mapping.channel?String(mapping.channel).trim():'';
+    // ── 🧫 BS-230 فقط: توسيع HbA1c إلى بندين قابلين للطلب (HbA1c-1 + Hb-1) ──
+    //   قائمة تحاليل BS-230 تُظهر للتراكمي بندين منفصلين يجب طلبهما معاً حتى
+    //   يُخصّصهما الجهاز للمريض. النتيجة النهائية تعود باسم A1C وتُستلَم صحيحة.
+    //   معزول تماماً: يُفعَّل فقط إذا كان جهاز الهدف vendor='mindray_bs230'
+    //   وكان التحليل هو التراكمي (كود MedLab = HBA1C). لا يمسّ أي جهاز آخر.
+    const _tgtDev = (lisDevices||[]).find(d=>d && d.id===mapping.pushDevice);
+    const _tgtIsBS230 = _tgtDev && String(_tgtDev.vendor||'').toLowerCase()==='mindray_bs230';
+    if(_tgtIsBS230 && String(t.code||'').toUpperCase()==='HBA1C'){
+      const _a1cItems=[
+        {code:'HbA1c-1',name:'HbA1c-1',channel:String(mapping.channelA1c1||'').trim(),_pid:_pid},
+        {code:'Hb-1',   name:'Hb-1',   channel:String(mapping.channelHb1||'').trim(),_pid:_pid},
+      ];
+      // إن وُجدت تحاليل سيرم لنفس الجهاز → التراكمي يُرسَل بباركوده الخاص (9)
+      // كعينة مستقلة. وإلا (تراكمي فقط) → يُرسَل بالباركود العادي كالمعتاد.
+      if(_bs230SerumByDev[mapping.pushDevice]){
+        const _wbSid=(typeof _c111WbSid==='function'?_c111WbSid(sampleId):('9'+sampleId))||('9'+sampleId);
+        let _grp=_bs230A1cSends.find(g=>g.deviceId===mapping.pushDevice && g.sampleId===_wbSid);
+        if(!_grp){ _grp={deviceId:mapping.pushDevice, sampleId:_wbSid, tests:[]}; _bs230A1cSends.push(_grp); }
+        _a1cItems.forEach(it=>{ if(!_grp.tests.some(x=>String(x.code).toUpperCase()===it.code.toUpperCase())) _grp.tests.push(it); });
+      } else {
+        const _bucket=(byDevice[mapping.pushDevice]=byDevice[mapping.pushDevice]||[]);
+        _a1cItems.forEach(it=>{
+          if(_bucket.some(x=>String(x.code).toUpperCase()===it.code.toUpperCase())) return;
+          _bucket.push({ code:it.code, name:it.name, channel:it.channel, _pid:_pid });
+        });
+      }
+      return;
+    }
     (byDevice[mapping.pushDevice]=byDevice[mapping.pushDevice]||[]).push({
       code:devCode, name:t.name||devCode, channel:channel, _pid:_pid
     });
@@ -30569,6 +31038,28 @@ async function _pushResultsToDeviceLocal(_remote){
       if(res&&res.ok){ okCount++; lisAddLog('astm','✅ تم الإرسال إلى '+devName+(res.waited?' (بعد انتظار الاتصال)':'')); }
       else { failMsgs.push(devName+': '+((res&&res.error)||'فشل')); lisAddLog('err','❌ '+devName+': '+((res&&res.error)||'فشل')); }
     }catch(e){ failMsgs.push(devName+': '+e.message); lisAddLog('err','❌ '+devName+': '+e.message); }
+  }
+
+  // ── 🧫 BS-230 فقط: إرسال التراكمي كعينة مستقلة بباركوده الخاص (بادئة 9) ──
+  //   يُنفَّذ فقط حين وُجد تراكمي + سيرم معاً لنفس الجهاز. الباقي أُرسِل أعلاه
+  //   بالباركود العادي، والآن نرسل HbA1c-1 + Hb-1 تحت باركود التيوب الخاص،
+  //   فيطابقهما الجهاز عند مسح ملصق التراكمي. معزول تماماً عن باقي المسارات.
+  for(const _grp of _bs230A1cSends){
+    const _dObj=(lisDevices||[]).find(d=>d.id===_grp.deviceId)||{};
+    const _dName=_dObj.name||_grp.deviceId;
+    lisAddLog('info','🩸 إرسال التراكمي كعينة مستقلة إلى '+_dName+' (باركود التراكمي '+_grp.sampleId+')');
+    try{
+      if(!window.electronAPI || !window.electronAPI.hl7PushSample){
+        failMsgs.push(_dName+': hl7PushSample غير مفعّل في preload');
+        lisAddLog('err','❌ hl7PushSample غير متاح في preload!');
+        continue;
+      }
+      const _res=await window.electronAPI.hl7PushSample({
+        deviceId:_grp.deviceId, sampleId:_grp.sampleId, tests:_grp.tests, patient:_pid
+      });
+      if(_res&&_res.ok){ okCount++; lisAddLog('astm','✅ تم إرسال التراكمي إلى '+_dName+(_res.waited?' (بعد انتظار الاتصال)':'')); }
+      else { failMsgs.push(_dName+' (تراكمي): '+((_res&&_res.error)||'فشل')); lisAddLog('err','❌ '+_dName+' (تراكمي): '+((_res&&_res.error)||'فشل')); }
+    }catch(e){ failMsgs.push(_dName+' (تراكمي): '+e.message); lisAddLog('err','❌ '+_dName+' (تراكمي): '+e.message); }
   }
 
   let msg='تم إرسال التحاليل إلى '+okCount+' جهاز.';
@@ -31225,7 +31716,19 @@ function _cbcInitIpcListeners(){
 
 // البحث عن تحاليل المريض بالـ Sample ID والرد على الجهاز
 async function lisHandleHl7Query(info){
-  const sid = String(info.sampleId||'').trim();
+  const sidRaw = String(info.sampleId||'').trim();
+  // ── 🧫 BS-230 فقط: كشف تيوب التراكمي (HbA1c) بالبادئة 9 (نفس نظام c111) ──
+  //   ملصق التراكمي يُطبع برقم ببادئة 9 (عبر _c111WbSid). عند مسح هذا الباركود
+  //   يجب إرسال HbA1c فقط. وعند مسح الباركود العادي يُرسَل الباقي بدون HbA1c.
+  //   نحوّل رقم تيوب التراكمي إلى الرقم الأصلي للبحث عن المريض. معزول: يُحسم
+  //   فعلياً لاحقاً بعد معرفة أن الجهاز الطالِب BS-230، لكن نجهّز الرقم هنا.
+  const _reqDevIdEarly = info.deviceId || '';
+  const _reqDevEarly = (typeof lisDevices!=='undefined'?lisDevices:[]).find(d=>d && d.id===_reqDevIdEarly);
+  const _isBS230Early = _reqDevEarly && String(_reqDevEarly.vendor||'').toLowerCase()==='mindray_bs230';
+  const _isWbTubeBS = _isBS230Early && !!(sidRaw && sidRaw.charAt(0)===C111_WB_PREFIX &&
+                        _bcCleanCode(sidRaw).length>6);
+  const sid = _isWbTubeBS ? _c111BaseSidFromWb(sidRaw) : sidRaw;
+  if(_isWbTubeBS) lisAddLog('astm','🩸 BS-230: تيوب التراكمي (HbA1c) — '+sidRaw+' → المريض '+sid);
   lisAddLog('astm','🔍 طلب تحاليل من '+info.name+' — SID:'+sid);
 
   let testsToSend = [];
@@ -31270,6 +31773,14 @@ async function lisHandleHl7Query(info){
         if(_r) reqList = [_r];
       }
     }
+    // ── استعلِم عن *آخر طلب* للمريض فقط (لكل الأجهزة) ──────────────────
+    //   المريض قد يملك طلبات سابقة (منتهية أو قديمة). إرسال كل الطلبات معاً
+    //   يُحمِّل الجهاز تحاليلَ زياراتٍ سابقة مع الحالية. الصحيح: أحدث طلب فقط.
+    if(reqList.length>1){
+      const _latest = reqList.slice().sort((a,b)=>(new Date(b.date||b.createdAt||0))-(new Date(a.date||a.createdAt||0)))[0];
+      reqList = [_latest];
+      lisAddLog('info','📌 تم اختيار آخر طلب فقط للمريض');
+    }
     // احتفظ بمرجع أول طلب لأغراض السجل/الـ PID فقط
     const req = reqList[0] || null;
     if(reqList.length){
@@ -31294,6 +31805,12 @@ async function lisHandleHl7Query(info){
       const _reqDevId = info.deviceId || '';
       const _reqDev   = (typeof lisDevices!=='undefined'?lisDevices:[]).find(d=>d && d.id===_reqDevId);
       const _isSnibeReq = _reqDev && String(_reqDev.vendor||'').toLowerCase()==='snibe';
+      // ── 🧫 BS-230 فقط: HbA1c يتطلب إرسال نوعين قابلين للطلب في قائمة الجهاز ──
+      // قائمة تحاليل BS-230 تُظهر للتراكمي بندين منفصلين: HbA1c-1 و Hb-1.
+      // يجب إرسالهما معاً حتى يُخصّصهما الجهاز للمريض. النتيجة النهائية تعود
+      // باسم A1C (channel 43) وتُستلَم صحيحة كما هي — لا نمسّ مسار الاستلام.
+      // معزول تماماً: يُفعَّل فقط عندما الجهاز الطالِب vendor='mindray_bs230'.
+      const _isBS230Req = _reqDev && String(_reqDev.vendor||'').toLowerCase()==='mindray_bs230';
       // هل يوجد أصلاً أي تحليل مُعيَّن لهذا الجهاز؟ (لتقرير تطبيق الفلترة)
       const _hasAssigned = (typeof lisMappings!=='undefined'?lisMappings:[])
         .some(m => m && m.pushDevice===_reqDevId);
@@ -31304,11 +31821,30 @@ async function lisHandleHl7Query(info){
       // منع إرسال نفس التحليل مرتين إن تكرر بين طلبات المريض
       const _sentCodes = new Set();
 
+      // ── 🧫 BS-230 فقط: فصل تيوب التراكمي (HbA1c) عن تيوب السيرم ──────────
+      //   عند مسح باركود التراكمي (تيوب EDTA ببادئة 9): نُرسل HbA1c فقط.
+      //   عند مسح الباركود العادي (سيرم): نُرسل الباقي بدون HbA1c.
+      //   يُفعَّل الفصل فقط إذا احتوى الطلب على النوعين معاً (تراكمي + سيرم)،
+      //   وإلا لا تعارض ويُرسَل كل شيء كالمعتاد. معزول على BS-230 تماماً.
+      let _bsNeedsSplit = false;
+      if(_isBS230Req){
+        let _wbN=0, _serN=0;
+        reqList.forEach(_rq=>{ const _s=_c111SplitReqTests(_rq); _wbN+=_s.wb.length; _serN+=_s.serum.length; });
+        _bsNeedsSplit = (_wbN>0 && _serN>0);
+        if(_bsNeedsSplit) lisAddLog('astm','🩸 BS-230: الطلب فيه تيوبان — '+(_isWbTubeBS?'تيوب التراكمي (HbA1c)':'تيوب السيرم')+' الآن');
+      }
+
       // ⭐ نمرّ على تحاليل *كل* طلبات المريض غير المنتهية
       reqList.forEach(_rq => {
         (_rq.tests||[]).forEach(tid => {
         const t = (typeof tests!=='undefined'?tests:[]).find(x=>x.id===tid||x.code===tid);
         if(!t){ lisAddLog('warn','⚠️ تحليل مفقود: '+tid); return; }
+        // ── 🧫 BS-230 فقط: تطبيق فصل التيوبين على كل تحليل ──
+        if(_bsNeedsSplit){
+          const _tIsWb = _c111IsWholeBloodCode(t.code||tid);
+          if(_isWbTubeBS && !_tIsWb) return;   // باركود التراكمي: تجاهل السيرم
+          if(!_isWbTubeBS && _tIsWb) return;   // باركود السيرم: تجاهل التراكمي
+        }
         let devCode = t.code || t.name || '';
         let channel = '';
         const mapping = (typeof lisMappings!=='undefined'?lisMappings:[]).find(m =>
@@ -31337,7 +31873,27 @@ async function lisHandleHl7Query(info){
           return;
         }
         _sentCodes.add(_dedupKey);
-        testsToSend.push({ code: devCode, name: t.name||devCode, channel: channel, _pid: _pid });
+        // ── 🧫 BS-230 فقط: توسيع HbA1c إلى بندين قابلين للطلب (HbA1c-1 + Hb-1) ──
+        //   يُفعَّل حصراً إذا: الجهاز الطالِب BS-230 (_isBS230Req) وكان التحليل
+        //   هو التراكمي (كود MedLab = HBA1C). خلاف ذلك يبقى السلوك كما هو تماماً.
+        //   لا channel للبندين (اسم فقط) — الجهاز يطابقهما بالاسم من قائمته،
+        //   ويعيد النتيجة النهائية باسم A1C التي يستلمها البرنامج صحيحة أصلاً.
+        const _isHbA1cTest = String(t.code||'').toUpperCase()==='HBA1C';
+        if(_isBS230Req && _isHbA1cTest){
+          const _a1cItems = [
+            { code:'HbA1c-1', name:'HbA1c-1', channel:String((mapping&&mapping.channelA1c1)||'').trim() },
+            { code:'Hb-1',    name:'Hb-1',    channel:String((mapping&&mapping.channelHb1)||'').trim() },
+          ];
+          _a1cItems.forEach(it=>{
+            const _k = String(it.code).toUpperCase()+'|'+String(it.channel);
+            if(_sentCodes.has(_k)) return;
+            _sentCodes.add(_k);
+            testsToSend.push({ code: it.code, name: it.name, channel: it.channel, _pid: _pid });
+          });
+          lisAddLog('info','🧫 BS-230: توسيع HbA1c → HbA1c-1('+((mapping&&mapping.channelA1c1)||'-')+') + Hb-1('+((mapping&&mapping.channelHb1)||'-')+')');
+        } else {
+          testsToSend.push({ code: devCode, name: t.name||devCode, channel: channel, _pid: _pid });
+        }
         });
       });
     }
@@ -31413,6 +31969,11 @@ async function lisHandleC111Query(info){
         const _r = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
         if(_r) reqList = [_r];
       }
+    }
+    // ── آخر طلب فقط للمريض (كل الأجهزة) — لا نُرسل طلبات سابقة مع الحالية ──
+    if(reqList.length>1){
+      reqList = [ reqList.slice().sort((a,b)=>(new Date(b.date||b.createdAt||0))-(new Date(a.date||a.createdAt||0)))[0] ];
+      lisAddLog('info','📌 تم اختيار آخر طلب فقط للمريض');
     }
     const req = reqList[0] || null;
     if(reqList.length){
@@ -32614,6 +33175,18 @@ function lisRenderMappings(){
         <input type="text" value="${m.channel||''}" placeholder="رقم"
           onchange="lisSetMappingChannel('${m.id}', this.value)"
           style="width:70px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.3);border-radius:6px;color:var(--primary);font-size:11px;padding:3px 6px;text-align:center;font-weight:700">
+        ${String(_lisMedlabCode(m)).toUpperCase()==='HBA1C' ? `
+        <div style="margin-top:5px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:9px;color:#ffcf5a;font-weight:700">BS-230:</span>
+          <input type="text" value="${m.channelA1c1||''}" placeholder="HbA1c-1"
+            title="رقم قناة HbA1c-1 في جهاز BS-230"
+            onchange="lisSetMappingA1cChannel('${m.id}','a1c1', this.value)"
+            style="width:64px;background:rgba(255,207,90,0.10);border:1px solid rgba(255,207,90,0.35);border-radius:6px;color:#ffcf5a;font-size:10px;padding:2px 5px;text-align:center;font-weight:700">
+          <input type="text" value="${m.channelHb1||''}" placeholder="Hb-1"
+            title="رقم قناة Hb-1 في جهاز BS-230"
+            onchange="lisSetMappingA1cChannel('${m.id}','hb1', this.value)"
+            style="width:56px;background:rgba(255,207,90,0.10);border:1px solid rgba(255,207,90,0.35);border-radius:6px;color:#ffcf5a;font-size:10px;padding:2px 5px;text-align:center;font-weight:700">
+        </div>` : ''}
       </td>
       <td style="padding:8px 12px"><span style="background:rgba(0,212,255,0.12);color:var(--primary);border:1px solid rgba(0,212,255,0.3);border-radius:12px;padding:2px 8px;font-size:10px;font-weight:700">${m.device==='all'?'كل الأجهزة':m.device}</span></td>
       <td style="padding:8px 12px"><button class="btn btn-s btn-sm" style="color:var(--danger);border-color:rgba(255,34,68,0.3);padding:3px 8px;font-size:10px" onclick="lisDeleteMapping('${m.id}')">🗑️</button></td>
@@ -32624,6 +33197,17 @@ function lisSetMappingChannel(id, val){
   const m=lisMappings.find(x=>x.id===id);
   if(!m) return;
   m.channel=String(val||'').trim();
+  lisSaveState();
+}
+// ⭐ 🧫 BS-230 فقط: حفظ رقمَي قناة التراكمي (HbA1c-1 و Hb-1)
+//   يُخزَّنان على نفس mapping التحليل HbA1c، ويُستخدمان عند إرسال البندين
+//   للجهاز. معزول تماماً — لا يمسّ channel العادي ولا أي جهاز آخر.
+function lisSetMappingA1cChannel(id, which, val){
+  const m=lisMappings.find(x=>x.id===id);
+  if(!m) return;
+  const v=String(val||'').trim();
+  if(which==='a1c1') m.channelA1c1=v;
+  else if(which==='hb1') m.channelHb1=v;
   lisSaveState();
 }
 function lisAddMapping(){
@@ -33872,6 +34456,12 @@ function _fsaUpdateIndicator(connected){
 // ════════════════════════════════════════════════════════════════════════
 
 // ── مفاتيح تخزين محلية (خاصة بكل مستخدم) ─────────────────────────────
+// ── تبديل القوائم المنسدلة في قسم قاعدة البيانات ──
+function dbAccToggle(el){
+  var acc = el.closest('.db-acc');
+  if(acc) acc.classList.toggle('open');
+}
+
 function _gdKey(suffix){ return 'gdrive_' + (DB._user || 'default') + '_' + suffix; }
 function _gdPassKey(){ return _gdKey('encpass'); }        // كلمة مرور التشفير (مخزّنة مبهّمة)
 function _gdAutoKey(){ return _gdKey('auto'); }           // إعداد النسخ التلقائي
@@ -39192,6 +39782,10 @@ function lisLanStartServer(){
               _lanResetGate();
               setTimeout(function(){ _lanAnnounce(); }, 500);
               _lanUpdateStatus();
+              // ⭐ عميل جديد قد يكون شاشة البث اللاسلكي (tvcast.html) — زوّده فوراً بآخر بيانات + التسجيل الصوتي
+              if(window._tvCastActive){
+                setTimeout(function(){ _pushTvCastData(); _pushTvCastVoice(); }, 600);
+              }
               return;
             }
             if(_p && _p.type==='client_disconnected'){
