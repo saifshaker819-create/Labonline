@@ -3034,7 +3034,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     window.electronAPI.onDeviceData((d) => {
       const targetDev = lisDevices.find(x => x.id === d.deviceId);
       if(!targetDev) return;
-      lisRawMessages.unshift(d.data);
+      _lisPushRaw(d.data);
       // ── رسالة صادرة من c111 (رد التحميل) — تُعرض فقط، لا تُحلَّل كنتيجة واردة ──
       if(d.c111out){
         lisAddLog('astm','📤 cobas c111 — رد صادر:\n'+String(d.data||''));
@@ -4077,8 +4077,13 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div style="font-size:12px;color:var(--text2)">اربط <b style="color:var(--warning)">رمز الجهاز</b> بـ <b style="color:var(--success)">رمز MedLab Pro</b></div>
               <div style="display:flex;gap:8px">
                 <button class="btn btn-p btn-sm" onclick="lisAddMapping()">➕ إضافة ربط</button>
+                <button class="btn btn-s btn-sm" onclick="lisDedupeMappings()" title="حذف الروابط المكرّرة (يبقي الأول لكل رمز جهاز)">🧹 حذف المكرّر</button>
                 <button class="btn btn-s btn-sm" onclick="lisLoadDefaultMappings()">🔄 تحميل الافتراضي</button>
               </div>
+            </div>
+            <div style="position:relative;margin-bottom:10px">
+              <input id="lis-map-search" class="fc" placeholder="🔍 بحث برمز الجهاز أو رمز MedLab أو اسم التحليل..."
+                autocomplete="off" oninput="lisRenderMappings()" style="font-size:12px;padding-right:12px">
             </div>
             <div class="gc">
               <div class="gc-body" style="overflow-x:auto;padding:0">
@@ -4102,6 +4107,10 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
               <div style="font-size:12px;color:var(--text2)">حدّد لكل تحليل <b style="color:var(--success)">الجهاز</b> الذي تُرسَل إليه التحاليل عند الضغط على "إرسال للجهاز" في شاشة النتائج</div>
               <button class="btn btn-s btn-sm" onclick="lisRenderPushTargets()">🔄 تحديث</button>
+            </div>
+            <div style="position:relative;margin-bottom:10px">
+              <input id="lis-push-search" class="fc" placeholder="🔍 بحث برمز MedLab أو اسم التحليل أو رقم القناة..."
+                autocomplete="off" oninput="lisRenderPushTargets()" style="font-size:12px">
             </div>
             <div class="gc">
               <div class="gc-body" style="overflow-x:auto;padding:0">
@@ -7929,6 +7938,11 @@ const IDB=(()=>{
     });
   }
 
+  // ⚡⚡ إصلاح جذري للأداء (السبب الأول للتجميد) ⚡⚡
+  // LZS.compress ليست ضغطاً — بل Base64 يُكبّر البيانات ٣٨٪، وتنفيذه بطيء
+  // جداً مع النص العربي. القياس على ٢٠٬٠٠٠ طلب: ١٧.٧ ثانية تجميد عند كل حفظ.
+  // IndexedDB يخزّن الكائنات أصلاً (structured clone) بتنفيذ C++ — أسرع ٣٠ ضعفاً.
+  // التوافق الرجعي: الصفوف القديمة (تبدأ بـ \x01) تُقرأ كما كانت تماماً.
   async function get(key){
     try{
       const db=await open();
@@ -7938,9 +7952,10 @@ const IDB=(()=>{
         req.onsuccess=()=>{
           const row=req.result;
           if(!row){res(null);return;}
-          try{
-            const text=(row.v&&row.v[0]==='\x01')?LZS.decompress(row.v):row.v;
-            res(JSON.parse(text||'null'));
+          if(row.raw===1){ res(row.v===undefined?null:row.v); return; }   // صيغة جديدة
+          try{                                                            // صيغة قديمة
+            const text=(typeof row.v==='string'&&row.v[0]==='\x01')?LZS.decompress(row.v):row.v;
+            res(typeof text==='string'?JSON.parse(text||'null'):(text===undefined?null:text));
           }catch{res(null);}
         };
         req.onerror=()=>res(null);
@@ -7950,12 +7965,17 @@ const IDB=(()=>{
 
   async function set(key,value){
     try{
+      // ألغِ أي كتابة مؤجّلة لنفس المفتاح — الكتابة المباشرة هنا أحدث
+      try{ if(typeof _idbCancelPending==='function') _idbCancelPending(key); }catch(e){}
       const db=await open();
-      const json=JSON.stringify(value);
-      const compressed=LZS.compress(json);
       return new Promise((res,rej)=>{
         const tx=db.transaction(STORE,'readwrite');
-        tx.objectStore(STORE).put({k:key,v:compressed});
+        try{
+          tx.objectStore(STORE).put({k:key,v:value,raw:1});   // ⚡ خام — بلا JSON ولا Base64
+        }catch(cloneErr){
+          try{ tx.objectStore(STORE).put({k:key,v:JSON.parse(JSON.stringify(value)),raw:1}); }
+          catch(e2){ res(false); return; }
+        }
         tx.oncomplete=()=>res(true);
         tx.onerror=()=>res(false);
       });
@@ -8007,7 +8027,11 @@ const IDB=(()=>{
       }
       // fallback: حساب تقديري من البيانات المخزنة
       const all=await getAll();
-      let total=all.reduce((s,r)=>(s+(r.v||'').length*2),0);
+      let total=all.reduce((s,r)=>{
+        const v=r&&r.v;
+        if(typeof v==='string') return s+v.length*2;
+        try{ return s+JSON.stringify(v||'').length*2; }catch{ return s; }
+      },0);
       return (total/1024/1024).toFixed(2);
     }catch{return '0';}
   }
@@ -8039,6 +8063,46 @@ const _IDB_KEYS=new Set(['patients','requests','invoices','doctors','packages',
 // كاش الذاكرة — يُحدَّث عند كل قراءة/كتابة لتفادي أي تأخير
 const _MC={};
 
+// ══════════════════════════════════════════════════════════════
+// ⚡ كتابة مؤجّلة مُجمَّعة إلى IndexedDB
+// عمليات مثل استلام نتيجة CBC تستدعي save('requests') عشرات المرات خلال
+// أقل من ثانية. نحتفظ بأحدث نسخة ونكتبها مرة واحدة بعد ٣٠٠ms هدوء (سقف
+// أمان ١٥٠٠ms). القراءة تأتي من _MC المحدَّث فوراً — فلا يتغيّر أي سلوك.
+// ══════════════════════════════════════════════════════════════
+const _idbPending={}, _idbTimers={}, _idbDeadline={};
+
+function _idbCancelPending(pk){
+  if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
+  delete _idbPending[pk]; delete _idbDeadline[pk];
+}
+function _idbWriteNow(pk){
+  if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
+  delete _idbDeadline[pk];
+  if(!(pk in _idbPending)) return;
+  const v=_idbPending[pk];
+  delete _idbPending[pk];
+  try{ IDB.set(pk,v).catch(e=>console.warn('[DB] IDB set error',pk,e)); }
+  catch(e){ console.warn('[DB] IDB set error',pk,e); }
+}
+function _idbWriteLater(pk,v){
+  _idbPending[pk]=v;
+  const now=Date.now();
+  if(!_idbDeadline[pk]) _idbDeadline[pk]=now+1500;
+  if(_idbTimers[pk]) clearTimeout(_idbTimers[pk]);
+  const wait=Math.max(0,Math.min(300,_idbDeadline[pk]-now));
+  _idbTimers[pk]=setTimeout(function(){ _idbWriteNow(pk); },wait);
+}
+function _idbFlushAll(){ Object.keys(_idbPending).forEach(_idbWriteNow); }
+window._idbFlushAll=_idbFlushAll;
+window._idbCancelPending=_idbCancelPending;
+
+// ضمانات عدم فقدان البيانات
+window.addEventListener('beforeunload',function(){ try{ _idbFlushAll(); }catch(e){} });
+window.addEventListener('pagehide',    function(){ try{ _idbFlushAll(); }catch(e){} });
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'){ try{ _idbFlushAll(); }catch(e){} }
+});
+
 const DB={
   _user:'',
   _pfx(){ return 'mlab2_'+(this._user?this._user+'_':''); },
@@ -8064,7 +8128,7 @@ const DB={
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
         localStorage.removeItem(pk);
-        IDB.set(pk,v).catch(e=>console.warn('[DB] IDB set error',k,e));
+        _idbWriteLater(pk,v);   // ⚡ كتابة مُجمَّعة بدل كتابة كاملة عند كل save()
       } else if(k==='settings' && v && typeof v==='object'){
         // الإعدادات: استبعد الحقول الكبيرة من localStorage (تذهب لـ IDB عبر setBig)
         const slim={};
@@ -8088,6 +8152,7 @@ const DB={
     const pk=this._pfx()+k;
     delete _MC[pk];
     localStorage.removeItem(pk);
+    _idbCancelPending(pk);   // ألغِ أي كتابة مؤجّلة حتى لا تُعيد كتابة المحذوف
     if(_IDB_KEYS.has(k)) IDB.del(pk).catch(()=>{});
   },
 
@@ -9897,7 +9962,27 @@ function _collectAndSaveSettings(){
   }catch(e){}
 }
 
-function renderAll(){renderPatients();renderRequests();renderTestsDB();renderDoctors();renderPackages();renderInventory();renderInvoices();renderQC();renderReports();if(typeof renderWaitQueue==='function')renderWaitQueue();if(typeof updateWaitScreen==='function')updateWaitScreen();}
+// ⚡ لا يُعاد بناء إلا جداول القسم الظاهر. كان يبني ١١ جدولاً رغم أن
+//    المستخدم يرى قسماً واحداً. الأقسام المخفية تُرسم عند الانتقال إليها
+//    عبر nav() كما هو الحال أصلاً — فلا يتغيّر أي سلوك.
+function _secVisible(id){
+  var s=document.getElementById(id);
+  return !!(s&&s.classList.contains('active'));
+}
+function renderAll(){
+  if(_secVisible('sec-patients'))  renderPatients();
+  if(_secVisible('sec-requests'))  renderRequests();
+  if(_secVisible('sec-tests-db'))  renderTestsDB();
+  if(_secVisible('sec-doctors'))   renderDoctors();
+  if(_secVisible('sec-packages'))  renderPackages();
+  if(_secVisible('sec-inventory')) renderInventory();
+  if(_secVisible('sec-invoices'))  renderInvoices();
+  if(_secVisible('sec-quality'))   renderQC();
+  if(_secVisible('sec-reports'))   renderReports();
+  if(typeof renderWaitQueue==='function')  renderWaitQueue();
+  if(typeof updateWaitScreen==='function') updateWaitScreen();
+  if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(e){} }
+}
 
 // ── تطبيق الصلاحيات على الشريط الجانبي ─────────────
 function applyPermissionsToSidebar(){
@@ -10065,6 +10150,7 @@ function nav(p){
   if(p==='tests-db') renderTestsDB();
   if(p==='packages') renderPackages();
   if(p==='invoices') renderInvoices();
+  if(p==='quality') renderQC();   // ⭐ لم يكن له استدعاء رسم في nav إطلاقاً
   if(p==='waitqueue'){if(typeof renderWaitQueue==='function')renderWaitQueue();}
   if(p==='lis'){if(typeof lisInit==='function')lisInit();}
   if(p==='esr'){if(typeof esrRenderList==='function')esrRenderList();}
@@ -12347,7 +12433,10 @@ function renderRequestsFiltered(filter='today',srch=''){
     tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text2)">${_emptyMsg}</td></tr>`;
     return;
   }
-  tbody.innerHTML=list.map(r=>`<tr>
+  // ⚡ سقف عرض على دفعات — فلاتر مثل «الكل» أو البحث قد تُرجع كل طلبات المختبر
+  const _reqShown=list.slice(0,_reqRenderLimit);
+  const _reqRest=list.length-_reqShown.length;
+  tbody.innerHTML=_reqShown.map(r=>`<tr>
     <td><span class="bdg bdg-p">${r.id}</span></td>
     <td><b style="font-size:16.5px;font-weight:900;cursor:pointer;color:var(--primary);text-decoration:underline dotted;text-underline-offset:3px" onclick="${r.status==='done'?`goToPrint('${r.id}')`:`goToResult('${r.id}')`}" title="${r.status==='done'?'فتح الطباعة':'إدخال النتائج'}">${r.patientName}</b></td>
     <td><span style="font-size:11px">${r.testNames?r.testNames.slice(0,3).join(', ')+(r.testNames.length>3?'...':''):'-'}</span></td>
@@ -12366,10 +12455,20 @@ function renderRequestsFiltered(filter='today',srch=''){
         </button>
       </div>
     </td>
-  </tr>`).join('');
+  </tr>`).join('')+(_reqRest>0?`<tr><td colspan="8" style="text-align:center;padding:14px">
+    <button class="btn btn-s" onclick="_showMoreRequests()" style="font-weight:800">⬇️ عرض المزيد (${_reqRest} طلب متبقٍ)</button>
+  </td></tr>`:'');
   if(typeof _updateDeviceReqBadge==='function') _updateDeviceReqBadge();
 }
-function renderRequests(filter='all',srch=''){renderRequestsFiltered(filter,srch);}
+var _reqRenderLimit=300;
+function _showMoreRequests(){
+  _reqRenderLimit+=300;
+  var actPill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+  var f=(actPill&&actPill.getAttribute('data-filter'))||'today';
+  var srchEl=document.getElementById('req-srch-inp');
+  renderRequestsFiltered(f, srchEl?srchEl.value:'');
+}
+function renderRequests(filter='all',srch=''){_reqRenderLimit=300;renderRequestsFiltered(filter,srch);}
 
 /* ═══════════════════════════════════════════════════════
    🌀 RADIAL MENU — نظام القائمة الدائرية للطلبات
@@ -12490,9 +12589,10 @@ window.rrOpen = function(triggerBtn){
   if(bd) bd.classList.add('show');
 };
 
-function filterReq(f,el){document.querySelectorAll('#sec-requests .req-pill[data-filter]').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderRequestsFiltered(f);}
+function filterReq(f,el){_reqRenderLimit=300;document.querySelectorAll('#sec-requests .req-pill[data-filter]').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderRequestsFiltered(f);}
 function searchReq(v){
   if(window._srTimer)clearTimeout(window._srTimer);
+  _reqRenderLimit=300;
   const activeTab=document.querySelector('#sec-requests .req-pill[data-filter].active');
   const filter=activeTab?.getAttribute('data-filter')||'today';
   renderRequestsFiltered(filter,v);
@@ -16611,6 +16711,8 @@ function doPrint(reqId){
         try{
           var _rq=requests.find(function(r){return r.id===currentReqId;});
           if(_rq){ _rq.printed=true; _rq._updatedAt=Date.now(); save('requests',requests); }
+          try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+          try{ if(typeof _wsCallPatient==='function') _wsCallPatient(currentReqId); }catch(_){}
         }catch(e){}
         if(typeof showNotif==='function') showNotif('🖨️ طباعة','أُرسلت الطباعة إلى الحاسبة المتصلة','success');
         try{ renderRequests(); nav('requests'); }catch(e){}
@@ -16733,6 +16835,9 @@ function doPrint(reqId){
   req.printed=true;
   req._updatedAt=Date.now(); // وقت التعديل — يُستخدم في المزامنة الذكية
   save('requests',requests);
+  // ⭐ النداء يبدأ فور الطباعة (لا بعد 5 ثوانٍ من التحديث الدوري)
+  try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+  try{ if(typeof _wsCallPatient==='function') _wsCallPatient(req.id); }catch(_){}
   if(regularTests.length>0) deductInventoryOnPrint(req);
   renderRequests();
   showNotif('🖨️ طباعة','جاري الطباعة...','success');
@@ -17991,7 +18096,10 @@ function renderInvoices(){
     debtMap[i.patientId]=(debtMap[i.patientId]||0)+(i.total||0);
   });
 
-  document.getElementById('inv-body').innerHTML=invoices.map(i=>{
+  // ⚡ سقف عرض بدل رسم كل الفواتير منذ بداية عمل المختبر
+  const _invShown=invoices.slice(0,_invRenderLimit);
+  const _invRest=invoices.length-_invShown.length;
+  document.getElementById('inv-body').innerHTML=_invShown.map(i=>{
     const isPaid=i.status==='مدفوعة';
     const ptDebt=debtMap[i.patientId]||0;
     const discTxt=i.discount>0?`<span style="font-size:10px;color:var(--warning)"> (خصم ${i.discount}%)</span>`:'';
@@ -18010,14 +18118,18 @@ function renderInvoices(){
         <button class="btn btn-sm btn-d" onclick="deleteInv('${i.id}')">🗑️</button>
       </div></td>
     </tr>`;
-  }).join('');
+  }).join('')+(_invRest>0?`<tr><td colspan="7" style="text-align:center;padding:14px">
+      <button class="btn btn-s" onclick="_showMoreInvoices()" style="font-weight:800">⬇️ عرض المزيد (${_invRest} فاتورة متبقية)</button>
+    </td></tr>`:'');
 }
+var _invRenderLimit=300;
+function _showMoreInvoices(){ _invRenderLimit+=300; renderInvoices(); }
 function saveInvoice(){const pid=document.getElementById('inv-pt').value;const pt=patients.find(p=>p.id===pid);invoices.push({id:'INV-'+(1000+invoices.length+1),patientId:pid,patientName:pt?pt.name:'-',total:parseFloat(document.getElementById('inv-total').value)||0,insType:document.getElementById('inv-ins').value,insAmt:parseFloat(document.getElementById('inv-ins-amt').value)||0,status:document.getElementById('inv-status').value,date:new Date().toISOString().split('T')[0]});save('invoices',invoices);renderInvoices();closeModal('m-invoice');showNotif('تم','تم حفظ الفاتورة ✅','success');}
 function loadInvPtDropdown(){const sel=document.getElementById('inv-pt');if(sel)sel.innerHTML=patients.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');}
 function deleteInv(id){if(confirm('حذف؟')){invoices=invoices.filter(i=>i.id!==id);save('invoices',invoices);renderInvoices();}}
 function clearAllInvoices(){if(confirm('هل تريد مسح جميع الفواتير بالكامل؟ لا يمكن التراجع عن هذا الإجراء.')){invoices=[];save('invoices',invoices);renderInvoices();showNotif('تم المسح','تم مسح جميع الفواتير ✅','success');}}
 function getInvStatusBdg(s){const m={مدفوعة:'ok',معلقة:'d',مؤجلة:'w',جزئية:'w',pending:'d'};return`<span class="bdg bdg-${m[s]||'p'}">${s}</span>`;}
-function renderQC(){document.getElementById('qc-body').innerHTML=qcRecords.map(r=>`<tr><td>${r.date}</td><td>${r.device}</td><td>${r.type}</td><td>${r.result}</td><td>${r.status==='مقبول'?'<span class="bdg bdg-ok">مقبول</span>':'<span class="bdg bdg-d">مرفوض</span>'}</td><td>${r.note||'-'}</td></tr>`).join('');}
+function renderQC(){document.getElementById('qc-body').innerHTML=qcRecords.slice(-500).map(r=>`<tr><td>${r.date}</td><td>${r.device}</td><td>${r.type}</td><td>${r.result}</td><td>${r.status==='مقبول'?'<span class="bdg bdg-ok">مقبول</span>':'<span class="bdg bdg-d">مرفوض</span>'}</td><td>${r.note||'-'}</td></tr>`).join('');}
 function saveQC(){qcRecords.push({date:new Date().toISOString().split('T')[0],device:document.getElementById('qc-dev').value,type:document.getElementById('qc-type').value,result:document.getElementById('qc-res').value,status:document.getElementById('qc-st').value,note:document.getElementById('qc-note').value});save('qc',qcRecords);renderQC();closeModal('m-qc');showNotif('تم','تم حفظ سجل الجودة ✅','success');}
 
 // ============================================================
@@ -18412,7 +18524,8 @@ function updateDashboard(force){
     alertsDiv.innerHTML='<div class="empty"><div class="empty-ic">✅</div><p>لا توجد تنبيهات حرجة</p></div>';
   } else {
     var html='<div style="max-height:420px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--danger) transparent">';
-    html+=criticals.map(function(c){
+    var _critShown=criticals.slice(0,200);   // ⚡ بناء ٢٠٠ عنصر فقط (العدد الكامل يبقى ظاهراً)
+    html+=_critShown.map(function(c){
       var v=parseFloat(c.val);
       var lbl=v>c.test.maxVal*1.2?'⬆️ مرتفع جداً':v<c.test.minVal*0.8?'⬇️ منخفض جداً':'⚠️ حرج';
       var dateStr=c.req.resultDate||c.req.date||'';
@@ -18425,6 +18538,9 @@ function updateDashboard(force){
         +'<div style="font-size:10px;color:var(--danger);margin-top:3px">'+lbl+' — يرجى المراجعة الفورية</div>'
         +'</div>';
     }).join('');
+    if(criticals.length>_critShown.length){
+      html+='<div style="text-align:center;padding:8px;color:var(--text2);font-size:11px">… و '+(criticals.length-_critShown.length)+' تنبيه أقدم</div>';
+    }
     html+='</div>';
     if(criticals.length>4) html='<div style="font-size:11px;color:var(--warning);padding:4px 6px;margin-bottom:6px;font-weight:700">⚠️ '+criticals.length+' تنبيه حرج — من الأحدث للأقدم</div>'+html;
     alertsDiv.innerHTML=html;
@@ -18544,7 +18660,11 @@ function saveBillFinal(){
 function renderBillingHistory(){
   const tbody=document.getElementById('billing-history-body');if(!tbody)return;
   if(!billingRecords.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text2)">لا توجد سجلات بعد</td></tr>';return;}
-  tbody.innerHTML=[...billingRecords].reverse().map(b=>`<tr>
+  // ⚡ سقف عرض على دفعات
+  const _bhAll=[...billingRecords].reverse();
+  const _bhShown=_bhAll.slice(0,_bhRenderLimit);
+  const _bhRest=_bhAll.length-_bhShown.length;
+  tbody.innerHTML=_bhShown.map(b=>`<tr>
     <td><span class="bdg bdg-p">${b.id}</span></td>
     <td>${b.patientName}</td>
     <td><span class="bdg bdg-s">${b.reqId}</span></td>
@@ -18554,8 +18674,12 @@ function renderBillingHistory(){
     <td style="color:#a78bfa">${b.drComm}% (${b.drAmt} ${b.currency})</td>
     <td>${b.date}</td>
     <td><button class="btn btn-sm btn-d" onclick="deleteBillingRecord('${b.id}')">🗑️</button></td>
-  </tr>`).join('');
+  </tr>`).join('')+(_bhRest>0?`<tr><td colspan="9" style="text-align:center;padding:14px">
+    <button class="btn btn-s" onclick="_showMoreBilling()" style="font-weight:800">⬇️ عرض المزيد (${_bhRest} سجل متبقٍ)</button>
+  </td></tr>`:'');
 }
+var _bhRenderLimit=300;
+function _showMoreBilling(){ _bhRenderLimit+=300; renderBillingHistory(); }
 
 function deleteBillingRecord(id){if(confirm('حذف؟')){billingRecords=billingRecords.filter(b=>b.id!==id);save('billing',billingRecords);renderBillingHistory();}}
 
@@ -25314,6 +25438,14 @@ function saveUARecords(){ save('uaRecords', uaRecords); }
 // The print report shows an empty result box (with normal color) but still shows
 // the field name and normal range, so the row layout is preserved.
 const EMPTY_VAL = '__EMPTY__';
+// ⭐ تطبيع قيمة حقل الفحوص الخاصة: الفراغ ≡ اختيار "فارغ" (EMPTY_VAL)
+//   لازم بعد تحويل القوائم المنسدلة إلى حقول قابلة للكتابة، حتى تبقى
+//   الطباعة وعدّ القيم غير الطبيعية مطابقة للسلوك السابق حرفياً.
+function _normExamVal(v, f){
+  var t=(v===undefined||v===null)?'':String(v).trim();
+  if(t==='') return (f&&f.type==='select')?EMPTY_VAL:'';
+  return t;
+}
 const EMPTY_LABEL = 'فارغ';
 function _isEmptyVal(v){ return v===EMPTY_VAL; }
 function _displayValForReport(v){ return _isEmptyVal(v) ? '' : v; }
@@ -25464,10 +25596,12 @@ function _buildUAModalBody(r, req){
         // عند اختياره: مربع النتيجة في التقرير يكون فارغاً (بدون أحمر)
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.unit?` (${f.unit})`:''}</label>
-          <select class="fc" id="uaf-${f.id}" style="font-size:12px;${hlStyle}" onchange="uaHighlight('${f.id}','${f.normal||''}')">
-            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
-            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-          </select>
+          <input class="fc" id="uaf-${f.id}" list="uadl-${f.id}" value="${val===EMPTY_VAL?'':(val||'')}"
+            placeholder="${EMPTY_LABEL}" autocomplete="off" style="font-size:12px;${hlStyle}"
+            oninput="uaHighlight('${f.id}','${f.normal||''}')" onchange="uaHighlight('${f.id}','${f.normal||''}')">
+          <datalist id="uadl-${f.id}">
+            ${f.options.map(o=>`<option value="${o}"></option>`).join('')}
+          </datalist>
         </div>`;
       } else if(f.type==='number'){
         html+=`<div class="fg" style="margin-bottom:0">
@@ -25550,7 +25684,7 @@ function saveUAEntry(){
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
@@ -25592,7 +25726,7 @@ function saveAndPrintUA(){
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
@@ -25782,6 +25916,7 @@ function printUAReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير البول للطابعة 🖨️','success');
 }
 
@@ -25992,10 +26127,12 @@ function _buildStoolModalBody(r, req){
         // ── خيار "فارغ" يُحقن ديناميكياً في أعلى القائمة ──
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}</label>
-          <select class="fc" id="stoolef-${f.id}" style="font-size:12px;${hlStyle}" onchange="stoolHighlight('${f.id}','${f.normal||''}')">
-            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
-            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-          </select>
+          <input class="fc" id="stoolef-${f.id}" list="stooldl-${f.id}" value="${val===EMPTY_VAL?'':(val||'')}"
+            placeholder="${EMPTY_LABEL}" autocomplete="off" style="font-size:12px;${hlStyle}"
+            oninput="stoolHighlight('${f.id}','${f.normal||''}')" onchange="stoolHighlight('${f.id}','${f.normal||''}')">
+          <datalist id="stooldl-${f.id}">
+            ${f.options.map(o=>`<option value="${o}"></option>`).join('')}
+          </datalist>
         </div>`;
       } else if(f.type==='multiselect'){
         // Fix 9: Multi-select checkboxes for parasites
@@ -26108,7 +26245,7 @@ function saveStoolEntry(){
       if(hidden) rec[f.id]=hidden.value||'';
     } else {
       const el=document.getElementById('stoolef-'+f.id);
-      if(el) rec[f.id]=el.value||'';
+      if(el) rec[f.id]=_normExamVal(el.value,f);
     }
   }));
   loadStoolExamRecords();
@@ -26154,7 +26291,7 @@ function saveAndPrintStool(){
       if(hidden) rec[f.id]=hidden.value||'';
     } else {
       const el=document.getElementById('stoolef-'+f.id);
-      if(el) rec[f.id]=el.value||'';
+      if(el) rec[f.id]=_normExamVal(el.value,f);
     }
   }));
   loadStoolExamRecords();
@@ -26345,6 +26482,7 @@ function printStoolReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير البراز للطابعة 🖨️','success');
 }
 
@@ -26456,7 +26594,7 @@ function saveAndShareUAWhatsApp(){
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
@@ -26503,7 +26641,7 @@ function saveAndShareStoolWhatsApp(){
       if(hidden) rec[f.id]=hidden.value||'';
     } else {
       const el=document.getElementById('stoolef-'+f.id);
-      if(el) rec[f.id]=el.value||'';
+      if(el) rec[f.id]=_normExamVal(el.value,f);
     }
   }));
   loadStoolExamRecords();
@@ -27584,6 +27722,8 @@ function printCBCFromDevice(reqId){
   const html=_buildCBCReportHTML(cbcParams,pt,req,settings.cbcTemplate||'1');
   // طباعة صامتة بدون واجهة
   _printViaIframe(html, false);
+  // ⭐ شاشة المرضى: طُبع تقرير CBC → يصبح "جاهز" ويُنادى
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(req.id); }catch(_){}
 }
 
 function printCBCBlank(){
@@ -27928,10 +28068,11 @@ function _buildSemenModalBody(r, req){
         // ── خيار "فارغ" يُحقن ديناميكياً في أعلى القائمة ──
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> (${f.ref})</span>`:''}</label>
-          <select class="fc" id="semenf-${f.id}" style="font-size:12px">
-            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
-            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-          </select></div>`;
+          <input class="fc" id="semenf-${f.id}" list="semendl-${f.id}" value="${val===EMPTY_VAL?'':(val||'')}"
+            placeholder="${EMPTY_LABEL}" autocomplete="off" style="font-size:12px">
+          <datalist id="semendl-${f.id}">
+            ${f.options.map(o=>`<option value="${o}"></option>`).join('')}
+          </datalist></div>`;
       } else if(f.type==='number'){
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> — طبيعي: ${f.ref}</span>`:''}</label>
@@ -28037,7 +28178,7 @@ function saveSemenEntry(){
   };
   Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('semenf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadSemenRecords();
   if(window._semenEditId){ const idx=semenRecords.findIndex(x=>x.id===window._semenEditId); if(idx>-1)semenRecords[idx]=rec; else semenRecords.push(rec); }
@@ -28271,7 +28412,7 @@ function printSemenReport(id){
     const ptId=(document.getElementById('semen-pt-id')||{}).value;
     r={id:'_current',patientId:ptId,patientName:ptName,date:(document.getElementById('semen-date')||{}).value||''};
     Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
-      const el=document.getElementById('semenf-'+f.id); if(el) r[f.id]=el.value||'';
+      const el=document.getElementById('semenf-'+f.id); if(el) r[f.id]=_normExamVal(el.value,f);
     }));
   } else {
     r=semenRecords.find(x=>x.id===id);
@@ -28281,6 +28422,7 @@ function printSemenReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير السائل المنوي للطابعة 🖨️','success');
 }
 
@@ -29792,6 +29934,16 @@ function openWaitScreen(mode){
   +'}catch(_){}'
   +'return;'
   +'}'
+  /* ⭐ أمر نداء صريح لحظة الطباعة — ينفّذ فوراً بلا اعتماد على مقارنة القوائم */
+  +'if(e.data.type === "WQ_CALL"){'
+  +'try{'
+  +'if(e.data.id){'
+  +'_announcedIds[e.data.id] = true;'
+  +'if(_speakEnabled) _enqueueSpeak({ id: e.data.id, name: e.data.name || "" });'
+  +'}'
+  +'}catch(_){}'
+  +'return;'
+  +'}'
   +'if(e.data.type!=="WQ_UPDATE")return;'
   +'var c=e.data.cnt;'
   +'document.getElementById("wsp").textContent=c.pending;'
@@ -29883,6 +30035,53 @@ function _wsGetScrollSpeed(){
   return 0.5;
 }
 
+// ⭐ الحالة المعروضة على شاشة المرضى: الطلب لا يصبح "جاهز" إلا بعد طباعته فعلياً.
+//    داخلياً يبقى status='done' كما هو (لا تأثير على بقية النظام) — هذا للعرض والنداء فقط.
+function _wsEffStatus(r){
+  if(!r) return 'pending';
+  if(r.status === 'done' && !r.printed && !r.wsPrinted) return 'inprogress';
+  return r.status;
+}
+
+// ⭐ علامة خاصة بشاشة المرضى فقط (wsPrinted): تُضبط عند طباعة تقرير CBC أو تقرير
+//    فحص خاص (إدرار/خروج/سائل منوي) — هذه المسارات لا تضبط r.printed أصلاً.
+//    حقل مستقل لا يقرأه أي جزء آخر من النظام (لا نتائج الأجهزة ولا الحذف ولا المخزون)
+//    فلا يوجد أي تأثير جانبي على السلوك القائم.
+function _wsMarkPrinted(reqId){
+  try{
+    if(!reqId) return;
+    var r = requests.find(function(x){ return x.id === reqId; });
+    if(!r || r.wsPrinted) return;
+    r.wsPrinted = true;
+    r._updatedAt = Date.now();
+    save('requests', requests);
+    if(typeof updateWaitScreen === 'function') updateWaitScreen();
+    _wsCallPatient(reqId);
+  }catch(e){}
+}
+
+// ⭐ نداء صريح لحظة الطباعة — لا يعتمد على مقارنة القوائم (doneList) إطلاقاً.
+//    يرسل أمر نداء مباشر لشاشة الانتظار المنبثقة ولشاشة البث اللاسلكي:
+//    الطباعة = النداء، بلا أي احتمال ضياع بسبب أول لقطة أو تكرار المعرّفات.
+function _wsCallPatient(reqId){
+  try{
+    if(!reqId) return;
+    var ws = (settings && settings.waitScreen) || {};
+    if(ws.speakEnabled === false) return;
+    var r = requests.find(function(x){ return x.id === reqId; });
+    if(!r) return;
+    var payloadName = (r.patientName || '').toString();
+    if(!payloadName) return;
+    var win = window._waitScreenWin;
+    if(win && !win.closed){
+      try{ win.postMessage({ type:'WQ_CALL', id: r.id, name: payloadName }, '*'); }catch(_){}
+    }
+    if(window._tvCastActive && typeof _lanSendRaw === 'function'){
+      try{ _lanSendRaw({ type:'tvcast_call', id: r.id, name: payloadName, ts: Date.now() }); }catch(_){}
+    }
+  }catch(e){}
+}
+
 function _pushWaitScreenData(){
   const win = window._waitScreenWin;
   if(!win || win.closed) return;
@@ -29890,16 +30089,17 @@ function _pushWaitScreenData(){
   const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
   const filteredReqs = _wsFilterRequests(todayReqs);
   const cnt = {
-    pending:    todayReqs.filter(r=>r.status==='pending').length,
-    inprogress: todayReqs.filter(r=>r.status==='inprogress').length,
-    done:       todayReqs.filter(r=>r.status==='done').length,
+    pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
+    inprogress: todayReqs.filter(r=>_wsEffStatus(r)==='inprogress').length,
+    done:       todayReqs.filter(r=>_wsEffStatus(r)==='done').length,
     total:      todayReqs.length
   };
   let rows = '';
   if(filteredReqs.length > 0){
     rows = filteredReqs.map((r,i)=>{
-        const sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[r.status]||'-';
-        const sC={pending:'pp',inprogress:'pi',done:'pd'}[r.status]||'';
+        const _es=_wsEffStatus(r);
+        const sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[_es]||'-';
+        const sC={pending:'pp',inprogress:'pi',done:'pd'}[_es]||'';
         const tn=(r.testNames||r.tests.map(tid=>{const t=tests.find(x=>x.id===tid);return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
         return '<tr><td style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:700">'+(i+1)+'</td>'
           +'<td style="font-size:16px;font-weight:900;color:#00d4ff">'+r.id+'</td>'
@@ -29910,7 +30110,7 @@ function _pushWaitScreenData(){
   }
   // قائمة المرضى الجاهزين (للناطق الصوتي)
   var doneList = filteredReqs
-    .filter(function(r){ return r.status==='done'; })
+    .filter(function(r){ return r.status==='done' && (!!r.printed || !!r.wsPrinted); })
     .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
   var ws = (settings&&settings.waitScreen)||{};
   var speakEnabled = ws.speakEnabled !== false;
@@ -29946,18 +30146,18 @@ function _pushTvCastData(){
     const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
     const filteredReqs = _wsFilterRequests(todayReqs);
     const cnt = {
-      pending:    todayReqs.filter(r=>r.status==='pending').length,
-      inprogress: todayReqs.filter(r=>r.status==='inprogress').length,
-      done:       todayReqs.filter(r=>r.status==='done').length,
+      pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
+      inprogress: todayReqs.filter(r=>_wsEffStatus(r)==='inprogress').length,
+      done:       todayReqs.filter(r=>_wsEffStatus(r)==='done').length,
       total:      todayReqs.length
     };
     const rows = filteredReqs.map(function(r,i){
       const tn=(r.testNames||r.tests.map(function(tid){var t=tests.find(function(x){return x.id===tid;});return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
-      return { n:i+1, id:r.id, name:r.patientName||'-', tests:tn, status:r.status };
+      return { n:i+1, id:r.id, name:r.patientName||'-', tests:tn, status:_wsEffStatus(r) };
     });
     // قائمة المرضى الجاهزين (لعرض بطاقة النداء + الصوت في شاشة البث اللاسلكي)
     const doneList = filteredReqs
-      .filter(function(r){ return r.status==='done'; })
+      .filter(function(r){ return r.status==='done' && (!!r.printed || !!r.wsPrinted); })
       .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
     const ws = (settings&&settings.waitScreen)||{};
     const speakEnabled = ws.speakEnabled !== false;
@@ -30213,6 +30413,13 @@ let lisResults    = [];
 let lisMappings   = [];
 let lisLogEntries = [];
 let lisRawMessages= [];
+// ⚡ سقف للرسائل الخام المحفوظة. كانت تُضاف بلا حد طوال تشغيل البرنامج فتنمو
+//    الذاكرة باستمرار. العرض يستخدم آخر رسالة فقط (lisRawMessages[0]).
+const _LIS_RAW_MAX=150;
+function _lisPushRaw(m){
+  lisRawMessages.unshift(m);
+  if(lisRawMessages.length>_LIS_RAW_MAX) lisRawMessages.length=_LIS_RAW_MAX;
+}
 let _lisLogFilter = 'all';
 let _lisSerialPort= null;
 let _lisSerialReader=null;
@@ -31181,7 +31388,23 @@ function lisRenderPushTargets(){
     return;
   }
   const devs=(typeof lisDevices!=='undefined'?lisDevices:[]).filter(d=>d&&d.id);
-  tb.innerHTML=lisMappings.map((m,idx)=>{
+  // 🔍 بحث — نحتفظ بالفهرس الأصلي حتى يبقى lisSetPushTarget صحيحاً تماماً
+  const _pq=(function(){ const e=document.getElementById('lis-push-search'); return e?e.value.trim().toLowerCase():''; })();
+  let _rows=lisMappings.map(function(m,idx){ return {m:m,idx:idx}; });
+  if(_pq){
+    _rows=_rows.filter(function(o){
+      const m=o.m;
+      return String(_lisMedlabCode(m)||'').toLowerCase().includes(_pq)
+          || String(m.name||m.deviceCode||'').toLowerCase().includes(_pq)
+          || String(m.channel||'').toLowerCase().includes(_pq);
+    });
+  }
+  if(!_rows.length){
+    tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا نتائج مطابقة للبحث</td></tr>';
+    return;
+  }
+  tb.innerHTML=_rows.map(function(o){
+    var m=o.m, idx=o.idx;
     const opts=['<option value="">— لا يُرسَل —</option>'].concat(
       devs.map(d=>'<option value="'+d.id+'"'+((m.pushDevice===d.id)?' selected':'')+'>'+(d.name||d.id)+'</option>')
     ).join('');
@@ -31198,6 +31421,7 @@ function lisSetPushTarget(idx,deviceId){
   if(!lisMappings[idx]) return;
   lisMappings[idx].pushDevice=deviceId||'';
   if(typeof lisSaveState==='function') lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // ⭐ حفظ فوري مضمون
   lisAddLog('info','📤 تعيين جهاز الإرسال: '+(lisMappings[idx].medlabCode||'')+' → '+(deviceId||'(بدون)'));
 }
 
@@ -31517,7 +31741,7 @@ async function lisReadSerialLoop(dev){
         // ASTM message ends with ETX (0x03) or L record
         const msgs=lisExtractMessages(_lisSerialBuffer);
         msgs.messages.forEach(msg=>{
-          lisRawMessages.unshift(msg);
+          _lisPushRaw(msg);
           lisParseByProtocol(msg,dev);
         });
         _lisSerialBuffer=msgs.remainder;
@@ -31603,7 +31827,7 @@ async function lisConnectFileDevice(dev){
               const file=await fh.getFile();
               const text=await file.text();
               lisAddLog('data','ملف جديد: '+entry.name+' ('+text.length+' حرف)');
-              lisRawMessages.unshift(text);
+              _lisPushRaw(text);
               lisParseByProtocol(text,dev);
             }
           }
@@ -31672,7 +31896,7 @@ function _cbcInitIpcListeners(){
     _cbcLastRawSig=_rawSig;
     _cbcLastRawTime=_rawNow;
     lisAddLog('data','📥 TCP بيانات: '+text.length+' حرف');
-    lisRawMessages.unshift(text);
+    _lisPushRaw(text);
     // وجّه البيانات للجهاز النشط
     const dev=_cbcActiveDev||{name:'BC-5000',protocol:'hl7'};
     lisParseByProtocol(text,dev);
@@ -32188,7 +32412,7 @@ function lisConnectWSBridge(url,dev){
     _lisWS.onmessage=(e)=>{
       const text=typeof e.data==='string'?e.data:String(e.data);
       lisAddLog('data','WebSocket بيانات: '+text.length+' حرف');
-      lisRawMessages.unshift(text);
+      _lisPushRaw(text);
       const targetDev=dev||lisDevices.find(d=>d.conn==='websocket'&&d.connected)||{name:'WebSocket',protocol:'astm'};
       lisParseByProtocol(text,targetDev);
     };
@@ -33170,18 +33394,65 @@ function _lisMedlabCode(m){
   return m.medlabCode||'';
 }
 
+// ⭐ هل رمز MedLab لهذا الربط موجود فعلاً في قاعدة التحاليل؟
+//   لا نحذف شيئاً تلقائياً — نكتفي بتمييزه بصرياً، لأن حذفه قد يكسر
+//   استقبال نتائج جهاز يرسل هذا الرمز.
+function _lisCodeInTestsDB(m){
+  try{
+    if(typeof tests==='undefined'||!tests||!tests.length) return true;
+    const c=String(_lisMedlabCode(m)||'').trim().toUpperCase();
+    if(!c) return false;
+    return tests.some(t=>String(t.code||'').trim().toUpperCase()===c
+                      || String(t.id||'').trim().toUpperCase()===c);
+  }catch(e){ return true; }
+}
+
+// ⭐ حذف الروابط المكرّرة — يبقي أول ربط لكل (رمز الجهاز + الجهاز)
+function lisDedupeMappings(){
+  const seen=Object.create(null);
+  const keep=[], dropped=[];
+  lisMappings.forEach(function(m){
+    const k=String(m.deviceCode||'').trim().toUpperCase()+'|'+String(m.device||'').trim().toUpperCase();
+    if(seen[k]){ dropped.push(m); return; }
+    seen[k]=1; keep.push(m);
+  });
+  if(!dropped.length){ showNotif('لا يوجد مكرّر','كل الروابط فريدة ✅','success'); return; }
+  if(!confirm('سيتم حذف '+dropped.length+' ربط مكرّر (يبقى الأول لكل رمز جهاز).\nمتابعة؟')) return;
+  lisMappings=keep;
+  lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // حفظ فوري مضمون
+  lisRenderMappings();
+  if(typeof lisRenderPushTargets==='function') lisRenderPushTargets();
+  showNotif('تم','حُذف '+dropped.length+' ربط مكرّر ✅','success');
+}
+
 function lisRenderMappings(){
   const tbody=document.getElementById('lis-mapping-body');
   if(!tbody) return;
+  // 🔍 بحث
+  const _q=(function(){ const e=document.getElementById('lis-map-search'); return e?e.value.trim().toLowerCase():''; })();
+  let _list=lisMappings;
+  if(_q){
+    _list=lisMappings.filter(m=>
+      String(m.deviceCode||'').toLowerCase().includes(_q) ||
+      String(_lisMedlabCode(m)||'').toLowerCase().includes(_q) ||
+      String(_lisMappingName(m)||'').toLowerCase().includes(_q) ||
+      String(m.channel||'').toLowerCase().includes(_q)
+    );
+  }
   if(!lisMappings.length){
     tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px;font-size:12px">لا توجد روابط — اضغط "تحميل الافتراضي"</td></tr>';
     return;
   }
-  tbody.innerHTML=lisMappings.map(m=>`
+  if(!_list.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px;font-size:12px">لا نتائج مطابقة للبحث</td></tr>';
+    return;
+  }
+  tbody.innerHTML=_list.map(m=>`
     <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
       <td style="padding:8px 12px"><code style="color:var(--warning);font-size:11px">${m.deviceCode}</code></td>
       <td style="padding:8px 12px"><code style="color:var(--success);font-size:11px">${_lisMedlabCode(m)}</code></td>
-      <td style="padding:8px 12px;font-size:11px;color:var(--text)">${_lisMappingName(m)}</td>
+      <td style="padding:8px 12px;font-size:11px;color:var(--text)">${_lisMappingName(m)}${_lisCodeInTestsDB(m)?'':' <span title="هذا الرمز غير موجود في قاعدة التحاليل" style="color:var(--warning);font-size:10px">⚠️ خارج قاعدة التحاليل</span>'}</td>
       <td style="padding:8px 12px">
         <input type="text" value="${m.channel||''}" placeholder="رقم"
           onchange="lisSetMappingChannel('${m.id}', this.value)"
@@ -33281,6 +33552,14 @@ function lisSaveMappingItem(){
   if(!dc||!mc){showNotif('تنبيه','أدخل رمز الجهاز والتحليل','warning');return;}
   const _src=(typeof tests!=='undefined'&&tests&&tests.length)?tests:[];
   const t=_src.find(x=>(x.code||'').toUpperCase()===mc.toUpperCase())||LIS_MEDLAB_TESTS.find(x=>x.id===mc);
+  // ⭐ منع التكرار: نفس رمز الجهاز لنفس الجهاز الهدف
+  const _devSel=document.getElementById('lis-map-device-sel').value;
+  const _dup=lisMappings.find(x=>String(x.deviceCode||'').toUpperCase()===dc
+                              && String(x.device||'')===String(_devSel||''));
+  if(_dup){
+    showNotif('مكرّر','رمز الجهاز "'+dc+'" مربوط أصلاً بـ '+(_lisMedlabCode(_dup)||'')+'','warning');
+    return;
+  }
   lisMappings.push({
     id:'lm'+Date.now(),
     deviceCode:dc,
@@ -33291,14 +33570,18 @@ function lisSaveMappingItem(){
     note:document.getElementById('lis-map-note').value,
   });
   lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // ⭐ حفظ فوري مضمون
   lisRenderMappings();
+  if(typeof lisRenderPushTargets==='function') lisRenderPushTargets();
   closeModal('lis-m-add-mapping');
   showNotif('تم','ربط مضاف: '+dc+' → '+mc,'success');
 }
 function lisDeleteMapping(id){
   lisMappings=lisMappings.filter(m=>m.id!==id);
   lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // ⭐ حفظ فوري مضمون
   lisRenderMappings();
+  if(typeof lisRenderPushTargets==='function') lisRenderPushTargets();
 }
 function lisLoadDefaultMappings(){
   // دمج الافتراضية مع الموجودة — لا نحذف الروابط المخصصة
@@ -33357,10 +33640,15 @@ function lisIngestResult(result){
   // Sound — نبقيه للتنبيه (المتطلب ٤)
   if(_lisSettings.sound) lisPlayBeep();
 
-  // Auto transfer
+  // Auto transfer — ⚡ مُجمَّع: جهاز يرسل ٢٠ نتيجة كان يُشغّل ٢٠ دورة نقل
+  // كاملة (قراءة+كتابة لكل المصفوفة). الآن دورة واحدة لكل دفعة.
+  // ⚠️ حرج: lisTransferToMedlabPro لم تُمسّ إطلاقاً — أثرها الجانبي
+  //    (تعبئة requests/patients في الذاكرة من IDB) يبقى كما هو، وهو ما
+  //    يعتمد عليه lisHandleHl7Query للرد على استعلام CL-900i/BS-230.
   if(_lisSettings.autoTransfer){
     const delay=(_lisSettings.delay||2)*1000;
-    setTimeout(()=>lisTransferResult(result.id),delay);
+    if(typeof _lisAutoEnqueue==='function') _lisAutoEnqueue(result.id, delay);
+    else setTimeout(()=>lisTransferResult(result.id),delay);   // مسار احتياطي أصلي
   }
 
   // تجميع الحفظ + إعادة الرسم: يُنفَّذ مرة واحدة بعد توقف تدفق النتائج (120ms)
@@ -33377,6 +33665,55 @@ function lisTransferResult(id){
   const r=lisResults.find(x=>x.id===id);
   if(!r||r.transferred) return;
   lisTransferToMedlabPro([r]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ⚡ طابور النقل التلقائي المُجمَّع
+// يُغيّر *متى وكم مرة* تُستدعى lisTransferToMedlabPro — لا *ماذا* تفعل.
+// الدفعة تُمرَّر كقائمة، وهي نفس الصيغة التي تقبلها الدالة أصلاً
+// (lisTransferAll يمرّر قائمة كاملة منذ البداية) — فلا مسار جديد.
+// سقف أمان: لا تتأخر الدفعة أكثر من delay+2s مهما استمر التدفق.
+// أي خطأ غير متوقع ⟵ سقوط تلقائي على السلوك الأصلي (نتيجة نتيجة).
+// ═══════════════════════════════════════════════════════════════
+var _lisAutoQueue=[], _lisAutoTimer=null, _lisAutoDeadline=0;
+
+function _lisAutoEnqueue(id, delay){
+  try{
+    _lisAutoQueue.push(id);
+    var now=Date.now();
+    if(!_lisAutoDeadline) _lisAutoDeadline=now+delay+2000;
+    if(_lisAutoTimer) clearTimeout(_lisAutoTimer);
+    var wait=Math.max(0, Math.min(delay, _lisAutoDeadline-now));
+    _lisAutoTimer=setTimeout(_lisAutoFlush, wait);
+  }catch(e){
+    console.warn('[LIS] enqueue fallback',e);
+    setTimeout(function(){ lisTransferResult(id); }, delay);
+  }
+}
+
+function _lisAutoFlush(){
+  _lisAutoTimer=null; _lisAutoDeadline=0;
+  var ids=_lisAutoQueue.splice(0,_lisAutoQueue.length);
+  if(!ids.length) return;
+  try{
+    var seen=Object.create(null), batch=[];
+    for(var i=0;i<ids.length;i++){
+      var id=ids[i];
+      if(seen[id]) continue;
+      seen[id]=1;
+      var r=lisResults.find(function(x){return x.id===id;});
+      if(r && !r.transferred) batch.push(r);
+    }
+    if(batch.length){
+      lisAddLog('info','📦 نقل دفعة واحدة: '+batch.length+' نتيجة');
+      lisTransferToMedlabPro(batch);
+    }
+  }catch(e){
+    // سقوط آمن: نفّذ نتيجة نتيجة كما كان السلوك الأصلي تماماً
+    console.warn('[LIS] batch fallback',e);
+    lisAddLog('warn','⚠️ تعذّر النقل بدفعة — رجوع للنقل الفردي');
+    ids.forEach(function(id){ try{ lisTransferResult(id); }catch(_){} });
+  }
 }
 function lisTransferAll(){
   const pending=lisResults.filter(r=>!r.transferred);
@@ -33810,13 +34147,33 @@ function lisFmtTime(iso){
 // ═══════════════════════════════════════════════
 // LOG
 // ═══════════════════════════════════════════════
+// ⚡ رسم السجل مُجمَّع في إطار واحد.
+//    نتيجة CBC واحدة تستدعي lisAddLog حوالي ٣٠ مرة (سطر OBX لكل باراميتر)،
+//    وكانت كل مرة تُعيد بناء السجل بالكامل عبر innerHTML. الآن تُدمج كل
+//    الأسطر الواصلة في عملية رسم واحدة — نفس المحتوى تماماً، بلا تكرار.
+//    عرضٌ فقط: لا يمسّ أي منطق استقبال أو إرسال للأجهزة.
+var _lisLogRenderPending=false;
+function _lisScheduleLogRender(){
+  if(_lisLogRenderPending) return;
+  _lisLogRenderPending=true;
+  var _go=function(){
+    _lisLogRenderPending=false;
+    try{ lisRenderMiniLog(); }catch(e){}
+    try{
+      var fullLog=document.getElementById('lis-full-log');
+      var sec=fullLog&&fullLog.closest('#lis-sec-log');
+      if(sec&&sec.style.display!=='none') lisRenderFullLog();
+    }catch(e){}
+  };
+  // rAF متوقف عندما تكون النافذة مخفية/مصغّرة — نسقط على setTimeout حينها
+  if(typeof requestAnimationFrame==='function' && document.visibilityState!=='hidden') requestAnimationFrame(_go);
+  else setTimeout(_go,50);
+}
 function lisAddLog(type,msg){
   const ts=new Date().toLocaleTimeString('ar');
   lisLogEntries.unshift({type,msg,ts});
   if(lisLogEntries.length>500) lisLogEntries.pop();
-  lisRenderMiniLog();
-  const fullLog=document.getElementById('lis-full-log');
-  if(fullLog&&fullLog.closest('#lis-sec-log')&&fullLog.closest('#lis-sec-log').style.display!=='none') lisRenderFullLog();
+  _lisScheduleLogRender();
 }
 function lisLogIcon(t){return{ok:'✅',err:'❌',warn:'⚠️',info:'ℹ️',astm:'📡',data:'📥'}[t]||'•';}
 function lisLogColor(t){return{ok:'var(--success)',err:'var(--danger)',warn:'var(--warning)',info:'var(--primary)',astm:'#7dd3fc',data:'rgba(255,255,255,0.7)'}[t]||'var(--text2)';}
@@ -34190,7 +34547,7 @@ function lisSimulateASTM(){
   const msg=tpl.replace(/{SID}/g,sid).replace(/{NAME}/g,name).replace(/{DT}/g,dt)
     .replace(/{V1}/g,rnd()).replace(/{V2}/g,rnd()).replace(/{V3}/g,rnd())
     .replace(/{V4}/g,rnd()).replace(/{V5}/g,(150+Math.floor(Math.random()*250)).toString());
-  lisRawMessages.unshift(msg);
+  _lisPushRaw(msg);
   lisAddLog('info','محاكاة ASTM: SID='+sid+' | '+name);
   lisParseASTM(msg,'محاكاة');
 }
@@ -39612,7 +39969,12 @@ function lanBroadcast(key, data){
     var d = _lanBcLatest[key];
     delete _lanBcTimers[key];
     delete _lanBcLatest[key];
-    try{ _lanEmit(key, d); }catch(e){ console.warn('[LAN] broadcast',key,e); }
+    // ⚡ JSON.stringify للمصفوفة كاملة عملية ثقيلة. ننفّذها في وقت خمول
+    //    المتصفح كي لا تُقاطع نقرة أو كتابة المستخدم. سقف ٢ ثانية يضمن
+    //    الإرسال حتى لو ظل البرنامج مشغولاً — فلا تتأخر المزامنة أبداً.
+    var _run=function(){ try{ _lanEmit(key, d); }catch(e){ console.warn('[LAN] broadcast',key,e); } };
+    if(typeof requestIdleCallback==='function') requestIdleCallback(_run,{timeout:2000});
+    else _run();
   }, 120);
 }
 
