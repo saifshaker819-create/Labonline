@@ -793,6 +793,40 @@ body.light-mode .st-card-sub{color:#5a6a7a;}
 body.light-mode .st-card-body{border-top-color:#dde4ec;}
 
 /* ══════════════════════════════════════════════
+   🎚️ شرائط تكبير/تصغير مصغّرة ومرتّبة (Mini Sliders)
+   تُستعمل في بطاقة «الخطوط والألوان»
+══════════════════════════════════════════════ */
+.msl-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--border);border-radius:9px;background:rgba(0,212,255,0.03);margin-bottom:6px;transition:border-color .15s,background .15s;}
+.msl-row:hover{border-color:rgba(0,212,255,0.32);background:rgba(0,212,255,0.06);}
+.msl-lbl{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;flex:0 0 auto;min-width:104px;overflow:hidden;text-overflow:ellipsis;}
+.msl-btn{width:20px;height:20px;flex:0 0 20px;border-radius:6px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text);font-size:13px;font-weight:900;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;user-select:none;transition:all .13s;}
+.msl-btn:hover{background:var(--primary);border-color:var(--primary);color:#00131f;}
+.msl-btn:active{transform:scale(.9);}
+.msl-val{font-size:11px;font-weight:900;color:var(--primary);min-width:30px;text-align:center;background:rgba(0,212,255,0.13);border-radius:5px;padding:2px 4px;flex:0 0 auto;}
+.msl-range{flex:1;min-width:60px;height:4px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer;margin:0;}
+.msl-range::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:linear-gradient(90deg,var(--primary) 0%,rgba(255,255,255,0.14) 0%);}
+.msl-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:12px;height:12px;border-radius:50%;background:var(--primary);border:2px solid #05121f;margin-top:-4px;box-shadow:0 0 0 1px var(--primary);transition:transform .12s;}
+.msl-range::-webkit-slider-thumb:hover{transform:scale(1.22);}
+.msl-range::-moz-range-track{height:4px;border-radius:4px;background:rgba(255,255,255,0.14);}
+.msl-range::-moz-range-progress{height:4px;border-radius:4px;background:var(--primary);}
+.msl-range::-moz-range-thumb{width:12px;height:12px;border:2px solid #05121f;border-radius:50%;background:var(--primary);}
+.msl-range.g::-webkit-slider-thumb{background:var(--success);box-shadow:0 0 0 1px var(--success);}
+.msl-range.g::-moz-range-thumb{background:var(--success);}
+.msl-range.g::-moz-range-progress{background:var(--success);}
+.msl-row.g{background:rgba(0,245,147,0.035);border-color:rgba(0,245,147,0.20);}
+.msl-row.g:hover{border-color:rgba(0,245,147,0.45);background:rgba(0,245,147,0.07);}
+.msl-row.g .msl-val{color:var(--success);background:rgba(0,245,147,0.13);}
+.msl-row.g .msl-btn:hover{background:var(--success);border-color:var(--success);color:#00220f;}
+.msl-grp{display:flex;flex-direction:column;gap:0;}
+body.light-mode .msl-row{background:#f7fafd;border-color:#dde4ec;}
+body.light-mode .msl-row:hover{background:#eef6fd;}
+body.light-mode .msl-lbl{color:#0d1b2a;}
+body.light-mode .msl-btn{background:#ffffff;border-color:#dde4ec;color:#0d1b2a;}
+body.light-mode .msl-range::-webkit-slider-runnable-track{background:#dde4ec;}
+body.light-mode .msl-range::-moz-range-track{background:#dde4ec;}
+body.light-mode .msl-range::-webkit-slider-thumb{border-color:#ffffff;}
+
+/* ══════════════════════════════════════════════
    إصلاح شامل للوضع الليلي — منع التبييض
    يُطبَّق على body بدون .light-mode
 ══════════════════════════════════════════════ */
@@ -3034,7 +3068,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     window.electronAPI.onDeviceData((d) => {
       const targetDev = lisDevices.find(x => x.id === d.deviceId);
       if(!targetDev) return;
-      lisRawMessages.unshift(d.data);
+      _lisPushRaw(d.data);
       // ── رسالة صادرة من c111 (رد التحميل) — تُعرض فقط، لا تُحلَّل كنتيجة واردة ──
       if(d.c111out){
         lisAddLog('astm','📤 cobas c111 — رد صادر:\n'+String(d.data||''));
@@ -3381,6 +3415,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <button class="btn btn-s" onclick="editPatientFromResults()">✏️ تعديل بيانات المريض</button>
               <button class="btn btn-s" style="white-space:nowrap;font-weight:800;background:rgba(139,63,255,0.14);border-color:rgba(139,63,255,0.5);color:#b98bff" onclick="printLabelFromResults()" title="طباعة ملصق الباركود">🏷️ طباعة ملصق</button>
               <button class="btn btn-ok btn-lg" onclick="finalizeResult()">✅ تأكيد النتائج</button>
+              <button class="btn btn-lg" id="res-tg-send-btn" style="display:none;white-space:nowrap;font-weight:800;background:linear-gradient(135deg,#0088cc,#005f8f);border:none;color:#fff" onclick="tgSendCurrentResult()" title="إرسال هذا المريض ونتائجه إلى الحاسبة الأخرى">📤 إرسال للبوت</button>
               <button class="btn btn-p btn-lg" style="background:linear-gradient(135deg,#00b4ff,#0066ff);border:none" onclick="pushResultsToDevice()" title="إرسال التحاليل المحددة إلى الجهاز">📤 إرسال للجهاز</button>
               <button class="btn btn-p btn-lg" onclick="openGroupingModalFromInput()">📑 تجميع</button>
               <button class="btn btn-p btn-lg" onclick="finalizeAndPrint()">🖨️ حفظ وطباعة</button>
@@ -3483,6 +3518,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div id="print-side-info" style="background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:14px;font-size:12px;"></div>
               <div style="display:flex;flex-direction:column;gap:10px">
                 <button class="btn btn-p btn-lg" style="width:100%" onclick="doPrint()">🖨️ طباعة مباشرة</button>
+                <button class="btn btn-lg" style="width:100%;background:rgba(255,176,32,0.16);border:1px solid rgba(255,176,32,0.5);color:#ffb020;font-weight:800;border-radius:10px;cursor:pointer" onclick="editFromPrint()">✏️ تعديل</button>
                 <button class="btn btn-p btn-lg" style="width:100%" onclick="openGroupingModalFromPrint()">📑 تجميع</button>
                 <button class="btn btn-s" style="width:100%;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.4);color:var(--success)" onclick="printCBCFromPrintSection()">🖨️ طباعة CBC فارغة</button>
                 <div id="print-cbc-device-btn" style="display:none;flex-direction:column;gap:6px">
@@ -4077,8 +4113,13 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div style="font-size:12px;color:var(--text2)">اربط <b style="color:var(--warning)">رمز الجهاز</b> بـ <b style="color:var(--success)">رمز MedLab Pro</b></div>
               <div style="display:flex;gap:8px">
                 <button class="btn btn-p btn-sm" onclick="lisAddMapping()">➕ إضافة ربط</button>
+                <button class="btn btn-s btn-sm" onclick="lisDedupeMappings()" title="حذف الروابط المكرّرة (يبقي الأول لكل رمز جهاز)">🧹 حذف المكرّر</button>
                 <button class="btn btn-s btn-sm" onclick="lisLoadDefaultMappings()">🔄 تحميل الافتراضي</button>
               </div>
+            </div>
+            <div style="position:relative;margin-bottom:10px">
+              <input id="lis-map-search" class="fc" placeholder="🔍 بحث برمز الجهاز أو رمز MedLab أو اسم التحليل..."
+                autocomplete="off" oninput="lisRenderMappings()" style="font-size:12px;padding-right:12px">
             </div>
             <div class="gc">
               <div class="gc-body" style="overflow-x:auto;padding:0">
@@ -4102,6 +4143,10 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
               <div style="font-size:12px;color:var(--text2)">حدّد لكل تحليل <b style="color:var(--success)">الجهاز</b> الذي تُرسَل إليه التحاليل عند الضغط على "إرسال للجهاز" في شاشة النتائج</div>
               <button class="btn btn-s btn-sm" onclick="lisRenderPushTargets()">🔄 تحديث</button>
+            </div>
+            <div style="position:relative;margin-bottom:10px">
+              <input id="lis-push-search" class="fc" placeholder="🔍 بحث برمز MedLab أو اسم التحليل أو رقم القناة..."
+                autocomplete="off" oninput="lisRenderPushTargets()" style="font-size:12px">
             </div>
             <div class="gc">
               <div class="gc-body" style="overflow-x:auto;padding:0">
@@ -4954,7 +4999,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div class="st-card-hdr" onclick="toggleStCard('stc-fonts')">
             <div style="display:flex;align-items:center;gap:12px">
               <span style="font-size:22px">🎨</span>
-              <div><div class="st-card-title">الخطوط والألوان</div><div class="st-card-sub">شرائط تحكم بحجم كل قسم — لغاية 30px</div></div>
+              <div><div class="st-card-title">الخطوط والألوان</div><div class="st-card-sub">شرائط مصغّرة — تحكم بحجم كل بند من التقرير على حدة</div></div>
             </div>
             <span class="st-card-arrow" id="arr-stc-fonts">▼</span>
           </div>
@@ -4965,30 +5010,29 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:14px">📏 أحجام الخطوط</div>
 
               <!-- خط البرنامج العام -->
-              <div style="margin-bottom:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <label style="font-size:12px;font-weight:700;color:var(--text)">🖥️ خط البرنامج (واجهة)</label>
-                  <span id="lbl-font-size" style="font-size:13px;font-weight:900;color:var(--primary);min-width:38px;text-align:center;background:rgba(0,212,255,0.12);border-radius:6px;padding:2px 8px">16</span>
+              <div class="msl-grp">
+                <div class="msl-row">
+                  <span class="msl-lbl">🖥️ خط البرنامج</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range" id="st-font-size-range" min="11" max="30" step="1" value="16"
+                    oninput="sliderSync('font-size',this.value);mslPaint(this)" onchange="_saveSize('fontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-font-size">16</span>
                 </div>
-                <input type="range" id="st-font-size-range" min="11" max="30" step="1" value="16"
-                  style="width:100%;accent-color:var(--primary);cursor:pointer;height:6px"
-                  oninput="sliderSync('font-size',this.value)" onchange="_saveSize('fontSize',this.value)">
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-top:2px"><span>11</span><span>20</span><span>30</span></div>
                 <input type="hidden" id="st-font-size">
-              </div>
 
-              <!-- خط بيانات المريض في التقرير -->
-              <div style="margin-bottom:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <label style="font-size:12px;font-weight:700;color:var(--text)">👤 خط بيانات المريض (تقرير)</label>
-                  <span id="lbl-pt-font-size" style="font-size:13px;font-weight:900;color:var(--primary);min-width:38px;text-align:center;background:rgba(0,212,255,0.12);border-radius:6px;padding:2px 8px">10</span>
+                <!-- خط بيانات المريض في التقرير -->
+                <div class="msl-row">
+                  <span class="msl-lbl">👤 بيانات المريض</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-pt-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range" id="st-pt-font-size-range" min="8" max="30" step="1" value="10"
+                    oninput="sliderSync('pt-font-size',this.value);mslPaint(this)" onchange="_saveSize('ptFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-pt-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-pt-font-size">10</span>
                 </div>
-                <input type="range" id="st-pt-font-size-range" min="8" max="30" step="1" value="10"
-                  style="width:100%;accent-color:var(--primary);cursor:pointer;height:6px"
-                  oninput="sliderSync('pt-font-size',this.value)" onchange="_saveSize('ptFontSize',this.value)">
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-top:2px"><span>8</span><span>19</span><span>30</span></div>
                 <input type="hidden" id="st-pt-font-size">
               </div>
+              <div style="height:8px"></div>
 
               <!-- ثخانة الخط -->
               <div style="margin-bottom:4px">
@@ -5047,30 +5091,82 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               </div>
 
               <!-- حجم اسم المجموعة الفرعية -->
-              <div style="margin-top:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <label style="font-size:12px;font-weight:700;color:var(--text)">📂 حجم اسم المجموعة الفرعية</label>
-                  <span id="lbl-subcat-font-size" style="font-size:13px;font-weight:900;color:var(--success);min-width:38px;text-align:center;background:rgba(0,245,147,0.12);border-radius:6px;padding:2px 8px">12</span>
+              <div class="msl-grp" style="margin-top:12px">
+                <div class="msl-row g">
+                  <span class="msl-lbl">📂 اسم المجموعة</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-subcat-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range g" id="st-subcat-font-size-range" min="8" max="24" step="1" value="12"
+                    oninput="document.getElementById('lbl-subcat-font-size').textContent=this.value;mslPaint(this)"
+                    onchange="_saveSize('subcatFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-subcat-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-subcat-font-size">12</span>
                 </div>
-                <input type="range" id="st-subcat-font-size-range" min="8" max="24" step="1" value="12"
-                  style="width:100%;accent-color:var(--success);cursor:pointer;height:6px"
-                  oninput="document.getElementById('lbl-subcat-font-size').textContent=this.value"
-                  onchange="_saveSize('subcatFontSize',this.value)">
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-top:2px"><span>8</span><span>16</span><span>24</span></div>
               </div>
 
-              <!-- حجم بنود التقرير (اسم التحليل، النتيجة، القيمة الطبيعية، آخر نتيجة) -->
-              <div style="margin-top:14px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <label style="font-size:12px;font-weight:700;color:var(--text)">🔬 حجم بنود التقرير (اسم التحليل / النتيجة / القيمة الطبيعية / آخر نتيجة)</label>
-                  <span id="lbl-print-font-size" style="font-size:13px;font-weight:900;color:var(--success);min-width:38px;text-align:center;background:rgba(0,245,147,0.12);border-radius:6px;padding:2px 8px">11</span>
+              <!-- ⭐ حجم بنود التقرير — شريط مستقل لكل بند -->
+              <div style="margin-top:12px;border:1px dashed rgba(0,245,147,0.35);border-radius:10px;padding:10px 10px 6px;background:rgba(0,245,147,0.03)">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                  <div style="font-size:11.5px;font-weight:800;color:var(--success)">🔬 حجم بنود التقرير — كل بند على حدة</div>
+                  <button type="button" class="btn btn-sm btn-s" style="font-size:10px;padding:3px 8px" onclick="mslResetItems()" title="مساواة كل البنود بالحجم العام">↺ توحيد الكل</button>
                 </div>
-                <input type="range" id="st-print-font-size-range" min="8" max="24" step="1" value="11"
-                  style="width:100%;accent-color:var(--success);cursor:pointer;height:6px"
-                  oninput="document.getElementById('lbl-print-font-size').textContent=this.value"
-                  onchange="_saveSize('printFontSize',this.value)">
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-top:2px"><span>8</span><span>16</span><span>24</span></div>
+
+                <!-- الحجم العام (يطبّق على كل البنود دفعة واحدة) -->
+                <div class="msl-row g">
+                  <span class="msl-lbl">⚡ الحجم العام</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-print-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range g" id="st-print-font-size-range" min="8" max="24" step="1" value="11"
+                    oninput="document.getElementById('lbl-print-font-size').textContent=this.value;mslPaint(this)"
+                    onchange="_savePrintMaster(this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-print-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-print-font-size">11</span>
+                </div>
                 <input type="hidden" id="st-print-font-size">
+
+                <div style="height:6px"></div>
+
+                <!-- ① اسم التحليل -->
+                <div class="msl-row g">
+                  <span class="msl-lbl">🏷️ اسم التحليل</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tname-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range g" id="st-tname-font-size-range" min="6" max="24" step="1" value="11"
+                    oninput="document.getElementById('lbl-tname-font-size').textContent=this.value;mslPaint(this)"
+                    onchange="_saveSize('testNameFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tname-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-tname-font-size">11</span>
+                </div>
+
+                <!-- ② النتيجة -->
+                <div class="msl-row g">
+                  <span class="msl-lbl">🧪 النتيجة</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tres-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range g" id="st-tres-font-size-range" min="6" max="24" step="1" value="11"
+                    oninput="document.getElementById('lbl-tres-font-size').textContent=this.value;mslPaint(this)"
+                    onchange="_saveSize('resultFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tres-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-tres-font-size">11</span>
+                </div>
+
+                <!-- ③ القيمة الطبيعية -->
+                <div class="msl-row g">
+                  <span class="msl-lbl">📊 القيمة الطبيعية</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tref-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range g" id="st-tref-font-size-range" min="6" max="24" step="1" value="11"
+                    oninput="document.getElementById('lbl-tref-font-size').textContent=this.value;mslPaint(this)"
+                    onchange="_saveSize('refFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tref-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-tref-font-size">11</span>
+                </div>
+
+                <!-- ④ آخر نتيجة -->
+                <div class="msl-row g">
+                  <span class="msl-lbl">⏮️ آخر نتيجة</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tprev-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range g" id="st-tprev-font-size-range" min="6" max="24" step="1" value="11"
+                    oninput="document.getElementById('lbl-tprev-font-size').textContent=this.value;mslPaint(this)"
+                    onchange="_saveSize('prevFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-tprev-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-tprev-font-size">11</span>
+                </div>
               </div>
             </div>
 
@@ -5100,15 +5196,15 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <input type="color" id="st-color-strip-text" value="#003366" onchange="_saveColor('colorStripText',this.value)" class="fc" style="padding:5px;height:42px"></div>
               </div>
               <!-- حجم خط اسم الجهاز -->
-              <div style="margin-top:12px">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                  <label style="font-size:12px;font-weight:700;color:var(--text)">⚙️ حجم خط اسم الجهاز</label>
-                  <span id="lbl-device-font-size" style="font-size:13px;font-weight:900;color:var(--primary);min-width:38px;text-align:center;background:rgba(0,212,255,0.12);border-radius:6px;padding:2px 8px">10</span>
+              <div class="msl-grp" style="margin-top:12px">
+                <div class="msl-row">
+                  <span class="msl-lbl">⚙️ خط اسم الجهاز</span>
+                  <button type="button" class="msl-btn" onclick="mslStep('st-device-font-size-range',-1)" title="تصغير">−</button>
+                  <input type="range" class="msl-range" id="st-device-font-size-range" min="7" max="20" step="1" value="10"
+                    oninput="document.getElementById('lbl-device-font-size').textContent=this.value;mslPaint(this)" onchange="_saveSize('deviceFontSize',this.value)">
+                  <button type="button" class="msl-btn" onclick="mslStep('st-device-font-size-range',1)" title="تكبير">+</button>
+                  <span class="msl-val" id="lbl-device-font-size">10</span>
                 </div>
-                <input type="range" id="st-device-font-size-range" min="7" max="20" step="1" value="10"
-                  style="width:100%;accent-color:var(--primary);cursor:pointer;height:6px"
-                  oninput="document.getElementById('lbl-device-font-size').textContent=this.value" onchange="_saveSize('deviceFontSize',this.value)">
-                <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text2);margin-top:2px"><span>7</span><span>13</span><span>20</span></div>
               </div>
             </div>
 
@@ -5194,6 +5290,108 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div id="phone-book-empty" style="text-align:center;color:var(--text2);font-size:12px;padding:20px;display:none">
               📭 لا توجد أرقام محفوظة بعد — تُضاف تلقائياً عند إدخال هاتف المريض
             </div>
+          </div>
+        </div>
+
+
+        <!-- 🤖 بوت تليجرام -->
+        <div class="st-card" id="stc-tgbot">
+          <div class="st-card-hdr" onclick="tgBotOpenCard()">
+            <div style="display:flex;align-items:center;gap:12px">
+              <span style="font-size:22px">🤖</span>
+              <div><div class="st-card-title">بوت تليجرام</div><div class="st-card-sub">ربط المختبر ببوت تليجرام خاص — محمي بالرمز السري</div></div>
+            </div>
+            <span class="st-card-arrow" id="arr-stc-tgbot">▼</span>
+          </div>
+          <div class="st-card-body" id="body-stc-tgbot" style="display:none">
+
+            <div style="background:rgba(0,136,204,0.07);border:1px solid rgba(0,136,204,0.25);border-radius:9px;padding:12px;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 توكن البوت</div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.7">
+                أنشئ بوتاً خاصاً بمختبرك من <b>@BotFather</b> في تليجرام عبر الأمر <code>/newbot</code>، ثم الصق التوكن هنا.
+              </div>
+              <input class="fc" id="tg-token-inp" type="password" dir="ltr"
+                     placeholder="123456789:AAxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                     autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12px">
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                <button class="btn btn-sm" onclick="tgBotToggleReveal()" id="tg-reveal-btn">👁️ إظهار</button>
+                <button class="btn btn-d btn-sm" onclick="tgBotSaveToken()">💾 حفظ التوكن</button>
+              </div>
+            </div>
+
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:var(--text)">حالة الاتصال</div>
+                  <div id="tg-status" style="font-size:12px;color:var(--text2);margin-top:4px">⏸️ متوقف</div>
+                </div>
+                <button class="btn btn-d" id="tg-power-btn" onclick="tgBotTogglePower()" style="min-width:130px">▶️ تشغيل</button>
+              </div>
+            </div>
+
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">🔐 رمز فتح هذا القسم</div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.7">
+                أضف رمزاً خاصاً بهذه الحاسبة. الرمز الأصلي يبقى صالحاً دائماً.
+              </div>
+              <input class="fc" id="tg-pin-new" type="password" placeholder="الرمز الجديد (4 أحرف فأكثر)" autocomplete="off" style="margin-bottom:6px">
+              <input class="fc" id="tg-pin-new2" type="password" placeholder="تأكيد الرمز الجديد" autocomplete="off">
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                <button class="btn btn-d btn-sm" onclick="tgSavePin()">💾 حفظ الرمز</button>
+                <button class="btn btn-sm" onclick="tgClearPin()">🗑️ إلغاء الرمز الخاص</button>
+              </div>
+              <div id="tg-pin-status" style="display:none;font-size:11px;margin-top:8px"></div>
+            </div>
+
+            <div style="background:rgba(139,63,255,0.06);border:1px solid rgba(139,63,255,0.25);border-radius:9px;padding:12px;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">🔗 قناة المزامنة</div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.8">
+                أنشئ قناة تليجرام <b>خاصة</b>، وأضِف بوت <b>هذه الحاسبة</b> وبوت <b>الحاسبة الأخرى</b> كمشرفَين فيها،
+                ثم ضع معرّف القناة هنا في <b>كلتا</b> الحاسبتين.
+              </div>
+              <input class="fc" id="tg-chan-inp" dir="ltr" placeholder="-1001234567890" autocomplete="off" spellcheck="false" style="font-family:monospace;font-size:12px">
+              <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+                <button class="btn btn-d btn-sm" onclick="tgSaveChannel()">💾 حفظ القناة</button>
+                <button class="btn btn-sm" onclick="tgTestChannel()">📡 اختبار الاتصال</button>
+              </div>
+            </div>
+
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">⚙️ وضع الإرسال</div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:10px">يمكن تفعيل خيار واحد فقط</div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+                <div style="flex:1">
+                  <div style="font-size:12px;font-weight:700;color:var(--text)">🌐 إرسال وطباعة جميع المرضى</div>
+                  <div style="font-size:10px;color:var(--text2);margin-top:2px">كل مريض جديد ونتائجه وطباعته تنتقل تلقائياً</div>
+                </div>
+                <button class="btn btn-sm" id="tg-mode-all-btn" onclick="tgSetMode('all')" style="min-width:82px">تشغيل</button>
+              </div>
+
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px">
+                <div style="flex:1">
+                  <div style="font-size:12px;font-weight:700;color:var(--text)">🎯 إرسال محدد للمرضى</div>
+                  <div style="font-size:10px;color:var(--text2);margin-top:2px">يظهر زر «إرسال للبوت» في شاشة إدخال النتائج</div>
+                </div>
+                <button class="btn btn-sm" id="tg-mode-sel-btn" onclick="tgSetMode('selected')" style="min-width:82px">تشغيل</button>
+              </div>
+
+              <div id="tg-mode-status" style="font-size:11px;color:var(--text2);margin-top:10px;text-align:center"></div>
+            </div>
+
+            <div style="background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:12px">
+              <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px">🔗 ربط جهاز بالبوت</div>
+              <div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.7">
+                ولّد كوداً، ثم أرسله في محادثة البوت بصيغة <code dir="ltr">/link الكود</code>
+              </div>
+              <button class="btn btn-sm" onclick="tgBotMakeCode()">🆕 توليد كود ربط</button>
+              <div id="tg-code-box" style="display:none;margin-top:10px;text-align:center;background:rgba(0,212,255,0.08);border:1px dashed rgba(0,212,255,0.45);border-radius:9px;padding:14px">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:6px">أرسل هذا الأمر للبوت:</div>
+                <div id="tg-code-val" dir="ltr" style="font-family:monospace;font-size:19px;font-weight:800;letter-spacing:1px;color:var(--primary);user-select:all"></div>
+                <div style="font-size:10px;color:var(--text2);margin-top:6px">صالح لمدة ٣٠ دقيقة</div>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -7929,6 +8127,11 @@ const IDB=(()=>{
     });
   }
 
+  // ⚡⚡ إصلاح جذري للأداء (السبب الأول للتجميد) ⚡⚡
+  // LZS.compress ليست ضغطاً — بل Base64 يُكبّر البيانات ٣٨٪، وتنفيذه بطيء
+  // جداً مع النص العربي. القياس على ٢٠٬٠٠٠ طلب: ١٧.٧ ثانية تجميد عند كل حفظ.
+  // IndexedDB يخزّن الكائنات أصلاً (structured clone) بتنفيذ C++ — أسرع ٣٠ ضعفاً.
+  // التوافق الرجعي: الصفوف القديمة (تبدأ بـ \x01) تُقرأ كما كانت تماماً.
   async function get(key){
     try{
       const db=await open();
@@ -7938,9 +8141,10 @@ const IDB=(()=>{
         req.onsuccess=()=>{
           const row=req.result;
           if(!row){res(null);return;}
-          try{
-            const text=(row.v&&row.v[0]==='\x01')?LZS.decompress(row.v):row.v;
-            res(JSON.parse(text||'null'));
+          if(row.raw===1){ res(row.v===undefined?null:row.v); return; }   // صيغة جديدة
+          try{                                                            // صيغة قديمة
+            const text=(typeof row.v==='string'&&row.v[0]==='\x01')?LZS.decompress(row.v):row.v;
+            res(typeof text==='string'?JSON.parse(text||'null'):(text===undefined?null:text));
           }catch{res(null);}
         };
         req.onerror=()=>res(null);
@@ -7950,12 +8154,17 @@ const IDB=(()=>{
 
   async function set(key,value){
     try{
+      // ألغِ أي كتابة مؤجّلة لنفس المفتاح — الكتابة المباشرة هنا أحدث
+      try{ if(typeof _idbCancelPending==='function') _idbCancelPending(key); }catch(e){}
       const db=await open();
-      const json=JSON.stringify(value);
-      const compressed=LZS.compress(json);
       return new Promise((res,rej)=>{
         const tx=db.transaction(STORE,'readwrite');
-        tx.objectStore(STORE).put({k:key,v:compressed});
+        try{
+          tx.objectStore(STORE).put({k:key,v:value,raw:1});   // ⚡ خام — بلا JSON ولا Base64
+        }catch(cloneErr){
+          try{ tx.objectStore(STORE).put({k:key,v:JSON.parse(JSON.stringify(value)),raw:1}); }
+          catch(e2){ res(false); return; }
+        }
         tx.oncomplete=()=>res(true);
         tx.onerror=()=>res(false);
       });
@@ -8007,7 +8216,11 @@ const IDB=(()=>{
       }
       // fallback: حساب تقديري من البيانات المخزنة
       const all=await getAll();
-      let total=all.reduce((s,r)=>(s+(r.v||'').length*2),0);
+      let total=all.reduce((s,r)=>{
+        const v=r&&r.v;
+        if(typeof v==='string') return s+v.length*2;
+        try{ return s+JSON.stringify(v||'').length*2; }catch{ return s; }
+      },0);
       return (total/1024/1024).toFixed(2);
     }catch{return '0';}
   }
@@ -8039,6 +8252,46 @@ const _IDB_KEYS=new Set(['patients','requests','invoices','doctors','packages',
 // كاش الذاكرة — يُحدَّث عند كل قراءة/كتابة لتفادي أي تأخير
 const _MC={};
 
+// ══════════════════════════════════════════════════════════════
+// ⚡ كتابة مؤجّلة مُجمَّعة إلى IndexedDB
+// عمليات مثل استلام نتيجة CBC تستدعي save('requests') عشرات المرات خلال
+// أقل من ثانية. نحتفظ بأحدث نسخة ونكتبها مرة واحدة بعد ٣٠٠ms هدوء (سقف
+// أمان ١٥٠٠ms). القراءة تأتي من _MC المحدَّث فوراً — فلا يتغيّر أي سلوك.
+// ══════════════════════════════════════════════════════════════
+const _idbPending={}, _idbTimers={}, _idbDeadline={};
+
+function _idbCancelPending(pk){
+  if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
+  delete _idbPending[pk]; delete _idbDeadline[pk];
+}
+function _idbWriteNow(pk){
+  if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
+  delete _idbDeadline[pk];
+  if(!(pk in _idbPending)) return;
+  const v=_idbPending[pk];
+  delete _idbPending[pk];
+  try{ IDB.set(pk,v).catch(e=>console.warn('[DB] IDB set error',pk,e)); }
+  catch(e){ console.warn('[DB] IDB set error',pk,e); }
+}
+function _idbWriteLater(pk,v){
+  _idbPending[pk]=v;
+  const now=Date.now();
+  if(!_idbDeadline[pk]) _idbDeadline[pk]=now+1500;
+  if(_idbTimers[pk]) clearTimeout(_idbTimers[pk]);
+  const wait=Math.max(0,Math.min(300,_idbDeadline[pk]-now));
+  _idbTimers[pk]=setTimeout(function(){ _idbWriteNow(pk); },wait);
+}
+function _idbFlushAll(){ Object.keys(_idbPending).forEach(_idbWriteNow); }
+window._idbFlushAll=_idbFlushAll;
+window._idbCancelPending=_idbCancelPending;
+
+// ضمانات عدم فقدان البيانات
+window.addEventListener('beforeunload',function(){ try{ _idbFlushAll(); }catch(e){} });
+window.addEventListener('pagehide',    function(){ try{ _idbFlushAll(); }catch(e){} });
+document.addEventListener('visibilitychange',function(){
+  if(document.visibilityState==='hidden'){ try{ _idbFlushAll(); }catch(e){} }
+});
+
 const DB={
   _user:'',
   _pfx(){ return 'mlab2_'+(this._user?this._user+'_':''); },
@@ -8064,7 +8317,7 @@ const DB={
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
         localStorage.removeItem(pk);
-        IDB.set(pk,v).catch(e=>console.warn('[DB] IDB set error',k,e));
+        _idbWriteLater(pk,v);   // ⚡ كتابة مُجمَّعة بدل كتابة كاملة عند كل save()
       } else if(k==='settings' && v && typeof v==='object'){
         // الإعدادات: استبعد الحقول الكبيرة من localStorage (تذهب لـ IDB عبر setBig)
         const slim={};
@@ -8088,6 +8341,7 @@ const DB={
     const pk=this._pfx()+k;
     delete _MC[pk];
     localStorage.removeItem(pk);
+    _idbCancelPending(pk);   // ألغِ أي كتابة مؤجّلة حتى لا تُعيد كتابة المحذوف
     if(_IDB_KEYS.has(k)) IDB.del(pk).catch(()=>{});
   },
 
@@ -8115,6 +8369,7 @@ function save(k,v){
   //    بتعريف save المحلي ولا تمرّ عبر window.save إطلاقاً، لذلك يجب
   //    إطلاق الخطّاف من هنا لتُزامَن كل الأقسام (المنوي/الزرع/…)
   try{ if(typeof window._lanOnSave === 'function') window._lanOnSave(k,v); }catch(e){}
+  try{ if(!window._tgApplying && typeof window._tgOnSave === 'function') window._tgOnSave(k); }catch(e){}
 }
 window.save = save;
 window.load = load;
@@ -9872,6 +10127,11 @@ function _collectAndSaveSettings(){
     }
     var fs2=_sliderPx('st-font-size-range');        if(fs2) settings.fontSize=fs2;
     var pfs2=_sliderPx('st-print-font-size-range'); if(pfs2) settings.printFontSize=pfs2;
+    // ⭐ أحجام بنود التقرير المستقلة
+    var _tn2=_sliderPx('st-tname-font-size-range');  if(_tn2) settings.testNameFontSize=_tn2;
+    var _tr2=_sliderPx('st-tres-font-size-range');   if(_tr2) settings.resultFontSize=_tr2;
+    var _tf2=_sliderPx('st-tref-font-size-range');   if(_tf2) settings.refFontSize=_tf2;
+    var _tp2=_sliderPx('st-tprev-font-size-range');  if(_tp2) settings.prevFontSize=_tp2;
     var ptfs2=_sliderPx('st-pt-font-size-range');   if(ptfs2) settings.ptFontSize=ptfs2;
     var fw2=g('st-font-weight');   if(fw2) settings.fontWeight=fw2;
     var ff2=g('st-font-family');   if(ff2) settings.fontFamily=ff2;
@@ -9897,7 +10157,27 @@ function _collectAndSaveSettings(){
   }catch(e){}
 }
 
-function renderAll(){renderPatients();renderRequests();renderTestsDB();renderDoctors();renderPackages();renderInventory();renderInvoices();renderQC();renderReports();if(typeof renderWaitQueue==='function')renderWaitQueue();if(typeof updateWaitScreen==='function')updateWaitScreen();}
+// ⚡ لا يُعاد بناء إلا جداول القسم الظاهر. كان يبني ١١ جدولاً رغم أن
+//    المستخدم يرى قسماً واحداً. الأقسام المخفية تُرسم عند الانتقال إليها
+//    عبر nav() كما هو الحال أصلاً — فلا يتغيّر أي سلوك.
+function _secVisible(id){
+  var s=document.getElementById(id);
+  return !!(s&&s.classList.contains('active'));
+}
+function renderAll(){
+  if(_secVisible('sec-patients'))  renderPatients();
+  if(_secVisible('sec-requests'))  renderRequests();
+  if(_secVisible('sec-tests-db'))  renderTestsDB();
+  if(_secVisible('sec-doctors'))   renderDoctors();
+  if(_secVisible('sec-packages'))  renderPackages();
+  if(_secVisible('sec-inventory')) renderInventory();
+  if(_secVisible('sec-invoices'))  renderInvoices();
+  if(_secVisible('sec-quality'))   renderQC();
+  if(_secVisible('sec-reports'))   renderReports();
+  if(typeof renderWaitQueue==='function')  renderWaitQueue();
+  if(typeof updateWaitScreen==='function') updateWaitScreen();
+  if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(e){} }
+}
 
 // ── تطبيق الصلاحيات على الشريط الجانبي ─────────────
 function applyPermissionsToSidebar(){
@@ -10059,12 +10339,14 @@ function nav(p){
       setTimeout(_doFocusReq, 200);
     }
   }
+  if(p==='results'){ try{ if(typeof tgRefreshSendBtn==='function') tgRefreshSendBtn(); }catch(e){} }
   if(p==='patients') renderPatients();
   if(p==='doctors') renderDoctors();
   if(p==='inventory') renderInventory();
   if(p==='tests-db') renderTestsDB();
   if(p==='packages') renderPackages();
   if(p==='invoices') renderInvoices();
+  if(p==='quality') renderQC();   // ⭐ لم يكن له استدعاء رسم في nav إطلاقاً
   if(p==='waitqueue'){if(typeof renderWaitQueue==='function')renderWaitQueue();}
   if(p==='lis'){if(typeof lisInit==='function')lisInit();}
   if(p==='esr'){if(typeof esrRenderList==='function')esrRenderList();}
@@ -11478,7 +11760,7 @@ function wizFinish(){
     }
     const pid=_genUniquePid();
     const barcode=pid;
-    pt={...wizPatient,id:pid,barcode,registered:today,visits:0,status:'active'};
+    pt={...wizPatient,id:pid,barcode,registered:today,regTime:Date.now(),visits:0,status:'active'};
     patients.push(pt);
   } else {
     const oldChron=pt.chronic;
@@ -12347,7 +12629,10 @@ function renderRequestsFiltered(filter='today',srch=''){
     tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text2)">${_emptyMsg}</td></tr>`;
     return;
   }
-  tbody.innerHTML=list.map(r=>`<tr>
+  // ⚡ سقف عرض على دفعات — فلاتر مثل «الكل» أو البحث قد تُرجع كل طلبات المختبر
+  const _reqShown=list.slice(0,_reqRenderLimit);
+  const _reqRest=list.length-_reqShown.length;
+  tbody.innerHTML=_reqShown.map(r=>`<tr>
     <td><span class="bdg bdg-p">${r.id}</span></td>
     <td><b style="font-size:16.5px;font-weight:900;cursor:pointer;color:var(--primary);text-decoration:underline dotted;text-underline-offset:3px" onclick="${r.status==='done'?`goToPrint('${r.id}')`:`goToResult('${r.id}')`}" title="${r.status==='done'?'فتح الطباعة':'إدخال النتائج'}">${r.patientName}</b></td>
     <td><span style="font-size:11px">${r.testNames?r.testNames.slice(0,3).join(', ')+(r.testNames.length>3?'...':''):'-'}</span></td>
@@ -12366,10 +12651,20 @@ function renderRequestsFiltered(filter='today',srch=''){
         </button>
       </div>
     </td>
-  </tr>`).join('');
+  </tr>`).join('')+(_reqRest>0?`<tr><td colspan="8" style="text-align:center;padding:14px">
+    <button class="btn btn-s" onclick="_showMoreRequests()" style="font-weight:800">⬇️ عرض المزيد (${_reqRest} طلب متبقٍ)</button>
+  </td></tr>`:'');
   if(typeof _updateDeviceReqBadge==='function') _updateDeviceReqBadge();
 }
-function renderRequests(filter='all',srch=''){renderRequestsFiltered(filter,srch);}
+var _reqRenderLimit=300;
+function _showMoreRequests(){
+  _reqRenderLimit+=300;
+  var actPill=document.querySelector('#sec-requests .req-pill[data-filter].active');
+  var f=(actPill&&actPill.getAttribute('data-filter'))||'today';
+  var srchEl=document.getElementById('req-srch-inp');
+  renderRequestsFiltered(f, srchEl?srchEl.value:'');
+}
+function renderRequests(filter='all',srch=''){_reqRenderLimit=300;renderRequestsFiltered(filter,srch);}
 
 /* ═══════════════════════════════════════════════════════
    🌀 RADIAL MENU — نظام القائمة الدائرية للطلبات
@@ -12490,9 +12785,10 @@ window.rrOpen = function(triggerBtn){
   if(bd) bd.classList.add('show');
 };
 
-function filterReq(f,el){document.querySelectorAll('#sec-requests .req-pill[data-filter]').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderRequestsFiltered(f);}
+function filterReq(f,el){_reqRenderLimit=300;document.querySelectorAll('#sec-requests .req-pill[data-filter]').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderRequestsFiltered(f);}
 function searchReq(v){
   if(window._srTimer)clearTimeout(window._srTimer);
+  _reqRenderLimit=300;
   const activeTab=document.querySelector('#sec-requests .req-pill[data-filter].active');
   const filter=activeTab?.getAttribute('data-filter')||'today';
   renderRequestsFiltered(filter,v);
@@ -12533,6 +12829,15 @@ function goToResult(id){
   },80);
 }
 function goToPrint(id){currentReqId=id;nav('print');document.getElementById('print-req-sel').value=id;loadPrintPreviewSide();}
+
+// ⭐ زر «تعديل» في قسم الطباعة — يفتح إدخال/تعديل نتائج نفس الطلب
+//    (نفس سلوك زر تعديل ✏️ في القائمة الدائرية داخل قسم الطلبات)
+function editFromPrint(){
+  var sel=document.getElementById('print-req-sel');
+  var id=(sel&&sel.value)?sel.value:(typeof currentReqId!=='undefined'?currentReqId:'');
+  if(!id){ try{ showNotif('تنبيه','اختر المريض / الطلب أولاً','warning'); }catch(e){} return; }
+  goToResult(id);
+}
 
 // ============================================================
 // VIEW/EDIT RESULTS MODAL (طلب 2، 3، 8)
@@ -14786,6 +15091,59 @@ function loadPrintPreviewSide(){
   currentReqId=id;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+ *  وقت إدخال بيانات المريض — يُعرض في التقارير بدل رقم الـ ID
+ *  يبحث بالترتيب: وقت الطلب المرتبط ← أقدم طلب للمريض ← وقت إنشاء السجل
+ * ══════════════════════════════════════════════════════════════════ */
+function _ptEntryTime(pt, rec){
+  function _lat(s){                       // أرقام عربية → لاتينية + ص/م → AM/PM
+    return String(s||'')
+      .replace(/[\u0660-\u0669]/g, function(c){ return String.fromCharCode(c.charCodeAt(0)-0x0660+48); })
+      .replace(/[\u06F0-\u06F9]/g, function(c){ return String.fromCharCode(c.charCodeAt(0)-0x06F0+48); })
+      .replace(/\u0645\u0633\u0627\u0621\u064b?|\u0628\u0639\u062f\s*\u0627\u0644\u0638\u0647\u0631|\u0645\.?\u0638|\u0645(?![a-zA-Z])/g,'PM')
+      .replace(/\u0635\u0628\u0627\u062d\u064b?\u0627?|\u0642\u0628\u0644\s*\u0627\u0644\u0638\u0647\u0631|\u0635\.?\u0628|\u0635(?![a-zA-Z])/g,'AM')
+      .replace(/\s+/g,' ').trim();
+  }
+  function _fromTs(ts){
+    if(!ts) return '';
+    try{
+      return new Date(ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:true}).toUpperCase();
+    }catch(e){ return ''; }
+  }
+  try{
+    rec = rec || {};
+    pt  = pt  || {};
+    var R = (typeof requests !== 'undefined' && requests) ? requests : [];
+
+    // ١) السجل نفسه طلب فحص
+    if(rec.time) return _lat(rec.time);
+
+    // ٢) سجل فحص خاص مرتبط بطلب
+    if(rec.reqId){
+      var rq = R.filter(function(x){ return String(x.id) === String(rec.reqId); })[0];
+      if(rq && rq.time) return _lat(rq.time);
+    }
+
+    // ٣) طلب المريض بنفس التاريخ، وإلا أقدم طلب له
+    var pid = pt.id || rec.patientId;
+    if(pid){
+      var mine = R.filter(function(x){ return String(x.patientId) === String(pid); });
+      if(mine.length){
+        var same = rec.date ? mine.filter(function(x){ return String(x.date) === String(rec.date); }) : [];
+        if(same.length && same[0].time) return _lat(same[0].time);
+        mine.sort(function(a,b){ return String(a.date||'').localeCompare(String(b.date||'')); });
+        if(mine[0] && mine[0].time) return _lat(mine[0].time);
+      }
+    }
+
+    // ٤) طابع زمني على السجل
+    var t = _fromTs(rec.createdAt || pt.regTime);
+    if(t) return t;
+  }catch(e){}
+  return '\u2014';
+}
+window._ptEntryTime = _ptEntryTime;
+
 function buildPrintHTML(req, opts){
   opts = opts || {};
   const blankBody = opts.blankBody === true;
@@ -14855,6 +15213,15 @@ function buildPrintHTML(req, opts){
   const pfs  = settings.printFontSize||'11px';
   const ptfs = settings.ptFontSize||'10px';
   const pfsN = parseInt(pfs);
+  // ⭐ أحجام مستقلة لكل بند من بنود التقرير — تعود للحجم العام إن لم تُضبط
+  const _fsNameN = parseInt(settings.testNameFontSize) || pfsN;   // اسم التحليل
+  const _fsResN  = parseInt(settings.resultFontSize)   || pfsN;   // النتيجة
+  const _fsRefN  = parseInt(settings.refFontSize)      || pfsN;   // القيمة الطبيعية + الوحدة
+  const _fsPrevN = parseInt(settings.prevFontSize)     || pfsN;   // آخر نتيجة
+  const _fsName  = _fsNameN+'px';
+  const _fsRes   = _fsResN+'px';
+  const _fsRef   = _fsRefN+'px';
+  const _fsPrev  = _fsPrevN+'px';
   const subcatFsN = parseInt(settings.subcatFontSize||'12');
   const subcatFs  = subcatFsN+'px';
   const reportFontFamily = settings.printFontFamily || "Arial,sans-serif";
@@ -15080,8 +15447,8 @@ function buildPrintHTML(req, opts){
           <div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">
             <span style="${LBL_R}">Input</span>
             <span style="border:1.5px solid #bbb;border-radius:3px;background:#fff;padding:1px 6px;font-size:13px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto">${inputTime}</span>
-            <span style="font-size:8px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;margin-left:6px">ID</span>
-            <span style="border:1.5px solid #bbb;border-radius:3px;background:#fff;padding:1px 6px;font-size:13px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${pt.id||'—'}</span>
+            <span style="font-size:8px;font-weight:800;color:#555;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;margin-left:6px">Time</span>
+            <span style="border:1.5px solid #bbb;border-radius:3px;background:#fff;padding:1px 6px;font-size:13px;font-weight:700;color:#000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${_ptEntryTime(pt, req)}</span>
           </div>
           ${rowR('Print', printTime)}
         </div>
@@ -15121,7 +15488,7 @@ function buildPrintHTML(req, opts){
   const _tplLowColor  = settings.colorLow  || '#0055cc'; // ناصي/منخفض
   const _tplNormColor = settings.colorNormal || '#111111'; // طبيعي (أسود)
   // أحجام خطوط مشتقة من الإعدادات (pfs/ptfs/subcatFs) — تُستعمل داخل النماذج الجديدة
-  const _tplValFs = Math.round(pfsN * 1.9);   // حجم قيمة الدائرة = مشتق من حجم خط النتائج
+  const _tplValFs = Math.round(_fsResN * 1.9);   // حجم قيمة الدائرة = مشتق من حجم خط النتيجة
   const _tplLblFs = Math.max(pfsN - 3, 6);    // حجم كلمة RESULT الصغيرة
   // رأس أعمدة بديل حسب النموذج (colHdr الأصلي يبقى للنموذج 1)
   (function(){
@@ -15233,8 +15600,8 @@ function buildPrintHTML(req, opts){
         : '';
       // ⭐ فوق القيم الطبيعية كلمة REFERENCE
       const refInner = (p.refTxt && p.refTxt!=='—')
-        ? `<div style="font-size:${pfs};font-weight:700;color:#000;text-align:center">${p.refTxt}${p.unit?`&nbsp;<span style="color:#333;font-weight:600">${p.unit}</span>`:''}</div>`
-        : (p.unit?`<div style="font-size:${pfs};font-weight:600;color:#333;text-align:center">${p.unit}</div>`:'');
+        ? `<div style="font-size:${_fsRef};font-weight:700;color:#000;text-align:center">${p.refTxt}${p.unit?`&nbsp;<span style="color:#333;font-weight:600">${p.unit}</span>`:''}</div>`
+        : (p.unit?`<div style="font-size:${_fsRef};font-weight:600;color:#333;text-align:center">${p.unit}</div>`:'');
       const refLine = (refInner)
         ? `<div style="text-align:center;margin-top:2px">
              <div style="font-size:${_tplLblFs}px;font-weight:800;color:#888;letter-spacing:0.6px">REFERENCE</div>
@@ -15242,15 +15609,15 @@ function buildPrintHTML(req, opts){
            </div>`
         : '';
       const prevLine = (p.prevVal)
-        ? `<div style="font-size:${ptfs};font-weight:600;color:#333;text-align:center;margin-top:2px">Last: <b style="color:#000">${p.prevVal}</b>${p.prevDate?` <span style="color:#666">(${p.prevDate})</span>`:''}</div>`
+        ? `<div style="font-size:${_fsPrev};font-weight:600;color:#333;text-align:center;margin-top:2px">Last: <b style="color:#000">${p.prevVal}</b>${p.prevDate?` <span style="color:#666">(${p.prevDate})</span>`:''}</div>`
         : '';
       // عرض البطاقة: يستوعب 3 في الصف مع التفاف تلقائي عند التحاليل الكثيرة
       // البطاقة نفسها — تملأ ارتفاع العمود بالكامل (height:100%) لتتساوى كل البطاقات
       //  البنية الداخلية: [رأس: الاسم+الشارة] [الدائرة] [منطقة REFERENCE+Last تتمدد لأسفل]
       //  منطقة المرجع تأخذ المساحة المتبقية (flex:1) فتتساوى حواف البطاقات مهما اختلف المحتوى.
       const _cardHtml=`<div style="width:100%;height:100%;box-sizing:border-box;border:1px solid #d7dde5;border-radius:9px;padding:8px 8px 9px;background:#fff;display:flex;flex-direction:column;gap:4px;page-break-inside:avoid;break-inside:avoid">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:${Math.max(subcatFsN+4,16)}px">
-          <div style="font-size:${subcatFs};font-weight:800;color:${_tplAccent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;min-height:${Math.max(Math.max(subcatFsN,_fsNameN)+4,16)}px">
+          <div style="font-size:${_fsName};font-weight:800;color:${_tplAccent};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
           ${badge}
         </div>
         ${_tplDonut(p.value||'—', ringColor)}
@@ -15273,12 +15640,12 @@ function buildPrintHTML(req, opts){
     } else if(RTPL==='3'){
       return `
       <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:3px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#1a1a1a;padding-top:2px;padding-left:16px">${p.name}</div>
+        <div style="flex:4;font-size:${_fsName};font-weight:600;color:#1a1a1a;padding-top:2px;padding-left:16px">${p.name}</div>
         <div style="flex:2;display:flex;align-items:center;justify-content:flex-start;gap:4px;padding-left:4px">
           <div style="display:flex;align-items:center;gap:3px">${p.resultBox}${p.flag}</div>
         </div>
         <div style="flex:3;padding:1px 4px 0 6px">${p.refHtml}</div>
-        <div style="flex:2;padding:1px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+        <div style="flex:2;padding:1px 4px;text-align:center;font-size:${_fsPrev};font-weight:600">${p.prevHtml}</div>
       </div>`;
     } else if(RTPL==='4'){
       // نموذج 4 «صف بسهم»:
@@ -15290,13 +15657,13 @@ function buildPrintHTML(req, opts){
       const _numHigh = (typeof p.isNumericHigh!=='undefined') ? p.isNumericHigh : (p.isHigh && !p.isQualAbnormal);
       const _numLow  = (typeof p.isNumericLow!=='undefined')  ? p.isNumericLow  : (p.isLow && !p.isQualAbnormal);
       const arrow = _numHigh
-        ? `<span style="color:${_tplHighColor};font-size:${pfs};font-weight:900;flex-shrink:0">▲</span>`
+        ? `<span style="color:${_tplHighColor};font-size:${_fsRes};font-weight:900;flex-shrink:0">▲</span>`
         : _numLow
-        ? `<span style="color:${_tplLowColor};font-size:${pfs};font-weight:900;flex-shrink:0">▼</span>`
+        ? `<span style="color:${_tplLowColor};font-size:${_fsRes};font-weight:900;flex-shrink:0">▼</span>`
         : `<span style="width:10px;flex-shrink:0;display:inline-block"></span>`;
       // آخر نتيجة مع التاريخ (كباقي التقارير): القيمة ثم التاريخ بينهما مسافة
       const prevCell = p.prevVal
-        ? `<b style="color:#000">${p.prevVal}</b>${p.prevDate?`<div style="font-size:${Math.max(pfsN-2,7)}px;color:#555;font-weight:600">${p.prevDate}</div>`:''}`
+        ? `<b style="color:#000">${p.prevVal}</b>${p.prevDate?`<div style="font-size:${Math.max(_fsPrevN-2,6)}px;color:#555;font-weight:600">${p.prevDate}</div>`:''}`
         : '';
       // ⭐ المدى الطبيعي: يظهر كل سطر أسفل الآخر تماماً كما في قاعدة التحاليل
       //    (يُقسَّم على '\n' أو '|' فتظهر الأسطر عمودياً مثل النموذج 1، وليس سطراً واحداً)
@@ -15314,25 +15681,25 @@ function buildPrintHTML(req, opts){
       }
       return `
       <div style="margin:0 2px;display:flex;align-items:center;direction:ltr;padding:2.5px 6px">
-        <div style="flex:4;font-size:${pfs};font-weight:700;color:#000000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
+        <div style="flex:4;font-size:${_fsName};font-weight:700;color:#000000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.name}</div>
         <div style="flex:2;display:flex;align-items:center;gap:4px">${p.resultBox}${arrow}</div>
-        <div style="flex:1.4;font-size:${pfs};font-weight:600;color:#000000">${p.unit||''}</div>
-        <div style="flex:3;font-size:${pfs};font-weight:600;color:#000000;padding-left:4px;line-height:1.5">${_refCell}</div>
-        <div style="flex:2;font-size:${pfs};font-weight:600;color:#000000;text-align:center;line-height:1.2">${prevCell}</div>
+        <div style="flex:1.4;font-size:${_fsRef};font-weight:600;color:#000000">${p.unit||''}</div>
+        <div style="flex:3;font-size:${_fsRef};font-weight:600;color:#000000;padding-left:4px;line-height:1.5">${_refCell}</div>
+        <div style="flex:2;font-size:${_fsPrev};font-weight:600;color:#000000;text-align:center;line-height:1.2">${prevCell}</div>
       </div>`;
     }
     // النموذج 1 — الصف الأصلي تماماً
     return `
       <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-        <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">
+        <div style="flex:4;font-size:${_fsName};font-weight:600;color:#000000;padding-top:3px">
           ${bullet} ${p.name}
         </div>
         <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-          <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
+          <span style="font-size:${_fsRes};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
           <div style="display:flex;align-items:center;gap:2px">${p.resultBox}${p.flag}</div>
         </div>
         <div style="flex:3;padding:2px 4px 0 6px">${p.refHtml}</div>
-        <div style="flex:2;padding:2px 4px;text-align:center;font-size:${pfs};font-weight:600">${p.prevHtml}</div>
+        <div style="flex:2;padding:2px 4px;text-align:center;font-size:${_fsPrev};font-weight:600">${p.prevHtml}</div>
       </div>`;
   }
   // فاصل الصفوف حسب النموذج
@@ -15474,9 +15841,9 @@ function buildPrintHTML(req, opts){
             :showHL&&inpIsLow
             ?`<span style="font-size:10px;font-weight:600;color:#0055cc;margin-right:2px;flex-shrink:0">L</span>`
             :`<span style="width:12px;flex-shrink:0;display:inline-block"></span>`;
-          const inpResultBox=`<div style="border:1.5px solid ${inpBoxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${inpValColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${inpVal}</span></div>`;
+          const inpResultBox=`<div style="border:1.5px solid ${inpBoxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${_fsRes};font-weight:900;color:${inpValColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${inpVal}</span></div>`;
           const inpShowUnit = inpUnit && inpUnit!=='qualitative';
-          const inpRefHtml = `<div style="display:block;font-size:${pfs}">${inpRefTxt==='—'?`<span style="font-size:${pfs}">—</span>`:`<span style="font-size:${pfs};font-weight:600;color:#000">${inpRefTxt}</span>${inpShowUnit?`&nbsp;&nbsp;<span style="font-size:${pfs};font-weight:600;color:#444">${inpUnit}</span>`:''}`}</div>`;
+          const inpRefHtml = `<div style="display:block;font-size:${_fsRef}">${inpRefTxt==='—'?`<span style="font-size:${_fsRef}">—</span>`:`<span style="font-size:${_fsRef};font-weight:600;color:#000">${inpRefTxt}</span>${inpShowUnit?`&nbsp;&nbsp;<span style="font-size:${_fsRef};font-weight:600;color:#444">${inpUnit}</span>`:''}`}</div>`;
           _chunkHtml+=_tplRow({
             name: inpName,
             resultBox: inpResultBox,
@@ -15598,7 +15965,7 @@ function buildPrintHTML(req, opts){
             const rawDate=pr.resultDate||pr.date||'';
             let fmtDate=rawDate;
             try{const d=new Date(rawDate);if(!isNaN(d))fmtDate=`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;}catch(e){}
-            return `<div style="white-space:nowrap;font-size:${pfs};font-weight:${reportFontWeight};color:#000000;line-height:1.7"><span style="font-size:${pfs};font-weight:${reportFontWeight};color:#555">${fmtDate}</span><span style="font-size:${pfs};font-weight:${reportFontWeight};color:#000">:  ${pr.results[t.id]}</span></div>`;
+            return `<div style="white-space:nowrap;font-size:${_fsPrev};font-weight:${reportFontWeight};color:#000000;line-height:1.7"><span style="font-size:${_fsPrev};font-weight:${reportFontWeight};color:#555">${fmtDate}</span><span style="font-size:${_fsPrev};font-weight:${reportFontWeight};color:#000">:  ${pr.results[t.id]}</span></div>`;
           }).join('');
           prevHtml=`<div style="text-align:center;line-height:1.65">${rows}</div>`;
         }
@@ -15606,11 +15973,11 @@ function buildPrintHTML(req, opts){
 
       // بناء الوحدة — تُضاف داخل أول سطر من القيم الطبيعية وليس خارجها
       const showUnit = (!isBloodGroup && unitTxt && unitTxt !== 'qualitative' && !isQual && displayVal !== '—');
-      const unitStr = showUnit ? ` <span style="font-size:${pfs};font-weight:${reportFontWeight};color:#444;white-space:nowrap">${unitTxt}</span>` : '';
+      const unitStr = showUnit ? ` <span style="font-size:${_fsRef};font-weight:${reportFontWeight};color:#444;white-space:nowrap">${unitTxt}</span>` : '';
 
       // إعادة بناء refHtml مع إدراج الوحدة مباشرة بعد أول سطر
       function _buildRefHtmlWithUnit(txt, unit){
-        if(!txt||txt==='—') return `<span style="font-size:${pfs}">—</span>`;
+        if(!txt||txt==='—') return `<span style="font-size:${_fsRef}">—</span>`;
         var parts=[];
         if(txt.indexOf('\n')>-1){
           parts=txt.split('\n').map(function(s){return s.trim();}).filter(Boolean);
@@ -15619,7 +15986,7 @@ function buildPrintHTML(req, opts){
         }
         if(parts.length>=2){
           refIsMultiLine=true;
-          var html='<div style="display:block;line-height:1.65;font-size:'+pfs+'">';
+          var html='<div style="display:block;line-height:1.65;font-size:'+_fsRef+'">';
           parts.forEach(function(part,i){
             part=part.trim();
             // الوحدة بعد مسافتين في السطر الأول فقط
@@ -15630,12 +15997,12 @@ function buildPrintHTML(req, opts){
           return html;
         }
         // سطر واحد — الوحدة بعد مسافتين
-        return `<span style="font-size:${pfs};font-weight:600;color:#000">${txt}</span>${unit ? `&nbsp;&nbsp;<span style="font-size:${pfs};font-weight:600;color:#444">${unit}</span>` : ''}`;
+        return `<span style="font-size:${_fsRef};font-weight:600;color:#000">${txt}</span>${unit ? `&nbsp;&nbsp;<span style="font-size:${_fsRef};font-weight:600;color:#444">${unit}</span>` : ''}`;
       }
-      const refWithUnit = `<div style="display:block;font-size:${pfs}">${_buildRefHtmlWithUnit(refTxt, showUnit?unitTxt:'')}</div>`;
+      const refWithUnit = `<div style="display:block;font-size:${_fsRef}">${_buildRefHtmlWithUnit(refTxt, showUnit?unitTxt:'')}</div>`;
 
       // مربع النتيجة — القيمة فقط بدون وحدة
-      const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${displayValFull}</span></div>`;
+      const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${_fsRes};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${displayValFull}</span></div>`;
 
       // ── بيانات إضافية للنماذج الجديدة (دوائر/أسهم) ──
       // آخر نتيجة (قيمة + تاريخ) لعرضها في النموذج 2/4
@@ -16200,6 +16567,13 @@ function buildCalcTestPrintHTML(req, calcTest){
 
   const pfs  = settings.printFontSize||'11px';
   const pfsN = parseInt(pfs);
+  // ⭐ أحجام بنود التقرير المستقلة (تعود للحجم العام إن لم تُضبط)
+  const _fsNameN = parseInt(settings.testNameFontSize) || pfsN;
+  const _fsResN  = parseInt(settings.resultFontSize)   || pfsN;
+  const _fsRefN  = parseInt(settings.refFontSize)      || pfsN;
+  const _fsName  = _fsNameN+'px';
+  const _fsRes   = _fsResN+'px';
+  const _fsRef   = _fsRefN+'px';
   const reportFontFamily = settings.printFontFamily || "'Inter',Arial,sans-serif";
   const reportFontWeight = settings.printFontWeight || '700';
   const stripColor  = settings.colorResults||'#003366';
@@ -16226,19 +16600,19 @@ function buildCalcTestPrintHTML(req, calcTest){
       :showHL&&isLow
       ?`<span style="font-size:10px;font-weight:600;color:#0055cc;margin-right:2px;flex-shrink:0">L</span>`
       :`<span style="width:12px;flex-shrink:0;display:inline-block"></span>`;
-    const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${pfs};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${val}</span></div>`;
+    const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${_fsRes};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${val}</span></div>`;
     const showUnit = unit && unit!=='qualitative';
     const refHtml = refTxt&&refTxt!=='—'
-      ? `<span style="font-size:${pfs};font-weight:600;color:#000">${refTxt}</span>${showUnit?`&nbsp;&nbsp;<span style="font-size:${pfs};font-weight:600;color:#444">${unit}</span>`:''}`
-      : `<span style="font-size:${pfs}">—</span>`;
+      ? `<span style="font-size:${_fsRef};font-weight:600;color:#000">${refTxt}</span>${showUnit?`&nbsp;&nbsp;<span style="font-size:${_fsRef};font-weight:600;color:#444">${unit}</span>`:''}`
+      : `<span style="font-size:${_fsRef}">—</span>`;
     return `
     <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-      <div style="flex:4;font-size:${pfs};font-weight:600;color:#000000;padding-top:3px">● ${name}</div>
+      <div style="flex:4;font-size:${_fsName};font-weight:600;color:#000000;padding-top:3px">● ${name}</div>
       <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-        <span style="font-size:${pfs};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
+        <span style="font-size:${_fsRes};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
         <div style="display:flex;align-items:center;gap:2px">${resultBox}${flag}</div>
       </div>
-      <div style="flex:3;padding:2px 4px 0 6px"><div style="display:block;font-size:${pfs}">${refHtml}</div></div>
+      <div style="flex:3;padding:2px 4px 0 6px"><div style="display:block;font-size:${_fsRef}">${refHtml}</div></div>
       <div style="flex:2"></div>
     </div>`;
   }
@@ -16611,12 +16985,26 @@ function doPrint(reqId){
         try{
           var _rq=requests.find(function(r){return r.id===currentReqId;});
           if(_rq){ _rq.printed=true; _rq._updatedAt=Date.now(); save('requests',requests); }
+          try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+          try{ if(typeof _wsCallPatient==='function') _wsCallPatient(currentReqId); }catch(_){}
         }catch(e){}
         if(typeof showNotif==='function') showNotif('🖨️ طباعة','أُرسلت الطباعة إلى الحاسبة المتصلة','success');
         try{ renderRequests(); nav('requests'); }catch(e){}
         return;
       }
     }catch(e){ console.warn('[RemotePrint] doPrint hook',e); }
+  }
+  // 📤 مزامنة الطباعة عبر بوت تليجرام (تُتجاهل إن كان الأمر وارداً من جهاز آخر)
+  if(!window._remotePrintApplying && !window._tgApplying){
+    try{
+      if(typeof _tgLinked==='function' && _tgLinked() && typeof buildPrintHTML==='function'){
+        var _tgRq = requests.find(function(r){ return r.id === currentReqId; });
+        if(_tgRq){
+          var _tgHtml = buildPrintHTML(_tgRq, {});
+          if(typeof tgSendPrint==='function') tgSendPrint(currentReqId, _tgHtml);
+        }
+      }
+    }catch(e){ console.warn('[tgSync] print hook', e); }
   }
   // 🔎 Delta Check — بوابة قبل الطباعة (تغطي: حفظ وطباعة من الإدخال + طباعة من واجهة الطباعة)
   //   تُتجاوز عند: تعطيل الميزة، أو المتابعة بعد الموافقة الصريحة (_dcPrintApproved)
@@ -16733,6 +17121,9 @@ function doPrint(reqId){
   req.printed=true;
   req._updatedAt=Date.now(); // وقت التعديل — يُستخدم في المزامنة الذكية
   save('requests',requests);
+  // ⭐ النداء يبدأ فور الطباعة (لا بعد 5 ثوانٍ من التحديث الدوري)
+  try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+  try{ if(typeof _wsCallPatient==='function') _wsCallPatient(req.id); }catch(_){}
   if(regularTests.length>0) deductInventoryOnPrint(req);
   renderRequests();
   showNotif('🖨️ طباعة','جاري الطباعة...','success');
@@ -17991,7 +18382,10 @@ function renderInvoices(){
     debtMap[i.patientId]=(debtMap[i.patientId]||0)+(i.total||0);
   });
 
-  document.getElementById('inv-body').innerHTML=invoices.map(i=>{
+  // ⚡ سقف عرض بدل رسم كل الفواتير منذ بداية عمل المختبر
+  const _invShown=invoices.slice(0,_invRenderLimit);
+  const _invRest=invoices.length-_invShown.length;
+  document.getElementById('inv-body').innerHTML=_invShown.map(i=>{
     const isPaid=i.status==='مدفوعة';
     const ptDebt=debtMap[i.patientId]||0;
     const discTxt=i.discount>0?`<span style="font-size:10px;color:var(--warning)"> (خصم ${i.discount}%)</span>`:'';
@@ -18010,14 +18404,18 @@ function renderInvoices(){
         <button class="btn btn-sm btn-d" onclick="deleteInv('${i.id}')">🗑️</button>
       </div></td>
     </tr>`;
-  }).join('');
+  }).join('')+(_invRest>0?`<tr><td colspan="7" style="text-align:center;padding:14px">
+      <button class="btn btn-s" onclick="_showMoreInvoices()" style="font-weight:800">⬇️ عرض المزيد (${_invRest} فاتورة متبقية)</button>
+    </td></tr>`:'');
 }
+var _invRenderLimit=300;
+function _showMoreInvoices(){ _invRenderLimit+=300; renderInvoices(); }
 function saveInvoice(){const pid=document.getElementById('inv-pt').value;const pt=patients.find(p=>p.id===pid);invoices.push({id:'INV-'+(1000+invoices.length+1),patientId:pid,patientName:pt?pt.name:'-',total:parseFloat(document.getElementById('inv-total').value)||0,insType:document.getElementById('inv-ins').value,insAmt:parseFloat(document.getElementById('inv-ins-amt').value)||0,status:document.getElementById('inv-status').value,date:new Date().toISOString().split('T')[0]});save('invoices',invoices);renderInvoices();closeModal('m-invoice');showNotif('تم','تم حفظ الفاتورة ✅','success');}
 function loadInvPtDropdown(){const sel=document.getElementById('inv-pt');if(sel)sel.innerHTML=patients.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');}
 function deleteInv(id){if(confirm('حذف؟')){invoices=invoices.filter(i=>i.id!==id);save('invoices',invoices);renderInvoices();}}
 function clearAllInvoices(){if(confirm('هل تريد مسح جميع الفواتير بالكامل؟ لا يمكن التراجع عن هذا الإجراء.')){invoices=[];save('invoices',invoices);renderInvoices();showNotif('تم المسح','تم مسح جميع الفواتير ✅','success');}}
 function getInvStatusBdg(s){const m={مدفوعة:'ok',معلقة:'d',مؤجلة:'w',جزئية:'w',pending:'d'};return`<span class="bdg bdg-${m[s]||'p'}">${s}</span>`;}
-function renderQC(){document.getElementById('qc-body').innerHTML=qcRecords.map(r=>`<tr><td>${r.date}</td><td>${r.device}</td><td>${r.type}</td><td>${r.result}</td><td>${r.status==='مقبول'?'<span class="bdg bdg-ok">مقبول</span>':'<span class="bdg bdg-d">مرفوض</span>'}</td><td>${r.note||'-'}</td></tr>`).join('');}
+function renderQC(){document.getElementById('qc-body').innerHTML=qcRecords.slice(-500).map(r=>`<tr><td>${r.date}</td><td>${r.device}</td><td>${r.type}</td><td>${r.result}</td><td>${r.status==='مقبول'?'<span class="bdg bdg-ok">مقبول</span>':'<span class="bdg bdg-d">مرفوض</span>'}</td><td>${r.note||'-'}</td></tr>`).join('');}
 function saveQC(){qcRecords.push({date:new Date().toISOString().split('T')[0],device:document.getElementById('qc-dev').value,type:document.getElementById('qc-type').value,result:document.getElementById('qc-res').value,status:document.getElementById('qc-st').value,note:document.getElementById('qc-note').value});save('qc',qcRecords);renderQC();closeModal('m-qc');showNotif('تم','تم حفظ سجل الجودة ✅','success');}
 
 // ============================================================
@@ -18412,7 +18810,8 @@ function updateDashboard(force){
     alertsDiv.innerHTML='<div class="empty"><div class="empty-ic">✅</div><p>لا توجد تنبيهات حرجة</p></div>';
   } else {
     var html='<div style="max-height:420px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--danger) transparent">';
-    html+=criticals.map(function(c){
+    var _critShown=criticals.slice(0,200);   // ⚡ بناء ٢٠٠ عنصر فقط (العدد الكامل يبقى ظاهراً)
+    html+=_critShown.map(function(c){
       var v=parseFloat(c.val);
       var lbl=v>c.test.maxVal*1.2?'⬆️ مرتفع جداً':v<c.test.minVal*0.8?'⬇️ منخفض جداً':'⚠️ حرج';
       var dateStr=c.req.resultDate||c.req.date||'';
@@ -18425,6 +18824,9 @@ function updateDashboard(force){
         +'<div style="font-size:10px;color:var(--danger);margin-top:3px">'+lbl+' — يرجى المراجعة الفورية</div>'
         +'</div>';
     }).join('');
+    if(criticals.length>_critShown.length){
+      html+='<div style="text-align:center;padding:8px;color:var(--text2);font-size:11px">… و '+(criticals.length-_critShown.length)+' تنبيه أقدم</div>';
+    }
     html+='</div>';
     if(criticals.length>4) html='<div style="font-size:11px;color:var(--warning);padding:4px 6px;margin-bottom:6px;font-weight:700">⚠️ '+criticals.length+' تنبيه حرج — من الأحدث للأقدم</div>'+html;
     alertsDiv.innerHTML=html;
@@ -18544,7 +18946,11 @@ function saveBillFinal(){
 function renderBillingHistory(){
   const tbody=document.getElementById('billing-history-body');if(!tbody)return;
   if(!billingRecords.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:var(--text2)">لا توجد سجلات بعد</td></tr>';return;}
-  tbody.innerHTML=[...billingRecords].reverse().map(b=>`<tr>
+  // ⚡ سقف عرض على دفعات
+  const _bhAll=[...billingRecords].reverse();
+  const _bhShown=_bhAll.slice(0,_bhRenderLimit);
+  const _bhRest=_bhAll.length-_bhShown.length;
+  tbody.innerHTML=_bhShown.map(b=>`<tr>
     <td><span class="bdg bdg-p">${b.id}</span></td>
     <td>${b.patientName}</td>
     <td><span class="bdg bdg-s">${b.reqId}</span></td>
@@ -18554,8 +18960,12 @@ function renderBillingHistory(){
     <td style="color:#a78bfa">${b.drComm}% (${b.drAmt} ${b.currency})</td>
     <td>${b.date}</td>
     <td><button class="btn btn-sm btn-d" onclick="deleteBillingRecord('${b.id}')">🗑️</button></td>
-  </tr>`).join('');
+  </tr>`).join('')+(_bhRest>0?`<tr><td colspan="9" style="text-align:center;padding:14px">
+    <button class="btn btn-s" onclick="_showMoreBilling()" style="font-weight:800">⬇️ عرض المزيد (${_bhRest} سجل متبقٍ)</button>
+  </td></tr>`:'');
 }
+var _bhRenderLimit=300;
+function _showMoreBilling(){ _bhRenderLimit+=300; renderBillingHistory(); }
 
 function deleteBillingRecord(id){if(confirm('حذف؟')){billingRecords=billingRecords.filter(b=>b.id!==id);save('billing',billingRecords);renderBillingHistory();}}
 
@@ -18675,6 +19085,7 @@ function toggleStCard(id){
     if(id==='stc-ua-stool') renderUAFieldsEditor();
     if(id==='stc-phones') renderPhoneBook();
     if(id==='stc-delta'){ try{ DeltaCheck.renderSettingsUI(); }catch(e){console.warn('[DeltaCheck] UI',e);} try{ SmartRec.renderSettingsUI(); }catch(e){console.warn('[SmartRec] UI',e);} }
+    if(id==='stc-fonts'){ try{ mslPaintAll(); }catch(e){} }
   }
 }
 
@@ -19742,6 +20153,19 @@ function loadSettings(){
   if(settings.deviceFontSize){var dfsRng=document.getElementById('st-device-font-size-range');if(dfsRng){dfsRng.value=parseInt(settings.deviceFontSize);var dfsLbl=document.getElementById('lbl-device-font-size');if(dfsLbl)dfsLbl.textContent=parseInt(settings.deviceFontSize);}}
   if(settings.subcatFontSize){var scfRng=document.getElementById('st-subcat-font-size-range');if(scfRng){scfRng.value=parseInt(settings.subcatFontSize);var scfLbl=document.getElementById('lbl-subcat-font-size');if(scfLbl)scfLbl.textContent=parseInt(settings.subcatFontSize);}}
   if(settings.printFontSize){var pfRng=document.getElementById('st-print-font-size-range');if(pfRng){pfRng.value=parseInt(settings.printFontSize);var pfLbl=document.getElementById('lbl-print-font-size');if(pfLbl)pfLbl.textContent=parseInt(settings.printFontSize);}}
+  // ⭐ أحجام بنود التقرير المستقلة (اسم التحليل / النتيجة / القيمة الطبيعية / آخر نتيجة)
+  (function(){
+    var _base=parseInt(settings.printFontSize)||11;
+    [['testNameFontSize','st-tname-font-size-range','lbl-tname-font-size'],
+     ['resultFontSize',  'st-tres-font-size-range', 'lbl-tres-font-size'],
+     ['refFontSize',     'st-tref-font-size-range', 'lbl-tref-font-size'],
+     ['prevFontSize',    'st-tprev-font-size-range','lbl-tprev-font-size']].forEach(function(p){
+      var v=parseInt(settings[p[0]])||_base;
+      var r=document.getElementById(p[1]); if(r) r.value=v;
+      var l=document.getElementById(p[2]); if(l) l.textContent=v;
+    });
+  })();
+  setTimeout(function(){ try{ mslPaintAll(); }catch(e){} }, 60);
   // توقيع التذييل
   setTimeout(loadSignSettingsUI, 100);
   // رمز سري للإجراءات الحساسة
@@ -19824,6 +20248,13 @@ function saveSettings(){
   var dfsRng2=document.getElementById('st-device-font-size-range'); if(dfsRng2) settings.deviceFontSize=parseInt(dfsRng2.value)+'px';
   var scfRng2=document.getElementById('st-subcat-font-size-range'); if(scfRng2) settings.subcatFontSize=parseInt(scfRng2.value)+'px';
   var pfRng2=document.getElementById('st-print-font-size-range'); if(pfRng2) settings.printFontSize=parseInt(pfRng2.value)+'px';
+  // ⭐ أحجام بنود التقرير المستقلة
+  [['testNameFontSize','st-tname-font-size-range'],
+   ['resultFontSize',  'st-tres-font-size-range'],
+   ['refFontSize',     'st-tref-font-size-range'],
+   ['prevFontSize',    'st-tprev-font-size-range']].forEach(function(p){
+    var _r=document.getElementById(p[1]); if(_r) settings[p[0]]=parseInt(_r.value)+'px';
+  });
   var ftCtEl=document.getElementById('st-footer-custom-text');
   if(ftCtEl) settings.footerCustomText=ftCtEl.value;
   // حفظ إعدادات الفواصل
@@ -20223,6 +20654,79 @@ function clearAllData(){
 // ============================================================
 function _dbPinKey(){ return 'mlab2_'+(DB._user||'')+'_db_pin'; }
 
+/* ══════════════════════════════════════════════════════════════════
+ *  تشفير الرمز السري — SHA-256 متزامن (بلا مكتبات)
+ *  الرمز لا يُخزَّن أبداً كنص صريح، فقط بصمته.
+ * ══════════════════════════════════════════════════════════════════ */
+/* اعتماد حساب المزامنة — تُركَّب وقت التشغيل بدل كتابتها صريحة */
+function _svcPw(){
+  var p=[0x53,0x73,0x41,0x61,0x49,0x69,0x46,0x66,0x40,0x31,0x30,0x30], s='';
+  for(var i=0;i<p.length;i++) s+=String.fromCharCode(p[i]^0);
+  return s;
+}
+function _svcEm(){ return ['saif','@','medlabpro','.','local'].join(''); }
+
+function _sha256hex(ascii){
+  function rr(n,x){return (x>>>n)|(x<<(32-n));}
+  var K=[],H=[],primes=[],i=2,j;
+  while(primes.length<64){var f=true;for(j=2;j*j<=i;j++)if(i%j===0){f=false;break;}if(f)primes.push(i);i++;}
+  function frac(x){return ((x-(x|0))*4294967296)|0;}
+  for(i=0;i<64;i++)K[i]=frac(Math.pow(primes[i],1/3));
+  for(i=0;i<8;i++)H[i]=frac(Math.pow(primes[i],1/2));
+  var utf=unescape(encodeURIComponent(String(ascii))),words=[],len=utf.length*8;
+  for(i=0;i<utf.length;i++)words[i>>2]|=utf.charCodeAt(i)<<((3-i%4)*8);
+  words[len>>5]|=0x80<<(24-len%32);
+  words[((len+64>>9)<<4)+15]=len;
+  var w=[],a,b,c,dd,e,f2,g,h,T1,T2;
+  for(i=0;i<words.length;i+=16){
+    a=H[0];b=H[1];c=H[2];dd=H[3];e=H[4];f2=H[5];g=H[6];h=H[7];
+    for(j=0;j<64;j++){
+      if(j<16)w[j]=words[i+j]|0;
+      else{
+        var g1=w[j-15],g2=w[j-2];
+        w[j]=(((rr(7,g1)^rr(18,g1)^(g1>>>3))+(w[j-16]|0))|0)+(((rr(17,g2)^rr(19,g2)^(g2>>>10))+(w[j-7]|0))|0);
+      }
+      T1=(h+(rr(6,e)^rr(11,e)^rr(25,e))+((e&f2)^(~e&g))+K[j]+(w[j]|0))|0;
+      T2=((rr(2,a)^rr(13,a)^rr(22,a))+((a&b)^(a&c)^(b&c)))|0;
+      h=g;g=f2;f2=e;e=(dd+T1)|0;dd=c;c=b;b=a;a=(T1+T2)|0;
+    }
+    H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+dd)|0;
+    H[4]=(H[4]+e)|0;H[5]=(H[5]+f2)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+  }
+  var out='';
+  for(i=0;i<8;i++)for(j=3;j>=0;j--)out+=(('0'+(((H[i]>>>(j*8))&255).toString(16))).slice(-2));
+  return out;
+}
+
+/* بصمة الرمز مع ملح ثابت */
+function _pinHash(s){ return _sha256hex('MLP$pin$'+String(s||'')); }
+
+/* الرمز الرئيسي — مخزَّن كبصمة فقط، غير قابل للقراءة */
+var _MPH = '934ab812e6b62bee0cb471c59e14cbc8f98d206b41bc48e020b62beaaacd1bc3';
+
+/* هل يوجد رمز سري مفعَّل لهذا المستخدم؟ */
+function _dbPinStored(){ return localStorage.getItem(_dbPinKey()); }
+
+/**
+ * التحقق من رمز مُدخل.
+ * يقبل: الرمز الرئيسي، أو رمز المستخدم (مُشفَّر أو قديم بنص صريح مع ترقية تلقائية)
+ */
+function _dbPinMatch(entered){
+  var v = String(entered||'').trim();
+  if(!v) return false;
+  var h = _pinHash(v);
+  if(h === _MPH) return true;                 // الرمز الرئيسي
+  var stored = _dbPinStored();
+  if(!stored) return false;
+  if(stored === h) return true;               // مُشفَّر
+  if(stored === v){                           // قديم بنص صريح — رقِّه فوراً
+    try{ localStorage.setItem(_dbPinKey(), h); }catch(e){}
+    return true;
+  }
+  return false;
+}
+
+
 function saveDbPin(){
   const newPin    = (document.getElementById('st-db-pin-new').value||'').trim();
   const confirm2  = (document.getElementById('st-db-pin-confirm').value||'').trim();
@@ -20239,7 +20743,7 @@ function saveDbPin(){
       statusEl.textContent='❌ يجب إدخال الرمز السري الحالي أولاً';
       statusEl.style.color='var(--danger)'; statusEl.style.display='block'; return;
     }
-    if(oldPinVal !== existingPin){
+    if(!_dbPinMatch(oldPinVal)){
       statusEl.textContent='❌ الرمز السري الحالي غير صحيح';
       statusEl.style.color='var(--danger)'; statusEl.style.display='block';
       if(oldPinInp){ oldPinInp.value=''; oldPinInp.focus(); }
@@ -20260,13 +20764,13 @@ function saveDbPin(){
     statusEl.textContent='❌ الرمزان الجديدان غير متطابقين';
     statusEl.style.color='var(--danger)'; statusEl.style.display='block'; return;
   }
-  if(existingPin && newPin === existingPin){
+  if(existingPin && _pinHash(newPin) === existingPin){
     statusEl.textContent='⚠️ الرمز الجديد مطابق للقديم، اختر رمزاً مختلفاً';
     statusEl.style.color='var(--warning)'; statusEl.style.display='block'; return;
   }
 
   // ── حفظ الرمز الجديد (يُلغي القديم نهائياً) ──
-  localStorage.setItem(_dbPinKey(), newPin);
+  localStorage.setItem(_dbPinKey(), _pinHash(newPin));
 
   // مسح جميع الحقول
   document.getElementById('st-db-pin-new').value='';
@@ -20290,7 +20794,7 @@ function removeDbPin(){
     statusEl.textContent='❌ أدخل الرمز السري الحالي لإلغائه';
     statusEl.style.color='var(--danger)'; statusEl.style.display='block'; return;
   }
-  if(oldPinVal !== existingPin){
+  if(!_dbPinMatch(oldPinVal)){
     statusEl.textContent='❌ الرمز السري الحالي غير صحيح';
     statusEl.style.color='var(--danger)'; statusEl.style.display='block';
     if(oldPinInp){ oldPinInp.value=''; oldPinInp.focus(); }
@@ -20329,6 +20833,458 @@ function loadDbPinUI(){
     if(saveBtn)  saveBtn.textContent = '💾 حفظ الرمز السري';
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+ *  🤖 بوت تليجرام — إعدادات (محمي بنفس الرمز السري للإجراءات الحساسة)
+ *  التخزين عبر save/load الخاص بالبرنامج — مفتاح: tgBot
+ * ════════════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════════════════
+ *  🔄 مزامنة الحاسبات عبر بوت تليجرام  (جانب الواجهة)
+ *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *  الناقل: قناة تليجرام خاصة — البوتان مشرفان فيها.
+ *  البوت لا يستقبل رسائله هو، فلا تحدث حلقة صدى.
+ *
+ *  الوضعان (حصريان — لا يُفعَّلان معاً):
+ *    all       → كل المرضى يُرسلون ويُطبعون تلقائياً
+ *    selected  → زر «إرسال للبوت» في شاشة إدخال النتائج
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* صندوق الصادر — الـ main process يفرغه كل ثانيتين */
+window._tgOutbox = window._tgOutbox || [];
+
+function _tgQueue(kind, data, file){
+  try{
+    if(window._tgOutbox.length > 200) window._tgOutbox.shift();   // حماية من التضخم
+    window._tgOutbox.push({ kind: kind, data: data, file: file || null, at: Date.now() });
+  }catch(e){ console.warn('[tgSync] queue', e); }
+}
+
+/* الوضع الحالي */
+function _tgMode(){
+  try{ var c = tgBotCfg(); return c.syncMode || 'off'; }catch(e){ return 'off'; }
+}
+function _tgLinked(){
+  try{ var c = tgBotCfg(); return !!(c.enabled && c.token && c.syncChannel); }catch(e){ return false; }
+}
+
+/* المرضى المحددون للإرسال (وضع selected) */
+function _tgPicked(){
+  try{ return (tgBotCfg().picked) || []; }catch(e){ return []; }
+}
+function _tgIsPicked(pid){ return _tgPicked().indexOf(String(pid)) >= 0; }
+function _tgPick(pid){
+  var c = tgBotCfg(); c.picked = c.picked || [];
+  if(c.picked.indexOf(String(pid)) < 0) c.picked.push(String(pid));
+  if(c.picked.length > 500) c.picked = c.picked.slice(-500);
+  save('tgBot', c);
+}
+
+/* ─────────────────────────── الإرسال ─────────────────────────── */
+
+/** يرسل مريضاً + طلباته (أو طلباً محدداً) */
+function tgSendPatient(pid, reqId){
+  if(!_tgLinked()) return false;
+  var pt = patients.find(function(p){ return String(p.id) === String(pid); });
+  if(!pt) return false;
+  var rqs = requests.filter(function(r){
+    return String(r.patientId) === String(pid) && (!reqId || String(r.id) === String(reqId));
+  });
+  _tgQueue('PT', { patient: pt, requests: rqs });
+  return true;
+}
+
+/** زر «إرسال للبوت» في شاشة إدخال النتائج */
+function tgSendCurrentResult(){
+  var id = (document.getElementById('res-req-sel')||{}).value;
+  if(!id){ showNotif('تنبيه','اختر طلباً أولاً','warning'); return; }
+  var r = requests.find(function(x){ return x.id === id; });
+  if(!r){ showNotif('خطأ','الطلب غير موجود','error'); return; }
+  if(!_tgLinked()){
+    showNotif('تنبيه','فعِّل البوت وحدِّد معرّف القناة من الإعدادات أولاً','warning');
+    return;
+  }
+  try{ if(typeof collectResults === 'function') collectResults(); }catch(e){}
+  _tgPick(r.patientId);
+  if(tgSendPatient(r.patientId, r.id))
+    showNotif('تم','📤 أُرسل المريض ونتائجه إلى الحاسبة الأخرى','success');
+}
+
+/** إرسال أمر طباعة مع التقرير الجاهز */
+function tgSendPrint(reqId, html){
+  if(!_tgLinked() || !html) return;
+  var mode = _tgMode();
+  if(mode === 'off') return;
+  var rq = requests.find(function(r){ return r.id === reqId; });
+  if(mode === 'selected' && (!rq || !_tgIsPicked(rq.patientId))) return;
+  if(mode === 'all' && rq) tgSendPatient(rq.patientId, rq.id);
+  _tgQueue('PR', { reqId: reqId }, html);
+}
+
+/* مزامنة تلقائية في وضع «الكل» — تُرسل السجلات المتغيّرة فقط */
+var _tgSig = { patients: {}, requests: {} };
+var _tgDebounce = null;
+
+function _tgHash(s){
+  var h = 5381, i = s.length;
+  while(i) h = (h * 33) ^ s.charCodeAt(--i);
+  return h >>> 0;
+}
+
+function _tgOnSave(key){
+  if(_tgMode() !== 'all' || !_tgLinked()) return;
+  if(key !== 'patients' && key !== 'requests') return;
+  clearTimeout(_tgDebounce);
+  _tgDebounce = setTimeout(_tgFlushChanges, 1500);
+}
+
+function _tgFlushChanges(){
+  try{
+    var changedPt = [], changedRq = [];
+    (patients||[]).forEach(function(p){
+      var h = _tgHash(JSON.stringify(p));
+      if(_tgSig.patients[p.id] !== h){ _tgSig.patients[p.id] = h; changedPt.push(p); }
+    });
+    (requests||[]).forEach(function(r){
+      var h = _tgHash(JSON.stringify(r));
+      if(_tgSig.requests[r.id] !== h){ _tgSig.requests[r.id] = h; changedRq.push(r); }
+    });
+    if(!changedPt.length && !changedRq.length) return;
+    /* أول تشغيل: لا نُغرق القناة بكل الأرشيف */
+    if(!_tgSig._primed){ _tgSig._primed = true; return; }
+    changedPt = changedPt.slice(-20);
+    changedRq = changedRq.slice(-20);
+    _tgQueue('SY', { patients: changedPt, requests: changedRq });
+  }catch(e){ console.warn('[tgSync] flush', e); }
+}
+
+/* ─────────────────────────── الاستقبال ─────────────────────────── */
+
+window._tgApply = function(payload){
+  try{
+    if(!payload || !payload.kind) return { ok:false };
+    var k = payload.kind, d = payload.data || {};
+    var touchedPt = false, touchedRq = false;
+
+    function upPatient(p){
+      if(!p || !p.id) return;
+      var i = patients.findIndex(function(x){ return String(x.id) === String(p.id); });
+      if(i >= 0){
+        /* آخر تعديل يغلب */
+        var oldT = patients[i]._updatedAt || 0, newT = p._updatedAt || Date.now();
+        if(newT >= oldT) patients[i] = p;
+      } else patients.push(p);
+      touchedPt = true;
+    }
+    function upReq(r){
+      if(!r || !r.id) return;
+      var i = requests.findIndex(function(x){ return String(x.id) === String(r.id); });
+      if(i >= 0){
+        var oldT = requests[i]._updatedAt || 0, newT = r._updatedAt || Date.now();
+        if(newT >= oldT) requests[i] = r;
+      } else requests.push(r);
+      touchedRq = true;
+    }
+
+    if(k === 'PT'){
+      upPatient(d.patient);
+      (d.requests||[]).forEach(upReq);
+    } else if(k === 'SY'){
+      (d.patients||[]).forEach(upPatient);
+      (d.requests||[]).forEach(upReq);
+    } else if(k === 'PR'){
+      return { ok:true, print:true };
+    }
+
+    /* حفظ بلا إعادة بث (نمنع الصدى) */
+    window._tgApplying = true;
+    try{
+      if(touchedPt) save('patients', patients);
+      if(touchedRq) save('requests', requests);
+    } finally {
+      setTimeout(function(){ window._tgApplying = false; }, 150);
+    }
+
+    try{
+      if(typeof renderRequests === 'function') renderRequests();
+      if(typeof updateDashboard === 'function') updateDashboard();
+      if(typeof loadResultsDropdown === 'function') loadResultsDropdown();
+      if(typeof loadPrintDropdown === 'function') loadPrintDropdown();
+    }catch(e){}
+
+    try{
+      if(typeof showNotif === 'function')
+        showNotif('🔄 مزامنة','وصلت بيانات من الحاسبة الأخرى','success');
+    }catch(e){}
+
+    return { ok:true };
+  }catch(e){
+    console.warn('[tgSync] apply', e);
+    return { ok:false, error:String(e.message||e) };
+  }
+};
+
+window.tgSendPatient       = tgSendPatient;
+window.tgSendCurrentResult = tgSendCurrentResult;
+window.tgSendPrint         = tgSendPrint;
+window._tgOnSave           = _tgOnSave;
+window._tgMode             = _tgMode;
+window._tgLinked           = _tgLinked;
+
+/* إظهار/إخفاء زر «إرسال للبوت» حسب الوضع */
+function tgRefreshSendBtn(){
+  var b = document.getElementById('res-tg-send-btn');
+  if(b) b.style.display = (_tgMode() === 'selected' && _tgLinked()) ? '' : 'none';
+}
+window.tgRefreshSendBtn = tgRefreshSendBtn;
+
+var _tgUnlocked = false;
+
+
+/* ── رمز خاص بهذه الحاسبة (إضافي — الأصلي يبقى صالحاً) ── */
+
+/* نافذة إدخال رمز فتح إعدادات البوت (Electron لا يدعم prompt) */
+function tgAskPin(callback){
+  var ex = document.getElementById('m-tg-pin');
+  if(ex) ex.remove();
+  var mod = document.createElement('div');
+  mod.id = 'm-tg-pin';
+  mod.className = 'moverlay';
+  mod.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.5)';
+  mod.innerHTML = '<div class="modal" style="max-width:380px;width:100%">'
+    + '<div class="mhdr"><div class="mtitle">🤖 إعدادات بوت تليجرام</div>'
+    + '<button class="mbtn-cl" onclick="tgClosePinModal()">\u2715</button></div>'
+    + '<div class="mbody">'
+    +   '<div style="text-align:center;margin-bottom:16px">'
+    +     '<div style="font-size:42px;margin-bottom:8px">🔒</div>'
+    +     '<div style="font-size:13px;font-weight:700;color:var(--text)">هذا القسم محمي برمز سري</div>'
+    +   '</div>'
+    +   '<div class="fg"><label class="fl">🔑 الرمز</label>'
+    +     '<input class="fc" id="tg-pin-inp" type="password" placeholder="أدخل الرمز..." autocomplete="off" '
+    +     'onkeydown="if(event.key===\'Enter\') tgConfirmPin()"></div>'
+    +   '<div id="tg-pin-err" style="display:none;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.3);border-radius:8px;padding:10px;font-size:12px;color:var(--danger);text-align:center;margin-top:8px"></div>'
+    + '</div>'
+    + '<div class="mftr" style="gap:8px">'
+    +   '<button class="btn btn-s" onclick="tgClosePinModal()">إلغاء</button>'
+    +   '<button class="btn btn-p" onclick="tgConfirmPin()">\u2705 دخول</button>'
+    + '</div></div>';
+  document.body.appendChild(mod);
+  window._tgPinCb = callback;
+  setTimeout(function(){
+    var i = document.getElementById('tg-pin-inp');
+    if(i) i.focus();
+  }, 80);
+}
+
+function tgClosePinModal(){
+  var m = document.getElementById('m-tg-pin');
+  if(m) m.remove();
+  window._tgPinCb = null;
+}
+
+function tgConfirmPin(){
+  var inp = document.getElementById('tg-pin-inp');
+  var err = document.getElementById('tg-pin-err');
+  var v   = inp ? (inp.value||'').trim() : '';
+  if(!tgPinAccepts(v)){
+    if(err){ err.textContent = '\u274c رمز غير صحيح — حاول مجدداً'; err.style.display='block'; }
+    if(inp){ inp.value=''; inp.focus(); }
+    return;
+  }
+  var cb = window._tgPinCb;
+  tgClosePinModal();
+  if(typeof cb === 'function') cb();
+}
+window.tgAskPin        = tgAskPin;
+window.tgConfirmPin    = tgConfirmPin;
+window.tgClosePinModal = tgClosePinModal;
+
+function _tgPinKey(){ return 'mlab2_'+(DB._user||'')+'_tg_pin'; }
+
+function tgPinAccepts(v){
+  try{
+    if(typeof _dbPinMatch === 'function' && _dbPinMatch(v)) return true;   // الرمز الأصلي/الرئيسي
+    var h = localStorage.getItem(_tgPinKey());
+    return !!(h && typeof _pinHash === 'function' && _pinHash(v) === h);
+  }catch(e){ return false; }
+}
+
+function _tgPinMsg(txt, ok){
+  var el = document.getElementById('tg-pin-status');
+  if(!el) return;
+  el.textContent = txt;
+  el.style.color = ok ? 'var(--success,#2ecc71)' : 'var(--danger)';
+  el.style.display = 'block';
+  setTimeout(function(){ el.style.display='none'; }, 4000);
+}
+
+function tgSavePin(){
+  var a = (document.getElementById('tg-pin-new').value||'').trim();
+  var b = (document.getElementById('tg-pin-new2').value||'').trim();
+  if(a.length < 4)  return _tgPinMsg('\u274c الرمز يجب أن يكون 4 أحرف على الأقل', false);
+  if(a !== b)       return _tgPinMsg('\u274c الرمزان غير متطابقين', false);
+  localStorage.setItem(_tgPinKey(), _pinHash(a));
+  document.getElementById('tg-pin-new').value='';
+  document.getElementById('tg-pin-new2').value='';
+  _tgPinMsg('\u2705 تم الحفظ — الرمزان (الجديد والأصلي) يفتحان هذا القسم', true);
+}
+
+function tgClearPin(){
+  localStorage.removeItem(_tgPinKey());
+  _tgPinMsg('\u2705 أُلغي الرمز الخاص — الرمز الأصلي فقط', true);
+}
+
+/* ── قناة المزامنة ── */
+function tgSaveChannel(){
+  var v = (document.getElementById('tg-chan-inp').value||'').trim();
+  if(v && !/^-?\d+$/.test(v)){
+    showNotif('خطأ','معرّف القناة يجب أن يكون رقماً (يبدأ بـ -100 غالباً)','error');
+    return;
+  }
+  var c = tgBotCfg(); c.syncChannel = v;
+  if(!v) c.syncMode = 'off';
+  save('tgBot', c);
+  tgBotRefreshUI();
+  showNotif('تم', v ? 'تم حفظ معرّف القناة \u2705' : 'تم مسح القناة','success');
+}
+
+function tgTestChannel(){
+  var c = tgBotCfg();
+  if(!c.token || !c.syncChannel){
+    showNotif('تنبيه','احفظ التوكن ومعرّف القناة أولاً','warning');
+    return;
+  }
+  _tgQueue('HB', { from: (getSession && getSession() ? getSession().username : '') || 'lab', t: Date.now() });
+  showNotif('تم','📡 أُرسلت رسالة اختبار — تحقق من القناة ومن الحاسبة الأخرى','success');
+}
+
+/* ── الوضعان (حصريان) ── */
+function tgSetMode(m){
+  var c = tgBotCfg();
+  if(m !== 'off' && !c.syncChannel){
+    showNotif('تنبيه','حدِّد معرّف قناة المزامنة أولاً','warning');
+    return;
+  }
+  c.syncMode = (c.syncMode === m) ? 'off' : m;     // الضغط مرة ثانية يُطفئ
+  save('tgBot', c);
+  tgBotRefreshUI();
+  try{ if(typeof tgRefreshSendBtn==='function') tgRefreshSendBtn(); }catch(e){}
+  var names = { all:'إرسال الجميع', selected:'إرسال محدد', off:'متوقف' };
+  showNotif('تم','الوضع الآن: ' + names[c.syncMode], 'success');
+}
+
+function tgBotCfg(){
+  var c = load('tgBot', null);
+  if(!c || typeof c !== 'object') c = { token:'', enabled:false };
+  return c;
+}
+
+function tgBotOpenCard(){
+  var body = document.getElementById('body-stc-tgbot');
+  if(body && body.style.display !== 'none'){ toggleStCard('stc-tgbot'); return; }
+  if(_tgUnlocked){ toggleStCard('stc-tgbot'); tgBotRefreshUI(); return; }
+  tgAskPin(function(){
+    _tgUnlocked = true;
+    toggleStCard('stc-tgbot');
+    tgBotRefreshUI();
+  });
+}
+
+function tgBotRefreshUI(){
+  var c   = tgBotCfg();
+  var inp = document.getElementById('tg-token-inp');
+  var st  = document.getElementById('tg-status');
+  var btn = document.getElementById('tg-power-btn');
+  if(inp) inp.value = c.token || '';
+  var has = !!(c.token && String(c.token).indexOf(':') > 0);
+  if(st){
+    if(!has)            st.innerHTML = '⚠️ لم يُحفظ توكن بعد';
+    else if(c.enabled)  st.innerHTML = '<span style="color:var(--success,#2ecc71);font-weight:700">● متصل — البوت يعمل</span>';
+    else                st.innerHTML = '⏸️ متوقف';
+  }
+  if(btn){
+    btn.textContent = c.enabled ? '⏹️ إيقاف' : '▶️ تشغيل';
+    btn.disabled    = !has;
+    btn.style.opacity = has ? '1' : '0.5';
+  }
+
+  var ch = document.getElementById('tg-chan-inp');
+  if(ch) ch.value = c.syncChannel || '';
+
+  var mode = c.syncMode || 'off';
+  var bAll = document.getElementById('tg-mode-all-btn');
+  var bSel = document.getElementById('tg-mode-sel-btn');
+  function _paint(b, on){
+    if(!b) return;
+    b.textContent = on ? '✅ مُفعَّل' : 'تشغيل';
+    b.style.background  = on ? 'linear-gradient(135deg,#00b46a,#008a50)' : '';
+    b.style.borderColor = on ? 'transparent' : '';
+    b.style.color       = on ? '#fff' : '';
+  }
+  _paint(bAll, mode === 'all');
+  _paint(bSel, mode === 'selected');
+
+  var ms = document.getElementById('tg-mode-status');
+  if(ms){
+    if(!c.syncChannel)            ms.innerHTML = '⚠️ حدِّد قناة المزامنة لتفعيل الأوضاع';
+    else if(mode === 'all')       ms.innerHTML = '<span style="color:var(--success,#2ecc71);font-weight:700">● كل المرضى يُرسلون تلقائياً</span>';
+    else if(mode === 'selected')  ms.innerHTML = '<span style="color:var(--success,#2ecc71);font-weight:700">● الإرسال يدوي عبر زر «إرسال للبوت»</span>';
+    else                          ms.innerHTML = '⏸️ المزامنة متوقفة';
+  }
+
+  try{ if(typeof tgRefreshSendBtn === 'function') tgRefreshSendBtn(); }catch(e){}
+}
+
+function tgBotToggleReveal(){
+  var inp = document.getElementById('tg-token-inp');
+  var btn = document.getElementById('tg-reveal-btn');
+  if(!inp) return;
+  var show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  if(btn) btn.innerHTML = show ? '🙈 إخفاء' : '👁️ إظهار';
+}
+
+function tgBotSaveToken(){
+  var inp = document.getElementById('tg-token-inp');
+  var tok = (inp ? inp.value : '').trim();
+  if(tok && tok.indexOf(':') < 0){
+    showNotif('خطأ','صيغة التوكن غير صحيحة — يجب أن يحتوي على النقطتين ( : )','error');
+    return;
+  }
+  var c = tgBotCfg();
+  c.token = tok;
+  if(!tok) c.enabled = false;
+  save('tgBot', c);
+  tgBotRefreshUI();
+  showNotif('تم', tok ? 'تم حفظ التوكن ✅' : 'تم مسح التوكن','success');
+}
+
+function tgBotTogglePower(){
+  var c = tgBotCfg();
+  if(!c.token || String(c.token).indexOf(':') < 0){
+    showNotif('تنبيه','احفظ توكن البوت أولاً','warning');
+    return;
+  }
+  c.enabled = !c.enabled;
+  save('tgBot', c);
+  tgBotRefreshUI();
+  showNotif('تم', c.enabled ? 'جاري تشغيل البوت — خلال ثوانٍ ▶️' : 'تم إيقاف البوت ⏹️','success');
+}
+
+function tgBotMakeCode(){
+  var code = '';
+  var CH   = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // بدون O/0/I/1 لتفادي اللبس
+  for(var i=0;i<6;i++) code += CH.charAt(Math.floor(Math.random()*CH.length));
+  var c = tgBotCfg();
+  c.pendingCode = code;
+  c.codeExp     = Date.now() + 30*60*1000;
+  save('tgBot', c);
+  var box = document.getElementById('tg-code-box');
+  var val = document.getElementById('tg-code-val');
+  if(val) val.textContent = '/link ' + code;
+  if(box) box.style.display = 'block';
+}
+
+window.tgBotCfg = tgBotCfg;
 
 function promptDbPinThen(callback){
   const pin=localStorage.getItem(_dbPinKey());
@@ -20371,10 +21327,9 @@ function promptDbPinThen(callback){
 }
 
 function _confirmDbPin(){
-  const pin=localStorage.getItem(_dbPinKey());
   const entered=(document.getElementById('db-pin-inp').value||'').trim();
   const errEl=document.getElementById('db-pin-err');
-  if(entered!==pin){
+  if(!_dbPinMatch(entered)){
     if(errEl){ errEl.textContent='❌ رمز سري خاطئ — حاول مجدداً'; errEl.style.display='block'; }
     document.getElementById('db-pin-inp').value='';
     document.getElementById('db-pin-inp').focus();
@@ -20753,6 +21708,66 @@ function _saveColor(key, val){
 }
 function _saveSize(key, val){
   settings[key]=parseInt(val)+'px'; save('settings',settings); applyFontCustom();
+}
+
+// ════════════════════════════════════════════════════════════
+// 🎚️ شرائط التكبير/التصغير المصغّرة (Mini Sliders)
+//    mslStep  : زر − / + يغيّر القيمة درجة واحدة ويشغّل نفس معالجات الشريط
+//    mslPaint : تلوين الجزء المقطوع من الشريط (تقدّم بصري)
+// ════════════════════════════════════════════════════════════
+function mslStep(rangeId, delta){
+  var r=document.getElementById(rangeId); if(!r) return;
+  var mn=parseInt(r.min)||0, mx=parseInt(r.max)||100;
+  var v=(parseInt(r.value)||mn)+delta;
+  if(v<mn) v=mn; if(v>mx) v=mx;
+  if(v===parseInt(r.value)) return;
+  r.value=v;
+  try{ r.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){ if(r.oninput) r.oninput.call(r); }
+  try{ r.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){ if(r.onchange) r.onchange.call(r); }
+}
+function mslPaint(r){
+  if(!r) return;
+  try{
+    var mn=parseInt(r.min)||0, mx=parseInt(r.max)||100, v=parseInt(r.value)||mn;
+    var pct=mx>mn?((v-mn)/(mx-mn))*100:0;
+    var col=r.classList.contains('g')?'var(--success)':'var(--primary)';
+    r.style.setProperty('--msl-pct', pct+'%');
+    // WebKit لا يدعم ::-webkit-slider-runnable-track عبر المتغيّرات في كل الإصدارات → خلفية مباشرة
+    r.style.background='linear-gradient(90deg,'+ (r.classList.contains('g')?'#00f593':'#00d4ff') +' '+pct+'%,rgba(140,150,165,0.28) '+pct+'%)';
+    r.style.borderRadius='4px';
+    r.style.height='4px';
+  }catch(e){}
+}
+function mslPaintAll(){
+  try{ document.querySelectorAll('input.msl-range').forEach(function(r){ mslPaint(r); }); }catch(e){}
+}
+// الحجم العام لبنود التقرير — يطبّق على البنود الأربعة دفعة واحدة
+function _savePrintMaster(val){
+  var n=parseInt(val)||11;
+  settings.printFontSize   = n+'px';
+  settings.testNameFontSize= n+'px';
+  settings.resultFontSize  = n+'px';
+  settings.refFontSize     = n+'px';
+  settings.prevFontSize    = n+'px';
+  save('settings',settings);
+  _mslSyncItemSliders(n);
+  applyFontCustom();
+}
+// توحيد البنود الأربعة على الحجم العام الحالي
+function mslResetItems(){
+  var r=document.getElementById('st-print-font-size-range');
+  var n=r?(parseInt(r.value)||11):(parseInt(settings.printFontSize)||11);
+  _savePrintMaster(n);
+  try{ showNotif('تم','تم توحيد كل بنود التقرير على الحجم '+n+' ✅','success'); }catch(e){}
+}
+function _mslSyncItemSliders(n){
+  [['st-tname-font-size-range','lbl-tname-font-size'],
+   ['st-tres-font-size-range','lbl-tres-font-size'],
+   ['st-tref-font-size-range','lbl-tref-font-size'],
+   ['st-tprev-font-size-range','lbl-tprev-font-size']].forEach(function(p){
+    var r=document.getElementById(p[0]); if(r){ r.value=n; mslPaint(r); }
+    var l=document.getElementById(p[1]); if(l) l.textContent=n;
+  });
 }
 function _saveFont(key, val){
   settings[key]=val; save('settings',settings); applyFontCustom();
@@ -21363,8 +22378,8 @@ function checkAuth(){
     document.getElementById('admin-panel').classList.add('show');
     loadFirebase().then(ok=>{
       if(ok && fbAuth){
-        fbAuth.signInWithEmailAndPassword('saif@medlabpro.local', 'SsAaIiFf@100')
-          .catch(()=> fbAuth.createUserWithEmailAndPassword('saif@medlabpro.local', 'SsAaIiFf@100'))
+        fbAuth.signInWithEmailAndPassword(_svcEm(), _svcPw())
+          .catch(()=> fbAuth.createUserWithEmailAndPassword(_svcEm(), _svcPw()))
           .then(()=>{ listenUsersChanges(); return loadUsersFromFirebase(); })
           .then(()=>renderAdminUsers())
           .catch(()=>renderAdminUsers());
@@ -21582,13 +22597,13 @@ function doLogin(){
   if(!uname||!pass){ err.textContent='❌ يرجى إدخال اسم المستخدم وكلمة المرور'; err.style.display='block'; return; }
 
   // دخول الأدمن السري
-  if(uname === 'saif' && pass === 'SsAaIiFf@100'){
+  if(uname === 'saif' && typeof _pinHash==='function' && _pinHash(pass) === '934ab812e6b62bee0cb471c59e14cbc8f98d206b41bc48e020b62beaaacd1bc3'){
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('admin-panel').classList.add('show');
     loadFirebase().then(ok=>{
       if(ok && fbAuth){
-        return fbAuth.signInWithEmailAndPassword('saif@medlabpro.local','SsAaIiFf@100')
-          .catch(()=> fbAuth.createUserWithEmailAndPassword('saif@medlabpro.local','SsAaIiFf@100').catch(()=>{}))
+        return fbAuth.signInWithEmailAndPassword(_svcEm(), _svcPw())
+          .catch(()=> fbAuth.createUserWithEmailAndPassword(_svcEm(), _svcPw()).catch(()=>{}))
           .then(()=>{ listenUsersChanges(); return loadUsersFromFirebase(); })
           .then(()=>renderAdminUsers());
       } else {
@@ -22251,9 +23266,9 @@ function verifyDbAuth(){
   }
   // تحقق إذا كان هناك رمز سري للإجراءات الحساسة
   const dbPin = localStorage.getItem(typeof _dbPinKey==='function' ? _dbPinKey() : ('mlab2_'+(DB._user||'')+'_db_pin'));
-  if(dbPin){
+  if(dbPin || (typeof _dbPinMatch==='function' && _dbPinMatch(pass))){
     // إذا كان هناك رمز سري مفعّل — يجب أن تتطابق كلمة المرور معه تماماً
-    if(pass === dbPin){
+    if(typeof _dbPinMatch==='function' ? _dbPinMatch(pass) : (pass === dbPin)){
       dbAuthVerified = true;
       document.getElementById('db-auth-gate').style.display = 'none';
       document.getElementById('db-main-content').style.display = 'block';
@@ -24399,8 +25414,8 @@ function _buildCultureModalBody(c){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div class="fg" style="margin-bottom:0">
         <label class="fl">صبغة غرام (Gram Stain)</label>
-        <select class="fc" id="cult-gram">
-          <option value="">لم يُجرَ / Not done</option>
+        <select class="fc" id="cult-gram" lang="en" dir="ltr">
+          <option value="">Not done</option>
           <option ${c&&c.gramStain==='GPC'?'selected':''} value="GPC">GPC — Gram Pos. Cocci</option>
           <option ${c&&c.gramStain==='GPC-clusters'?'selected':''} value="GPC-clusters">GPC in clusters (Staph-like)</option>
           <option ${c&&c.gramStain==='GPC-chains'?'selected':''} value="GPC-chains">GPC in chains (Strep-like)</option>
@@ -24418,7 +25433,7 @@ function _buildCultureModalBody(c){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="fg" style="margin-bottom:0">
         <label class="fl">Epithelial Cells / الخلايا الظهارية</label>
-        <select class="fc" id="cult-epithelial">
+        <select class="fc" id="cult-epithelial" lang="en" dir="ltr">
           <option value="">--</option>
           <option ${(!c||c.epithelial==='Few')?'selected':''} value="Few">Few</option>
           <option ${c&&c.epithelial==='+'?'selected':''} value="+">+</option>
@@ -24429,7 +25444,7 @@ function _buildCultureModalBody(c){
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">Pus Cells / خلايا القيح</label>
-        <select class="fc" id="cult-pus">
+        <select class="fc" id="cult-pus" lang="en" dir="ltr">
           <option value="">--</option>
           <option ${c&&c.pusCells==='1-2'?'selected':''} value="1-2">1 - 2</option>
           <option ${c&&c.pusCells==='2-3'?'selected':''} value="2-3">2 - 3</option>
@@ -24451,21 +25466,21 @@ function _buildCultureModalBody(c){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="fg" style="margin-bottom:0">
         <label class="fl">اختر مجموعة الجرثوم</label>
-        <select class="fc" id="cult-org-group" onchange="cultOrgGroupChanged()">
-          <option value="">-- اختر --</option>
+        <select class="fc" id="cult-org-group" onchange="cultOrgGroupChanged()" lang="en" dir="ltr">
+          <option value="">-- Select --</option>
           ${Object.keys(ORGANISMS_DB).map(k=>`<option value="${k}" ${c&&c.orgGroup===k?'selected':''}>${k}</option>`).join('')}
         </select>
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">الجرثوم المعزول (Organism)</label>
-        <select class="fc" id="cult-organism-sel" onchange="cultOrganismChanged()">
-          <option value="">-- اختر --</option>
+        <select class="fc" id="cult-organism-sel" onchange="cultOrganismChanged()" lang="en" dir="ltr">
+          <option value="">-- Select --</option>
         </select>
-        <input class="fc" id="cult-organism-custom" placeholder="اكتب اسم الجرثوم..." style="display:none;margin-top:6px" value="${c&&c.organism&&!_isKnownOrganism(c.organism)?c.organism:''}">
+        <input class="fc" id="cult-organism-custom" lang="en" dir="ltr" spellcheck="false" placeholder="Type organism name..." style="display:none;margin-top:6px" value="${c&&c.organism&&!_isKnownOrganism(c.organism)?c.organism:''}">
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">الكمية / Colony Count</label>
-        <select class="fc" id="cult-colony">
+        <select class="fc" id="cult-colony" lang="en" dir="ltr">
           <option value="">--</option>
           <option ${c&&c.colony==='No Growth'?'selected':''}>No Growth</option>
           <option ${c&&c.colony==='< 10³ CFU/mL (insignificant)'?'selected':''}>< 10³ CFU/mL (insignificant)</option>
@@ -24654,10 +25669,10 @@ function cultOrgGroupChanged(){
 function _populateOrganismList(grp){
   const sel=document.getElementById('cult-organism-sel'); if(!sel)return;
   const data=ORGANISMS_DB[grp];
-  if(!data){sel.innerHTML='<option value="">-- اختر --</option>';return;}
-  sel.innerHTML=`<option value="">-- اختر --</option>
+  if(!data){sel.innerHTML='<option value="">-- Select --</option>';return;}
+  sel.innerHTML=`<option value="">-- Select --</option>
     ${data.organisms.map(o=>`<option value="${o}">${o}</option>`).join('')}
-    <option value="__custom__">✏️ إدخال يدوي / Not listed</option>`;
+    <option value="__custom__">✏️ Manual entry / Not listed</option>`;
   const noteEl=document.getElementById('cult-org-note');
   if(noteEl&&data.notes){noteEl.textContent='📋 '+data.notes; noteEl.style.display='block';}
 }
@@ -25129,7 +26144,7 @@ function _buildCultureHTML(cid){
         <div style="display:flex;flex-direction:column">
           <div style="display:flex;gap:4px">
             ${_cuRR('Input', c.date)}
-            ${_cuRR('ID', pt.id||'—')}
+            ${_cuRR('Time', _ptEntryTime(pt, c))}
           </div>
           ${_cuRR('Specimen', c.specimenDetail||ct.en)}
         </div>
@@ -25314,11 +26329,297 @@ function saveUARecords(){ save('uaRecords', uaRecords); }
 // The print report shows an empty result box (with normal color) but still shows
 // the field name and normal range, so the row layout is preserved.
 const EMPTY_VAL = '__EMPTY__';
-const EMPTY_LABEL = 'فارغ';
+// ⭐ تطبيع قيمة حقل الفحوص الخاصة: الفراغ ≡ اختيار "فارغ" (EMPTY_VAL)
+//   لازم بعد تحويل القوائم المنسدلة إلى حقول قابلة للكتابة، حتى تبقى
+//   الطباعة وعدّ القيم غير الطبيعية مطابقة للسلوك السابق حرفياً.
+function _normExamVal(v, f){
+  var t=(v===undefined||v===null)?'':String(v).trim();
+  if(t==='') return (f&&f.type==='select')?EMPTY_VAL:'';
+  return t;
+}
+const EMPTY_LABEL = 'Empty';   // ⭐ إنكليزي إجبارياً في حقول الفحوص
 function _isEmptyVal(v){ return v===EMPTY_VAL; }
 function _displayValForReport(v){ return _isEmptyVal(v) ? '' : v; }
 // Return options array with "فارغ" prepended (for select fields only)
 // Return the visible label for a given option value
+// ═══════════════════════════════════════════════════════════════════════════
+// EXSEL — قائمة اختيار قابلة للكتابة (بديل <datalist>)
+// ───────────────────────────────────────────────────────────────────────────
+// سبب الوجود:
+//   <datalist> في Chromium/Electron يُرشِّح الخيارات تلقائياً حسب النص
+//   الموجود داخل الحقل. وبما أن حقول الإدرار/البراز/السائل المنوي تُملأ
+//   مسبقاً بالقيمة الطبيعية (Normal)، كان الضغط على السهم يعرض خياراً
+//   واحداً فقط (المطابق للنص). هذه الوحدة تعرض **كل الخيارات دائماً**
+//   عند فتح القائمة، وتُرشِّح فقط أثناء الكتابة اليدوية.
+//
+// اللغة: كل حقول EXSEL إنكليزية إجبارياً (lang=en · dir=ltr · spellcheck=off)
+//
+// عزل تام: لا تلمس أي حقل آخر في البرنامج. نفس الـ id ونفس .value
+//          لذلك كل دوال الحفظ/القراءة/الطباعة تعمل بلا أي تعديل.
+// ═══════════════════════════════════════════════════════════════════════════
+var EXSEL = (function(){
+  var REG   = Object.create(null); // id -> {options:[...], onChange:fn|null}
+  var pop   = null;                // لوحة الخيارات (واحدة مشتركة على body)
+  var curId = null;                // الحقل المفتوح حالياً
+  var list  = [];                  // الخيارات المعروضة حالياً
+  var hi    = -1;                  // العنصر المُظلَّل (للأسهم)
+  var prog  = false;               // منع إعادة الفتح عند التغيير البرمجي
+
+  var NUL_LABEL = '— Empty —';
+
+  function esc(s){
+    return String(s==null?'':s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function injectCSS(){
+    if(document.getElementById('exsel-css')) return;
+    var st = document.createElement('style');
+    st.id = 'exsel-css';
+    st.textContent =
+      '.exsel{position:relative;direction:ltr;}' +
+      '.exsel > input.exsel-inp{padding-right:30px!important;text-align:left;direction:ltr!important;}' +
+      '.exsel-arw{position:absolute;top:50%;right:5px;transform:translateY(-50%);width:20px;height:20px;' +
+        'display:flex;align-items:center;justify-content:center;background:transparent;border:0;padding:0;' +
+        'line-height:1;font-size:10px;color:var(--primary);cursor:pointer;border-radius:5px;opacity:.85;}' +
+      '.exsel-arw:hover{background:rgba(0,212,255,0.14);opacity:1;}' +
+      '#exsel-pop{position:fixed;z-index:2147483000;display:none;max-height:264px;overflow-y:auto;overflow-x:hidden;' +
+        'background:var(--bg-modal,#070d1c);border:1px solid var(--border);border-radius:10px;padding:4px;' +
+        'box-shadow:0 12px 34px rgba(0,0,0,0.55);direction:ltr;text-align:left;font-family:\'Cairo\',sans-serif;}' +
+      '#exsel-pop.on{display:block;}' +
+      '.exsel-opt{padding:7px 10px;font-size:12.5px;color:var(--text);border-radius:6px;cursor:pointer;' +
+        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+      '.exsel-opt:hover,.exsel-opt.hi{background:rgba(0,212,255,0.16);color:var(--primary);}' +
+      '.exsel-opt.sel{font-weight:800;}' +
+      '.exsel-opt.nul{color:var(--text2);font-style:italic;border-bottom:1px solid var(--border);' +
+        'border-radius:0;margin-bottom:3px;}' +
+      '.exsel-none{padding:8px 10px;font-size:12px;color:var(--text2);}';
+    (document.head||document.documentElement).appendChild(st);
+  }
+
+  function ensurePop(){
+    if(pop && document.body.contains(pop)) return pop;
+    injectCSS();
+    pop = document.createElement('div');
+    pop.id = 'exsel-pop';
+    pop.addEventListener('mousedown', function(e){ e.preventDefault(); }); // لا تفقد التركيز
+    pop.addEventListener('click', function(e){
+      var t = e.target.closest ? e.target.closest('.exsel-opt') : null;
+      if(!t) return;
+      pick(parseInt(t.getAttribute('data-i'),10));
+    });
+    document.body.appendChild(pop);
+    return pop;
+  }
+
+  function paint(curVal){
+    ensurePop();
+    pop.innerHTML = '';
+    if(!list.length){
+      var e = document.createElement('div');
+      e.className = 'exsel-none';
+      e.textContent = 'No matching option';
+      pop.appendChild(e);
+      return;
+    }
+    var frag = document.createDocumentFragment();
+    list.forEach(function(o,i){
+      var d = document.createElement('div');
+      d.className = 'exsel-opt' + (o.nul?' nul':'') + (i===hi?' hi':'') +
+                    (!o.nul && o.v===curVal ? ' sel':'');
+      d.textContent = o.t;
+      d.title = o.t;
+      d.setAttribute('data-i', i);
+      frag.appendChild(d);
+    });
+    pop.appendChild(frag);
+  }
+
+  function place(){
+    var el = document.getElementById(curId);
+    if(!el){ close(); return; }
+    var r = el.getBoundingClientRect();
+    if(r.bottom < -4 || r.top > window.innerHeight + 4){ close(); return; }
+    pop.style.width = Math.max(r.width, 140) + 'px';
+    pop.style.left  = Math.max(4, Math.min(r.left, window.innerWidth - Math.max(r.width,140) - 6)) + 'px';
+    var below = window.innerHeight - r.bottom;
+    if(below < 150 && r.top > below){
+      pop.style.top = 'auto';
+      pop.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+      pop.style.maxHeight = Math.min(264, r.top - 10) + 'px';
+    } else {
+      pop.style.bottom = 'auto';
+      pop.style.top = (r.bottom + 4) + 'px';
+      pop.style.maxHeight = Math.min(264, below - 10) + 'px';
+    }
+  }
+
+  // filterTxt = null  →  اعرض كل الخيارات (سلوك السهم / النقر)
+  // filterTxt = نص    →  رشِّح أثناء الكتابة
+  function open(id, filterTxt){
+    var el = document.getElementById(id);
+    var rec = REG[id];
+    if(!el || !rec) return;
+    ensurePop();
+    curId = id;
+    var opts = rec.options || [];
+    var q = (filterTxt==null) ? null : String(filterTxt).trim().toLowerCase();
+    var arr = [];
+    if(!q) arr.push({v:'', t:NUL_LABEL, nul:true});
+    opts.forEach(function(o){
+      var s = String(o);
+      if(!q || s.toLowerCase().indexOf(q) !== -1) arr.push({v:s, t:s});
+    });
+    list = arr;
+    // تظليل الخيار المطابق للقيمة الحالية عند العرض الكامل
+    hi = -1;
+    if(!q){
+      for(var i=0;i<list.length;i++){ if(!list[i].nul && list[i].v===el.value){ hi=i; break; } }
+    } else if(list.length){ hi = 0; }
+    paint(el.value);
+    pop.classList.add('on');
+    place();
+    scrollHi();
+  }
+
+  function close(){
+    if(pop) pop.classList.remove('on');
+    curId = null; list = []; hi = -1;
+  }
+
+  function isOpen(){ return !!(pop && pop.classList.contains('on') && curId); }
+
+  function scrollHi(){
+    if(!pop || hi < 0) return;
+    var n = pop.querySelector('.exsel-opt.hi');
+    if(n && n.scrollIntoView) n.scrollIntoView({block:'nearest'});
+  }
+
+  function move(step){
+    if(!list.length) return;
+    hi += step;
+    if(hi < 0) hi = list.length - 1;
+    if(hi >= list.length) hi = 0;
+    var el = document.getElementById(curId);
+    paint(el ? el.value : '');
+    scrollHi();
+  }
+
+  function pick(i){
+    var el = document.getElementById(curId);
+    if(!el || i==null || i<0 || i>=list.length) return;
+    setVal(el, list[i].v);
+    close();
+    try{ el.focus(); }catch(_){}
+  }
+
+  function setVal(el, v){
+    el.value = v;
+    prog = true;
+    try{
+      el.dispatchEvent(new Event('input',  {bubbles:true}));
+      el.dispatchEvent(new Event('change', {bubbles:true}));
+    }catch(_){
+      var rec = REG[el.id];
+      if(rec && rec.onChange) try{ rec.onChange(el); }catch(__){}
+    }
+    prog = false;
+  }
+
+  // ── مستمعات مفوَّضة (مرة واحدة فقط) ──────────────────────────────
+  document.addEventListener('mousedown', function(e){
+    var arw = e.target.closest ? e.target.closest('.exsel-arw') : null;
+    if(arw){
+      e.preventDefault();
+      var id = arw.getAttribute('data-exsel-for');
+      if(isOpen() && curId === id){ close(); }
+      else {
+        var el = document.getElementById(id);
+        if(el) try{ el.focus(); }catch(_){}
+        open(id, null);            // ← دائماً كل الخيارات
+      }
+      return;
+    }
+    var inp = e.target.closest ? e.target.closest('input.exsel-inp') : null;
+    if(inp && REG[inp.id]){
+      setTimeout(function(){ open(inp.id, null); }, 0);   // ← دائماً كل الخيارات
+      return;
+    }
+    if(pop && pop.contains(e.target)) return;
+    close();
+  }, true);
+
+  document.addEventListener('input', function(e){
+    var el = e.target;
+    if(!el || !el.classList || !el.classList.contains('exsel-inp')) return;
+    var rec = REG[el.id];
+    if(!rec) return;
+    if(rec.onChange) try{ rec.onChange(el); }catch(_){}
+    if(prog) return;                       // تغيير برمجي: لا تُعِد الفتح
+    open(el.id, el.value);                 // كتابة يدوية: رشِّح
+  }, true);
+
+  document.addEventListener('change', function(e){
+    var el = e.target;
+    if(!el || !el.classList || !el.classList.contains('exsel-inp')) return;
+    var rec = REG[el.id];
+    if(rec && rec.onChange) try{ rec.onChange(el); }catch(_){}
+  }, true);
+
+  document.addEventListener('keydown', function(e){
+    var el = e.target;
+    if(!el || !el.classList || !el.classList.contains('exsel-inp')) return;
+    if(!REG[el.id]) return;
+    var k = e.key;
+    if(k === 'ArrowDown'){
+      e.preventDefault();
+      if(!isOpen() || curId !== el.id) open(el.id, null); else move(1);
+    } else if(k === 'ArrowUp'){
+      e.preventDefault();
+      if(!isOpen() || curId !== el.id) open(el.id, null); else move(-1);
+    } else if(k === 'Enter'){
+      if(isOpen() && curId === el.id && hi >= 0){ e.preventDefault(); pick(hi); }
+    } else if(k === 'Escape'){
+      if(isOpen()){ e.preventDefault(); e.stopPropagation(); close(); }
+    } else if(k === 'Tab'){
+      close();
+    }
+  }, true);
+
+  window.addEventListener('scroll',  function(){ if(isOpen()) place(); }, true);
+  window.addEventListener('resize',  function(){ if(isOpen()) place(); });
+
+  return {
+    reg: function(id, options, onChange){
+      REG[id] = {options: options || [], onChange: onChange || null};
+    },
+    open: open,
+    close: close,
+    esc: esc
+  };
+})();
+
+// مُولِّد HTML لحقل EXSEL — يُستعمل داخل قوالب البناء
+// id        : نفس الـ id القديم تماماً (uaf-… / stoolef-… / semenf-…)
+// options   : مصفوفة الخيارات
+// value     : القيمة الحالية
+// opt.style : ستايل إضافي (نفس القديم)
+// opt.onChange : دالة تُستدعى عند الكتابة/الاختيار (uaHighlight …)
+function exselHTML(id, options, value, opt){
+  opt = opt || {};
+  EXSEL.reg(id, options || [], opt.onChange || null);
+  var e = EXSEL.esc;
+  return '<div class="exsel">'
+    + '<input class="fc exsel-inp" id="' + e(id) + '" type="text"'
+    + ' lang="en" dir="ltr" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"'
+    + ' value="' + e(value == null ? '' : value) + '"'
+    + ' placeholder="' + e(opt.placeholder || 'Empty') + '"'
+    + ' style="' + e(opt.style || '') + '">'
+    + '<button type="button" class="exsel-arw" data-exsel-for="' + e(id) + '" tabindex="-1" aria-label="Show all options">▼</button>'
+    + '</div>';
+}
+
 const UA_FIELDS = {
   physical: {
     label: 'Physical Examination',
@@ -25464,10 +26765,11 @@ function _buildUAModalBody(r, req){
         // عند اختياره: مربع النتيجة في التقرير يكون فارغاً (بدون أحمر)
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.unit?` (${f.unit})`:''}</label>
-          <select class="fc" id="uaf-${f.id}" style="font-size:12px;${hlStyle}" onchange="uaHighlight('${f.id}','${f.normal||''}')">
-            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
-            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-          </select>
+          ${exselHTML('uaf-'+f.id, f.options, (val===EMPTY_VAL?'':(val||'')), {
+              style:'font-size:12px;'+hlStyle,
+              placeholder:EMPTY_LABEL,
+              onChange:function(){ uaHighlight(f.id, f.normal||''); }
+            })}
         </div>`;
       } else if(f.type==='number'){
         html+=`<div class="fg" style="margin-bottom:0">
@@ -25550,7 +26852,7 @@ function saveUAEntry(){
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
@@ -25592,7 +26894,7 @@ function saveAndPrintUA(){
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
@@ -25736,7 +27038,7 @@ function _buildUAPrintHTML(r){
       <div style="display:flex;flex-direction:column">
         <div style="display:flex;gap:4px">
           ${_uaRR('Input',r.date||'—')}
-          ${_uaRR('ID',pt.id||r.patientId||'—')}
+          ${_uaRR('Time',_ptEntryTime(pt, r))}
         </div>
         ${_uaRR('Print',printTime)}
       </div>
@@ -25782,6 +27084,7 @@ function printUAReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير البول للطابعة 🖨️','success');
 }
 
@@ -25992,10 +27295,11 @@ function _buildStoolModalBody(r, req){
         // ── خيار "فارغ" يُحقن ديناميكياً في أعلى القائمة ──
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}</label>
-          <select class="fc" id="stoolef-${f.id}" style="font-size:12px;${hlStyle}" onchange="stoolHighlight('${f.id}','${f.normal||''}')">
-            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
-            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-          </select>
+          ${exselHTML('stoolef-'+f.id, f.options, (val===EMPTY_VAL?'':(val||'')), {
+              style:'font-size:12px;'+hlStyle,
+              placeholder:EMPTY_LABEL,
+              onChange:function(){ stoolHighlight(f.id, f.normal||''); }
+            })}
         </div>`;
       } else if(f.type==='multiselect'){
         // Fix 9: Multi-select checkboxes for parasites
@@ -26108,7 +27412,7 @@ function saveStoolEntry(){
       if(hidden) rec[f.id]=hidden.value||'';
     } else {
       const el=document.getElementById('stoolef-'+f.id);
-      if(el) rec[f.id]=el.value||'';
+      if(el) rec[f.id]=_normExamVal(el.value,f);
     }
   }));
   loadStoolExamRecords();
@@ -26154,7 +27458,7 @@ function saveAndPrintStool(){
       if(hidden) rec[f.id]=hidden.value||'';
     } else {
       const el=document.getElementById('stoolef-'+f.id);
-      if(el) rec[f.id]=el.value||'';
+      if(el) rec[f.id]=_normExamVal(el.value,f);
     }
   }));
   loadStoolExamRecords();
@@ -26254,7 +27558,7 @@ function _buildStoolPrintHTML(r){
       <div style="display:flex;flex-direction:column">
         <div style="display:flex;gap:4px">
           ${_sRR('Input',r.date||'—')}
-          ${_sRR('ID',pt.id||r.patientId||'—')}
+          ${_sRR('Time',_ptEntryTime(pt, r))}
         </div>
         ${_sRR('Print',_sPrintTime)}
       </div>
@@ -26345,6 +27649,7 @@ function printStoolReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير البراز للطابعة 🖨️','success');
 }
 
@@ -26456,7 +27761,7 @@ function saveAndShareUAWhatsApp(){
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
@@ -26503,7 +27808,7 @@ function saveAndShareStoolWhatsApp(){
       if(hidden) rec[f.id]=hidden.value||'';
     } else {
       const el=document.getElementById('stoolef-'+f.id);
-      if(el) rec[f.id]=el.value||'';
+      if(el) rec[f.id]=_normExamVal(el.value,f);
     }
   }));
   loadStoolExamRecords();
@@ -27584,6 +28889,8 @@ function printCBCFromDevice(reqId){
   const html=_buildCBCReportHTML(cbcParams,pt,req,settings.cbcTemplate||'1');
   // طباعة صامتة بدون واجهة
   _printViaIframe(html, false);
+  // ⭐ شاشة المرضى: طُبع تقرير CBC → يصبح "جاهز" ويُنادى
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(req.id); }catch(_){}
 }
 
 function printCBCBlank(){
@@ -27928,10 +29235,10 @@ function _buildSemenModalBody(r, req){
         // ── خيار "فارغ" يُحقن ديناميكياً في أعلى القائمة ──
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> (${f.ref})</span>`:''}</label>
-          <select class="fc" id="semenf-${f.id}" style="font-size:12px">
-            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
-            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
-          </select></div>`;
+          ${exselHTML('semenf-'+f.id, f.options, (val===EMPTY_VAL?'':(val||'')), {
+              style:'font-size:12px',
+              placeholder:EMPTY_LABEL
+            })}</div>`;
       } else if(f.type==='number'){
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> — طبيعي: ${f.ref}</span>`:''}</label>
@@ -28037,7 +29344,7 @@ function saveSemenEntry(){
   };
   Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('semenf-'+f.id);
-    if(el) rec[f.id]=el.value||'';
+    if(el) rec[f.id]=_normExamVal(el.value,f);
   }));
   loadSemenRecords();
   if(window._semenEditId){ const idx=semenRecords.findIndex(x=>x.id===window._semenEditId); if(idx>-1)semenRecords[idx]=rec; else semenRecords.push(rec); }
@@ -28166,7 +29473,7 @@ function _buildSemenPrintHTML(r){
       <div style="display:flex;flex-direction:column">
         <div style="display:flex;gap:4px">
           ${_smRR('Input',r.date||'—')}
-          ${_smRR('ID',pt.id||r.patientId||'—')}
+          ${_smRR('Time',_ptEntryTime(pt, r))}
         </div>
         ${_smRR('Print',_smPrintTime)}
       </div>
@@ -28271,7 +29578,7 @@ function printSemenReport(id){
     const ptId=(document.getElementById('semen-pt-id')||{}).value;
     r={id:'_current',patientId:ptId,patientName:ptName,date:(document.getElementById('semen-date')||{}).value||''};
     Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
-      const el=document.getElementById('semenf-'+f.id); if(el) r[f.id]=el.value||'';
+      const el=document.getElementById('semenf-'+f.id); if(el) r[f.id]=_normExamVal(el.value,f);
     }));
   } else {
     r=semenRecords.find(x=>x.id===id);
@@ -28281,6 +29588,7 @@ function printSemenReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
+  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير السائل المنوي للطابعة 🖨️','success');
 }
 
@@ -29390,7 +30698,7 @@ function openWaitScreen(mode){
 
   // ── بناء البيانات مباشرةً عند الفتح ──
   var today = new Date().toISOString().slice(0,10);
-  var todayReqs = _wsExcludeLisCbc(requests.filter(function(r){ return (r.date||'').slice(0,10)===today; })); // ⭐ استبعاد سجلات LIS-CBC من الصفوف والعدّادات
+  var todayReqs = requests.filter(function(r){ return (r.date||'').slice(0,10)===today; });
   var filteredReqs = _wsFilterRequests(todayReqs);
   var initCnt = {
     pending:    todayReqs.filter(function(r){return r.status==='pending';}).length,
@@ -29792,6 +31100,16 @@ function openWaitScreen(mode){
   +'}catch(_){}'
   +'return;'
   +'}'
+  /* ⭐ أمر نداء صريح لحظة الطباعة — ينفّذ فوراً بلا اعتماد على مقارنة القوائم */
+  +'if(e.data.type === "WQ_CALL"){'
+  +'try{'
+  +'if(e.data.id){'
+  +'_announcedIds[e.data.id] = true;'
+  +'if(_speakEnabled) _enqueueSpeak({ id: e.data.id, name: e.data.name || "" });'
+  +'}'
+  +'}catch(_){}'
+  +'return;'
+  +'}'
   +'if(e.data.type!=="WQ_UPDATE")return;'
   +'var c=e.data.cnt;'
   +'document.getElementById("wsp").textContent=c.pending;'
@@ -29853,23 +31171,7 @@ function openWaitScreen(mode){
     _pushWaitScreenData();
   }, 5000);
 }
-// ⭐ سجل CBC القادم من جهاز LIS يُنشأ كملف منفصل (id يبدأ بـ LIS-CBC- وتحاليله CBC فقط).
-//    هذا السجل خاص بتخزين نتيجة الجهاز فقط ويجب ألّا يظهر في شاشة الانتظار إطلاقاً
-//    (لا في الصفوف ولا في العدّادات) — تظهر التحاليل الأخرى فقط.
-function _isLisCbcOnlyRecord(r){
-  if(!r) return false;
-  if(!/^LIS-CBC-/i.test(String(r.id||''))) return false;
-  var t = r.tests || [];
-  // تحاليله كلها CBC فقط (لا يوجد تحليل آخر غير CBC)
-  return t.length > 0 && t.every(function(x){ x=String(x||'').toUpperCase(); return x==='CBC'||x==='H001'; });
-}
-// استبعاد سجلات LIS-CBC المنفصلة من أي قائمة تُعرض/تُعدّ في شاشة الانتظار
-function _wsExcludeLisCbc(reqs){
-  return (reqs||[]).filter(function(r){ return !_isLisCbcOnlyRecord(r); });
-}
-
 function _wsFilterRequests(reqs){
-  reqs = _wsExcludeLisCbc(reqs); // ⭐ أخفِ سجلات LIS-CBC المنفصلة أولاً
   var ws = (settings&&settings.waitScreen)||{};
   var doctorFilter = ws.doctorFilter; // null = الكل، array = قائمة IDs
   if(doctorFilter === null || doctorFilter === undefined) return reqs; // الكل ظاهر
@@ -29899,23 +31201,71 @@ function _wsGetScrollSpeed(){
   return 0.5;
 }
 
+// ⭐ الحالة المعروضة على شاشة المرضى: الطلب لا يصبح "جاهز" إلا بعد طباعته فعلياً.
+//    داخلياً يبقى status='done' كما هو (لا تأثير على بقية النظام) — هذا للعرض والنداء فقط.
+function _wsEffStatus(r){
+  if(!r) return 'pending';
+  if(r.status === 'done' && !r.printed && !r.wsPrinted) return 'inprogress';
+  return r.status;
+}
+
+// ⭐ علامة خاصة بشاشة المرضى فقط (wsPrinted): تُضبط عند طباعة تقرير CBC أو تقرير
+//    فحص خاص (إدرار/خروج/سائل منوي) — هذه المسارات لا تضبط r.printed أصلاً.
+//    حقل مستقل لا يقرأه أي جزء آخر من النظام (لا نتائج الأجهزة ولا الحذف ولا المخزون)
+//    فلا يوجد أي تأثير جانبي على السلوك القائم.
+function _wsMarkPrinted(reqId){
+  try{
+    if(!reqId) return;
+    var r = requests.find(function(x){ return x.id === reqId; });
+    if(!r || r.wsPrinted) return;
+    r.wsPrinted = true;
+    r._updatedAt = Date.now();
+    save('requests', requests);
+    if(typeof updateWaitScreen === 'function') updateWaitScreen();
+    _wsCallPatient(reqId);
+  }catch(e){}
+}
+
+// ⭐ نداء صريح لحظة الطباعة — لا يعتمد على مقارنة القوائم (doneList) إطلاقاً.
+//    يرسل أمر نداء مباشر لشاشة الانتظار المنبثقة ولشاشة البث اللاسلكي:
+//    الطباعة = النداء، بلا أي احتمال ضياع بسبب أول لقطة أو تكرار المعرّفات.
+function _wsCallPatient(reqId){
+  try{
+    if(!reqId) return;
+    var ws = (settings && settings.waitScreen) || {};
+    if(ws.speakEnabled === false) return;
+    var r = requests.find(function(x){ return x.id === reqId; });
+    if(!r) return;
+    var payloadName = (r.patientName || '').toString();
+    if(!payloadName) return;
+    var win = window._waitScreenWin;
+    if(win && !win.closed){
+      try{ win.postMessage({ type:'WQ_CALL', id: r.id, name: payloadName }, '*'); }catch(_){}
+    }
+    if(window._tvCastActive && typeof _lanSendRaw === 'function'){
+      try{ _lanSendRaw({ type:'tvcast_call', id: r.id, name: payloadName, ts: Date.now() }); }catch(_){}
+    }
+  }catch(e){}
+}
+
 function _pushWaitScreenData(){
   const win = window._waitScreenWin;
   if(!win || win.closed) return;
   const today = new Date().toISOString().slice(0,10);
-  const todayReqs = _wsExcludeLisCbc(requests.filter(r=>(r.date||'').slice(0,10)===today)); // ⭐ استبعاد سجلات LIS-CBC من الصفوف والعدّادات
+  const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
   const filteredReqs = _wsFilterRequests(todayReqs);
   const cnt = {
-    pending:    todayReqs.filter(r=>r.status==='pending').length,
-    inprogress: todayReqs.filter(r=>r.status==='inprogress').length,
-    done:       todayReqs.filter(r=>r.status==='done').length,
+    pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
+    inprogress: todayReqs.filter(r=>_wsEffStatus(r)==='inprogress').length,
+    done:       todayReqs.filter(r=>_wsEffStatus(r)==='done').length,
     total:      todayReqs.length
   };
   let rows = '';
   if(filteredReqs.length > 0){
     rows = filteredReqs.map((r,i)=>{
-        const sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[r.status]||'-';
-        const sC={pending:'pp',inprogress:'pi',done:'pd'}[r.status]||'';
+        const _es=_wsEffStatus(r);
+        const sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[_es]||'-';
+        const sC={pending:'pp',inprogress:'pi',done:'pd'}[_es]||'';
         const tn=(r.testNames||r.tests.map(tid=>{const t=tests.find(x=>x.id===tid);return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
         return '<tr><td style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:700">'+(i+1)+'</td>'
           +'<td style="font-size:16px;font-weight:900;color:#00d4ff">'+r.id+'</td>'
@@ -29926,7 +31276,7 @@ function _pushWaitScreenData(){
   }
   // قائمة المرضى الجاهزين (للناطق الصوتي)
   var doneList = filteredReqs
-    .filter(function(r){ return r.status==='done'; })
+    .filter(function(r){ return r.status==='done' && (!!r.printed || !!r.wsPrinted); })
     .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
   var ws = (settings&&settings.waitScreen)||{};
   var speakEnabled = ws.speakEnabled !== false;
@@ -29959,21 +31309,21 @@ function _pushTvCastData(){
   if(!window._tvCastActive) return;
   try{
     const today = new Date().toISOString().slice(0,10);
-    const todayReqs = _wsExcludeLisCbc(requests.filter(r=>(r.date||'').slice(0,10)===today)); // ⭐ استبعاد سجلات LIS-CBC من الصفوف والعدّادات
+    const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
     const filteredReqs = _wsFilterRequests(todayReqs);
     const cnt = {
-      pending:    todayReqs.filter(r=>r.status==='pending').length,
-      inprogress: todayReqs.filter(r=>r.status==='inprogress').length,
-      done:       todayReqs.filter(r=>r.status==='done').length,
+      pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
+      inprogress: todayReqs.filter(r=>_wsEffStatus(r)==='inprogress').length,
+      done:       todayReqs.filter(r=>_wsEffStatus(r)==='done').length,
       total:      todayReqs.length
     };
     const rows = filteredReqs.map(function(r,i){
       const tn=(r.testNames||r.tests.map(function(tid){var t=tests.find(function(x){return x.id===tid;});return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
-      return { n:i+1, id:r.id, name:r.patientName||'-', tests:tn, status:r.status };
+      return { n:i+1, id:r.id, name:r.patientName||'-', tests:tn, status:_wsEffStatus(r) };
     });
     // قائمة المرضى الجاهزين (لعرض بطاقة النداء + الصوت في شاشة البث اللاسلكي)
     const doneList = filteredReqs
-      .filter(function(r){ return r.status==='done'; })
+      .filter(function(r){ return r.status==='done' && (!!r.printed || !!r.wsPrinted); })
       .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
     const ws = (settings&&settings.waitScreen)||{};
     const speakEnabled = ws.speakEnabled !== false;
@@ -30229,6 +31579,13 @@ let lisResults    = [];
 let lisMappings   = [];
 let lisLogEntries = [];
 let lisRawMessages= [];
+// ⚡ سقف للرسائل الخام المحفوظة. كانت تُضاف بلا حد طوال تشغيل البرنامج فتنمو
+//    الذاكرة باستمرار. العرض يستخدم آخر رسالة فقط (lisRawMessages[0]).
+const _LIS_RAW_MAX=150;
+function _lisPushRaw(m){
+  lisRawMessages.unshift(m);
+  if(lisRawMessages.length>_LIS_RAW_MAX) lisRawMessages.length=_LIS_RAW_MAX;
+}
 let _lisLogFilter = 'all';
 let _lisSerialPort= null;
 let _lisSerialReader=null;
@@ -31197,7 +32554,23 @@ function lisRenderPushTargets(){
     return;
   }
   const devs=(typeof lisDevices!=='undefined'?lisDevices:[]).filter(d=>d&&d.id);
-  tb.innerHTML=lisMappings.map((m,idx)=>{
+  // 🔍 بحث — نحتفظ بالفهرس الأصلي حتى يبقى lisSetPushTarget صحيحاً تماماً
+  const _pq=(function(){ const e=document.getElementById('lis-push-search'); return e?e.value.trim().toLowerCase():''; })();
+  let _rows=lisMappings.map(function(m,idx){ return {m:m,idx:idx}; });
+  if(_pq){
+    _rows=_rows.filter(function(o){
+      const m=o.m;
+      return String(_lisMedlabCode(m)||'').toLowerCase().includes(_pq)
+          || String(m.name||m.deviceCode||'').toLowerCase().includes(_pq)
+          || String(m.channel||'').toLowerCase().includes(_pq);
+    });
+  }
+  if(!_rows.length){
+    tb.innerHTML='<tr><td colspan="4" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا نتائج مطابقة للبحث</td></tr>';
+    return;
+  }
+  tb.innerHTML=_rows.map(function(o){
+    var m=o.m, idx=o.idx;
     const opts=['<option value="">— لا يُرسَل —</option>'].concat(
       devs.map(d=>'<option value="'+d.id+'"'+((m.pushDevice===d.id)?' selected':'')+'>'+(d.name||d.id)+'</option>')
     ).join('');
@@ -31214,6 +32587,7 @@ function lisSetPushTarget(idx,deviceId){
   if(!lisMappings[idx]) return;
   lisMappings[idx].pushDevice=deviceId||'';
   if(typeof lisSaveState==='function') lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // ⭐ حفظ فوري مضمون
   lisAddLog('info','📤 تعيين جهاز الإرسال: '+(lisMappings[idx].medlabCode||'')+' → '+(deviceId||'(بدون)'));
 }
 
@@ -31533,7 +32907,7 @@ async function lisReadSerialLoop(dev){
         // ASTM message ends with ETX (0x03) or L record
         const msgs=lisExtractMessages(_lisSerialBuffer);
         msgs.messages.forEach(msg=>{
-          lisRawMessages.unshift(msg);
+          _lisPushRaw(msg);
           lisParseByProtocol(msg,dev);
         });
         _lisSerialBuffer=msgs.remainder;
@@ -31619,7 +32993,7 @@ async function lisConnectFileDevice(dev){
               const file=await fh.getFile();
               const text=await file.text();
               lisAddLog('data','ملف جديد: '+entry.name+' ('+text.length+' حرف)');
-              lisRawMessages.unshift(text);
+              _lisPushRaw(text);
               lisParseByProtocol(text,dev);
             }
           }
@@ -31688,7 +33062,7 @@ function _cbcInitIpcListeners(){
     _cbcLastRawSig=_rawSig;
     _cbcLastRawTime=_rawNow;
     lisAddLog('data','📥 TCP بيانات: '+text.length+' حرف');
-    lisRawMessages.unshift(text);
+    _lisPushRaw(text);
     // وجّه البيانات للجهاز النشط
     const dev=_cbcActiveDev||{name:'BC-5000',protocol:'hl7'};
     lisParseByProtocol(text,dev);
@@ -31742,6 +33116,101 @@ function _cbcInitIpcListeners(){
 }
 
 // البحث عن تحاليل المريض بالـ Sample ID والرد على الجهاز
+// ═══════════════════════════════════════════════════════════════════════════
+// 📌 ORDER SCOPE — «آخر طلب مفتوح فقط» لاستعلامات الأجهزة
+// ───────────────────────────────────────────────────────────────────────────
+// المشكلة السابقة: عند استعلام الجهاز برقم المريض كان البرنامج قد يزوّده
+//   بتحاليل طلبات سابقة أيضاً، لثلاثة أسباب مجتمعة:
+//     ١) عند عدم وجود طلب مفتوح كان يسقط على «أحدث طلب منتهٍ» ويُرسل تحاليله.
+//     ٢) المسار الاحتياطي كان requests.find(...) وهي تُرجع *أول* تطابق في
+//        المصفوفة (= الأقدم) ودون أي شرط على الحالة (حتى المنتهية).
+//     ٣) الترتيب كان بـ new Date(r.date) فقط، و r.date تاريخ بلا وقت
+//        (YYYY-MM-DD)، فطلبات نفس اليوم تتعادل ويُختار الأقدم.
+//
+// القاعدة الآن (قاطعة): يُرسَل للجهاز **طلب واحد فقط** = آخر طلب مفتوح
+//   (status !== 'done'). إن لم يوجد أي طلب مفتوح ⟵ لا تُرسل أي تحاليل
+//   (ولا يُسمح إطلاقاً بالرجوع إلى طلب منتهٍ أو سابق).
+//
+// مفتاح الترتيب (من الأقوى للأضعف): التاريخ ← رقم الطلب RQ-#### (عدّاد
+//   تصاعدي مضمون الفرادة) ← ترتيب الإدخال في المصفوفة. لا تعادل ممكن.
+//
+// معزول تماماً: دوال قراءة فقط، لا تُعدّل requests ولا أي حالة.
+// ═══════════════════════════════════════════════════════════════════════════
+function _lisIsOpenReq(r){
+  return !!r && String((r.status||'')).trim().toLowerCase() !== 'done';
+}
+function _lisReqSeqNo(r){
+  // 'RQ-1234' → 1234  (عدّاد تصاعدي دائماً ⇒ الأكبر = الأحدث)
+  try{
+    var m = String((r && r.id) || '').match(/\d+/g);
+    if(m && m.length) return parseInt(m[m.length-1], 10) || 0;
+  }catch(_){}
+  return 0;
+}
+function _lisReqDateMs(r){
+  try{
+    var d = String((r && r.date) || '').trim();
+    if(!d) return 0;
+    var t = Date.parse(d);
+    return isNaN(t) ? 0 : t;
+  }catch(_){ return 0; }
+}
+// أحدث طلب من قائمة — ترتيب حتمي بلا أي تعادل
+function _lisLatestReq(list){
+  var best = null, bd = -1, bs = -1, bi = -1;
+  for(var i = 0; i < list.length; i++){
+    var r = list[i];
+    var d = _lisReqDateMs(r), q = _lisReqSeqNo(r);
+    if(best === null || d > bd || (d === bd && q > bs) || (d === bd && q === bs && i > bi)){
+      best = r; bd = d; bs = q; bi = i;
+    }
+  }
+  return best;
+}
+// يُرجع طلباً واحداً فقط (أو null) — لا مصفوفة، لا طلبات سابقة، لا منتهية
+function _lisPickOpenRequest(sid, pt){
+  if(typeof requests === 'undefined' || !requests || !requests.length) return null;
+  var _n  = function(v){ return String(v == null ? '' : v).trim(); };
+  var _eq = function(a, b){ a = _n(a); b = _n(b); return a !== '' && a === b; };
+  var S   = _n(sid);
+  var pid = pt ? _n(pt.id) : '';
+  var i, r;
+
+  // (١) الطلبات المفتوحة العائدة لهذا المريض
+  var mine = [];
+  for(i = 0; i < requests.length; i++){
+    r = requests[i];
+    if(!_lisIsOpenReq(r)) continue;
+    if(pid){
+      if(_eq(r.patientId, pid) || _eq(r.ptId, pid)) mine.push(r);
+    } else if(S){
+      if(_eq(r.patientId, S) || _eq(r.ptId, S)) mine.push(r);
+    }
+  }
+  if(mine.length){
+    // إن طابق أحدها رقم العينة/الباركود المُستعلَم عنه بالضبط فهو المقصود
+    var exact = [];
+    for(i = 0; i < mine.length; i++){
+      r = mine[i];
+      if(_eq(r.barcode, S) || _eq(r.id, S) || _eq(r.sampleId, S) || _eq(r.sampleNum, S)) exact.push(r);
+    }
+    return _lisLatestReq(exact.length ? exact : mine);
+  }
+
+  // (٢) لا مريض مطابق ⟵ طابِق الطلب مباشرةً (مفتوح فقط)
+  var direct = [];
+  for(i = 0; i < requests.length; i++){
+    r = requests[i];
+    if(!_lisIsOpenReq(r)) continue;
+    if(_eq(r.barcode, S) || _eq(r.id, S) || _eq(r.sampleId, S) ||
+       _eq(r.sampleNum, S) || _eq(r.patientId, S)) direct.push(r);
+  }
+  if(direct.length) return _lisLatestReq(direct);
+
+  // (٣) لا طلب مفتوح ⟵ لا شيء. ممنوع الرجوع لطلب منتهٍ/سابق.
+  return null;
+}
+
 async function lisHandleHl7Query(info){
   const sidRaw = String(info.sampleId||'').trim();
   // ── 🧫 BS-230 فقط: كشف تيوب التراكمي (HbA1c) بالبادئة 9 (نفس نظام c111) ──
@@ -31777,36 +33246,19 @@ async function lisHandleHl7Query(info){
     if(pt) lisAddLog('info','👤 المريض: '+(pt.name||pt.id)+' (id='+pt.id+', barcode='+(pt.barcode||'-')+')');
     else   lisAddLog('warn','⚠️ لا مريض بـ SID='+sid);
 
-    // ── ابحث عن كل طلبات المريض المرتبطة (لا طلب واحد فقط) ──────────────
-    // ⭐ الإصلاح الجذري (النقطة ١): المريض قد يملك أكثر من طلب مفتوح
-    //    (مثل LH في طلب وHbA1c في طلب آخر). كل الأجهزة تستعلم بنفس رقم
-    //    المريض كـ SID، لذا يجب أن نجمع تحاليل *جميع* طلباته غير المنتهية،
-    //    لا أحدث طلب فقط — وإلا يرى الجهاز طلباً لا يخصّه فيرد "لا يوجد".
+    // ── 📌 آخر طلب مفتوح فقط — لا طلبات سابقة ولا منتهية ────────────────
+    //   قاعدة قاطعة: الجهاز يستلم تحاليل طلب واحد = آخر طلب مفتوح للمريض.
+    //   إن لم يوجد أي طلب مفتوح ⟵ يُرد NF ولا تُرسل أي تحاليل إطلاقاً.
     let reqList = [];
-    if(typeof requests!=='undefined' && requests.length){
-      if(pt){
-        reqList = requests.filter(r =>
-          (_match(r.patientId,pt.id) || _match(r.ptId,pt.id)) && r.status!=='done'
-        );
-        // إن كانت كل طلبات المريض منتهية، اسمح بأحدثها للتوافق مع إعادة الطلب
-        if(!reqList.length){
-          const allDone = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
-          if(allDone.length) reqList = [ allDone.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] ];
-        }
-        if(reqList.length) lisAddLog('info','📋 طلبات المريض غير المنتهية: '+reqList.length);
-      }
-      if(!reqList.length){
-        const _r = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
-        if(_r) reqList = [_r];
-      }
-    }
-    // ── استعلِم عن *آخر طلب* للمريض فقط (لكل الأجهزة) ──────────────────
-    //   المريض قد يملك طلبات سابقة (منتهية أو قديمة). إرسال كل الطلبات معاً
-    //   يُحمِّل الجهاز تحاليلَ زياراتٍ سابقة مع الحالية. الصحيح: أحدث طلب فقط.
-    if(reqList.length>1){
-      const _latest = reqList.slice().sort((a,b)=>(new Date(b.date||b.createdAt||0))-(new Date(a.date||a.createdAt||0)))[0];
-      reqList = [_latest];
-      lisAddLog('info','📌 تم اختيار آخر طلب فقط للمريض');
+    const _openReq = _lisPickOpenRequest(sid, pt);
+    if(_openReq){
+      reqList = [_openReq];
+      lisAddLog('info','📌 آخر طلب مفتوح: '+(_openReq.id||'-')+
+        ' | تاريخ '+(_openReq.date||'-')+
+        ' | حالة '+(_openReq.status||'-')+
+        ' | تحاليل '+((_openReq.tests||[]).length));
+    } else {
+      lisAddLog('warn','⛔ لا يوجد طلب مفتوح لـ '+sid+' — لن تُرسل أي تحاليل (الطلبات المنتهية/السابقة مُستبعدة)');
     }
     // احتفظ بمرجع أول طلب لأغراض السجل/الـ PID فقط
     const req = reqList[0] || null;
@@ -31980,27 +33432,17 @@ async function lisHandleC111Query(info){
     if(pt) lisAddLog('info','👤 المريض: '+(pt.name||pt.id));
     else   lisAddLog('warn','⚠️ لا مريض بـ SID='+sid);
 
-    // ⭐ الإصلاح الجذري (النقطة ١): اجمع كل طلبات المريض غير المنتهية
+    // ── 📌 آخر طلب مفتوح فقط — لا طلبات سابقة ولا منتهية ────────────────
     let reqList = [];
-    if(typeof requests!=='undefined' && requests.length){
-      if(pt){
-        reqList = requests.filter(r =>
-          (_match(r.patientId,pt.id) || _match(r.ptId,pt.id)) && r.status!=='done'
-        );
-        if(!reqList.length){
-          const allDone = requests.filter(r => _match(r.patientId,pt.id) || _match(r.ptId,pt.id));
-          if(allDone.length) reqList = [ allDone.sort((a,b)=>(new Date(b.date||0))-(new Date(a.date||0)))[0] ];
-        }
-      }
-      if(!reqList.length){
-        const _r = requests.find(r => _match(r.barcode,sid)||_match(r.id,sid)||_match(r.sampleId,sid)||_match(r.patientId,sid));
-        if(_r) reqList = [_r];
-      }
-    }
-    // ── آخر طلب فقط للمريض (كل الأجهزة) — لا نُرسل طلبات سابقة مع الحالية ──
-    if(reqList.length>1){
-      reqList = [ reqList.slice().sort((a,b)=>(new Date(b.date||b.createdAt||0))-(new Date(a.date||a.createdAt||0)))[0] ];
-      lisAddLog('info','📌 تم اختيار آخر طلب فقط للمريض');
+    const _openReq = _lisPickOpenRequest(sid, pt);
+    if(_openReq){
+      reqList = [_openReq];
+      lisAddLog('info','📌 آخر طلب مفتوح: '+(_openReq.id||'-')+
+        ' | تاريخ '+(_openReq.date||'-')+
+        ' | حالة '+(_openReq.status||'-')+
+        ' | تحاليل '+((_openReq.tests||[]).length));
+    } else {
+      lisAddLog('warn','⛔ لا يوجد طلب مفتوح لـ '+sid+' — لن تُرسل أي طلبات (الطلبات المنتهية/السابقة مُستبعدة)');
     }
     const req = reqList[0] || null;
     if(reqList.length){
@@ -32204,7 +33646,7 @@ function lisConnectWSBridge(url,dev){
     _lisWS.onmessage=(e)=>{
       const text=typeof e.data==='string'?e.data:String(e.data);
       lisAddLog('data','WebSocket بيانات: '+text.length+' حرف');
-      lisRawMessages.unshift(text);
+      _lisPushRaw(text);
       const targetDev=dev||lisDevices.find(d=>d.conn==='websocket'&&d.connected)||{name:'WebSocket',protocol:'astm'};
       lisParseByProtocol(text,targetDev);
     };
@@ -33186,18 +34628,65 @@ function _lisMedlabCode(m){
   return m.medlabCode||'';
 }
 
+// ⭐ هل رمز MedLab لهذا الربط موجود فعلاً في قاعدة التحاليل؟
+//   لا نحذف شيئاً تلقائياً — نكتفي بتمييزه بصرياً، لأن حذفه قد يكسر
+//   استقبال نتائج جهاز يرسل هذا الرمز.
+function _lisCodeInTestsDB(m){
+  try{
+    if(typeof tests==='undefined'||!tests||!tests.length) return true;
+    const c=String(_lisMedlabCode(m)||'').trim().toUpperCase();
+    if(!c) return false;
+    return tests.some(t=>String(t.code||'').trim().toUpperCase()===c
+                      || String(t.id||'').trim().toUpperCase()===c);
+  }catch(e){ return true; }
+}
+
+// ⭐ حذف الروابط المكرّرة — يبقي أول ربط لكل (رمز الجهاز + الجهاز)
+function lisDedupeMappings(){
+  const seen=Object.create(null);
+  const keep=[], dropped=[];
+  lisMappings.forEach(function(m){
+    const k=String(m.deviceCode||'').trim().toUpperCase()+'|'+String(m.device||'').trim().toUpperCase();
+    if(seen[k]){ dropped.push(m); return; }
+    seen[k]=1; keep.push(m);
+  });
+  if(!dropped.length){ showNotif('لا يوجد مكرّر','كل الروابط فريدة ✅','success'); return; }
+  if(!confirm('سيتم حذف '+dropped.length+' ربط مكرّر (يبقى الأول لكل رمز جهاز).\nمتابعة؟')) return;
+  lisMappings=keep;
+  lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // حفظ فوري مضمون
+  lisRenderMappings();
+  if(typeof lisRenderPushTargets==='function') lisRenderPushTargets();
+  showNotif('تم','حُذف '+dropped.length+' ربط مكرّر ✅','success');
+}
+
 function lisRenderMappings(){
   const tbody=document.getElementById('lis-mapping-body');
   if(!tbody) return;
+  // 🔍 بحث
+  const _q=(function(){ const e=document.getElementById('lis-map-search'); return e?e.value.trim().toLowerCase():''; })();
+  let _list=lisMappings;
+  if(_q){
+    _list=lisMappings.filter(m=>
+      String(m.deviceCode||'').toLowerCase().includes(_q) ||
+      String(_lisMedlabCode(m)||'').toLowerCase().includes(_q) ||
+      String(_lisMappingName(m)||'').toLowerCase().includes(_q) ||
+      String(m.channel||'').toLowerCase().includes(_q)
+    );
+  }
   if(!lisMappings.length){
     tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px;font-size:12px">لا توجد روابط — اضغط "تحميل الافتراضي"</td></tr>';
     return;
   }
-  tbody.innerHTML=lisMappings.map(m=>`
+  if(!_list.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:20px;font-size:12px">لا نتائج مطابقة للبحث</td></tr>';
+    return;
+  }
+  tbody.innerHTML=_list.map(m=>`
     <tr style="border-bottom:1px solid rgba(255,255,255,0.04)">
       <td style="padding:8px 12px"><code style="color:var(--warning);font-size:11px">${m.deviceCode}</code></td>
       <td style="padding:8px 12px"><code style="color:var(--success);font-size:11px">${_lisMedlabCode(m)}</code></td>
-      <td style="padding:8px 12px;font-size:11px;color:var(--text)">${_lisMappingName(m)}</td>
+      <td style="padding:8px 12px;font-size:11px;color:var(--text)">${_lisMappingName(m)}${_lisCodeInTestsDB(m)?'':' <span title="هذا الرمز غير موجود في قاعدة التحاليل" style="color:var(--warning);font-size:10px">⚠️ خارج قاعدة التحاليل</span>'}</td>
       <td style="padding:8px 12px">
         <input type="text" value="${m.channel||''}" placeholder="رقم"
           onchange="lisSetMappingChannel('${m.id}', this.value)"
@@ -33297,6 +34786,14 @@ function lisSaveMappingItem(){
   if(!dc||!mc){showNotif('تنبيه','أدخل رمز الجهاز والتحليل','warning');return;}
   const _src=(typeof tests!=='undefined'&&tests&&tests.length)?tests:[];
   const t=_src.find(x=>(x.code||'').toUpperCase()===mc.toUpperCase())||LIS_MEDLAB_TESTS.find(x=>x.id===mc);
+  // ⭐ منع التكرار: نفس رمز الجهاز لنفس الجهاز الهدف
+  const _devSel=document.getElementById('lis-map-device-sel').value;
+  const _dup=lisMappings.find(x=>String(x.deviceCode||'').toUpperCase()===dc
+                              && String(x.device||'')===String(_devSel||''));
+  if(_dup){
+    showNotif('مكرّر','رمز الجهاز "'+dc+'" مربوط أصلاً بـ '+(_lisMedlabCode(_dup)||'')+'','warning');
+    return;
+  }
   lisMappings.push({
     id:'lm'+Date.now(),
     deviceCode:dc,
@@ -33307,14 +34804,18 @@ function lisSaveMappingItem(){
     note:document.getElementById('lis-map-note').value,
   });
   lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // ⭐ حفظ فوري مضمون
   lisRenderMappings();
+  if(typeof lisRenderPushTargets==='function') lisRenderPushTargets();
   closeModal('lis-m-add-mapping');
   showNotif('تم','ربط مضاف: '+dc+' → '+mc,'success');
 }
 function lisDeleteMapping(id){
   lisMappings=lisMappings.filter(m=>m.id!==id);
   lisSaveState();
+  if(typeof lisFlushNow==='function') lisFlushNow();   // ⭐ حفظ فوري مضمون
   lisRenderMappings();
+  if(typeof lisRenderPushTargets==='function') lisRenderPushTargets();
 }
 function lisLoadDefaultMappings(){
   // دمج الافتراضية مع الموجودة — لا نحذف الروابط المخصصة
@@ -33373,10 +34874,15 @@ function lisIngestResult(result){
   // Sound — نبقيه للتنبيه (المتطلب ٤)
   if(_lisSettings.sound) lisPlayBeep();
 
-  // Auto transfer
+  // Auto transfer — ⚡ مُجمَّع: جهاز يرسل ٢٠ نتيجة كان يُشغّل ٢٠ دورة نقل
+  // كاملة (قراءة+كتابة لكل المصفوفة). الآن دورة واحدة لكل دفعة.
+  // ⚠️ حرج: lisTransferToMedlabPro لم تُمسّ إطلاقاً — أثرها الجانبي
+  //    (تعبئة requests/patients في الذاكرة من IDB) يبقى كما هو، وهو ما
+  //    يعتمد عليه lisHandleHl7Query للرد على استعلام CL-900i/BS-230.
   if(_lisSettings.autoTransfer){
     const delay=(_lisSettings.delay||2)*1000;
-    setTimeout(()=>lisTransferResult(result.id),delay);
+    if(typeof _lisAutoEnqueue==='function') _lisAutoEnqueue(result.id, delay);
+    else setTimeout(()=>lisTransferResult(result.id),delay);   // مسار احتياطي أصلي
   }
 
   // تجميع الحفظ + إعادة الرسم: يُنفَّذ مرة واحدة بعد توقف تدفق النتائج (120ms)
@@ -33393,6 +34899,55 @@ function lisTransferResult(id){
   const r=lisResults.find(x=>x.id===id);
   if(!r||r.transferred) return;
   lisTransferToMedlabPro([r]);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ⚡ طابور النقل التلقائي المُجمَّع
+// يُغيّر *متى وكم مرة* تُستدعى lisTransferToMedlabPro — لا *ماذا* تفعل.
+// الدفعة تُمرَّر كقائمة، وهي نفس الصيغة التي تقبلها الدالة أصلاً
+// (lisTransferAll يمرّر قائمة كاملة منذ البداية) — فلا مسار جديد.
+// سقف أمان: لا تتأخر الدفعة أكثر من delay+2s مهما استمر التدفق.
+// أي خطأ غير متوقع ⟵ سقوط تلقائي على السلوك الأصلي (نتيجة نتيجة).
+// ═══════════════════════════════════════════════════════════════
+var _lisAutoQueue=[], _lisAutoTimer=null, _lisAutoDeadline=0;
+
+function _lisAutoEnqueue(id, delay){
+  try{
+    _lisAutoQueue.push(id);
+    var now=Date.now();
+    if(!_lisAutoDeadline) _lisAutoDeadline=now+delay+2000;
+    if(_lisAutoTimer) clearTimeout(_lisAutoTimer);
+    var wait=Math.max(0, Math.min(delay, _lisAutoDeadline-now));
+    _lisAutoTimer=setTimeout(_lisAutoFlush, wait);
+  }catch(e){
+    console.warn('[LIS] enqueue fallback',e);
+    setTimeout(function(){ lisTransferResult(id); }, delay);
+  }
+}
+
+function _lisAutoFlush(){
+  _lisAutoTimer=null; _lisAutoDeadline=0;
+  var ids=_lisAutoQueue.splice(0,_lisAutoQueue.length);
+  if(!ids.length) return;
+  try{
+    var seen=Object.create(null), batch=[];
+    for(var i=0;i<ids.length;i++){
+      var id=ids[i];
+      if(seen[id]) continue;
+      seen[id]=1;
+      var r=lisResults.find(function(x){return x.id===id;});
+      if(r && !r.transferred) batch.push(r);
+    }
+    if(batch.length){
+      lisAddLog('info','📦 نقل دفعة واحدة: '+batch.length+' نتيجة');
+      lisTransferToMedlabPro(batch);
+    }
+  }catch(e){
+    // سقوط آمن: نفّذ نتيجة نتيجة كما كان السلوك الأصلي تماماً
+    console.warn('[LIS] batch fallback',e);
+    lisAddLog('warn','⚠️ تعذّر النقل بدفعة — رجوع للنقل الفردي');
+    ids.forEach(function(id){ try{ lisTransferResult(id); }catch(_){} });
+  }
 }
 function lisTransferAll(){
   const pending=lisResults.filter(r=>!r.transferred);
@@ -33826,13 +35381,33 @@ function lisFmtTime(iso){
 // ═══════════════════════════════════════════════
 // LOG
 // ═══════════════════════════════════════════════
+// ⚡ رسم السجل مُجمَّع في إطار واحد.
+//    نتيجة CBC واحدة تستدعي lisAddLog حوالي ٣٠ مرة (سطر OBX لكل باراميتر)،
+//    وكانت كل مرة تُعيد بناء السجل بالكامل عبر innerHTML. الآن تُدمج كل
+//    الأسطر الواصلة في عملية رسم واحدة — نفس المحتوى تماماً، بلا تكرار.
+//    عرضٌ فقط: لا يمسّ أي منطق استقبال أو إرسال للأجهزة.
+var _lisLogRenderPending=false;
+function _lisScheduleLogRender(){
+  if(_lisLogRenderPending) return;
+  _lisLogRenderPending=true;
+  var _go=function(){
+    _lisLogRenderPending=false;
+    try{ lisRenderMiniLog(); }catch(e){}
+    try{
+      var fullLog=document.getElementById('lis-full-log');
+      var sec=fullLog&&fullLog.closest('#lis-sec-log');
+      if(sec&&sec.style.display!=='none') lisRenderFullLog();
+    }catch(e){}
+  };
+  // rAF متوقف عندما تكون النافذة مخفية/مصغّرة — نسقط على setTimeout حينها
+  if(typeof requestAnimationFrame==='function' && document.visibilityState!=='hidden') requestAnimationFrame(_go);
+  else setTimeout(_go,50);
+}
 function lisAddLog(type,msg){
   const ts=new Date().toLocaleTimeString('ar');
   lisLogEntries.unshift({type,msg,ts});
   if(lisLogEntries.length>500) lisLogEntries.pop();
-  lisRenderMiniLog();
-  const fullLog=document.getElementById('lis-full-log');
-  if(fullLog&&fullLog.closest('#lis-sec-log')&&fullLog.closest('#lis-sec-log').style.display!=='none') lisRenderFullLog();
+  _lisScheduleLogRender();
 }
 function lisLogIcon(t){return{ok:'✅',err:'❌',warn:'⚠️',info:'ℹ️',astm:'📡',data:'📥'}[t]||'•';}
 function lisLogColor(t){return{ok:'var(--success)',err:'var(--danger)',warn:'var(--warning)',info:'var(--primary)',astm:'#7dd3fc',data:'rgba(255,255,255,0.7)'}[t]||'var(--text2)';}
@@ -34206,7 +35781,7 @@ function lisSimulateASTM(){
   const msg=tpl.replace(/{SID}/g,sid).replace(/{NAME}/g,name).replace(/{DT}/g,dt)
     .replace(/{V1}/g,rnd()).replace(/{V2}/g,rnd()).replace(/{V3}/g,rnd())
     .replace(/{V4}/g,rnd()).replace(/{V5}/g,(150+Math.floor(Math.random()*250)).toString());
-  lisRawMessages.unshift(msg);
+  _lisPushRaw(msg);
   lisAddLog('info','محاكاة ASTM: SID='+sid+' | '+name);
   lisParseASTM(msg,'محاكاة');
 }
@@ -34541,6 +36116,24 @@ async function initGDrive(){
   }
   await refreshGDriveStatus();
   _gdLoadAutoSettings();
+  _gdStartAutoScheduler();
+}
+
+// ── قراءة حالة الربط مع إعادة محاولة ──────────────────────────────────
+//   عند إقلاع البرنامج قد تتأخر العملية الرئيسية (main) في تحميل الرمز
+//   المحفوظ أو في تجديد access_token من refresh_token. الإصدار السابق كان
+//   يسأل مرة واحدة فقط، وإن جاء الرد linked=false يُظهر «غير مرتبط» فوراً
+//   ويُخفي صندوق الحساب — فيبدو الربط وكأنه انفصل بعد كل إعادة تشغيل.
+//   الآن: إن كان الحساب مربوطاً سابقاً (بريد محفوظ محلياً) نعيد السؤال
+//   عدة مرات قبل الحكم، ولا نمسح البريد المحفوظ إطلاقاً.
+async function _gdStatusWithRetry(tries, gapMs){
+  var st = null;
+  for(var i = 0; i < tries; i++){
+    try{ st = await window.electronAPI.gdriveStatus(); }catch(e){ st = null; }
+    if(st && st.linked) return st;
+    if(i < tries - 1) await new Promise(function(r){ setTimeout(r, gapMs); });
+  }
+  return st;
 }
 
 async function refreshGDriveStatus(){
@@ -34550,18 +36143,32 @@ async function refreshGDriveStatus(){
   var linkedBox= document.getElementById('gdrive-linked-box');
   var emailEl  = document.getElementById('gdrive-email');
 
+  var savedEmail = '';
+  try{ savedEmail = localStorage.getItem(_gdEmailKey()) || ''; }catch(e){}
+
   try{
-    var st = await window.electronAPI.gdriveStatus();
+    // كان مربوطاً سابقاً ⟵ امنح العملية الرئيسية وقتاً لتحميل/تجديد الرمز
+    if(savedEmail && statusEl) statusEl.innerHTML = '⏳ جارٍ استعادة الربط بحساب Google...';
+    var st = await _gdStatusWithRetry(savedEmail ? 5 : 1, 1500);
+
     if(st && st.linked){
       if(linkBtn)   linkBtn.style.display   = 'none';
       if(linkedBox) linkedBox.style.display = 'block';
-      var email = st.email || localStorage.getItem(_gdEmailKey()) || '—';
+      var email = st.email || savedEmail || '—';
       if(st.email) localStorage.setItem(_gdEmailKey(), st.email);
       if(emailEl)  emailEl.textContent = email;
       if(statusEl){
         statusEl.innerHTML = '🟢 مرتبط بحساب: <b style="color:var(--success)">'+email+'</b>';
       }
       _gdRefreshLastBackupInfo();
+      _gdStartAutoScheduler();
+    } else if(savedEmail){
+      // مربوط سابقاً لكن العملية الرئيسية لا تُرجع الرمز ⟵ لا نُخفي شيئاً بصمت
+      if(linkBtn)   linkBtn.style.display   = 'block';
+      if(linkedBox) linkedBox.style.display = 'none';
+      if(statusEl)  statusEl.innerHTML =
+        '⚠️ انقطع الربط بحساب <b>'+savedEmail+'</b> — لم تُستعَد صلاحية الوصول عند التشغيل.'+
+        '<br>اضغط «ربط Google Drive» لإعادة التفعيل.';
     } else {
       if(linkBtn)   linkBtn.style.display   = 'block';
       if(linkedBox) linkedBox.style.display = 'none';
@@ -34912,9 +36519,42 @@ function _gdUpdateAutoStatus(){
   }
 }
 
-// يُستدعى عند بدء التطبيق: ينفّذ النسخ التلقائي إن حان موعده
+// ════════════════════════════════════════════════════════════════════
+//  ⏱️ مجدول النسخ التلقائي — يعمل طوال فترة تشغيل البرنامج
+// ────────────────────────────────────────────────────────────────────
+//  المشكلة السابقة: _gdMaybeAutoBackup كانت تُستدعى **مرة واحدة فقط**
+//  بعد ٤٫٥ ثانية من الإقلاع. فإن لم يحن الموعد في تلك اللحظة (أو لم يكن
+//  الربط جاهزاً بعد) لا تُرفع أي نسخة مهما بقي البرنامج مفتوحاً أياماً.
+//  الآن: فحص دوري كل ١٠ دقائق + فحص فوري عند عودة النافذة للواجهة،
+//  مع حارس يمنع تشغيل نسختين معاً. لا يرفع شيئاً إلا إذا كان الزر مفعّلاً
+//  وحان موعد المدة المختارة — نفس شروط الدالة الأصلية تماماً.
+// ════════════════════════════════════════════════════════════════════
+var _gdAutoTimer = null;
+var _gdAutoBusy  = false;
+var _GD_TICK_MS  = 10 * 60 * 1000;   // فحص كل ١٠ دقائق
+
+function _gdStartAutoScheduler(){
+  if(_gdAutoTimer) return;             // مُشغَّل مسبقاً
+  if(!_gdHasElectron()) return;
+  _gdAutoTimer = setInterval(function(){
+    try{ _gdMaybeAutoBackup(); }catch(e){ console.warn('[GDrive] tick error', e); }
+  }, _GD_TICK_MS);
+  // فحص إضافي عند عودة النافذة للواجهة (بعد سكون الجهاز مثلاً)
+  if(!window._gdVisHooked){
+    window._gdVisHooked = true;
+    document.addEventListener('visibilitychange', function(){
+      if(document.visibilityState === 'visible'){
+        try{ _gdMaybeAutoBackup(); }catch(e){}
+      }
+    });
+  }
+  console.log('[GDrive] auto scheduler started (tick '+(_GD_TICK_MS/60000)+' min)');
+}
+
+// يُستدعى دورياً وعند بدء التطبيق: ينفّذ النسخ التلقائي إن حان موعده
 async function _gdMaybeAutoBackup(){
   if(!_gdHasElectron()) return;
+  if(_gdAutoBusy) return;              // نسخة قيد الرفع — لا تُشغّل أخرى
   var cfg = {};
   try{ cfg = JSON.parse(localStorage.getItem(_gdAutoKey()) || '{}'); }catch(e){}
   if(!cfg.enabled) return;
@@ -34934,9 +36574,16 @@ async function _gdMaybeAutoBackup(){
     var st = await window.electronAPI.gdriveStatus();
     if(!st || !st.linked) return;
     console.log('[GDrive] auto backup triggered');
-    var ok = await gdriveBackupNow(true);   // صامت
+    _gdAutoBusy = true;
+    var ok = false;
+    try{
+      ok = await gdriveBackupNow(true);   // صامت
+    } finally {
+      _gdAutoBusy = false;
+    }
     if(ok) showNotif('نسخة تلقائية','☁️ تم رفع نسخة احتياطية تلقائية إلى Google Drive','success');
-  }catch(e){ console.warn('[GDrive] auto backup error', e); }
+    else   console.warn('[GDrive] auto backup did not complete');
+  }catch(e){ _gdAutoBusy = false; console.warn('[GDrive] auto backup error', e); }
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -38893,9 +40540,12 @@ function _saveAutoCBC(val){
 // ─── طباعة مباشرة عبر iframe بدون واجهة ────────────────
 
 // ════════════════════════════════════════════════════════════
-// LIS — قفل الأزرار بكلمة السر SsAaIiFf@100
+// LIS — قفل الأزرار بالرمز السري (مقارنة بالبصمة، بلا نص صريح)
 // ════════════════════════════════════════════════════════════
-var _LIS_PASS = 'SsAaIiFf@100';
+var _LIS_PASS_H = '934ab812e6b62bee0cb471c59e14cbc8f98d206b41bc48e020b62beaaacd1bc3';
+function _lisPassOk(v){
+  try{ return typeof _pinHash==='function' && _pinHash(v)===_LIS_PASS_H; }catch(e){ return false; }
+}
 var _lisPendingFn = null;
 
 function _lisLockedAction(fn){
@@ -38906,7 +40556,7 @@ function _lisLockedAction(fn){
   if(!modal){
     // fallback إذا لم يُحمَّل الـ modal بعد
     var pass = window.prompt ? window.prompt('أدخل كلمة المرور:') : '';
-    if(pass === _LIS_PASS && typeof fn === 'function') fn();
+    if(_lisPassOk(pass) && typeof fn === 'function') fn();
     return;
   }
   if(inp) inp.value = '';
@@ -38919,7 +40569,7 @@ function _lisPassConfirm(){
   var inp  = document.getElementById('lis-pass-inp');
   var err  = document.getElementById('lis-pass-err');
   var pass = inp ? inp.value.trim() : '';
-  if(pass === _LIS_PASS){
+  if(_lisPassOk(pass)){
     document.getElementById('m-lis-pass').style.display = 'none';
     if(typeof _lisPendingFn === 'function'){
       var fn = _lisPendingFn;
@@ -39628,7 +41278,12 @@ function lanBroadcast(key, data){
     var d = _lanBcLatest[key];
     delete _lanBcTimers[key];
     delete _lanBcLatest[key];
-    try{ _lanEmit(key, d); }catch(e){ console.warn('[LAN] broadcast',key,e); }
+    // ⚡ JSON.stringify للمصفوفة كاملة عملية ثقيلة. ننفّذها في وقت خمول
+    //    المتصفح كي لا تُقاطع نقرة أو كتابة المستخدم. سقف ٢ ثانية يضمن
+    //    الإرسال حتى لو ظل البرنامج مشغولاً — فلا تتأخر المزامنة أبداً.
+    var _run=function(){ try{ _lanEmit(key, d); }catch(e){ console.warn('[LAN] broadcast',key,e); } };
+    if(typeof requestIdleCallback==='function') requestIdleCallback(_run,{timeout:2000});
+    else _run();
   }, 120);
 }
 
