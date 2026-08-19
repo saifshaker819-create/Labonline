@@ -39668,18 +39668,112 @@ function _gdDeobfuscate(b64){
 
 function _gdSavePassword(pw){ try{ localStorage.setItem(_gdPassKey(), _gdObfuscate(pw)); }catch(e){} }
 function _gdGetPassword(){ var v = localStorage.getItem(_gdPassKey()); return v ? _gdDeobfuscate(v) : ''; }
-function _gdHasElectron(){ return !!(window.IS_ELECTRON && window.electronAPI && window.electronAPI.gdriveStatus); }
+/* ══════════════════════════════════════════════════════════════════
+ * ☁️ جسر Google Drive — كشف مرن + ترقيع تلقائي
+ * ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ * سبب اختفاء القسم كاملاً: الشرط القديم كان يتطلب أمرين معاً:
+ *   window.IS_ELECTRON   +   window.electronAPI.gdriveStatus
+ * ويكفي أن يسقط أحدهما ليُخفى الصندوق بصمت بلا أي تفسير:
+ *   • IS_ELECTRON تُضبط في سكربت مبكر — إن تأخّر preload تبقى false
+ *   • gdriveStatus موجودة في main.js كـ ipcMain.handle('gdrive:status')
+ *     لكنها قد لا تكون مُصدَّرة في preload.js — وهذا هو السبب الأرجح
+ * الحل: لا نعتمد على العَلَم، بل على القدرة الفعلية؛ وإن غابت الدوال
+ * المسمّاة نبنيها من أي قناة invoke عامة متاحة. وإن تعذّر كل ذلك
+ * نعرض تشخيصاً واضحاً بدل الإخفاء الصامت.
+ * ══════════════════════════════════════════════════════════════════ */
+var _GD_CH = ['status','link','unlink','backup','info','restore'];
+
+function _gdGenericInvoke(){
+  var api = window.electronAPI;
+  try{
+    if(api && typeof api.invoke === 'function')
+      return function(c,p){ return api.invoke(c,p); };
+  }catch(e){}
+  try{
+    if(window.ipcRenderer && typeof window.ipcRenderer.invoke === 'function')
+      return function(c,p){ return window.ipcRenderer.invoke(c,p); };
+  }catch(e){}
+  try{
+    if(typeof window.require === 'function'){
+      var ipc = window.require('electron').ipcRenderer;
+      if(ipc && typeof ipc.invoke === 'function')
+        return function(c,p){ return ipc.invoke(c,p); };
+    }
+  }catch(e){}
+  return null;
+}
+
+/* يبني gdriveStatus/gdriveLink/... من قناة invoke عامة إن كانت مفقودة.
+   كائن contextBridge قد يكون مُجمّداً، لذا نسقط على نسخة مدمجة عند الفشل. */
+function _gdEnsureBridge(){
+  var api = window.electronAPI;
+  if(!api) return false;
+  if(typeof api.gdriveStatus === 'function') return true;
+  var inv = _gdGenericInvoke();
+  if(!inv) return false;
+  var patch = {};
+  _GD_CH.forEach(function(k){
+    var name = 'gdrive' + k.charAt(0).toUpperCase() + k.slice(1);
+    if(typeof api[name] !== 'function'){
+      patch[name] = (function(ch){ return function(p){ return inv('gdrive:'+ch, p); }; })(k);
+    }
+  });
+  try{
+    for(var n in patch) api[n] = patch[n];
+  }catch(e){}
+  if(typeof window.electronAPI.gdriveStatus !== 'function'){
+    try{
+      var merged = {};
+      for(var k1 in api){ try{ merged[k1] = api[k1]; }catch(_){} }
+      for(var k2 in patch) merged[k2] = patch[k2];
+      window.electronAPI = merged;
+    }catch(e){}
+  }
+  return typeof window.electronAPI.gdriveStatus === 'function';
+}
+
+/* تشخيص مقروء: ما الذي ينقص بالضبط؟ */
+function _gdDiagnose(){
+  var api = window.electronAPI;
+  if(!api) return 'لا يوجد جسر electronAPI إطلاقاً — أنت تعمل في متصفح عادي وليس في تطبيق سطح المكتب.';
+  if(typeof api.gdriveStatus === 'function') return '';
+  if(!_gdGenericInvoke())
+    return 'ملف preload.js لا يُصدّر دوال gdrive (gdriveStatus / gdriveLink ...) ولا قناة invoke عامة. '+
+           'المعالجات موجودة في main.js لكن لا سبيل للوصول إليها من الواجهة — يجب إضافتها في preload.js.';
+  return 'تعذّر بناء جسر gdrive رغم توفّر قناة invoke.';
+}
+
+function _gdHasElectron(){
+  // نعتمد على القدرة الفعلية لا على العَلَم — ونحاول الترقيع أولاً
+  if(window.electronAPI && typeof window.electronAPI.gdriveStatus === 'function') return true;
+  return _gdEnsureBridge();
+}
 
 // ════════════════════════════════════════════════════════════════════
 //  تهيئة القسم + تحديث الحالة
 // ════════════════════════════════════════════════════════════════════
 
 async function initGDrive(){
+  var _box0 = document.getElementById('gdrive-box');
   if(!_gdHasElectron()){
-    var box = document.getElementById('gdrive-box');
-    if(box) box.style.display = 'none';   // على المتصفح/الهاتف: أخفِ القسم (كنسخة index1)
+    // ⛔ لا نُخفي الصندوق بصمت — الإخفاء هو ما جعل القائمة تبدو فارغة تماماً.
+    //    نعرض السبب الحقيقي كي يكون العطل قابلاً للإصلاح لا مجرد فراغ.
+    var lb  = document.getElementById('gdrive-link-btn');
+    var lbx = document.getElementById('gdrive-linked-box');
+    var stx = document.getElementById('gdrive-status');
+    if(_box0) _box0.style.display = '';
+    if(lbx) lbx.style.display = 'none';
+    var why = _gdDiagnose();
+    var inBrowser = !window.electronAPI;
+    if(lb) lb.style.display = inBrowser ? 'none' : 'flex';   // في التطبيق: أبقِ الزر ليحاول
+    if(stx) stx.innerHTML =
+      (inBrowser ? 'ℹ️ ' : '⚠️ ') +
+      '<b>الربط بـ Google Drive غير متاح حالياً.</b><br>' +
+      '<span style="font-size:11px;color:var(--text2)">' + why + '</span>' +
+      (inBrowser ? '' : '<br><span style="font-size:11px">يمكنك الضغط على «ربط Google Drive» للمحاولة على أي حال.</span>');
     return;
   }
+  if(_box0) _box0.style.display = '';
   var _box = document.getElementById('gdrive-box');
   if(_box) _box.style.display = '';   // تأكيد الظهور لو أخفاه استدعاء سابق
   await refreshGDriveStatus();
@@ -39794,7 +39888,7 @@ async function _gdRefreshLastBackupInfo(){
 
 async function gdriveLink(){
   if(!_gdHasElectron()){
-    showNotif('غير متاح','ربط Google Drive يعمل في نسخة سطح المكتب فقط','warning');
+    showNotif('غير متاح','ربط Google Drive: '+_gdDiagnose(),'warning');
     return;
   }
   showNotif('جارٍ الربط','🌐 افتح المتصفح وسجّل الدخول بحساب Google الخاص بك...','info');
