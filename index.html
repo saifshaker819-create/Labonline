@@ -4676,22 +4676,15 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                         <option value="8">🎯 النموذج 8 — أنيق مينيمال بإبراز ذكي للقيم الشاذة</option>
                       </select>
                       <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
-
-                      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid rgba(0,180,100,0.25)">
-                        <div style="flex:1">
-                          <div style="font-size:12px;font-weight:700">📊 عمود النتيجة السابقة</div>
-                          <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية الجدول يعرض قيمة آخر فحص CBC للمريض — بخط أصغر وخلفية شفافة خفيفة. يعمل مع النماذج الثمانية.</div>
-                        </div>
-                        <div class="tog" id="tog-cbc-prev" onclick="this.classList.toggle('on');_saveCBCShowPrev(this.classList.contains('on'))"><div class="tog-t"></div></div>
-                      </div>
                     </div>
 
                     <!-- ═══ اختيار نموذج تقرير النتائج العامة ═══ -->
                     <div style="background:rgba(0,140,255,0.05);border:1px solid rgba(0,140,255,0.35);border-radius:10px;padding:14px">
                       <div style="font-size:12px;font-weight:800;color:#2b9bff;margin-bottom:10px">📄 نموذج تقرير النتائج العامة</div>
-                      <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). ثلاثة تصاميم حديثة ومرتبة.</div>
+                      <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). أربعة تصاميم حديثة ومرتبة.</div>
                       <select id="st-report-template" class="fc" style="width:100%;font-size:12px;font-weight:700" onchange="_saveReportTemplate(this.value)">
                         <option value="1">📄 النموذج 1 — كلاسيكي (التصميم الحالي)</option>
+                        <option value="2">🔵 النموذج 2 — بطاقات بدوائر ملوّنة (نتيجة داخل دائرة)</option>
                         <option value="3">✨ النموذج 3 — أنيق مينيمال بأحرف متباعدة وخطوط رفيعة</option>
                         <option value="4">↕️ النموذج 4 — أقسام بأسهم اتجاه (عالي/منخفض)</option>
                       </select>
@@ -10242,8 +10235,6 @@ function nav(p){
   if(p==='settings'){
     const togAC=document.getElementById('tog-auto-cbc');
     if(togAC){ if(settings.autoPrintCBC) togAC.classList.add('on'); else togAC.classList.remove('on'); }
-    const togCP=document.getElementById('tog-cbc-prev');
-    if(togCP){ if(settings.cbcShowPrev) togCP.classList.add('on'); else togCP.classList.remove('on'); }
     _loadCBCTemplateSel();
     _loadReportTemplateSel();
   }
@@ -10570,7 +10561,7 @@ function openPatientQuickPanel(pid){
         <div style="display:flex;align-items:center;gap:8px">
           <span class="bdg bdg-p">${r.id}</span>
           <span style="font-size:11px;color:var(--text2)">${r.date}</span>
-          ${_reqFullyPrinted(r)?'<span class="bdg bdg-ok" style="font-size:9px">🖨️ مطبوع</span>':'<span class="bdg bdg-w" style="font-size:9px">غير مطبوع</span>'}
+          ${r.printed?'<span class="bdg bdg-ok" style="font-size:9px">🖨️ مطبوع</span>':'<span class="bdg bdg-w" style="font-size:9px">غير مطبوع</span>'}
         </div>
         <div style="display:flex;gap:5px;flex-wrap:wrap">
           <button class="btn btn-sm btn-s" onclick="goToResult('${r.id}');document.getElementById('m-pt-quick').remove()">✏️ تعديل النتائج</button>
@@ -10638,42 +10629,6 @@ function deleteReqFromPanel(reqId, pid){
   openPatientQuickPanel(pid);
 }
 
-/* ══════════════════════════════════════════════════════════════════
- *  🔬 صفحة تقرير CBC لطلب واردٍ من جهاز مربوط (LIS)
- *  طلبات LIS تُنشأ بـ tests:['CBC'] وهو معرّف غير موجود في قاعدة
- *  التحاليل، لذا كانت المعاينة/الـ PDF تخرج صفحة فارغة.
- *  ترجع HTML الصفحة أو null إن لم توجد بيانات CBC.
- * ══════════════════════════════════════════════════════════════════ */
-function _cbcPageHTML(req){
-  try{
-    if(!req) return null;
-    var cbcParams = req.cbcData ||
-      (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.cbcParams);
-    if(!cbcParams || !Object.keys(cbcParams).length) return null;
-    if(typeof _buildCBCReportHTML !== 'function') return null;
-
-    var src = patients.find(function(p){ return p.id === req.patientId; });
-    /* نسخة مستقلة — لا نعدّل سجل المريض الأصلي */
-    var pt = src ? JSON.parse(JSON.stringify(src))
-                 : { name: req.patientName, id: req.patientId, barcode: req.patientId,
-                     gender: req.gender, age: req.age };
-    if(!pt.doctorName) pt.doctorName = req.doctorName || req.doctor || '---';
-    if(!pt.ageDisplay){
-      pt.ageDisplay = (typeof calcAgeFromInput === 'function'
-        ? calcAgeFromInput(pt.dob, pt.age) : pt.age) || '---';
-    }
-    return _buildCBCReportHTML(cbcParams, pt, req, (settings && settings.cbcTemplate) || '1');
-  }catch(e){ console.warn('[cbcPage]', e); return null; }
-}
-window._cbcPageHTML = _cbcPageHTML;
-
-/* هل الطلب يحوي نتيجة CBC من جهاز؟ */
-function _reqHasCBC(req){
-  return !!(req && (req.cbcData ||
-    (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.cbcParams)));
-}
-window._reqHasCBC = _reqHasCBC;
-
 function openPrintModal(rid){
   // Fix 2: resolve reqId from parameter, hidden select, or currentReqId
   if(rid) currentReqId=rid;
@@ -10707,10 +10662,6 @@ function openPrintModal(rid){
   // Gather all pages as separate HTML strings
   const pages=[];
   if(regularTests.length>0) pages.push(buildPrintHTML(req));
-
-  // 🔬 نتيجة CBC واردة من جهاز مربوط — صفحة مستقلة
-  const _cbcPg = _cbcPageHTML(req);
-  if(_cbcPg) pages.push(_cbcPg);
 
   // كل تحليل محسوب له نتيجة → صفحة منفردة
   calcTests.forEach(function(ct){
@@ -12103,7 +12054,7 @@ function viewPatientFullModal(pid){
         <div style="display:flex;align-items:center;gap:10px">
           <span class="bdg bdg-p">${r.id}</span>
           <span style="font-size:11px;color:var(--text2)">${r.date}</span>
-          ${_reqFullyPrinted(r)?'<span class="bdg bdg-ok" style="font-size:9px">🖨️ مطبوع</span>':'<span class="bdg bdg-w" style="font-size:9px">⏸ غير مطبوع</span>'}
+          ${r.printed?'<span class="bdg bdg-ok" style="font-size:9px">🖨️ مطبوع</span>':'<span class="bdg bdg-w" style="font-size:9px">⏸ غير مطبوع</span>'}
           ${getStatusBdg(r.status)}
         </div>
         <div style="display:flex;gap:6px">
@@ -12629,123 +12580,7 @@ function _updateDeviceReqBadge(){
     else btn.classList.remove('req-devnew-flash');
   }
 }
-/* ══════════════════════════════════════════════════════════════════════
- *  🖨️ اكتمال الطلب — مصدر واحد للحقيقة
- *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
- *  الطلب "مطبوع بالكامل" فقط عندما:
- *    • طُبع التقرير العام (إن وُجدت تحاليل عادية/محسوبة/CBC من جهاز)
- *    • وطُبعت كل فحوصاته الخاصة (إدرار / خروج / سائل منوي)
- *
- *  r.printed   = التقرير العام طُبع
- *  r.spPrinted = مصفوفة أنواع الفحوصات الخاصة التي طُبعت
- *  دوال قراءة فقط — لا تغيّر أي بيانات.
- * ══════════════════════════════════════════════════════════════════════ */
-
-/* يفكّك محتويات الطلب */
-function _reqParts(r){
-  var reqTests = ((r && r.tests) || []).map(function(tid){
-    return (typeof tests !== 'undefined' ? tests : []).find(function(t){ return t.id === tid; });
-  }).filter(Boolean);
-  return {
-    regular : reqTests.filter(function(t){ return !t.isSpecialExam && !t.isCalc; }),
-    calc    : reqTests.filter(function(t){ return t.isCalc; }),
-    special : reqTests.filter(function(t){ return t.isSpecialExam; }),
-    hasCBC  : !!(r && (r.cbcData || (r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.cbcParams)))
-  };
-}
-
-/* هل كل الفحوصات الخاصة في الطلب طُبعت؟ */
-function _spAllPrinted(r){
-  try{
-    var sp = _reqParts(r).special;
-    if(!sp.length) return true;
-    var done = (r && Array.isArray(r.spPrinted)) ? r.spPrinted : [];
-    for(var i = 0; i < sp.length; i++){
-      if(done.indexOf(sp[i].isSpecialExam) < 0) return false;
-    }
-    return true;
-  }catch(e){ return true; }
-}
-
-/* هل كل الفحوصات الخاصة أُدخلت نتائجها؟ */
-function _spAllEntered(r){
-  try{
-    var sp = _reqParts(r).special;
-    if(!sp.length) return true;
-    try{
-      if(typeof loadUARecords === 'function' && !window._spLoadedTick){
-        loadUARecords(); loadStoolExamRecords(); loadSemenRecords();
-        window._spLoadedTick = true;
-      }
-    }catch(e){}
-    for(var i = 0; i < sp.length; i++){
-      var k = sp[i].isSpecialExam, rec = null;
-      try{
-        if(k === 'ua')         rec = (uaRecords||[]).find(function(x){ return x.reqId === r.id; });
-        else if(k === 'stool') rec = (stoolExamRecords||[]).find(function(x){ return x.reqId === r.id; });
-        else if(k === 'semen') rec = (semenRecords||[]).find(function(x){ return x.reqId === r.id; });
-      }catch(e){}
-      if(!rec) return false;
-    }
-    return true;
-  }catch(e){ return true; }
-}
-
-/** ⭐ مطبوع بالكامل؟ */
-function _reqFullyPrinted(r){
-  try{
-    if(!r) return false;
-    var P = _reqParts(r);
-    var needsMain = (P.regular.length > 0 || P.calc.length > 0 || P.hasCBC);
-    if(needsMain && !r.printed) return false;      // التقرير العام لم يُطبع
-    if(!needsMain && !r.printed && !P.special.length) return false;
-    return _spAllPrinted(r);                        // وكل الفحوصات الخاصة
-  }catch(e){ return !!(r && r.printed); }
-}
-window._reqFullyPrinted = _reqFullyPrinted;
-
-/** شارة الحالة — لا تصبح «مكتمل» إلا بعد طباعة كل شيء */
-function _reqStatusBdg(r){
-  try{
-    if(r && r.status === 'done' && !_reqFullyPrinted(r))
-      return '<span class="bdg bdg-p">🔄 جاري</span>';
-  }catch(e){}
-  return getStatusBdg(r ? r.status : '');
-}
-
-/** شارة الطباعة */
-function _reqPrintBdg(r){
-  return _reqFullyPrinted(r)
-    ? '<span class="bdg bdg-ok">🖨️ مطبوع</span>'
-    : '<span class="bdg" style="background:rgba(255,214,10,0.13);color:var(--warning);border:1px solid rgba(255,214,10,0.28)">⏸ غير مطبوع</span>';
-}
-
-/** لون زر الطلب: 🔵 نتائج ناقصة · 🟠 مكتملة غير مطبوعة · 🟢 مطبوعة بالكامل */
-function _reqBtnState(r){
-  try{
-    if(!r) return 'blue';
-    if(_reqFullyPrinted(r)) return 'green';
-    if(r.status !== 'done') return 'blue';
-    if(!_spAllEntered(r))   return 'blue';
-    return 'orange';
-  }catch(e){ return 'blue'; }
-}
-window._reqBtnState = _reqBtnState;
-
-/** يُعلِّم كل فحوصات الطلب الخاصة كمطبوعة (تُستدعى عند طباعة/إرسال شامل) */
-function _spMarkAllPrinted(r){
-  try{
-    var sp = _reqParts(r).special;
-    if(!sp.length) return;
-    if(!Array.isArray(r.spPrinted)) r.spPrinted = [];
-    sp.forEach(function(t){
-      if(r.spPrinted.indexOf(t.isSpecialExam) < 0) r.spPrinted.push(t.isSpecialExam);
-    });
-  }catch(e){}
-}
-
 function renderRequestsFiltered(filter='today',srch=''){
-  window._spLoadedTick=false;   /* أعد تحميل سجلات الفحوصات الخاصة لهذه الدورة */
   const today=new Date().toISOString().split('T')[0];
   const tbody=document.getElementById('requests-body');
   if(!tbody) return;
@@ -12768,19 +12603,19 @@ function renderRequestsFiltered(filter='today',srch=''){
   const _reqRest=list.length-_reqShown.length;
   tbody.innerHTML=_reqShown.map(r=>`<tr>
     <td><span class="bdg bdg-p">${r.id}</span></td>
-    <td><b style="font-size:16.5px;font-weight:900;cursor:pointer;color:var(--primary);text-decoration:underline dotted;text-underline-offset:3px" onclick="goToResult('${r.id}')" title="إدخال النتائج">${r.patientName}</b></td>
+    <td><b style="font-size:16.5px;font-weight:900;cursor:pointer;color:var(--primary);text-decoration:underline dotted;text-underline-offset:3px" onclick="${r.status==='done'?`goToPrint('${r.id}')`:`goToResult('${r.id}')`}" title="${r.status==='done'?'فتح الطباعة':'إدخال النتائج'}">${r.patientName}</b></td>
     <td><span style="font-size:11px">${r.testNames?r.testNames.slice(0,3).join(', ')+(r.testNames.length>3?'...':''):'-'}</span></td>
     <td>${r.doctorName||'-'}</td>
     <td>${getPriorityBdg(r.priority)}</td>
-    <td>${_reqStatusBdg(r)}</td>
-    <td>${_reqPrintBdg(r)}</td>
+    <td>${getStatusBdg(r.status)}</td>
+    <td>${r.printed?'<span class="bdg bdg-ok">🖨️ مطبوع</span>':'<span class="bdg" style="background:rgba(255,214,10,0.13);color:var(--warning);border:1px solid rgba(255,214,10,0.28)">⏸ غير مطبوع</span>'}</td>
     <td>
       <div class="rrw">
-        <button class="rrt ${_reqBtnState(r)}"
+        <button class="rrt ${r.status==='done'?(r.printed?'green':'orange'):'blue'}"
           data-rid="${r.id}"
           data-mode="${r.status==='done'?'done':'pending'}"
           onclick="rrOpen(this)"
-          title="${(function(_s){return _s==='green'?'مطبوع بالكامل':_s==='orange'?'مكتمل — لم يُطبع بعد':'نتائج ناقصة';})(_reqBtnState(r))}">
+          title="${r.status==='done'?(r.printed?'تعديل وطباعة (مطبوع)':'تعديل وطباعة (غير مطبوع)'):'نتائج وطباعة'}">
           ${r.status==='done'?'✏️🖨️':'🧪'}
         </button>
       </div>
@@ -14865,7 +14700,7 @@ function filterPrintSearch(v){
         <div onclick="selectPrintReq('${r.id}','${r.patientName}')" style="padding:9px 18px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background 0.15s;display:flex;justify-content:space-between;align-items:center"
           onmouseover="this.style.background='rgba(0,212,255,0.08)'" onmouseout="this.style.background=''">
           <span style="font-size:12px;color:var(--text)">${r.patientName}</span>
-          <span style="font-size:10px;color:var(--text2)">${r.resultDate||r.date} ${_reqFullyPrinted(r)?'🖨️':''} ${(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams))?'<span style="color:#00c46a;font-weight:700">CBC</span>':''}</span>
+          <span style="font-size:10px;color:var(--text2)">${r.resultDate||r.date} ${r.printed?'🖨️':''} ${(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams))?'<span style="color:#00c46a;font-weight:700">CBC</span>':''}</span>
         </div>`).join('')}
     </div>`).join('');
   box.style.display='block';
@@ -15595,8 +15430,7 @@ function buildPrintHTML(req, opts){
   //  كل الحسابات (H/L، الألوان، المدى، الوحدة، السابقة) تبقى كما هي — النماذج
   //  تستقبل النتائج الجاهزة فقط وتغلّفها بتصميم مختلف.
   // ═══════════════════════════════════════════════════════════════════════
-  var RTPL = String(settings.reportTemplate||'1');
-  if(RTPL === '2') RTPL = '1';   /* النموذج ٢ (الدوائر) أُلغي — يُعرض بالكلاسيكي */
+  const RTPL = String(settings.reportTemplate||'1');
   // ألوان مساعدة مشتقة من الإعدادات (كل النماذج تخضع لإعدادات الألوان وأحجام الخط)
   const _tplAccent = sectionColor;         // لون القسم/العناوين (من الإعدادات)
   const _tplStrip  = stripColor;           // لون الشريط (من الإعدادات)
@@ -17253,26 +17087,6 @@ function generatePDFBlob(callback){
   const pageHTMLs=[];
   if(regularTests.length>0) pageHTMLs.push(buildPrintHTML(req));
   calcTests.forEach(function(ct){ pageHTMLs.push(buildCalcTestPrintHTML(req, ct)); });
-
-  // 🔬 صفحة CBC من جهاز مربوط (كانت تخرج صفحة فارغة قبل الإصلاح)
-  const _cbcPdfPg = (typeof _cbcPageHTML==='function') ? _cbcPageHTML(req) : null;
-  if(_cbcPdfPg) pageHTMLs.push(_cbcPdfPg);
-
-  // الفحوصات الخاصة المحفوظة — تُضاف للـ PDF أيضاً
-  try{
-    const _spT=allTests.filter(function(t){return t.isSpecialExam;});
-    if(_spT.length){
-      loadUARecords(); loadStoolExamRecords(); loadSemenRecords();
-      _spT.forEach(function(st){
-        let rec=null, h=null;
-        if(st.isSpecialExam==='ua'){    rec=uaRecords.find(function(x){return x.reqId===req.id;});         if(rec) h=_buildUAPrintHTML(rec); }
-        else if(st.isSpecialExam==='stool'){ rec=stoolExamRecords.find(function(x){return x.reqId===req.id;}); if(rec) h=_buildStoolPrintHTML(rec); }
-        else if(st.isSpecialExam==='semen'){ rec=semenRecords.find(function(x){return x.reqId===req.id;});     if(rec) h=_buildSemenPrintHTML(rec); }
-        if(h) pageHTMLs.push(h);
-      });
-    }
-  }catch(e){ console.warn('[pdf special]', e); }
-
   if(pageHTMLs.length===0) pageHTMLs.push(buildPrintHTML(req));
 
   // ── إظهار overlay ──
@@ -17564,21 +17378,7 @@ function shareWhatsApp(){
   generatePDFBlob(async (doc, fileName, ptName, ptId)=>{
     await _fsaSavePDFToD(doc, fileName, (savedPath)=>{
       const intPhone=_formatPhoneForWhatsApp(pt.phone, pt.phoneCC);
-
-      /* 📤 الإرسال عبر واتساب = تسليم النتيجة ⇒ يُعدّ الطلب مطبوعاً بالكامل
-         (ملف الـ PDF يضم التقرير العام + المحسوبة + CBC + الفحوصات الخاصة) */
-      try{
-        req.printed = true;
-        if(typeof _spMarkAllPrinted === 'function') _spMarkAllPrinted(req);
-        if(!req.resultDate) req.resultDate = new Date().toISOString().split('T')[0];
-        req._updatedAt = Date.now();
-        save('requests', requests);
-        try{ if(typeof _wsMarkPrinted === 'function') _wsMarkPrinted(req.id); }catch(_){}
-        try{ if(typeof renderRequests === 'function') renderRequests(); }catch(_){}
-        try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(_){}
-        showNotif('تم','📤 أُرسلت النتيجة — الطلب الآن «مطبوع»','success');
-      }catch(e){ console.warn('[wa printed]', e); }
-
+      // فتح واتساب مباشرة بعد حفظ الملف
       setTimeout(()=>{ _openWhatsAppDirect(intPhone); }, 400);
     }, ptName, ptId);
   });
@@ -18932,7 +18732,7 @@ function updateDashboard(force){
     <td><span class="bdg bdg-p">${r.id}</span></td>
     <td style="color:#000;font-weight:900;font-size:11px">${r.patientName}</td>
     <td style="font-size:10px;color:#000;font-weight:700">${r.testNames?r.testNames.slice(0,2).join(', '):'-'}</td>
-    <td>${_reqStatusBdg(r)}</td>
+    <td>${getStatusBdg(r.status)}</td>
     <td><div style="display:flex;gap:4px;flex-wrap:wrap">
       <button class="btn btn-sm btn-p" onclick="${r.status==='done'?`goToPrint('${r.id}')`:`goToResult('${r.id}')`}">${r.status==='done'?'🖨️':'🧪'}</button>
       ${r.status==='done'?`<button class="btn btn-sm btn-s" onclick="openViewResultsModal('${r.id}')">👁️</button>`:''}
@@ -20225,10 +20025,7 @@ function loadSettings(){
   const cbcTplSel=document.getElementById('st-cbc-template');
   if(cbcTplSel) cbcTplSel.value=settings.cbcTemplate||'1';
   const repTplSel=document.getElementById('st-report-template');
-  if(repTplSel){
-    if(String(settings.reportTemplate)==='2'){ settings.reportTemplate='1'; try{ save('settings',settings); }catch(e){} }
-    repTplSel.value=settings.reportTemplate||'1';
-  }
+  if(repTplSel) repTplSel.value=settings.reportTemplate||'1';
   // 🖨️ وضع الطباعة عبر الشبكة (طباعة في الحاسبتين / الأخرى فقط / حاسبتي فقط)
   try{ if(typeof _syncPrintScopeUI==='function') _syncPrintScopeUI(); }catch(e){}
   document.getElementById('sb-labname').textContent='🏥 '+(settings.name||'المختبر');
@@ -27221,7 +27018,6 @@ function printUAReport(id){
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
   try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'ua'); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير البول للطابعة 🖨️','success');
 }
 
@@ -27787,7 +27583,6 @@ function printStoolReport(id){
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
   try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'stool'); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير البراز للطابعة 🖨️','success');
 }
 
@@ -28333,7 +28128,6 @@ function _loadCBCTemplateSel(){
 
 /* ─── نموذج تقرير النتائج العامة (Report Templates 1–4) ─── */
 function _saveReportTemplate(val){
-  if(String(val)==='2') val='1';   /* النموذج ٢ محذوف */
   if(typeof settings==='object') settings.reportTemplate=val;
   if(typeof saveSettings==='function') saveSettings();
   try{ showNotif('✅ تم الحفظ','تم اختيار نموذج التقرير رقم '+val,'success'); }catch(e){}
@@ -28460,13 +28254,6 @@ function _previewCBCTemplate(){
   };
   const demoPt={name:'Ahmed Khalid Al-Rashidi',barcode:'123456',gender:'Male',age:'35Y',doctorName:'Dr. Omar Saleh'};
   const demoReq={date:'2025-01-15'};
-  demoReq._cbcPrevDemo={ when:'02/12/24', t:new Date('2024-12-02').getTime(), params:{
-    WBC:{value:'6.4'}, 'NEU#':{value:'3.8'}, 'LYM#':{value:'2.1'}, 'MON#':{value:'0.5'},
-    'EOS#':{value:'0.3'}, 'BAS#':{value:'0.0'}, 'NEU%':{value:'59.4'}, 'LYM%':{value:'32.8'},
-    'MON%':{value:'7.8'}, 'EOS%':{value:'4.7'}, 'BAS%':{value:'0.4'},
-    RBC:{value:'4.62'}, HGB:{value:'13.5'}, HCT:{value:'40.3'}, MCV:{value:'87.2'},
-    MCH:{value:'29.2'}, MCHC:{value:'33.5'}, 'RDW-CV':{value:'13.6'}, 'RDW-SD':{value:'42.1'},
-    PLT:{value:'265'}, MPV:{value:'10.2'}, PDW:{value:'12.7'}, PCT:{value:'0.27'} } };
   const tpl=(document.getElementById('st-cbc-template')||{}).value||settings.cbcTemplate||'1';
   const html=_buildCBCReportHTML(demoParams,demoPt,demoReq,tpl);
   // استخدم Blob URL داخل iframe بدلاً من window.open لتجنب مشكلة اختيار التطبيق
@@ -28486,130 +28273,8 @@ function _previewCBCTemplate(){
   document.body.appendChild(overlay);
 }
 
-/* ══════════════════════════════════════════════════════════════════════
- *  📊 عمود «Previous» في تقارير CBC
- *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
- *  عمود إضافي في نهاية كل جدول (يمين الورقة) يحمل قيمة الفحص السابق
- *  فقط — بخط أصغر بدرجة، مائل، بخلفية زجاجية شفافة خفيفة جداً ليتميّز
- *  عن النتيجة الحالية دون أن يزاحمها.
- *
- *  التفعيل: settings.cbcShowPrev — عند الإطفاء لا يُبنى العمود إطلاقاً
- *  وتعود التقارير كما كانت حرفياً.
- * ══════════════════════════════════════════════════════════════════════ */
-
-/* اللقطة السابقة الجاري عرضها — تُضبط في الغلاف قبل بناء كل تقرير */
-var _CBC_PREV = null;
-
-/* خلفية زجاجية موحّدة */
-var _PREVBG = 'background:rgba(122,148,186,0.085);-webkit-print-color-adjust:exact;print-color-adjust:exact;';
-
-/* قيمة المُعامل في الفحص السابق */
-function _prevVal(key){
-  try{
-    if(!_CBC_PREV || !_CBC_PREV.params) return '';
-    var p = _CBC_PREV.params[key];
-    if(!p) return '';
-    var v = String(p.value == null ? '' : p.value).trim();
-    return (!v || v === '---') ? '' : v;
-  }catch(e){ return ''; }
-}
-
-/* خلية العمود */
-function _prevCell(key, o){
-  if(!_CBC_PREV) return '';
-  o = o || {};
-  var v  = _prevVal(key);
-  var bd = o.bd ? ('border-bottom:' + o.bd + ';') : '';
-  return '<td style="' + _PREVBG + bd + (o.extra || '') +
-         'padding:' + (o.pad || '3px 7px') + ';text-align:center;font-size:' + (o.fs || 11) +
-         'px;font-weight:600;font-style:italic;color:#8492a6;white-space:nowrap">' +
-         (v || '<span style="color:#c9d1dc;font-style:normal">–</span>') + '</td>';
-}
-
-/* رأس العمود — يحمل تاريخ الفحص السابق بخط صغير */
-function _prevTh(o){
-  if(!_CBC_PREV) return '';
-  o = o || {};
-  var sub = _CBC_PREV.when
-    ? '<div style="font-size:7px;font-weight:600;opacity:.85;margin-top:-1px;letter-spacing:0">' + _CBC_PREV.when + '</div>'
-    : '';
-  return '<th style="' + _PREVBG + (o.thExtra || '') +
-         'padding:' + (o.pad || '4px 6px') + ';text-align:center;font-size:' + (o.fs || 9) +
-         'px;white-space:nowrap">Previous' + sub + '</th>';
-}
-
-/* أعمدة إضافية — لتصحيح colspan في صفوف الفواصل */
-function _prevSpan(){ return _CBC_PREV ? 1 : 0; }
-
-/** يبحث عن آخر فحص CBC للمريض أقدم من الفحص الحالي */
-function _cbcPrevSnapshot(cbcParams, pt, req){
-  try{
-    if(!req || !cbcParams) return null;
-    var pid = req.patientId || (pt && pt.id);
-    if(!pid) return null;
-
-    var snaps = [];
-    function ts(v){ var t = new Date(v).getTime(); return isNaN(t) ? 0 : t; }
-
-    (typeof requests !== 'undefined' ? requests : []).forEach(function(r){
-      if(String(r.patientId) !== String(pid)) return;
-      if(Array.isArray(r.cbcHistory) && r.cbcHistory.length){
-        r.cbcHistory.forEach(function(h){
-          if(h && h.params) snaps.push({ params:h.params, t:ts(h.datetime || r.resultDate || r.date) });
-        });
-      } else {
-        var pr = r.cbcData || (r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.cbcParams);
-        if(pr) snaps.push({ params:pr,
-          t:ts((r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.datetime) || r.resultDate || r.date) });
-      }
-    });
-    if(snaps.length < 2) return null;
-
-    var curT = 0, found = false;
-    for(var i = 0; i < snaps.length; i++){
-      if(snaps[i].params === cbcParams){ curT = snaps[i].t; found = true; break; }
-    }
-    if(!found){
-      curT = ts((req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.datetime)
-                || req.resultDate || req.date) || Date.now();
-    }
-
-    var older = snaps.filter(function(s){ return s.params !== cbcParams && s.t <= curT; });
-    if(!older.length) return null;
-    older.sort(function(a,b){ return b.t - a.t; });
-
-    var best = older[0], when = '';
-    try{
-      if(best.t) when = new Date(best.t).toLocaleDateString('en-GB',
-        { day:'2-digit', month:'2-digit', year:'2-digit' });
-    }catch(e){}
-    return { params: best.params, t: best.t, when: when };
-  }catch(e){ console.warn('[cbcPrev]', e); return null; }
-}
-
-/**
- * الغلاف — يضبط _CBC_PREV ثم يستدعي النواة، ويُصفّرها بعدها دائماً.
- * أي خلل يُلغي العمود ويُبقي التقرير سليماً تماماً.
- */
+/* ─── دالة بناء HTML حسب النموذج المختار ─── */
 function _buildCBCReportHTML(cbcParams, pt, req, templateId){
-  var prev = null;
-  try{
-    if(typeof settings === 'object' && settings.cbcShowPrev){
-      prev = (req && req._cbcPrevDemo) ? req._cbcPrevDemo
-                                       : _cbcPrevSnapshot(cbcParams, pt, req);
-    }
-  }catch(e){ prev = null; }
-
-  _CBC_PREV = prev;
-  try{
-    return _buildCBCReportHTML_core(cbcParams, pt, req, templateId);
-  } finally {
-    _CBC_PREV = null;   /* لا تتسرب الحالة لأي تقرير لاحق */
-  }
-}
-
-/* ─── بناء التقرير حسب النموذج المختار (النواة) ─── */
-function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
   const tableColor=settings.tableColor||'#003366';
   const nameColor=settings.colorName||'#cc0011';
   const barcodeId=(String(pt.barcode||pt.id||'000000').replace(/[^0-9A-Za-z]/g,'')||'000000');
@@ -28680,10 +28345,10 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       const {val,flag,flagColor,ref,unit}=getParam(key);
       const sTop=(key==='WBC'||key==='RBC'||key==='PLT')?'border-top:2px solid '+tableColor+';':'';
       const bg=rowNum%2===0?'#f5f5f5':'#fff';
-      rows+='<tr style="background:'+bg+';'+sTop+'"><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:#666">'+rowNum+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:12px;font-weight:600">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:13px;font-weight:800;text-align:center;color:'+flagColor+'">'+val+'</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:'+flagColor+';font-weight:700">'+(flag||'')+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000;font-weight:600">'+unit+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000;font-weight:600">'+ref+'</td>'+_prevCell(key,{fs:11,pad:'3px 8px',extra:'border:1px solid #ddd;'})+'</tr>';
+      rows+='<tr style="background:'+bg+';'+sTop+'"><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:#666">'+rowNum+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:12px;font-weight:600">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:13px;font-weight:800;text-align:center;color:'+flagColor+'">'+val+'</td><td style="padding:3px 6px;border:1px solid #ddd;font-size:11px;text-align:center;color:'+flagColor+';font-weight:700">'+(flag||'')+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000;font-weight:600">'+unit+'</td><td style="padding:3px 8px;border:1px solid #ddd;font-size:11px;text-align:center;color:#000;font-weight:600">'+ref+'</td></tr>';
       rowNum++;
     });
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.report-title{text-align:center;font-size:13px;font-weight:800;color:'+tableColor+';border:2px solid '+tableColor+';padding:3px;margin:5px 0;border-radius:3px;}.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1.5px solid #ccc;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:4px 8px;gap:3px;border-left:1.5px solid #ccc;min-width:140px;}.pt-field{display:flex;gap:4px;align-items:baseline;}.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:48px;}.pt-val{font-weight:800;font-size:14px;}.rbox{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;text-align:center;min-width:120px;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;border:1px solid #002244;text-align:center;font-weight:700;}.footer-bar{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}</style></head><body>'+hdr+'<div class="report-title">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-bar"><div class="pt-left"><div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:18px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex/Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:18px">'+doctorName+'</span></div></div><div class="pt-right"><div class="rbox">ID: '+barcodeId+'</div><div class="rbox">'+sampleDate+'</div><div class="rbox">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:28px">#</th><th>Parameter</th><th>Result</th><th style="width:45px">Flag</th><th>Unit</th><th>Ref. Ranges</th>'+_prevTh({fs:9,pad:'5px 6px',thExtra:'border:1px solid #002244;color:#dbe7f5;font-weight:700;'})+'</tr></thead><tbody>'+rows+'</tbody></table><div class="footer-bar"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.report-title{text-align:center;font-size:13px;font-weight:800;color:'+tableColor+';border:2px solid '+tableColor+';padding:3px;margin:5px 0;border-radius:3px;}.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1.5px solid #ccc;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:4px 8px;gap:3px;border-left:1.5px solid #ccc;min-width:140px;}.pt-field{display:flex;gap:4px;align-items:baseline;}.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:48px;}.pt-val{font-weight:800;font-size:14px;}.rbox{background:'+tableColor+';color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;text-align:center;min-width:120px;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;border:1px solid #002244;text-align:center;font-weight:700;}.footer-bar{border-top:1.5px solid '+tableColor+';margin-top:6px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}</style></head><body>'+hdr+'<div class="report-title">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-bar"><div class="pt-left"><div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:18px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex/Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:18px">'+doctorName+'</span></div></div><div class="pt-right"><div class="rbox">ID: '+barcodeId+'</div><div class="rbox">'+sampleDate+'</div><div class="rbox">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:28px">#</th><th>Parameter</th><th>Result</th><th style="width:45px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table><div class="footer-bar"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -28698,11 +28363,11 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       const barColor=flag?flagColor:'#4caf50';
       const sTop=(key==='WBC'||key==='RBC'||key==='PLT')?'border-top:2.5px solid '+tableColor+';':'';
       const bg=rowNum%2===0?'#fafcff':'#fff';
-      rows+='<tr style="background:'+bg+';'+sTop+'"><td style="width:5px;background:'+barColor+';padding:0"></td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:12px;font-weight:700;color:#1a2a3a">'+(LABELS[key]||key)+'</td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+'">'+val+'</td><td style="padding:4px 6px;border-bottom:1px solid #e8eef5;text-align:center"><span style="background:'+(flag?(flagColor+'22'):'transparent')+';color:'+flagColor+';font-weight:800;font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid '+(flag?flagColor:'transparent')+'">'+(flag||'N')+'</span></td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:10px;color:#000;font-weight:600;text-align:center">'+unit+'</td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:10px;color:#000;font-weight:600;text-align:center">'+ref+'</td>'+_prevCell(key,{fs:11,pad:'4px 8px',bd:'1px solid #e8eef5'})+'</tr>';
+      rows+='<tr style="background:'+bg+';'+sTop+'"><td style="width:5px;background:'+barColor+';padding:0"></td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:12px;font-weight:700;color:#1a2a3a">'+(LABELS[key]||key)+'</td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+'">'+val+'</td><td style="padding:4px 6px;border-bottom:1px solid #e8eef5;text-align:center"><span style="background:'+(flag?(flagColor+'22'):'transparent')+';color:'+flagColor+';font-weight:800;font-size:11px;padding:1px 5px;border-radius:4px;border:1px solid '+(flag?flagColor:'transparent')+'">'+(flag||'N')+'</span></td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:10px;color:#000;font-weight:600;text-align:center">'+unit+'</td><td style="padding:4px 8px;border-bottom:1px solid #e8eef5;font-size:10px;color:#000;font-weight:600;text-align:center">'+ref+'</td></tr>';
       rowNum++;
     });
     const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;color:#000;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;}.ttl{background:linear-gradient(90deg,'+tableColor+',#0055aa);color:#fff;text-align:center;font-size:13px;font-weight:900;padding:5px;margin:5px 0;border-radius:4px;letter-spacing:0.5px;}.pt-wrap{display:flex;gap:0;border:1.5px solid '+tableColor+';border-radius:5px;overflow:hidden;margin:6px 0;}.pt-main{flex:1;padding:7px 12px;display:flex;flex-direction:column;gap:4px;background:#f7faff;}.pt-side{background:'+tableColor+';color:#fff;padding:7px 10px;display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;min-width:130px;}.pt-row{display:flex;gap:5px;align-items:center;font-size:11px;}.pt-key{color:#668;font-weight:600;min-width:50px;}.pt-v{font-weight:800;font-size:14px;color:#1a2a3a;}.sbox{background:rgba(255,255,255,0.2);color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:3px;text-align:center;width:100%;}table{width:100%;border-collapse:collapse;margin-top:5px;}th{background:'+tableColor+';color:#fff;padding:5px 8px;font-size:11px;font-weight:700;text-align:center;}.foot{border-top:2px solid '+tableColor+';margin-top:8px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#666;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-main"><div class="pt-row"><span class="pt-key">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:17px;font-weight:900">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-key">Sex / Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-key">Doctor:</span><span class="pt-v" style="font-size:16px">'+doctorName+'</span></div><div class="pt-row"><span class="pt-key">Sample:</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="pt-side"><div class="sbox">ID: '+barcodeId+'</div><div class="sbox">WB-CBC+DIFF</div><div class="sbox">'+sampleDate+'</div></div></div><table><thead><tr><th style="width:5px"></th><th style="text-align:left;padding-right:10px">Parameter</th><th>Result</th><th style="width:50px">Flag</th><th>Unit</th><th>Ref. Range</th>'+_prevTh({fs:9,pad:'4px 6px'})+'</tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-main"><div class="pt-row"><span class="pt-key">Patient:</span><span class="pt-v" style="color:'+nameColor+';font-size:17px;font-weight:900">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-key">Sex / Age:</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-key">Doctor:</span><span class="pt-v" style="font-size:16px">'+doctorName+'</span></div><div class="pt-row"><span class="pt-key">Sample:</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="pt-side"><div class="sbox">ID: '+barcodeId+'</div><div class="sbox">WB-CBC+DIFF</div><div class="sbox">'+sampleDate+'</div></div></div><table><thead><tr><th style="width:5px"></th><th style="text-align:left;padding-right:10px">Parameter</th><th>Result</th><th style="width:50px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -28722,10 +28387,10 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         if(!p) return;
         const {val,flag,flagColor,ref,unit}=getParam(key);
         const isAbn=!!flag;
-        rows+='<tr style="background:'+(isAbn?'#fff8f8':'#fff')+'"><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#2c3e50">'+(LABELS[key]||key)+'</td><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:13px;font-weight:900;text-align:center;color:'+flagColor+'">'+val+(isAbn?' <sup style="font-size:9px">'+flag+'</sup>':'')+'</td><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:10px;color:#000;font-weight:600;text-align:center">'+unit+'</td><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:10px;color:#000;font-weight:600;text-align:center">'+ref+'</td>'+_prevCell(key,{fs:10,pad:'2px 7px',bd:'1px solid #eee'})+'</tr>';
+        rows+='<tr style="background:'+(isAbn?'#fff8f8':'#fff')+'"><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:#2c3e50">'+(LABELS[key]||key)+'</td><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:13px;font-weight:900;text-align:center;color:'+flagColor+'">'+val+(isAbn?' <sup style="font-size:9px">'+flag+'</sup>':'')+'</td><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:10px;color:#000;font-weight:600;text-align:center">'+unit+'</td><td style="padding:2px 8px;border-bottom:1px solid #eee;font-size:10px;color:#000;font-weight:600;text-align:center">'+ref+'</td></tr>';
       });
       if(!rows) return;
-      groupsHTML+='<div style="margin-bottom:5px;border-radius:5px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)"><div style="background:'+g.color+';color:#fff;padding:3px 10px;font-size:11px;font-weight:800;letter-spacing:0.3px">'+g.title+'</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:'+g.color+'22"><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:left;border-bottom:1px solid '+g.color+'44">Parameter</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Result</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Unit</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Ref. Range</th>'+_prevTh({fs:9,pad:'2px 6px',thExtra:'color:'+g.color+';border-bottom:1px solid '+g.color+'44;font-weight:700;'})+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+      groupsHTML+='<div style="margin-bottom:5px;border-radius:5px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08)"><div style="background:'+g.color+';color:#fff;padding:3px 10px;font-size:11px;font-weight:800;letter-spacing:0.3px">'+g.title+'</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:'+g.color+'22"><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:left;border-bottom:1px solid '+g.color+'44">Parameter</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Result</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Unit</th><th style="padding:2px 8px;font-size:10px;font-weight:700;color:'+g.color+';text-align:center;border-bottom:1px solid '+g.color+'44">Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
     });
     const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:0.5mm 2mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.ttl{text-align:center;font-size:12px;font-weight:900;color:'+tableColor+';border-bottom:2px solid '+tableColor+';padding:3px 0;margin:3px 0 5px;text-transform:uppercase;letter-spacing:1px;}.pt-card{display:grid;grid-template-columns:1fr auto;gap:0;border:1.5px solid '+tableColor+';border-radius:5px;overflow:hidden;margin:0 0 6px;}.pt-info{padding:5px 10px;display:flex;flex-direction:column;gap:3px;}.pt-field{display:flex;gap:5px;align-items:center;font-size:10px;}.pt-lbl{color:#667;font-weight:600;min-width:50px;}.pt-val{font-weight:800;color:#1a2035;font-size:12px;}.pt-ids{background:'+tableColor+';color:#fff;padding:6px 10px;display:flex;flex-direction:column;gap:4px;align-items:center;justify-content:center;min-width:115px;}.id-chip{background:rgba(255,255,255,0.22);font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-align:center;width:100%;}.foot{border-top:1px solid #ddd;margin-top:5px;padding-top:3px;display:flex;justify-content:space-between;font-size:9px;color:#888;}';
     return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-card"><div class="pt-info"><div class="pt-field"><span class="pt-lbl">Patient</span><span class="pt-val" style="color:'+nameColor+';font-size:17px">'+ptFullName+'</span></div><div class="pt-field"><span class="pt-lbl">Sex / Age</span><span class="pt-val">'+gender+' / '+age+'</span></div><div class="pt-field"><span class="pt-lbl">Doctor</span><span class="pt-val">'+doctorName+'</span></div><div class="pt-field"><span class="pt-lbl">Date</span><span class="pt-val">'+sampleDate+'</span></div></div><div class="pt-ids"><div class="id-chip">ID: '+barcodeId+'</div><div class="id-chip">WB-CBC+DIFF</div></div></div>'+groupsHTML+'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
@@ -28743,11 +28408,11 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       const {val,flag,flagColor,ref,unit}=getParam(key);
       const sep=(key==='WBC'||key==='RBC'||key==='PLT');
       const bg=sep?ac+'0d':'#fff';
-      rows+='<tr style="background:'+bg+'\">'+(sep?'<td colspan="'+(6+_prevSpan())+'" style="padding:3px 10px;font-size:10px;font-weight:900;color:'+ac+';letter-spacing:1px;background:'+ac+'15;border-top:1.5px solid '+ac+'44">'+(key==='WBC'?'▸ WBC DIFFERENTIAL':key==='RBC'?'▸ RED CELL INDICES':'▸ PLATELET INDICES')+'</td></tr><tr style="background:#fff">':'')+'<td style="padding:3px 8px;font-size:11px;color:#888;border-bottom:1px solid #f0f0f0;text-align:center">'+rowNum+'</td><td style="padding:3px 10px;font-size:12px;font-weight:700;color:#2c3e50;border-bottom:1px solid #f0f0f0">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+';border-bottom:1px solid #f0f0f0">'+val+'</td><td style="padding:3px 6px;text-align:center;border-bottom:1px solid #f0f0f0"><span style="display:inline-block;min-width:22px;padding:1px 4px;border-radius:10px;font-size:10px;font-weight:800;background:'+(flag!=='N'?(flagColor+'18'):'#f5f5f5')+';color:'+flagColor+'">'+flag+'</span></td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+unit+'</td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+ref+'</td>'+_prevCell(key,{fs:10,pad:'3px 7px',bd:'1px solid #f0f0f0'})+'</tr>';
+      rows+='<tr style="background:'+bg+'\">'+(sep?'<td colspan="6" style="padding:3px 10px;font-size:10px;font-weight:900;color:'+ac+';letter-spacing:1px;background:'+ac+'15;border-top:1.5px solid '+ac+'44">'+(key==='WBC'?'▸ WBC DIFFERENTIAL':key==='RBC'?'▸ RED CELL INDICES':'▸ PLATELET INDICES')+'</td></tr><tr style="background:#fff">':'')+'<td style="padding:3px 8px;font-size:11px;color:#888;border-bottom:1px solid #f0f0f0;text-align:center">'+rowNum+'</td><td style="padding:3px 10px;font-size:12px;font-weight:700;color:#2c3e50;border-bottom:1px solid #f0f0f0">'+(LABELS[key]||key)+'</td><td style="padding:3px 8px;font-size:14px;font-weight:900;text-align:center;color:'+flagColor+';border-bottom:1px solid #f0f0f0">'+val+'</td><td style="padding:3px 6px;text-align:center;border-bottom:1px solid #f0f0f0"><span style="display:inline-block;min-width:22px;padding:1px 4px;border-radius:10px;font-size:10px;font-weight:800;background:'+(flag!=='N'?(flagColor+'18'):'#f5f5f5')+';color:'+flagColor+'">'+flag+'</span></td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+unit+'</td><td style="padding:3px 8px;font-size:10px;text-align:center;color:#000;font-weight:600;border-bottom:1px solid #f0f0f0">'+ref+'</td></tr>';
       rowNum++;
     });
     const css='*{margin:0;padding:0;box-sizing:border-box}html,body{background:#fff;font-family:"Segoe UI",Arial,sans-serif;}@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}.outer{border:2px solid '+ac+';border-radius:10px;overflow:hidden;margin:6px 0;}.ttl{text-align:center;font-size:13px;font-weight:900;background:'+ac+';color:#fff;padding:5px;}.pt-wrap{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;background:'+ac+'0a;border-bottom:1px solid '+ac+'33;}.pt-l{display:flex;flex-direction:column;gap:3px;}.pt-row{display:flex;gap:6px;align-items:center;}.pt-k{font-size:10px;color:#888;font-weight:600;min-width:50px;}.pt-v{font-size:14px;font-weight:800;color:#1a2035;}.chips{display:flex;flex-direction:column;gap:4px;align-items:flex-end;}.chip{background:'+ac+';color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:10px;}table{width:100%;border-collapse:collapse;}th{padding:5px 8px;font-size:11px;font-weight:700;color:'+ac+';text-align:center;border-bottom:2px solid '+ac+'33;background:'+ac+'0d;}.foot{padding:5px 14px;background:'+ac+'0a;border-top:1px solid '+ac+'33;display:flex;justify-content:space-between;font-size:10px;color:#888;}';
-    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="outer"><div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-l"><div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:17px">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div><div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="chips"><div class="chip">ID: '+barcodeId+'</div><div class="chip">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:30px">#</th><th style="text-align:left;padding-right:12px">Parameter</th><th>Result</th><th style="width:48px">Flag</th><th>Unit</th><th>Ref. Range</th>'+_prevTh({fs:9,pad:'4px 6px'})+'</tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></div></body></html>';
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr+'<div class="outer"><div class="ttl">Hematology Analysis Report — WB-CBC+DIFF</div><div class="pt-wrap"><div class="pt-l"><div class="pt-row"><span class="pt-k">Patient</span><span class="pt-v" style="color:'+nameColor+';font-size:17px">'+ptFullName+'</span></div><div class="pt-row"><span class="pt-k">Sex / Age</span><span class="pt-v">'+gender+' / '+age+'</span></div><div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div><div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div></div><div class="chips"><div class="chip">ID: '+barcodeId+'</div><div class="chip">WB-CBC+DIFF</div></div></div><table><thead><tr><th style="width:30px">#</th><th style="text-align:left;padding-right:12px">Parameter</th><th>Result</th><th style="width:48px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table><div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></div></body></html>';
   }
 
   // ══════════════════════════════════════════════════════════
@@ -28854,7 +28519,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     const _PLT_KEYS5={'PLT':1,'MPV':1,'PDW':1,'PCT':1};
     function buildCol(keys,hdrColor,mode){
       // mode: 'blue' = العمود الأزرق · 'rbcplt' = عمود RBC/PLT
-      let r='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="background:#fff;color:'+hdrColor+';padding:4px 7px;font-size:11px;text-align:left;border-bottom:2px solid '+hdrColor+'">Parameter</th><th style="background:#fff;color:'+hdrColor+';padding:4px 7px;font-size:11px;text-align:center;border-bottom:2px solid '+hdrColor+'">Result</th><th style="background:#fff;color:'+hdrColor+';padding:4px 5px;font-size:10px;text-align:center;border-bottom:2px solid '+hdrColor+'">F</th><th style="background:#fff;color:'+hdrColor+';padding:4px 5px;font-size:10px;text-align:center;border-bottom:2px solid '+hdrColor+'">Unit</th><th style="background:#fff;color:'+hdrColor+';padding:4px 5px;font-size:10px;text-align:center;border-bottom:2px solid '+hdrColor+'">Ref</th>'+_prevTh({fs:8,pad:'4px 4px',thExtra:'color:'+hdrColor+';border-bottom:2px solid '+hdrColor+';'})+'</tr></thead><tbody>';
+      let r='<table style="width:100%;border-collapse:collapse"><thead><tr><th style="background:#fff;color:'+hdrColor+';padding:4px 7px;font-size:11px;text-align:left;border-bottom:2px solid '+hdrColor+'">Parameter</th><th style="background:#fff;color:'+hdrColor+';padding:4px 7px;font-size:11px;text-align:center;border-bottom:2px solid '+hdrColor+'">Result</th><th style="background:#fff;color:'+hdrColor+';padding:4px 5px;font-size:10px;text-align:center;border-bottom:2px solid '+hdrColor+'">F</th><th style="background:#fff;color:'+hdrColor+';padding:4px 5px;font-size:10px;text-align:center;border-bottom:2px solid '+hdrColor+'">Unit</th><th style="background:#fff;color:'+hdrColor+';padding:4px 5px;font-size:10px;text-align:center;border-bottom:2px solid '+hdrColor+'">Ref</th></tr></thead><tbody>';
       keys.forEach(function(key,i){
         const p=cbcParams[key];
         if(!p&&!(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])) return;
@@ -28864,7 +28529,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         if(mode==='rbcplt') baseColor=_PLT_KEYS5[key]?_BLUE5:_RED5;
         const valColor=flag?flagColor:baseColor;
         const bg=i%2===0?'#fff':'#f8f9fc';
-        r+='<tr style="background:'+bg+'"><td style="padding:3px 7px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:'+baseColor+'">'+(LABELS[key]||key)+'</td><td style="padding:3px 7px;border-bottom:1px solid #eee;font-size:13px;font-weight:900;text-align:center;color:'+valColor+'">'+val+'</td><td style="padding:3px 5px;border-bottom:1px solid #eee;font-size:10px;font-weight:800;text-align:center;color:'+flagColor+'">'+(flag||'')+'</td><td style="padding:3px 5px;border-bottom:1px solid #eee;font-size:9px;text-align:center;color:#000;font-weight:600">'+unit+'</td><td style="padding:3px 5px;border-bottom:1px solid #eee;font-size:9px;text-align:center;color:#000;font-weight:600">'+ref+'</td>'+_prevCell(key,{fs:9,pad:'3px 5px',bd:'1px solid #eee'})+'</tr>';
+        r+='<tr style="background:'+bg+'"><td style="padding:3px 7px;border-bottom:1px solid #eee;font-size:11px;font-weight:700;color:'+baseColor+'">'+(LABELS[key]||key)+'</td><td style="padding:3px 7px;border-bottom:1px solid #eee;font-size:13px;font-weight:900;text-align:center;color:'+valColor+'">'+val+'</td><td style="padding:3px 5px;border-bottom:1px solid #eee;font-size:10px;font-weight:800;text-align:center;color:'+flagColor+'">'+(flag||'')+'</td><td style="padding:3px 5px;border-bottom:1px solid #eee;font-size:9px;text-align:center;color:#000;font-weight:600">'+unit+'</td><td style="padding:3px 5px;border-bottom:1px solid #eee;font-size:9px;text-align:center;color:#000;font-weight:600">'+ref+'</td></tr>';
       });
       r+='</tbody></table>';
       return r;
@@ -28887,7 +28552,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       const sec=(key==='WBC'||key==='RBC'||key==='PLT');
       if(sec){
         const secName=key==='WBC'?'WBC Differential':key==='RBC'?'Red Cell Indices':'Platelet Indices';
-        rows+='<tr><td colspan="'+(6+_prevSpan())+'" style="padding:6px 12px 3px;font-size:10px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:'+ac+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+ac+';margin-right:6px;vertical-align:middle"></span>'+secName+'</td></tr>';
+        rows+='<tr><td colspan="6" style="padding:6px 12px 3px;font-size:10px;font-weight:900;letter-spacing:1.2px;text-transform:uppercase;color:'+ac+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+ac+';margin-right:6px;vertical-align:middle"></span>'+secName+'</td></tr>';
       }
       rows+='<tr style="background:'+(isAbn?(flagColor+'0c'):'#ffffff')+'">'
         +'<td style="padding:5px 8px;text-align:center;font-size:10px;color:#aab;font-weight:700">'+rowNum+'</td>'
@@ -28895,7 +28560,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         +'<td style="padding:5px 8px;text-align:center"><span style="font-size:15px;font-weight:900;color:'+flagColor+'">'+val+'</span></td>'
         +'<td style="padding:5px 6px;text-align:center">'+(isAbn?'<span style="display:inline-block;background:'+flagColor+';color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:20px">'+flag+'</span>':'<span style="color:#43c463;font-size:11px;font-weight:800">●</span>')+'</td>'
         +'<td style="padding:5px 8px;text-align:center;font-size:10px;color:#000;font-weight:600">'+unit+'</td>'
-        +'<td style="padding:5px 12px;text-align:center;font-size:10px;color:#000;font-weight:600">'+ref+'</td>'+_prevCell(key,{fs:11,pad:'5px 8px'})
+        +'<td style="padding:5px 12px;text-align:center;font-size:10px;color:#000;font-weight:600">'+ref+'</td>'
         +'</tr>';
       rowNum++;
     });
@@ -28924,7 +28589,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'<div class="pt-row"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div>'
       +'<div class="pt-row"><span class="pt-k">Date</span><span class="pt-v">'+sampleDate+'</span></div>'
       +'</div><div class="pt-chips"><div class="chip">ID: '+barcodeId+'</div><div class="chip">WB-CBC+DIFF</div></div></div>'
-      +'<div class="tbl-wrap"><table><thead><tr><th style="width:30px">#</th><th class="l">Parameter</th><th>Result</th><th style="width:52px">Flag</th><th>Unit</th><th>Ref. Range</th>'+_prevTh({fs:9,pad:'4px 6px'})+'</tr></thead><tbody>'+rows+'</tbody></table></div>'
+      +'<div class="tbl-wrap"><table><thead><tr><th style="width:30px">#</th><th class="l">Parameter</th><th>Result</th><th style="width:52px">Flag</th><th>Unit</th><th>Ref. Range</th></tr></thead><tbody>'+rows+'</tbody></table></div>'
       +'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
@@ -28967,7 +28632,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       const sec=(key==='WBC'||key==='RBC'||key==='PLT');
       if(sec){
         const secName=key==='WBC'?'WBC Differential':key==='RBC'?'Red Cell Indices':'Platelet Indices';
-        rows+='<tr><td colspan="'+(6+_prevSpan())+'" style="padding:5px 10px 2px;font-size:10px;font-weight:900;letter-spacing:1px;color:'+ac+';border-top:1.5px solid '+ac+'33">'+secName+'</td></tr>';
+        rows+='<tr><td colspan="6" style="padding:5px 10px 2px;font-size:10px;font-weight:900;letter-spacing:1px;color:'+ac+';border-top:1.5px solid '+ac+'33">'+secName+'</td></tr>';
       }
       rows+='<tr style="background:'+(rowNum%2===0?'#fafbfd':'#fff')+'">'
         +'<td style="padding:4px 10px;font-size:12px;font-weight:700;color:#243042;width:24%">'+(LABELS[key]||key)+'</td>'
@@ -28975,7 +28640,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         +'<td style="padding:4px 6px;text-align:center;width:8%">'+(isAbn?'<span style="color:'+flagColor+';font-weight:800;font-size:11px">'+flag+'</span>':'<span style="color:#43c463;font-size:10px">●</span>')+'</td>'
         +'<td style="padding:4px 10px;width:33%">'+bar+'</td>'
         +'<td style="padding:4px 6px;text-align:center;font-size:9px;color:#000;font-weight:600;width:10%">'+unit+'</td>'
-        +'<td style="padding:4px 8px;text-align:center;font-size:9px;color:#000;font-weight:600;width:14%">'+ref+'</td>'+_prevCell(key,{fs:11,pad:'4px 6px',extra:'width:10%;'})
+        +'<td style="padding:4px 8px;text-align:center;font-size:9px;color:#000;font-weight:600;width:14%">'+ref+'</td>'
         +'</tr>';
       rowNum++;
     });
@@ -28997,7 +28662,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'<div class="pt-row"><span class="pt-k">Doctor:</span><span class="pt-v">'+doctorName+'</span></div>'
       +'</div><div class="pt-ids"><div class="idc">ID: '+barcodeId+'</div><div class="idc">'+sampleDate+'</div></div></div>'
       +'<div class="lgnd"><span>▮ Normal range</span><span>▏ Patient value</span></div>'
-      +'<table><thead><tr><th class="l">Parameter</th><th>Result</th><th>Flag</th><th>Range Position</th><th>Unit</th><th>Ref.</th>'+_prevTh({fs:9,pad:'4px 6px'})+'</tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<table><thead><tr><th class="l">Parameter</th><th>Result</th><th>Flag</th><th>Range Position</th><th>Unit</th><th>Ref.</th></tr></thead><tbody>'+rows+'</tbody></table>'
       +'<div class="foot"><span>Operator: '+operator+'</span><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
@@ -29015,7 +28680,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       const sec=(key==='WBC'||key==='RBC'||key==='PLT');
       if(sec){
         const secName=key==='WBC'?'WBC DIFFERENTIAL':key==='RBC'?'RED CELL INDICES':'PLATELET INDICES';
-        rows+='<tr><td colspan="'+(5+_prevSpan())+'" style="padding:8px 4px 3px;font-size:9px;font-weight:900;letter-spacing:2px;color:#9aa5b5;border-bottom:1px solid #edf0f4">'+secName+'</td></tr>';
+        rows+='<tr><td colspan="6" style="padding:8px 4px 3px;font-size:9px;font-weight:900;letter-spacing:2px;color:#9aa5b5;border-bottom:1px solid #edf0f4">'+secName+'</td></tr>';
       }
       const arrow=isAbn?(flag.indexOf('H')>-1?'▲':flag.indexOf('L')>-1?'▼':''):'';
       rows+='<tr>'
@@ -29023,7 +28688,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         +'<td style="padding:6px 8px;text-align:right;border-bottom:1px solid #f4f6f9"><span style="font-size:16px;font-weight:800;color:'+(isAbn?flagColor:'#1a2230')+'">'+val+'</span> '+(arrow?'<span style="color:'+flagColor+';font-size:11px;font-weight:900">'+arrow+'</span>':'')+'</td>'
         +'<td style="padding:6px 6px;text-align:center;border-bottom:1px solid #f4f6f9">'+(isAbn?'<span style="font-size:9px;font-weight:900;letter-spacing:1px;color:'+flagColor+';border:1px solid '+flagColor+';padding:1px 6px;border-radius:3px">'+flag+'</span>':'')+'</td>'
         +'<td style="padding:6px 8px;text-align:center;font-size:10px;color:#000;font-weight:600;border-bottom:1px solid #f4f6f9">'+unit+'</td>'
-        +'<td style="padding:6px 4px;text-align:right;font-size:10px;color:#000;font-weight:600;border-bottom:1px solid #f4f6f9">'+ref+'</td>'+_prevCell(key,{fs:12,pad:'6px 6px',bd:'1px solid #f4f6f9'})
+        +'<td style="padding:6px 4px;text-align:right;font-size:10px;color:#000;font-weight:600;border-bottom:1px solid #f4f6f9">'+ref+'</td>'
         +'</tr>';
       rowNum++;
     });
@@ -29053,7 +28718,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'<div class="pt-item"><span class="pt-k">Doctor</span><span class="pt-v">'+doctorName+'</span></div>'
       +'<div class="pt-item"><span class="pt-k">Operator</span><span class="pt-v">'+operator+'</span></div>'
       +'</div>'
-      +'<table><thead><tr><th class="l">Parameter</th><th class="r">Result</th><th>Flag</th><th>Unit</th><th class="r">Reference</th>'+_prevTh({fs:9,pad:'6px 6px'})+'</tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<table><thead><tr><th class="l">Parameter</th><th class="r">Result</th><th>Flag</th><th>Unit</th><th class="r">Reference</th></tr></thead><tbody>'+rows+'</tbody></table>'
       +'<div class="foot"><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
@@ -29857,7 +29522,6 @@ function printSemenReport(id){
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
   try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'semen'); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير السائل المنوي للطابعة 🖨️','success');
 }
 
@@ -31482,44 +31146,6 @@ function _wsEffStatus(r){
 //    فحص خاص (إدرار/خروج/سائل منوي) — هذه المسارات لا تضبط r.printed أصلاً.
 //    حقل مستقل لا يقرأه أي جزء آخر من النظام (لا نتائج الأجهزة ولا الحذف ولا المخزون)
 //    فلا يوجد أي تأثير جانبي على السلوك القائم.
-/* ══════════════════════════════════════════════════════════════════
- *  🖨️ اكتمال طباعة الفحوصات الخاصة (إدرار / خروج / سائل منوي)
- *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
- *  • الطلب يحتوي فحوصاً خاصة فقط  ⇒ بعد طباعتها كلها يصبح «مطبوع» (أخضر)
- *  • الطلب يحتوي تحاليل عادية أيضاً ⇒ يبقى «جاري» حتى تُطبع من شاشة الطباعة
- *  لا يمسّ أي مسار آخر — يضيف حقلاً واحداً (spPrinted) ويضبط printed فقط
- *  عندما تتحقق الشروط بالكامل.
- * ══════════════════════════════════════════════════════════════════ */
-function _spMarkPrinted(reqId, kind){
-  try{
-    if(!reqId || !kind) return;
-    var r = requests.find(function(x){ return x.id === reqId; });
-    if(!r) return;
-
-    /* سجّل نوع الفحص الخاص المطبوع */
-    if(!Array.isArray(r.spPrinted)) r.spPrinted = [];
-    if(r.spPrinted.indexOf(kind) < 0) r.spPrinted.push(kind);
-
-    /* إن لم يكن للطلب تقرير عام (فحوص خاصة فقط) ⇒ اكتماله بطباعتها كلها */
-    var P = (typeof _reqParts === 'function') ? _reqParts(r) : null;
-    var needsMain = P ? (P.regular.length > 0 || P.calc.length > 0 || P.hasCBC) : true;
-    if(!needsMain && !r.printed && _spAllPrinted(r)){
-      r.printed = true;
-      if(typeof showNotif === 'function')
-        showNotif('تم', '✅ اكتملت طباعة الطلب — الحالة الآن «مطبوع»', 'success');
-    }
-
-    r._updatedAt = Date.now();
-    save('requests', requests);
-
-    try{ if(typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
-    try{ if(typeof renderRequests === 'function') renderRequests(); }catch(e){}
-    try{ if(typeof loadResultsDropdown === 'function') loadResultsDropdown(); }catch(e){}
-    try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(e){}
-  }catch(e){ console.warn('[spPrint]', e); }
-}
-window._spMarkPrinted = _spMarkPrinted;
-
 function _wsMarkPrinted(reqId){
   try{
     if(!reqId) return;
@@ -40843,16 +40469,6 @@ function _saveAutoCBC(val){
   settings.autoPrintCBC = val;
   if(typeof save==='function') save('settings', settings);
 }
-
-/* عمود النتيجة السابقة في تقارير CBC */
-function _saveCBCShowPrev(val){
-  settings.cbcShowPrev = !!val;
-  if(typeof save==='function') save('settings', settings);
-  if(typeof showNotif==='function')
-    showNotif('تم', val ? '📊 أُضيف عمود النتيجة السابقة لتقارير CBC'
-                        : 'أُزيل عمود النتيجة السابقة — التقارير كما كانت','success');
-}
-window._saveCBCShowPrev = _saveCBCShowPrev;
 
 // ─── طباعة مباشرة عبر iframe بدون واجهة ────────────────
 
