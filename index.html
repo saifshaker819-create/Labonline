@@ -11762,11 +11762,7 @@ function toggleSideLab(){
 function _sideLabAutoPrint(req){
   try{
     if(!req || req.printed) return false;
-    var isSide = !!req.sideLab;
-    if(!isSide && typeof patients!=='undefined' && Array.isArray(patients)){
-      var p=patients.find(function(x){ return x.id===req.patientId; });
-      if(p && p.sideLab){ isSide=true; req.sideLab=true; }
-    }
+    var isSide = (typeof _isSideLabReq==='function') ? _isSideLabReq(req) : !!req.sideLab;
     if(!isSide) return false;
     var hasAny=false;
     if(req.results && typeof req.results==='object'){
@@ -12861,10 +12857,45 @@ function _spAllEntered(r){
   }catch(e){ return true; }
 }
 
+/* ══════════════════════════════════════════════════════════════════
+ * 🧪 سايد لاب — هل هذا الطلب لمريض سايد لاب؟
+ * ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ * نقرأ العلامة من الطلب أولاً، وإن غابت نرجع لبطاقة المريض. هذا يجعل
+ * السلوك صحيحاً حتى للطلبات التي أُنشئت قبل وجود الحقل، أو من أي مسار
+ * تسجيل آخر لا يمرّ بالمعالج (wizard).
+ * ══════════════════════════════════════════════════════════════════ */
+function _isSideLabReq(r){
+  try{
+    if(!r) return false;
+    if(r.sideLab) return true;
+    if(typeof patients!=='undefined' && Array.isArray(patients)){
+      var p=patients.find(function(x){ return x.id===r.patientId; });
+      if(p && p.sideLab){ r.sideLab=true; return true; }   // ترقية تلقائية
+    }
+  }catch(e){}
+  return false;
+}
+window._isSideLabReq = _isSideLabReq;
+
+/* هل أُدخلت أي نتيجة فعلية في هذا الطلب؟ */
+function _reqHasAnyResult(r){
+  try{
+    if(!r || !r.results) return false;
+    for(var k in r.results){
+      if(r.results[k]!==null && r.results[k]!==undefined && r.results[k]!=='') return true;
+    }
+  }catch(e){}
+  return false;
+}
+
 /** ⭐ مطبوع بالكامل؟ */
 function _reqFullyPrinted(r){
   try{
     if(!r) return false;
+    // 🧪 سايد لاب: يُعتبر مطبوعاً بمجرد إدخال النتائج — بلا طباعة فعلية.
+    //    نتحقق هنا مركزياً كي يصحّ العرض في كل الجداول والفلاتر معاً،
+    //    مهما كان المسار الذي أُنشئ به الطلب أو أُدخلت به النتيجة.
+    if(_isSideLabReq(r) && _reqHasAnyResult(r)) return true;
     var P = _reqParts(r);
     var needsMain = (P.regular.length > 0 || P.calc.length > 0 || P.hasCBC);
     if(needsMain && !r.printed) return false;      // التقرير العام لم يُطبع
@@ -12888,6 +12919,12 @@ function _reqStatusBdg(r){
 
 /** شارة الطباعة */
 function _reqPrintBdg(r){
+  // 🧪 شارة مميزة لطلبات سايد لاب — تُفرّقها بصرياً عن الطلبات المطبوعة فعلاً
+  if(_isSideLabReq(r) && _reqHasAnyResult(r)){
+    return '<span class="bdg" style="background:rgba(0,214,143,0.14);color:#00b377;'+
+           'border:1px solid rgba(0,214,143,0.45);font-weight:800" '+
+           'title="سايد لاب — يُعتبر مطبوعاً تلقائياً عند إدخال النتائج">🧪 سايد لاب · مطبوع</span>';
+  }
   return _reqFullyPrinted(r)
     ? '<span class="bdg bdg-ok">🖨️ مطبوع</span>'
     : '<span class="bdg" style="background:rgba(255,214,10,0.13);color:var(--warning);border:1px solid rgba(255,214,10,0.28)">⏸ غير مطبوع</span>';
@@ -12946,7 +12983,7 @@ function renderRequestsFiltered(filter='today',srch=''){
     <td>${r.doctorName||'-'}</td>
     <td>${getPriorityBdg(r.priority)}</td>
     <td>${_reqStatusBdg(r)}</td>
-    <td>${_reqPrintBdg(r)}</td>
+    <td>${_reqPrintBdg(r)}${_isSideLabReq(r)?'<div style="font-size:9px;color:#00b377;font-weight:800;margin-top:3px">🧪 سايد لاب</div>':''}</td>
     <td>
       <div class="rrw">
         <button class="rrt ${_reqBtnState(r)}"
@@ -39631,12 +39668,7 @@ function _gdDeobfuscate(b64){
 
 function _gdSavePassword(pw){ try{ localStorage.setItem(_gdPassKey(), _gdObfuscate(pw)); }catch(e){} }
 function _gdGetPassword(){ var v = localStorage.getItem(_gdPassKey()); return v ? _gdDeobfuscate(v) : ''; }
-function _gdHasElectron(){
-  // نقبل أي جسر متاح: بعض البناءات تُصدّر gdriveLink دون gdriveStatus.
-  var api = window.electronAPI;
-  if(!api) return false;
-  return !!(api.gdriveStatus || api.gdriveLink || api.gdriveInfo);
-}
+function _gdHasElectron(){ return !!(window.IS_ELECTRON && window.electronAPI && window.electronAPI.gdriveStatus); }
 
 // ════════════════════════════════════════════════════════════════════
 //  تهيئة القسم + تحديث الحالة
@@ -39644,16 +39676,8 @@ function _gdHasElectron(){
 
 async function initGDrive(){
   if(!_gdHasElectron()){
-    // على المتصفح/الهاتف: Google Drive غير متاح. نُخفي أدوات الربط فقط
-    // ونترك رسالة واضحة بدل إخفاء القسم كله بصمت (كان يبدو كأنه عُطل).
     var box = document.getElementById('gdrive-box');
-    var lb  = document.getElementById('gdrive-link-btn');
-    var lbx = document.getElementById('gdrive-linked-box');
-    var stx = document.getElementById('gdrive-status');
-    if(box) box.style.display = '';
-    if(lb)  lb.style.display  = 'none';
-    if(lbx) lbx.style.display = 'none';
-    if(stx) stx.innerHTML = 'ℹ️ الربط بـ Google Drive متاح في نسخة سطح المكتب فقط (تطبيق ويندوز).';
+    if(box) box.style.display = 'none';   // على المتصفح/الهاتف: أخفِ القسم (كنسخة index1)
     return;
   }
   var _box = document.getElementById('gdrive-box');
