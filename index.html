@@ -6708,8 +6708,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     <div class="mbody" id="semen-modal-body"></div>
     <div class="mftr">
       <button class="btn btn-s" onclick="closeModal('m-semen-exam')">إلغاء</button>
-      <button class="btn btn-ok btn-lg" onclick="printSemenReport(window._semenEditId||'_current')">🖨️ طباعة</button>
-      <button class="btn btn-p btn-lg" onclick="saveSemenEntry()">💾 حفظ النتيجة</button>
+      <button class="btn btn-s" style="background:rgba(170,0,255,0.14);border-color:rgba(170,0,255,0.5);color:#c77dff" onclick="printSemenLabelFromModal(this)" title="طباعة ملصق الباركود">🏷️ طباعة ملصق</button>
+      <button class="btn btn-p btn-lg" onclick="saveSemenEntry(false)">💾 حفظ فقط</button>
+      <button class="btn btn-ok btn-lg" onclick="saveSemenEntry(true)">💾🖨️ حفظ وطباعة</button>
     </div>
   </div>
 </div>
@@ -29713,11 +29714,11 @@ const SEMEN_FIELDS = {
   specimen: {
     label: '🧪 معلومات العينة',
     fields: [
-      {id:'s_abstinence',   label:'Abstinence Period',     type:'select', normal:'3-5 days',    options:['3-5 days','< 3 days','> 5 days','Not recorded'], ref:'3-5 days'},
+      {id:'s_abstinence',   label:'Abstinence Period',     type:'select', normal:'3 days',      options:['1 day','2 days','3 days','4 days','5 days','6 days','7 days','8 days','9 days','10 days','Not recorded'], ref:'3-5 days'},
       {id:'s_collection',   label:'طريقة الجمع',          type:'select', normal:'Masturbation', options:['Masturbation','Condom','Coitus Interruptus']},
       {id:'s_volume',       label:'الحجم (mL)',            type:'number', normal:'',  placeholder:'≥ 1.4 mL',   min:'0', max:'20', step:'0.1', ref:'≥ 1.4'},
       {id:'s_appearance',   label:'المظهر',               type:'select', normal:'Opaque-White', options:['Opaque-White','Yellowish','Transparent','Reddish','Brown']},
-      {id:'s_liquefaction', label:'وقت التميع (دقيقة)',   type:'select', normal:'< 60 min',    options:['< 15 min','15-30 min','30-60 min','> 60 min (Abnormal)']},
+      {id:'s_liquefaction', label:'وقت التميع (دقيقة)',   type:'select', normal:'15 min',      options:['15 min','20 min','25 min','30 min','35 min','40 min','45 min','50 min','55 min','60 min','> 60 min (Abnormal)'], ref:'< 60 min'},
       {id:'s_viscosity',    label:'اللزوجة',              type:'select', normal:'Nil',           options:['Nil','Few','+','++','+++']},
       {id:'s_ph',           label:'الرقم الهيدروجيني (pH)',type:'number', normal:'',  placeholder:'7.2 - 8.0',  min:'5', max:'10', step:'0.1', ref:'7.2 - 8.0'},
     ]
@@ -29733,21 +29734,39 @@ const SEMEN_FIELDS = {
   motility: {
     label: '🏃 الحركة (WHO 2021)',
     fields: [
-      {id:'s_pr',           label:'حركة تقدمية PR (%)',   type:'number', normal:'', placeholder:'≥ 30%', min:'0',max:'100',step:'0.1', ref:'≥ 30%'},
-      {id:'s_np',           label:'حركة غير تقدمية NP (%)',type:'number',normal:'', placeholder:'',      min:'0',max:'100',step:'0.1'},
-      {id:'s_im',           label:'بلا حركة IM (%)',      type:'number', normal:'', placeholder:'',      min:'0',max:'100',step:'0.1'},
-      {id:'s_total_motile', label:'إجمالي المتحرك PR+NP (%)',type:'number',normal:'',placeholder:'≥ 42%',min:'0',max:'100',step:'0.1', ref:'≥ 42%'},
-      {id:'s_vitality',     label:'حيوية الحيوانات (%)',  type:'number', normal:'', placeholder:'≥ 54%', min:'0',max:'100',step:'0.1', ref:'≥ 54%'},
+      {id:'s_grade_a',      label:'Grade A — Rapid Progressive (%)', type:'number', normal:'', placeholder:'>=15%', min:'0',max:'100',step:'0.1', ref:'>= 15%'},
+      {id:'s_grade_b',      label:'Grade B — Slow Progressive (%)',  type:'number', normal:'', placeholder:'>=20%',  min:'0',max:'100',step:'0.1', ref:'>= 20%'},
+      {id:'s_pr',           label:'PR = A+B  Total Progressive (%)', type:'number-auto', normal:'', placeholder:'>=35%', min:'0',max:'100',step:'0.1', ref:'>= 35%', autoFrom:['s_grade_a','s_grade_b']},
+      {id:'s_grade_c',      label:'Grade C — Non-Progressive NP (%)',type:'number', normal:'', placeholder:'',       min:'0',max:'100',step:'0.1'},
+      {id:'s_grade_d',      label:'Grade D — Immotile IM (%)',       type:'number', normal:'', placeholder:'',       min:'0',max:'100',step:'0.1'},
+      {id:'s_total_motile', label:'Total Motile  PR+NP (%)',         type:'number', normal:'', placeholder:'>=42%',  min:'0',max:'100',step:'0.1', ref:'>= 42%'},
+      {id:'s_vitality',     label:'Vitality — Live Spermatozoa (%)',type:'number', normal:'', placeholder:'>=54%',   min:'0',max:'100',step:'0.1', ref:'>= 54%'},
     ]
   },
   morphology: {
-    label: '🔬 المورفولوجيا (Kruger)',
+    label: '🔬 المورفولوجيا (Kruger Strict)',
     fields: [
-      {id:'s_normal_forms', label:'الأشكال الطبيعية (%)', type:'number', normal:'', placeholder:'≥ 4%', min:'0',max:'100',step:'0.1', ref:'≥ 4%'},
-      {id:'s_head_defect',  label:'عيوب الرأس (%)',        type:'number', normal:'', placeholder:'',     min:'0',max:'100',step:'0.1'},
-      {id:'s_mid_defect',   label:'عيوب المنطقة الوسطى (%)',type:'number',normal:'', placeholder:'',     min:'0',max:'100',step:'0.1'},
-      {id:'s_tail_defect',  label:'عيوب الذيل (%)',        type:'number', normal:'', placeholder:'',     min:'0',max:'100',step:'0.1'},
-      {id:'s_teratozoospermia',label:'مؤشر التشوه (TZI)',  type:'number', normal:'', placeholder:'1.0-1.5',min:'0',max:'3',step:'0.01'},
+      {id:'s_normal_forms', label:'Normal Morphology (%)', type:'number', normal:'', placeholder:'>= 14%', min:'0',max:'100',step:'0.1', ref:'>= 14%'},
+      {id:'s_normal_shapes',label:'Normal Sperm Shapes Observed', type:'multiselect-dropdown', normal:'',
+        options:['Oval head (standard normal form)','Smooth oval head — uniform contour','Acrosome covers 40–70% of head','Normal midpiece — slim, axially attached','Straight flagellum (tail)','Slightly curved tail (< 90°)','Normal cytoplasmic droplet (< 1/3 midpiece)']
+      },
+      {id:'s_abnormal_forms',label:'Abnormal Forms Observed', type:'multiselect-dropdown', normal:'',
+        options:[
+          '── Head Defects ──',
+          'Macrocytic (Large head)','Microcytic (Small head)','Tapered / Elongated head',
+          'Pyriform head (pear-shaped)','Round head (no acrosome)','Globozoospermia (round + no acrosome)',
+          'Amorphous head','Vacuolated head (> 20% vacuoles)','Asymmetrical acrosome',
+          'Double / Multiple heads',
+          '── Neck & Midpiece Defects ──',
+          'Asymmetrical insertion (Bent neck)','Thick midpiece (> 1 µm)',
+          'Thin midpiece','Irregular midpiece','Abnormally bent midpiece',
+          '── Tail Defects ──',
+          'Short tail (< 45 µm)','Bent tail (> 90°)','Coiled tail',
+          'Double / Multiple tails','Broken tail','Irregular tail width',
+          '── Cytoplasmic Defects ──',
+          'Excess cytoplasmic droplet (> 1/3 midpiece)'
+        ]
+      },
     ]
   },
   biochemistry: {
@@ -29838,6 +29857,10 @@ function _buildSemenModalBody(r, req){
       <label class="fl">رقم الهاتف (للمشاركة عبر واتساب)</label>
       <input class="fc" id="semen-pt-phone" type="tel" placeholder="07xxxxxxxxx" value="${r?r.patientPhone||'':''}">
     </div>
+    <div class="fg" style="margin-bottom:0">
+      <label class="fl">العمر</label>
+      <input class="fc" id="semen-pt-age" type="text" placeholder="مثال: 32 سنة" value="${r?r.patientAge||'':''}">
+    </div>
   </div>`;
 
   Object.entries(SEMEN_FIELDS).forEach(([secKey,sec])=>{
@@ -29850,14 +29873,46 @@ function _buildSemenModalBody(r, req){
         // ── خيار "فارغ" يُحقن ديناميكياً في أعلى القائمة ──
         html+=`<div class="fg" style="margin-bottom:0">
           <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> (${f.ref})</span>`:''}</label>
-          ${exselHTML('semenf-'+f.id, f.options, (val===EMPTY_VAL?'':(val||'')), {
-              style:'font-size:12px',
-              placeholder:EMPTY_LABEL
-            })}</div>`;
+          <select class="fc" id="semenf-${f.id}" style="font-size:12px">
+            <option value="${EMPTY_VAL}" ${val===EMPTY_VAL?'selected':''}>${EMPTY_LABEL}</option>
+            ${f.options.map(o=>`<option value="${o}" ${val===o?'selected':''}>${o}</option>`).join('')}
+          </select></div>`;
+      } else if(f.type==='multiselect-dropdown'){
+        // قائمة منسدلة متعددة الاختيار مع بحث
+        const savedVals=(val||'').split('||').filter(Boolean);
+        const isOpen=false;
+        const sepOpts=f.options.filter(o=>o.startsWith('──'));
+        const realOpts=f.options.filter(o=>!o.startsWith('──'));
+        html+=`<div class="fg" style="margin-bottom:0;grid-column:1/-1">
+          <label class="fl" style="font-size:11px">${f.label}</label>
+          <div style="position:relative">
+            <div id="semenf-${f.id}-display" onclick="_semenDropToggle('${f.id}')"
+              style="min-height:32px;padding:4px 10px;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;color:var(--text);display:flex;align-items:center;flex-wrap:wrap;gap:4px">
+              ${savedVals.length?savedVals.map(v=>`<span style="background:rgba(0,212,255,0.18);border:1px solid rgba(0,212,255,0.4);border-radius:5px;padding:1px 7px;font-size:10px;color:var(--primary);display:flex;align-items:center;gap:3px">${v}<span onclick="event.stopPropagation();_semenDropRemove('${f.id}','${encodeURIComponent(v)}')" style="cursor:pointer;opacity:0.7;font-size:12px;line-height:1">×</span></span>`).join(''):'<span style="color:var(--text2)">اختر...</span>'}
+            </div>
+            <div id="semenf-${f.id}-menu" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9999;background:var(--bg-modal,#080f20);border:1px solid var(--border);border-radius:9px;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.8);margin-top:2px">
+              ${f.options.map(o=>o.startsWith('──')?
+                `<div style="padding:5px 10px;font-size:10px;font-weight:800;color:var(--primary);border-top:1px solid var(--border);letter-spacing:0.5px">${o}</div>`:
+                `<div onclick="_semenDropSelect('${f.id}','${encodeURIComponent(o)}')"
+                  style="padding:7px 12px;cursor:pointer;font-size:11px;color:var(--text);transition:background 0.15s"
+                  onmouseover="this.style.background='rgba(0,212,255,0.1)'" onmouseout="this.style.background=''"
+                  id="semenf-${f.id}-opt-${encodeURIComponent(o)}">
+                  <span id="semenf-${f.id}-chk-${encodeURIComponent(o)}" style="margin-right:6px;color:var(--primary)">${savedVals.includes(o)?'✓':' '}</span>${o}
+                </div>`
+              ).join('')}
+            </div>
+          </div>
+          <input type="hidden" id="semenf-${f.id}" value="${savedVals.join('||')}">
+        </div>`;
+      } else if(f.type==='number-auto'){
+        // حقل يُحسب تلقائياً من مجموع حقلين
+        html+=`<div class="fg" style="margin-bottom:0">
+          <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--accent,#00ff9d);font-weight:700;font-size:10px"> ★ Auto — Normal: ${f.ref}</span>`:''}</label>
+          <input class="fc" type="number" id="semenf-${f.id}" value="${val}" placeholder="يُحسب تلقائياً" min="${f.min||0}" max="${f.max||9999}" step="${f.step||'any'}" style="font-size:12px;background:rgba(0,255,157,0.06);border-color:rgba(0,255,157,0.3)" readonly></div>`;
       } else if(f.type==='number'){
         html+=`<div class="fg" style="margin-bottom:0">
-          <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> — طبيعي: ${f.ref}</span>`:''}</label>
-          <input class="fc" type="number" id="semenf-${f.id}" value="${val}" placeholder="${f.placeholder||''}" min="${f.min||0}" max="${f.max||9999}" step="${f.step||'any'}" style="font-size:12px"></div>`;
+          <label class="fl" style="font-size:11px">${f.label}${f.ref?`<span style="color:var(--text2);font-weight:500;font-size:10px"> — Normal: ${f.ref}</span>`:''}</label>
+          <input class="fc" type="number" id="semenf-${f.id}" value="${val}" placeholder="${f.placeholder||''}" min="${f.min||0}" max="${f.max||9999}" step="${f.step||'any'}" style="font-size:12px" oninput="_semenAutoCalc()"></div>`;
       } else if(f.type==='textarea'){
         html+=`<div class="fg" style="margin-bottom:0;grid-column:1/-1">
           <label class="fl" style="font-size:11px">${f.label}</label>
@@ -29890,6 +29945,8 @@ function semenSelectPatient(pid){
   // auto-fill phone if available
   const phoneEl=document.getElementById('semen-pt-phone');
   if(phoneEl && pt.phone) phoneEl.value=pt.phone;
+  const ageEl=document.getElementById('semen-pt-age');
+  if(ageEl && pt.ageDisplay) ageEl.value=pt.ageDisplay;
   document.getElementById('semen-pt-suggest').style.display='none';
 }
 
@@ -29918,14 +29975,14 @@ function _getSemenDoctor(){
   return {id:sel.value, name:opt?opt.dataset.name||opt.text:''};
 }
 
-function saveSemenEntry(){
+function saveSemenEntry(andPrint){
   let ptName=(document.getElementById('semen-pt-search')||{}).value.trim();
   let ptId  =(document.getElementById('semen-pt-id')||{}).value;
   if(!ptName){showNotif('تنبيه','اختر المريض','error');return;}
 
   // إذا لم يكن المريض مسجلاً (إدخال يدوي)، أنشئ رقم ملف تلقائياً
   if(!ptId){
-    ptId=String(100000+parseInt(Date.now().toString().slice(-5)));
+    ptId='MR-'+(Date.now().toString().slice(-6));
     const existPt=patients.find(p=>p.name===ptName);
     if(existPt){
       ptId=existPt.id;
@@ -29949,7 +30006,7 @@ function saveSemenEntry(){
     id: window._semenEditId||('semen-'+Date.now()),
     reqId: window._semenReqId||'',
     patientId:ptId, patientName:ptName,
-    patientAge: ptObj.ageDisplay||'',
+    patientAge: (document.getElementById('semen-pt-age')||{}).value||ptObj.ageDisplay||'',
     patientGender: ptObj.gender||'male',
     patientPhone:(document.getElementById('semen-pt-phone')||{}).value||'',
     doctorId:_getSemenDoctor().id,
@@ -29959,7 +30016,7 @@ function saveSemenEntry(){
   };
   Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('semenf-'+f.id);
-    if(el) rec[f.id]=_normExamVal(el.value,f);
+    if(el) rec[f.id]=el.value||'';
   }));
   loadSemenRecords();
   if(window._semenEditId){ const idx=semenRecords.findIndex(x=>x.id===window._semenEditId); if(idx>-1)semenRecords[idx]=rec; else semenRecords.push(rec); }
@@ -29976,6 +30033,7 @@ function saveSemenEntry(){
   if(resSel&&resSel.value) loadResultEntry();
   window._specialExamInlineMode=false;
   showNotif('تم','تم حفظ تحليل السائل المنوي ✅','success');
+  if(andPrint){ setTimeout(function(){ printSemenReport(rec.id); }, 400); }
 }
 
 function deleteSemenRecord(id){
@@ -29993,7 +30051,7 @@ function renderSemenList(){
     body.innerHTML='<div class="empty"><div class="empty-ic">🔬</div><p>لا توجد نتائج بعد</p></div>';
     return;
   }
-  body.innerHTML=`<div class="semen-tbl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%"><table class="tbl" style="min-width:max-content"><thead><tr>
+  body.innerHTML=`<table class="tbl"><thead><tr>
     <th>المريض</th><th>التاريخ</th><th>التشخيص</th><th>التركيز</th><th>الحركة PR</th><th>الأشكال الطبيعية</th><th>الإجراءات</th>
   </tr></thead><tbody>${list.map(r=>`<tr>
     <td>${r.patientName||'—'}<div style="font-size:10px;color:var(--text2)">${r.patientId||''}</div></td>
@@ -30005,10 +30063,11 @@ function renderSemenList(){
     <td style="white-space:nowrap">
       <button class="btn btn-sm btn-p" onclick="openEditSemenModal('${r.id}')">✏️</button>
       <button class="btn btn-sm btn-ok" onclick="printSemenReport('${r.id}')">🖨️</button>
+      <button class="btn btn-sm" style="background:rgba(170,0,255,0.14);border-color:rgba(170,0,255,0.5);color:#c77dff" onclick="printSemenLabel('${r.id}',this)" title="طباعة ملصق الباركود">🏷️</button>
       <button class="btn btn-sm btn-w" onclick="shareSemenPDFWhatsApp('${r.id}')" title="مشاركة رابط PDF عبر واتساب">📱 PDF</button>
       <button class="btn btn-sm btn-d" onclick="deleteSemenRecord('${r.id}')">🗑️</button>
     </td>
-  </tr>`).join('')}</tbody></table></div>`;
+  </tr>`).join('')}</tbody></table>`;
 }
 
 function _buildSemenPrintHTML(r){
@@ -30018,13 +30077,14 @@ function _buildSemenPrintHTML(r){
   const s=settings||{};
   const color=s.hdrText?.color||'#003366';
   let hdrHTML='';
-  if(s.blankHdr) hdrHTML=blankHdrHTML(s);
-  else if(s.hdrMode==='text'&&s.hdrText) hdrHTML=buildTextHeader(s);
+  if(s.hdrMode==='text'&&s.hdrText) hdrHTML=buildTextHeader(s);
   else if(s.headerImg) hdrHTML=`<img src="${s.headerImg}" style="width:100%;height:${(typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170}px;display:block;object-fit:fill">`;
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
-  else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+  else if(s.footerImg&&s.ftrMode!=='txt') ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+  else if(s.ftrMode==='txt'&&(s.ftrAddress||s.ftrPhone||s.ftrNote)) ftrHTML=`<div style="background:#f5f7fa;border-top:2px solid ${color};padding:7px 20px;font-family:'Inter',Arial,sans-serif;font-size:14px;color:#444;direction:ltr;line-height:1.4"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span>${s.ftrPhone?'📞 '+s.ftrPhone:''}</span><span>${s.ftrAddress?'📍 '+s.ftrAddress:''}</span></div>${s.ftrNote?`<div style="text-align:center;font-style:italic;font-size:12px;color:#666;margin-top:3px">${s.ftrNote}</div>`:''}</div>`;
+  else if(s.footer) ftrHTML=`<div style="background:#f5f7fa;border-top:1px solid ${color};padding:5px 16px;font-family:'Inter',Arial,sans-serif;font-size:12px;color:#555;text-align:center">${s.footer}</div>`;
 
   const drName=r.doctorName||pt.doctorName||(doctors&&doctors.find&&doctors.find(d=>d.id===pt.doctorId)?.name)||'';
   const _smNameColor   = s.colorName||'#cc0011';
@@ -30033,14 +30093,14 @@ function _buildSemenPrintHTML(r){
   const _smPtFullName  = _smPtTitle ? _smPtTitle+' / '+(pt.name||r.patientName||'—') : (pt.name||r.patientName||'—');
   const _smAgeTxt      = (pt.ageDisplay||r.patientAge||'—').replace(/سنة/g,'Year').replace(/شهر/g,'Month').replace(/يوم/g,'Day').replace(/ساعة/g,'Hour');
   const _smPrintTime   = new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  const _smBarcodeId   = (String(pt.barcode||pt.id||r.patientId||'000000').replace(/[^0-9A-Za-z]/g,'')||'000000');
+  const _smBarcodeId   = (pt.barcode||(pt.id||r.patientId||'').replace(/[^A-Z0-9]/gi,'').toUpperCase().substring(0,12))||'00000000';
   function _semenBarcode128(text){
-    const C128={chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],[1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],[1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],[3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],[3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],[1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],[1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],[2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],[1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],[2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]};
+    const C128={chars:' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~',widths:[[2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],[1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],[1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],[2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],[3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],[2,1,2,4,1,1],[2,1,4,2,1,1],[4,1,2,2,1,1],[4,1,1,1,4,1],[1,1,4,2,2,1],[2,1,1,1,4,2],[2,1,1,4,1,2],[2,4,1,2,1,1],[4,1,1,2,1,2],[1,2,4,1,1,2],[1,4,1,4,1,1],[2,2,1,4,1,1],[4,4,1,1,1,1],[1,1,2,3,2,2],[1,2,2,3,2,1],[2,2,2,3,1,1],[1,1,3,2,3,1],[2,1,1,4,2,1],[1,4,2,1,2,1],[2,1,4,1,1,3],[1,3,2,3,1,1],[2,1,1,1,1,5],[2,1,1,5,1,1],[5,1,1,2,1,1],[2,1,5,1,1,2],[2,1,3,1,3,1],[2,3,1,1,3,1],[1,3,1,3,2,1],[1,4,2,2,1,1],[1,2,2,4,1,1],[1,2,4,1,2,1],[1,4,1,2,2,1],[2,1,4,4,1,1],[3,1,2,1,1,3],[3,1,1,1,2,3],[3,3,1,1,2,1],[3,1,2,3,1,1],[2,1,1,3,3,1],[1,1,2,2,1,4],[1,2,1,1,4,2],[1,2,1,4,1,2],[1,4,1,1,2,2],[3,1,1,2,4,1],[1,3,2,1,4,1],[2,3,1,2,3,1],[1,4,2,1,1,3],[4,1,4,1,1,2],[2,1,1,1,3,4],[3,1,4,1,2,1],[1,1,4,2,1,3],[1,4,4,1,1,2],[3,3,1,2,1,2],[3,1,1,4,2,1],[2,1,2,2,4,1],[2,1,4,2,2,1],[4,2,1,2,1,2],[2,4,2,2,1,1],[1,3,4,1,1,2],[2,3,4,1,1,1],[1,2,4,2,2,1],[3,2,4,1,1,1],[4,2,4,1,1,1],[2,2,1,1,1,5],[2,1,1,2,1,5],[3,2,1,1,1,4],[2,2,1,2,3,2],[2,2,3,2,1,2],[2,2,1,1,4,2],[2,2,3,1,2,2],[2,1,4,1,3,1],[4,2,1,1,3,1],[1,1,2,4,2,2],[1,2,2,4,2,1],[1,2,4,4,1,1],[1,4,4,2,1,1],[4,2,2,1,1,2],[4,2,2,2,1,1],[4,1,2,1,2,2],[1,2,4,1,3,1],[4,1,2,2,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],[1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],[4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]]};
     const START_B=104,STOP=[2,3,3,1,1,1,2];let codes=[START_B];let check=START_B;
     for(let i=0;i<text.length;i++){const idx=C128.chars.indexOf(text[i]);if(idx<0)continue;codes.push(idx);check+=(i+1)*idx;}
     codes.push(check%103);let bars=[];codes.forEach(c=>{C128.widths[c].forEach((w,i)=>bars.push({w,dark:i%2===0}));});
     STOP.forEach((w,i)=>bars.push({w,dark:i%2===0}));bars.push({w:2,dark:false});
-    const h=38,_QZ=20,totalW=bars.reduce((s,b)=>s+b.w*2,0)+_QZ*2;let x=_QZ,rects=''; // منطقة هادئة ≥10 وحدات
+    const h=38,totalW=bars.reduce((s,b)=>s+b.w*2,0);let x=0,rects='';
     bars.forEach(b=>{if(b.dark)rects+=`<rect x="${x}" y="0" width="${b.w*2}" height="${h}" fill="#000"/>`;x+=b.w*2;});
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${h}" viewBox="0 0 ${totalW} ${h}" style="display:block">${rects}</svg>`;
   }
@@ -30086,10 +30146,8 @@ function _buildSemenPrintHTML(r){
         <div style="font-size:7px;font-weight:900;color:#000;letter-spacing:2px;font-family:'Courier New',monospace;text-align:center;line-height:1">${_smBarcodeId}</div>
       </div>
       <div style="display:flex;flex-direction:column">
-        <div style="display:flex;gap:4px">
-          ${_smRR('Input',r.date||'—')}
-          ${_smRR('Time',_ptEntryTime(pt, r))}
-        </div>
+        ${_smRR('ID',pt.id||r.patientId||'—')}
+        ${_smRR('Date',r.date||'—')}
         ${_smRR('Print',_smPrintTime)}
       </div>
     </div>
@@ -30098,89 +30156,175 @@ function _buildSemenPrintHTML(r){
   const SEMEN_EN={
     specimen:    {label:'Specimen Information',fields:{s_abstinence:'Abstinence Period',s_collection:'Collection Method',s_volume:'Volume (mL)',s_appearance:'Appearance',s_liquefaction:'Liquefaction Time',s_viscosity:'Viscosity',s_ph:'pH'}},
     spermCount:  {label:'Sperm Count',fields:{s_conc:'Concentration (M/mL)',s_total_count:'Total Count (Million)',s_azoospermia:'Azoospermia'}},
-    motility:    {label:'Motility (WHO 2021)',fields:{s_pr:'Progressive Motility PR (%)',s_np:'Non-Progressive NP (%)',s_im:'Immotile IM (%)',s_total_motile:'Total Motile PR+NP (%)',s_vitality:'Vitality (%)'}},
-    morphology:  {label:'Morphology (Kruger)',fields:{s_normal_forms:'Normal Forms (%)',s_head_defect:'Head Defects (%)',s_mid_defect:'Mid-piece Defects (%)',s_tail_defect:'Tail Defects (%)',s_teratozoospermia:'Teratozoospermia Index (TZI)'}},
+    motility:    {label:'Motility (WHO 2021)',fields:{s_grade_a:'Grade A — Rapid Progressive (%)',s_grade_b:'Grade B — Slow Progressive (%)',s_pr:'PR = A+B  Total Progressive (%)',s_grade_c:'Grade C — Non-Progressive NP (%)',s_grade_d:'Grade D — Immotile IM (%)',s_total_motile:'Total Motile  PR+NP (%)',s_vitality:'Vitality — Live Spermatozoa (%)'}},
+    morphology:  {label:'Morphology (Kruger Strict)',fields:{s_normal_forms:'Normal Morphology (%)',s_normal_shapes:'Normal Sperm Shapes',s_abnormal_forms:'Abnormal Forms Observed'}},
     biochemistry:{label:'Seminal Biochemistry',fields:{s_fructose:'Fructose',s_zinc:'Zinc (µmol/ejac)',s_citric_acid:'Citric Acid (µmol/ejac)',s_wbc:'Pus Cells (/mL)',s_rbc:'RBC',s_bacteria:'Bacteria',s_agglutination:'Agglutination'}},
     advanced:    {label:'Advanced Markers',fields:{s_dna_frag:'DNA Fragmentation (%)',s_oxidative:'Oxidative Stress',s_antisperm_ab:'Antisperm Antibodies',s_round_cells:'Round Cells (/mL)'}}
   };
   const SEMEN_REFS={
-    s_volume:'≥ 1.4 mL',s_ph:'7.2 – 8.0',s_conc:'≥ 16 M/mL',s_total_count:'≥ 39 million',
-    s_pr:'≥ 30%',s_total_motile:'≥ 42%',s_vitality:'≥ 54%',s_normal_forms:'≥ 4%',
-    s_teratozoospermia:'1.0 – 1.5',s_fructose:'Positive',s_zinc:'≥ 2.4',s_citric_acid:'≥ 52',
+    s_volume:'>= 1.4 mL',s_ph:'7.2 – 8.0',s_conc:'>= 16 M/mL',s_total_count:'>= 39 million',
+    s_grade_a:'>= 15%',s_grade_b:'>= 20%',s_grade_c:'',s_grade_d:'',
+    s_pr:'>= 35%',s_total_motile:'>= 42%',s_vitality:'>= 54%',s_normal_forms:'>= 14%',s_normal_shapes:'',s_abnormal_forms:'',
+    s_fructose:'Positive',s_zinc:'>= 2.4',s_citric_acid:'>= 52',
     s_wbc:'< 1 M/mL',s_rbc:'Absent',s_bacteria:'Absent',s_agglutination:'Nil',
     s_dna_frag:'< 15%',s_oxidative:'Normal',s_antisperm_ab:'Negative',s_round_cells:'< 5 M/mL',
     s_azoospermia:'No',s_liquefaction:'< 60 min',s_viscosity:'Nil',s_appearance:'Opaque-White',s_collection:'',s_abstinence:'3-5 days'
   };
 
+  // ── جلب آخر نتيجة سابقة للمريض (أقدم تسجيل مختلف عن الحالي) ──
+  const _prevRec=(()=>{
+    if(!r.patientId) return null;
+    const all=semenRecords
+      .filter(x=>x.patientId===r.patientId && x.id!==r.id)
+      .sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+    return all[0]||null;
+  })();
+
+  // ── رأس واحد مشترك لكل الجدول ──
+  var _smConcM = parseFloat(r.s_conc)||0;
+  var _smMotilFids = ['s_grade_a','s_grade_b','s_pr','s_grade_c','s_grade_d','s_total_motile'];
+  var _lastResText = _prevRec
+    ? 'Last Result<br><span style="font-size:9px;font-weight:600;color:#555">'+(_prevRec.date||'')+'</span>'
+    : 'Last Result';
+
+  // Header: Parameter | Result | Reference | M/mL | Last Result
+  var _globalThead = '<thead><tr style="background:#e8edf5">'
+    + '<th style="font-size:12px;font-weight:800;color:#000;padding:2px 6px;text-align:left;border-bottom:2px solid #888;width:32%">Parameter</th>'
+    + '<th style="font-size:12px;font-weight:800;color:#000;padding:2px 6px;text-align:center;border-bottom:2px solid #888;width:15%">Result</th>'
+    + '<th style="font-size:12px;font-weight:800;color:#555;padding:2px 6px;text-align:left;border-bottom:2px solid #888;width:22%">Reference (WHO 2021)</th>'
+    + '<th style="font-size:12px;font-weight:800;color:#1565c0;padding:2px 6px;text-align:center;border-bottom:2px solid #888;width:9%">M/mL</th>'
+    + '<th style="font-size:12px;font-weight:800;color:#1a4fa0;padding:2px 6px;text-align:center;border-bottom:2px solid #888;width:22%;border-left:2px solid #b0c4e8;background:#eef3ff">'+_lastResText+'</th>'
+    + '</tr></thead>';
+
+  // ── التسميات/المراجع/الترتيب تُقرأ من SEMEN_FIELDS الحيّة (تعديلات المستخدم) ──
+  // مع رجوع تلقائي إلى SEMEN_EN/SEMEN_REFS القديمة عند غياب القيمة.
+  // بهذا يعكس التقرير المطبوع أي تغيير في: اسم الحقل، القيمة الطبيعية، الترتيب، القسم.
+  // ── الطباعة بالإنكليزية إلزامياً مع احترام تعديلاتك ──
+  // القاعدة: إن كان اسمك المُعدّل لاتينياً (إنكليزياً) نطبعه (تحكّمك الكامل)،
+  // وإن تركت الاسم العربي الافتراضي نطبع الاسم الإنكليزي الثابت من SEMEN_EN.
+  // بهذا لا يظهر أي نص عربي في التقرير أبداً، وتبقى قادراً على تغيير الأسماء إنكليزياً.
+  const _isLatinText=(t)=>{ if(t==null) return false; var s=String(t).trim(); if(!s) return false; return !/[\u0600-\u06FF]/.test(s); };
+  const _smLiveLabel=(secKey,fid)=>{
+    var sec=SEMEN_FIELDS[secKey];
+    if(sec&&sec.fields){ var f=sec.fields.find(x=>x.id===fid); if(f&&_isLatinText(f.label)) return f.label; } // تعديلك الإنكليزي
+    var en=SEMEN_EN[secKey];
+    if(en&&en.fields&&en.fields[fid]) return en.fields[fid];      // الإنكليزي الثابت
+    return fid;                                                    // fallback أخير
+  };
+  const _smLiveRef=(secKey,fid)=>{
+    var sec=SEMEN_FIELDS[secKey];
+    if(sec&&sec.fields){ var f=sec.fields.find(x=>x.id===fid); if(f&&f.ref!=null&&f.ref!==''&&_isLatinText(f.ref)) return f.ref; }
+    return SEMEN_REFS[fid]||'';
+  };
+  const _smLiveSecLabel=(secKey)=>{
+    var sec=SEMEN_FIELDS[secKey];
+    if(sec&&_isLatinText(sec.label)) return sec.label;            // تعديلك الإنكليزي للقسم
+    var en=SEMEN_EN[secKey];
+    if(en&&en.label) return en.label;                             // الإنكليزي الثابت
+    return secKey;
+  };
+  // ترتيب الحقول داخل القسم كما هو محفوظ في SEMEN_FIELDS (يعكس السحب والإفلات)
+  const _smLiveFieldOrder=(secKey)=>{
+    var sec=SEMEN_FIELDS[secKey];
+    if(sec&&Array.isArray(sec.fields)) return sec.fields.map(f=>f.id);
+    var en=SEMEN_EN[secKey]; return en&&en.fields?Object.keys(en.fields):[];
+  };
+
   const renderSec=(secKey)=>{
-    const secDef=SEMEN_EN[secKey]; if(!secDef) return '';
-    const fieldKeys=Object.keys(secDef.fields);
+    // القسم موجود إذا كان معرّفاً في الحيّة أو في القديمة
+    if(!SEMEN_FIELDS[secKey] && !SEMEN_EN[secKey]) return '';
+    const fieldKeys=_smLiveFieldOrder(secKey);
     const validKeys=fieldKeys.filter(fid=>r[fid]&&r[fid]!=='');
     if(!validKeys.length) return '';
     const rows=validKeys.map((fid,fi)=>{
-      // ── EMPTY_VAL ("فارغ"): مربع نتيجة فارغ بدون تلوين أحمر ──
       const isEmpty=r[fid]===EMPTY_VAL;
       const val=isEmpty?'':r[fid];
-      const ref=SEMEN_REFS[fid]||'';
+      const ref=_smLiveRef(secKey,fid);
       const numVal=parseFloat(val);
       let abn=false;
-      if(isEmpty){
-        // فارغ: لا يُحسب كحالة غير طبيعية إطلاقاً
-        abn=false;
-      } else if(['s_volume','s_conc','s_total_count','s_pr','s_total_motile','s_vitality','s_normal_forms'].includes(fid)){
+      if(isEmpty){ abn=false; }
+      else if(['s_volume','s_conc','s_total_count','s_grade_a','s_pr','s_total_motile','s_vitality'].includes(fid)){
         const refNum=parseFloat(ref); if(!isNaN(numVal)&&!isNaN(refNum)) abn=numVal<refNum;
-      } else if(fid==='s_dna_frag'){ if(!isNaN(numVal)) abn=numVal>15; }
+      } else if(fid==='s_normal_forms'){ if(!isNaN(numVal)) abn=numVal<14; }
+      else if(fid==='s_dna_frag'){ if(!isNaN(numVal)) abn=numVal>15; }
       else if(fid==='s_azoospermia'){ abn=val==='Yes'; }
       else if(fid==='s_wbc'){ abn=val!=='< 1 M/mL'; }
       else if(['s_rbc','s_bacteria','s_antisperm_ab'].includes(fid)){ abn=val!=='Absent'&&val!=='Negative'; }
       else if(['s_agglutination','s_viscosity'].includes(fid)){ abn=val!=='Nil'; }
       else if(fid==='s_oxidative'){ abn=val!=='Normal'; }
-      const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
-      return `<tr style="background:${rowBg}">
-        <td style="font-size:15px;font-weight:700;color:#000000;padding:1px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${secDef.fields[fid]}</td>
-        <td style="font-size:15px;font-weight:700;color:#000000;padding:1px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
-          <span style="display:inline-block;border:1.5px solid #b0b0b0;border-radius:4px;padding:0 8px;min-width:80px;text-align:center;background:#fff;color:${abn?'#cc0000':'#000000'};font-weight:${abn?'900':'700'}">${val}</span>
-        </td>
-        <td style="font-size:15px;font-weight:700;color:#000000;padding:1px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${ref||'—'}</td>
-      </tr>`;
+      const prevRaw=_prevRec?(_prevRec[fid]||'—'):'—';
+      // multiselect: display as comma-separated pills
+      const isMulti=(fid==='s_normal_shapes'||fid==='s_abnormal_forms');
+      const displayVal=isMulti?(val||'').split('||').filter(Boolean).join(', ')||val:val;
+      const displayPrev=isMulti?(prevRaw||'').split('||').filter(Boolean).join(', ')||prevRaw:prevRaw;
+      const rowBg=fi%2===0?'#ffffff':'#f7f9fc';
+      var isMotil = (secKey==='motility') && _smMotilFids.includes(fid);
+      var mValNum = (isMotil && !isNaN(numVal) && _smConcM>0) ? (_smConcM*numVal/100) : null;
+      var mValStr = mValNum!==null ? mValNum.toFixed(2) : '';
+
+      if(isMulti){
+        return '<tr style="background:'+rowBg+'">'
+          +'<td style="font-size:12px;font-weight:700;color:#000;padding:2px 6px;border-bottom:1px solid #e0e0e0"><span style="color:#666;margin-right:3px">■</span>'+_smLiveLabel(secKey,fid)+'</td>'
+          +'<td colspan="2" style="font-size:11px;font-weight:600;color:#000;padding:2px 6px;border-bottom:1px solid #e0e0e0">'+(displayVal||'—')+'</td>'
+          +'<td style="padding:2px 4px;border-bottom:1px solid #e0e0e0;text-align:center"></td>'
+          +'<td style="font-size:11px;font-weight:600;color:#1a4fa0;padding:2px 6px;border-bottom:1px solid #e0e0e0;text-align:center;border-left:2px solid #d0d8ea;background:#f4f8ff">'+displayPrev+'</td>'
+          +'</tr>';
+      }
+      // خلية M/mL: أزرق فقط في Motility — فارغة شفافة في غيرها
+      var mCellContent = mValStr
+        ? '<span style="display:inline-block;border:1px solid #90caf9;border-radius:3px;padding:0 4px;min-width:38px;text-align:center;background:#fff;color:#1565c0;font-weight:800;font-size:11px">'+mValStr+'</span><span style="font-size:10px;color:#1565c0;font-weight:700;margin-right:2px">&nbsp;million/ml</span>'
+        : '';
+      return '<tr style="background:'+rowBg+'">'
+        +'<td style="font-size:12px;font-weight:700;color:#000;padding:2px 6px;border-bottom:1px solid #e0e0e0"><span style="color:#666;margin-right:3px">■</span>'+_smLiveLabel(secKey,fid)+'</td>'
+        +'<td style="font-size:12px;font-weight:700;padding:2px 6px;border-bottom:1px solid #e0e0e0;text-align:center">'
+        +'<span style="display:inline-block;border:1px solid #b0b0b0;border-radius:3px;padding:0 4px;min-width:50px;text-align:center;background:#fff;color:'+(abn?'#cc0000':'#000')+';font-weight:'+(abn?'900':'700')+'">'+displayVal+'</span>'
+        +'</td>'
+        +'<td style="font-size:11px;font-weight:600;color:#555;padding:2px 6px;border-bottom:1px solid #e0e0e0">'+(ref||'—')+'</td>'
+        +'<td style="padding:2px 4px;border-bottom:1px solid #e0e0e0;text-align:center">'+mCellContent+'</td>'
+        +'<td style="font-size:12px;font-weight:700;color:#1a4fa0;padding:2px 6px;border-bottom:1px solid #e0e0e0;text-align:center;border-left:2px solid #d0d8ea;background:#f4f8ff">'
+        +'<span style="display:inline-block;border:1px solid #b0c4e8;border-radius:3px;padding:0 4px;min-width:50px;text-align:center;background:#fff;color:#1a4fa0;font-weight:700">'+displayPrev+'</span>'
+        +'</td>'
+        +'</tr>';
     }).join('');
-    return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:2px;overflow:hidden;page-break-inside:avoid">
-      <div style="background:#ffffff;padding:1px 10px;border-bottom:1.5px solid #b8b8b8">
-        <span style="font-size:16px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${secDef.label}</span>
-      </div>
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="background:#f0f0f0">
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:1px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:38%">Parameter</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:1px 8px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:32%">Result</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:1px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:30%">Reference (WHO 2021)</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+    return '<tr><td colspan="5" style="background:#f0f4fa;padding:2px 8px;border-bottom:1px solid #ccd0d8;border-top:2px solid #b0bcd8">'
+      +'<span style="font-size:12px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">'+_smLiveSecLabel(secKey)+'</span>'
+      +'</td></tr>'+rows;
   };
+
+  // ترتيب الأقسام يُقرأ من SEMEN_FIELDS الحيّة (يعكس أي إعادة ترتيب/إضافة قسم)،
+  // مع استبعاد قسم conclusion لأنه يُطبع أسفل الجدول (توصية/ملاحظات).
+  // نضمن ظهور الأقسام القديمة المعروفة حتى لو غابت من الحيّة.
+  const _smKnownOrder=['specimen','spermCount','motility','morphology','biochemistry','advanced'];
+  const _smLiveOrder=Object.keys(SEMEN_FIELDS).filter(k=>k!=='conclusion');
+  const _smSecOrder=_smLiveOrder.length?_smLiveOrder:_smKnownOrder;
+  const allSectionRows=_smSecOrder.map(renderSec).join('');
 
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{margin:0;padding:0;box-sizing:border-box;}
-    /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
-    body{font-family:Arial,sans-serif;color:#000;font-size:15px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .sm-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
-    .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 6mm ${Math.ceil(((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
+    body{font-family:Arial,sans-serif;color:#000;font-size:13px;-webkit-print-color-adjust:exact;print-color-adjust:exact;position:relative;}
+    .sm-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;position:relative;}
+    .sm-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    @page{margin:1mm 6mm 1mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @media print{ .sm-footer{position:fixed;bottom:3mm;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="sm-content">
       ${_buildWatermarkHTML(false)}
       ${hdrHTML}
-      <div style="background:${color};color:#fff;padding:3px 12px;text-align:center;font-weight:900;font-size:14px;letter-spacing:1px">
+      <div style="background:${color};color:#fff;padding:2px 12px;text-align:center;font-weight:900;font-size:13px;letter-spacing:1px">
         SEMEN ANALYSIS REPORT (SPERMIOGRAM)
       </div>
-      <div style="border:1.5px solid #b8b8b8;margin:3px 0 4px;padding:4px 10px;background:#fafafa">
+      <div style="border:1.5px solid #b8b8b8;margin:2px 0 3px;padding:3px 10px;background:#fafafa">
         ${_smPtBox}
       </div>
-      <div style="margin:0 0 3px;height:2px;background:${color}"></div>
-      <div>${['specimen','spermCount','motility','morphology','biochemistry','advanced'].map(renderSec).join('')}</div>
-      ${r.s_recommendation?`<div style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px"><span style="font-size:13px;font-weight:800;color:#996600">📋 Recommendation: </span><span style="font-size:13px;color:#333">${r.s_recommendation}</span></div>`:''}
-      ${r.s_note?`<div style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.s_note}</span></div>`:''}
+      <div style="margin:0 0 2px;height:2px;background:${color}"></div>
+      <div style="border:1.5px solid #b8b8b8;border-radius:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
+          ${_globalThead}
+          <tbody>${allSectionRows}</tbody>
+        </table>
+      </div>
+      ${r.s_recommendation?`<div style="border:1.5px solid #b8b8b8;padding:4px 10px;margin-top:2px"><span style="font-size:12px;font-weight:800;color:#996600">Recommendation: </span><span style="font-size:12px;color:#333">${r.s_recommendation}</span></div>`:''}
+      ${r.s_note?`<div style="border:1.5px solid #b8b8b8;padding:4px 10px;margin-top:2px"><span style="font-size:12px;font-weight:800;color:#444">Notes: </span><span style="font-size:12px;color:#333">${r.s_note}</span></div>`:''}
     </div>
     <div class="sm-footer">${ftrHTML}</div>
   </body></html>`;
@@ -30193,7 +30337,7 @@ function printSemenReport(id){
     const ptId=(document.getElementById('semen-pt-id')||{}).value;
     r={id:'_current',patientId:ptId,patientName:ptName,date:(document.getElementById('semen-date')||{}).value||''};
     Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
-      const el=document.getElementById('semenf-'+f.id); if(el) r[f.id]=_normExamVal(el.value,f);
+      const el=document.getElementById('semenf-'+f.id); if(el) r[f.id]=el.value||'';
     }));
   } else {
     r=semenRecords.find(x=>x.id===id);
@@ -30203,8 +30347,6 @@ function printSemenReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
-  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'semen'); }catch(_){}
   showNotif('طباعة','تم إرسال تقرير السائل المنوي للطابعة 🖨️','success');
 }
 
@@ -30240,18 +30382,390 @@ function shareSemenPDFWhatsApp(id){
         doc.addImage(imgData,'JPEG',0,y>0?-(y):0,pdfW,imgH);
         y+=pdfH;
       }
-      const _smSafe=(ptName||'semen').replace(/[\\/:*?"<>|]/g,'_').trim();
-      const fileName=_smSafe+'_semen.pdf';
+      const fileName=(ptName||'semen').replace(/\s+/g,'_')+'_semen.pdf';
       await _fsaSavePDFToD(doc, fileName, ()=>{
-        const intPhone=_formatPhoneForWhatsApp(phone,(pt&&pt.phoneCC)||null);
-        setTimeout(function(){ _openWhatsAppDirect(intPhone); },400);
-        showNotif('✅ PDF محفوظ','افتح المحادثة وأرفق الملف 📎','success');
-      }, _smSafe, (pt&&pt.id)||'');
+        const intPhone=_formatPhoneForWhatsApp(phone);
+        setTimeout(function(){
+          _openWhatsAppDirect(intPhone);
+          showNotif('📎 أرفق الملف','تم حفظ PDF في D:\\MedLabPro وفتح محادثة المريض ✅ اضغط 📎 وأرفق الملف ثم أرسل','success');
+        },600);
+      });
     }).catch(function(){
       try{if(iframe.parentNode)document.body.removeChild(iframe);}catch(e){}
       showNotif('خطأ','تعذر إنشاء PDF','error');
     });
   },900);
+}
+
+function _semenAutoCalc(){
+  // يحسب PR = Grade A + Grade B تلقائياً
+  const aEl=document.getElementById('semenf-s_grade_a');
+  const bEl=document.getElementById('semenf-s_grade_b');
+  const prEl=document.getElementById('semenf-s_pr');
+  if(!prEl) return;
+  const a=parseFloat(aEl&&aEl.value)||0;
+  const b=parseFloat(bEl&&bEl.value)||0;
+  if(a||b) prEl.value=(a+b).toFixed(1);
+}
+
+function _semenDropRemove(fid, encVal){
+  const val=decodeURIComponent(encVal);
+  const hidden=document.getElementById('semenf-'+fid);
+  const display=document.getElementById('semenf-'+fid+'-display');
+  const chk=document.getElementById('semenf-'+fid+'-chk-'+encVal);
+  if(!hidden) return;
+  let vals=(hidden.value||'').split('||').filter(v=>v&&v!==val);
+  hidden.value=vals.join('||');
+  if(chk) chk.textContent=' ';
+  if(display) display.innerHTML=vals.length?vals.map(v=>`<span style="background:rgba(0,212,255,0.18);border:1px solid rgba(0,212,255,0.4);border-radius:5px;padding:1px 7px;font-size:10px;color:var(--primary);display:flex;align-items:center;gap:3px">${v}<span onclick="event.stopPropagation();_semenDropRemove('${fid}','${encodeURIComponent(v)}')" style="cursor:pointer;opacity:0.7;font-size:12px;line-height:1">×</span></span>`).join(''):'<span style="color:var(--text2)">اختر...</span>';
+}
+
+function _semenDropSelect(fid, encVal){
+  const val=decodeURIComponent(encVal);
+  const hidden=document.getElementById('semenf-'+fid);
+  const display=document.getElementById('semenf-'+fid+'-display');
+  const chk=document.getElementById('semenf-'+fid+'-chk-'+encVal);
+  if(!hidden||!display) return;
+  let vals=(hidden.value||'').split('||').filter(Boolean);
+  if(vals.includes(val)){
+    vals=vals.filter(v=>v!==val);
+    if(chk) chk.textContent=' ';
+  } else {
+    vals.push(val);
+    if(chk) chk.textContent='✓';
+  }
+  hidden.value=vals.join('||');
+  // تحديث الـ display
+  display.innerHTML=vals.length?vals.map(v=>`<span style="background:rgba(0,212,255,0.18);border:1px solid rgba(0,212,255,0.4);border-radius:5px;padding:1px 7px;font-size:10px;color:var(--primary);display:flex;align-items:center;gap:3px">${v}<span onclick="event.stopPropagation();_semenDropRemove('${fid}','${encodeURIComponent(v)}')" style="cursor:pointer;opacity:0.7;font-size:12px;line-height:1">×</span></span>`).join(''):'<span style="color:var(--text2)">اختر...</span>';
+}
+
+function _semenDropToggle(fid){
+  const menu=document.getElementById('semenf-'+fid+'-menu');
+  if(!menu) return;
+  const isVisible=menu.style.display!=='none';
+  // إغلاق كل القوائم المفتوحة
+  document.querySelectorAll('[id$="-menu"]').forEach(m=>{ if(m.id.startsWith('semenf-')) m.style.display='none'; });
+  menu.style.display=isVisible?'none':'block';
+  if(!isVisible){
+    // إغلاق عند الضغط خارجها
+    setTimeout(()=>{
+      function closeMenu(e){ if(!menu.contains(e.target)){menu.style.display='none';document.removeEventListener('click',closeMenu);} }
+      document.addEventListener('click',closeMenu);
+    },10);
+  }
+}
+
+function _semenMultiUpdate(fid){
+  const wrap=document.getElementById('semenf-'+fid+'-wrap');
+  const hidden=document.getElementById('semenf-'+fid);
+  if(!wrap||!hidden) return;
+  const checked=[...wrap.querySelectorAll('input[type=checkbox]:checked')].map(cb=>cb.value);
+  hidden.value=checked.join('||');
+  // update highlight
+  wrap.querySelectorAll('label').forEach(lbl=>{
+    const cb=lbl.querySelector('input');
+    lbl.style.background=cb&&cb.checked?'rgba(0,212,255,0.15)':'transparent';
+  });
+}
+
+
+function openLabelCopyPopupForPatient(barcodeId, ptName, anchorEl){
+  _closeLabelCopyPopup();
+  barcodeId=String(barcodeId||'').replace(/[^0-9A-Za-z]/g,'');
+  if(!barcodeId){ showNotif('تنبيه','لا يوجد رقم/باركود للمريض','warning'); return; }
+  var pop=document.createElement('div');
+  pop.className='lbl-copy-pop';
+  pop.innerHTML=
+    '<div class="lbl-copy-ttl">🏷️ عدد النسخ</div>'+
+    '<div class="lbl-copy-row">'+
+      '<button type="button" class="lbl-copy-stp" id="_lblDec">▾</button>'+
+      '<input type="text" inputmode="numeric" class="lbl-copy-inp" id="_lblCnt" value="1" readonly>'+
+      '<button type="button" class="lbl-copy-stp" id="_lblInc">▴</button>'+
+    '</div>'+
+    '<button type="button" class="lbl-copy-print" id="_lblGo">🖨️ طباعة</button>';
+  document.body.appendChild(pop);
+  window._lblCopyPopupEl=pop;
+
+  var r=anchorEl?anchorEl.getBoundingClientRect():{left:window.innerWidth/2,top:window.innerHeight/2,right:window.innerWidth/2,bottom:window.innerHeight/2,width:0,height:0};
+  var pw=150, ph=118;
+  var left=r.left - pw - 8;
+  if(left<8) left=r.right + 8;
+  if(left+pw>window.innerWidth-8) left=Math.max(8,window.innerWidth-pw-8);
+  var top=r.top + (r.height/2) - (ph/2);
+  if(top<8) top=8;
+  if(top+ph>window.innerHeight-8) top=Math.max(8,window.innerHeight-ph-8);
+  pop.style.left=left+'px';
+  pop.style.top=top+'px';
+
+  var inp=pop.querySelector('#_lblCnt');
+  function _get(){ var v=parseInt(inp.value,10); return (v>=1)?v:1; }
+  function _set(v){ if(v<1)v=1; if(v>50)v=50; inp.value=v; }
+  pop.querySelector('#_lblDec').addEventListener('click',function(e){e.stopPropagation();_set(_get()-1);});
+  pop.querySelector('#_lblInc').addEventListener('click',function(e){e.stopPropagation();_set(_get()+1);});
+  pop.querySelector('#_lblGo').addEventListener('click',function(e){
+    e.stopPropagation();
+    var n=_get();
+    _closeLabelCopyPopup();
+    _renderAndPrintLabel(barcodeId, ptName, n);
+  });
+
+  setTimeout(function(){
+    document.addEventListener('mousedown',_lblCopyOutside,true);
+    window.addEventListener('scroll',_closeLabelCopyPopup,true);
+    window.addEventListener('resize',_closeLabelCopyPopup,true);
+  },10);
+}
+
+function openLabelCopyPopup(reqId, anchorEl){
+  _closeLabelCopyPopup();
+  if(!reqId){ showNotif('تنبيه','لا يوجد طلب محدد','warning'); return; }
+  var pop=document.createElement('div');
+  pop.className='lbl-copy-pop';
+  pop.innerHTML=
+    '<div class="lbl-copy-ttl">🏷️ عدد النسخ</div>'+
+    '<div class="lbl-copy-row">'+
+      '<button type="button" class="lbl-copy-stp" id="_lblDec">▾</button>'+
+      '<input type="text" inputmode="numeric" class="lbl-copy-inp" id="_lblCnt" value="1" readonly>'+
+      '<button type="button" class="lbl-copy-stp" id="_lblInc">▴</button>'+
+    '</div>'+
+    '<button type="button" class="lbl-copy-print" id="_lblGo">🖨️ طباعة</button>';
+  document.body.appendChild(pop);
+  window._lblCopyPopupEl=pop;
+
+  // تحديد الموضع بجانب الزر (يمين/يسار حسب المساحة)
+  var r=anchorEl?anchorEl.getBoundingClientRect():{left:window.innerWidth/2,top:window.innerHeight/2,right:window.innerWidth/2,bottom:window.innerHeight/2,width:0,height:0};
+  var pw=150, ph=118;
+  var left=r.left - pw - 8;               // نفضّل يسار الزر (واجهة RTL)
+  if(left<8) left=r.right + 8;            // إن لم تكفِ المساحة → يمين
+  if(left+pw>window.innerWidth-8) left=Math.max(8,window.innerWidth-pw-8);
+  var top=r.top + (r.height/2) - (ph/2);
+  if(top<8) top=8;
+  if(top+ph>window.innerHeight-8) top=Math.max(8,window.innerHeight-ph-8);
+  pop.style.left=left+'px';
+  pop.style.top=top+'px';
+
+  var inp=pop.querySelector('#_lblCnt');
+  function _get(){ var v=parseInt(inp.value,10); return (v>=1)?v:1; }
+  function _set(v){ if(v<1)v=1; if(v>50)v=50; inp.value=v; }
+  pop.querySelector('#_lblDec').addEventListener('click',function(e){e.stopPropagation();_set(_get()-1);});
+  pop.querySelector('#_lblInc').addEventListener('click',function(e){e.stopPropagation();_set(_get()+1);});
+  pop.querySelector('#_lblGo').addEventListener('click',function(e){
+    e.stopPropagation();
+    var n=_get();
+    _closeLabelCopyPopup();
+    printTubeLabel(reqId, n);
+  });
+
+  // إغلاق عند الضغط خارجها
+  setTimeout(function(){
+    document.addEventListener('mousedown',_lblCopyOutside,true);
+    window.addEventListener('scroll',_closeLabelCopyPopup,true);
+    window.addEventListener('resize',_closeLabelCopyPopup,true);
+  },10);
+}
+
+function _closeLabelCopyPopup(){
+  if(window._lblCopyPopupEl){
+    try{window._lblCopyPopupEl.remove();}catch(_){}
+    window._lblCopyPopupEl=null;
+  }
+  document.removeEventListener('mousedown',_lblCopyOutside,true);
+  window.removeEventListener('scroll',_closeLabelCopyPopup,true);
+  window.removeEventListener('resize',_closeLabelCopyPopup,true);
+}
+
+function _lblCopyOutside(e){
+  if(window._lblCopyPopupEl && !window._lblCopyPopupEl.contains(e.target)) _closeLabelCopyPopup();
+}
+
+function _renderAndPrintLabel(barcodeId, ptName, copies){
+  var _lblCopies=parseInt(copies,10); if(!(_lblCopies>=1)) _lblCopies=1; if(_lblCopies>50) _lblCopies=50;
+  barcodeId=String(barcodeId||'000000').replace(/[^0-9A-Za-z]/g,'');
+  if(!barcodeId) barcodeId='000000';
+  ptName=ptName||'—';
+
+  // حجم الملصق من الإعدادات
+  var _lw=parseFloat((typeof settings!=='undefined'&&settings.labelW)||57)||57;
+  var _lh=parseFloat((typeof settings!=='undefined'&&settings.labelH)||30)||30;
+
+  // ══ Code 128C للأرقام (أشرطة أعرض وأسهل قراءةً) ══
+  var C128widths=[
+    [2,1,2,2,2,2],[2,2,2,1,2,2],[2,2,2,2,2,1],[1,2,1,2,2,3],[1,2,1,3,2,2],[1,3,1,2,2,2],
+    [1,2,2,2,1,3],[1,2,2,3,1,2],[1,3,2,2,1,2],[2,2,1,2,1,3],[2,2,1,3,1,2],[2,3,1,2,1,2],
+    [1,1,2,2,3,2],[1,2,2,1,3,2],[1,2,2,2,3,1],[1,1,3,2,2,2],[1,2,3,1,2,2],[1,2,3,2,2,1],
+    [2,2,3,2,1,1],[2,2,1,1,3,2],[2,2,1,2,3,1],[2,1,3,2,1,2],[2,2,3,1,1,2],[3,1,2,1,3,1],
+    [3,1,1,2,2,2],[3,2,1,1,2,2],[3,2,1,2,2,1],[3,1,2,2,1,2],[3,2,2,1,1,2],[3,2,2,2,1,1],
+    [2,1,2,1,2,3],[2,1,2,3,2,1],[2,3,2,1,2,1],[1,1,1,3,2,3],[1,3,1,1,2,3],[1,3,1,3,2,1],
+    [1,1,2,3,1,3],[1,3,2,1,1,3],[1,3,2,3,1,1],[2,1,1,3,1,3],[2,3,1,1,1,3],[2,3,1,3,1,1],
+    [1,1,3,1,2,3],[1,1,3,3,2,1],[1,3,3,1,2,1],[1,1,2,1,3,3],[1,1,2,3,3,1],[1,3,2,1,3,1],
+    [3,1,3,1,2,1],[2,1,1,3,3,1],[2,3,1,1,3,1],[2,1,3,1,1,3],[2,1,3,3,1,1],[2,1,3,1,3,1],
+    [3,1,1,1,2,3],[3,1,1,3,2,1],[3,3,1,1,2,1],[3,1,2,1,1,3],[3,1,2,3,1,1],[3,3,2,1,1,1],
+    [3,1,4,1,1,1],[2,2,1,4,1,1],[4,3,1,1,1,1],[1,1,1,2,2,4],[1,1,1,4,2,2],[1,2,1,1,2,4],
+    [1,2,1,4,2,1],[1,4,1,1,2,2],[1,4,1,2,2,1],[1,1,2,2,1,4],[1,1,2,4,1,2],[1,2,2,1,1,4],
+    [1,2,2,4,1,1],[1,4,2,1,1,2],[1,4,2,2,1,1],[2,4,1,2,1,1],[2,2,1,1,1,4],[4,1,3,1,1,1],
+    [2,4,1,1,1,2],[1,3,4,1,1,1],[1,1,1,2,4,2],[1,2,1,1,4,2],[1,2,1,2,4,1],[1,1,4,2,1,2],
+    [1,2,4,1,1,2],[1,2,4,2,1,1],[4,1,1,2,1,2],[4,2,1,1,1,2],[4,2,1,2,1,1],[2,1,2,1,4,1],
+    [2,1,4,1,2,1],[4,1,2,1,2,1],[1,1,1,1,4,3],[1,1,1,3,4,1],[1,3,1,1,4,1],[1,1,4,1,1,3],
+    [1,1,4,3,1,1],[4,1,1,1,1,3],[4,1,1,3,1,1],[1,1,3,1,4,1],[1,1,4,1,3,1],[3,1,1,1,4,1],
+    [4,1,1,1,3,1],[2,1,1,4,1,2],[2,1,1,2,1,4],[2,1,1,2,3,2]
+  ];
+  var STOP=[2,3,3,1,1,1,2];
+  var START_B=104, START_C=105;
+
+  // اختيار Code128C للأرقام (يضاعف عرض الشريط)
+  var isAllDigits=/^[0-9]+$/.test(barcodeId);
+  var encodeText=barcodeId;
+  var useC=false;
+  if(isAllDigits){
+    useC=true;
+    if(barcodeId.length%2!==0) encodeText='0'+barcodeId;
+  }
+
+  var codes=[], check=0;
+  if(useC){
+    codes.push(START_C); check=START_C;
+    for(var ci=0;ci<encodeText.length;ci+=2){
+      var pair=parseInt(encodeText.substr(ci,2),10);
+      codes.push(pair);
+      check+=((ci/2)+1)*pair;
+    }
+  } else {
+    var C128Bchars=' !"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~';
+    codes.push(START_B); check=START_B;
+    for(var bi=0;bi<barcodeId.length;bi++){
+      var bidx=C128Bchars.indexOf(barcodeId[bi]);
+      if(bidx<0) continue;
+      codes.push(bidx);
+      check+=(bi+1)*bidx;
+    }
+  }
+  codes.push(check%103);
+
+  // بناء bars
+  var bars=[];
+  codes.forEach(function(c){
+    if(!C128widths[c]) return;
+    C128widths[c].forEach(function(w,ei){ bars.push({w:w,d:ei%2===0}); });
+  });
+  STOP.forEach(function(w,ei){ bars.push({w:w,d:ei%2===0}); });
+  bars.push({w:2,d:false});
+
+  // حساب BW المناسب لعرض الملصق
+  var totalUnits=bars.reduce(function(s,b){return s+b.w;},0);
+  var availPx=(_lw-2)*3.7795;
+  var BW=Math.max(1.2,Math.min(3.5,availPx/(totalUnits+20)));
+  var BH=Math.round(_lh*0.55*3.7795);
+  var PAD=BW*10;
+
+  // رسم SVG
+  var totalW=totalUnits*BW+PAD*2;
+  var x=PAD, rects='';
+  bars.forEach(function(b){
+    if(b.d) rects+='<rect x="'+x.toFixed(2)+'" y="0" width="'+(b.w*BW).toFixed(2)+'" height="'+BH+'" fill="#000"/>';
+    x+=b.w*BW;
+  });
+  var barcodeSvg='<svg xmlns="http://www.w3.org/2000/svg"'
+    +' width="'+totalW.toFixed(2)+'" height="'+BH+'"'
+    +' viewBox="0 0 '+totalW.toFixed(2)+' '+BH+'"'
+    +' style="display:block;shape-rendering:crispEdges;background:#fff">'
+    +'<rect width="'+totalW.toFixed(2)+'" height="'+BH+'" fill="#fff"/>'
+    +rects+'</svg>';
+
+  // HTML الملصق
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ملصق</title>'
+    +'<style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'@page{size:'+_lw+'mm '+_lh+'mm;margin:0}'
+    +'body{width:'+_lw+'mm;height:'+_lh+'mm;background:#fff;overflow:hidden;'
+    +'display:flex;flex-direction:column;align-items:center;justify-content:center;'
+    +'padding:0;gap:0.4mm;font-family:Arial,sans-serif}'
+    +'.bc-num{font-family:"Courier New",monospace;font-size:6pt;font-weight:900;'
+    +'letter-spacing:1.5px;color:#000;margin-top:0.3mm;text-align:center;line-height:1}'
+    +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
+    +'width:96%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;'
+    +'border-top:0.4pt solid #bbb;padding-top:0.4mm;margin-top:0.2mm}'
+    +'@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}'
+    +'</style></head><body>'
+    +barcodeSvg
+    +'<div class="bc-num">'+barcodeId+'</div>'
+    +'<div class="pt-name">'+ptName+'</div>'
+    +'</body></html>';
+
+  // طباعة صامتة مباشرة عبر Electron
+  // ⭐ نطبع دائماً عبر Electron إن وُجد — حتى لو لم تُختَر طابعة ملصق (فارغ = الافتراضية، يبقى صامتاً)
+  var barcodeP=(typeof settings!=='undefined'&&settings.printerBarcode)||'';
+  if(window.electronAPI&&window.electronAPI.printContent){
+    // طباعة النسخ بالتتابع (نسخة تلو الأخرى) لضمان خروج كل الملصقات
+    (function _printCopy(_i){
+      if(_i>=_lblCopies) return;
+      window.electronAPI.printContent({
+        html:html, printer:barcodeP, silent:true,
+        pageSize:{width:Math.round(_lw*1000),height:Math.round(_lh*1000)},
+        margins:{marginType:'none'}
+      }).then(function(res){
+        if(res&&!res.ok) showNotif('تنبيه طباعة',res.error||'خطأ طباعة','warning');
+        setTimeout(function(){ _printCopy(_i+1); }, 250);
+      }).catch(function(e){console.warn('printContent err:',e); setTimeout(function(){ _printCopy(_i+1); }, 250);});
+    })(0);
+    return;
+  }
+  // fallback: iframe صامت (متصفّح ويب فقط)
+  var old=document.getElementById('_lbl_iframe');
+  if(old) try{document.body.removeChild(old);}catch(ex){}
+  var iframe=document.createElement('iframe');
+  iframe.id='_lbl_iframe';
+  iframe.style.cssText='position:fixed;top:-9999px;left:-9999px;width:'+_lw+'mm;height:'+_lh+'mm;border:none;opacity:0;pointer-events:none;';
+  document.body.appendChild(iframe);
+  var iDoc=iframe.contentWindow.document;
+  // في متصفّح الويب: نكرّر جسم الملصق بعدد النسخ مع فاصل صفحات
+  var htmlMulti=html;
+  if(_lblCopies>1){
+    try{
+      var _bodyMatch=html.match(/<body>([\s\S]*)<\/body>/);
+      if(_bodyMatch){
+        var _one=_bodyMatch[1];
+        var _all='';
+        for(var _c=0;_c<_lblCopies;_c++){
+          _all+='<div style="page-break-after:always;break-after:page;width:'+_lw+'mm;height:'+_lh+'mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0.4mm">'+_one+'</div>';
+        }
+        htmlMulti=html.replace(/<body>[\s\S]*<\/body>/,'<body>'+_all+'</body>');
+      }
+    }catch(_e){ htmlMulti=html; }
+  }
+  iDoc.open();iDoc.write(htmlMulti);iDoc.close();
+  setTimeout(function(){
+    try{iframe.contentWindow.focus();iframe.contentWindow.print();}
+    catch(e){
+      var w=window.open('','_blank','width=400,height=300');
+      if(w){w.document.open();w.document.write(htmlMulti);w.document.close();
+        setTimeout(function(){try{w.focus();w.print();}catch(e2){}},120);}
+    }
+    setTimeout(function(){try{document.body.removeChild(iframe);}catch(ex){}},2500);
+  },80);
+}
+
+function printSemenLabel(recId, anchorEl){
+  loadSemenRecords();
+  var rec=semenRecords.find(function(x){return x.id===recId;});
+  if(!rec){ showNotif('خطأ','السجل غير موجود','error'); return; }
+  var pt=patients.find(function(p){return p.id===rec.patientId;})||{};
+  var barcodeId=String(pt.barcode||pt.id||rec.patientId||'').replace(/[^0-9A-Za-z]/g,'');
+  var ptName=rec.patientName||pt.name||'—';
+  openLabelCopyPopupForPatient(barcodeId, ptName, anchorEl);
+}
+
+function printSemenLabelFromModal(btnEl){
+  var ptName=(document.getElementById('semen-pt-search')||{}).value.trim();
+  var ptId  =(document.getElementById('semen-pt-id')||{}).value;
+  if(!ptName){ showNotif('تنبيه','اختر المريض أولاً','warning'); return; }
+  var pt=patients.find(function(p){return p.id===ptId;})||{};
+  var barcodeId=String(pt.barcode||pt.id||ptId||'').replace(/[^0-9A-Za-z]/g,'');
+  if(!barcodeId){
+    // مريض يدوي غير محفوظ بعد — استخدم الاسم كنص للباركود يتعذّر، لذا نبّه بالحفظ
+    showNotif('تنبيه','احفظ النتيجة أولاً ثم اطبع الملصق (لا يوجد رقم للمريض)','warning');
+    return;
+  }
+  openLabelCopyPopupForPatient(barcodeId, ptName, btnEl);
 }
 
 // ===== ADDED FROM index2: UT / IUI / DNA FRAGMENTATION ======
@@ -41566,6 +42080,45 @@ body.light-mode .pm-note{color:rgba(10,42,37,.38)}
 .rri.c-label {background:linear-gradient(135deg,#aa00ff,#6600aa);}
 .rri.c-delete{background:linear-gradient(135deg,#f44336,#b71c1c);}
 .rri.c-result{background:linear-gradient(135deg,#1e90ff,#0040bb);}
+
+/* ═══ منبثقة عدد نسخ الملصق ═══ */
+.lbl-copy-pop{
+  position:fixed; z-index:2147483000; width:150px;
+  background:var(--bg-modal,#141a24); border:1.5px solid rgba(170,0,255,0.45);
+  border-radius:14px; padding:11px 12px;
+  box-shadow:0 14px 40px rgba(0,0,0,0.55), 0 0 0 3px rgba(170,0,255,0.12);
+  display:flex; flex-direction:column; gap:9px;
+  font-family:'Cairo',sans-serif; animation:lblPopIn .16s ease;
+}
+@keyframes lblPopIn{from{opacity:0;transform:scale(.9) translateY(4px)}to{opacity:1;transform:scale(1) translateY(0)}}
+.lbl-copy-ttl{font-size:12px;font-weight:800;color:#c77dff;text-align:center;line-height:1}
+.lbl-copy-row{display:flex;align-items:center;gap:7px;justify-content:center}
+.lbl-copy-stp{
+  width:34px;height:34px;flex-shrink:0;border-radius:9px;cursor:pointer;
+  border:1.5px solid rgba(170,0,255,0.4);
+  background:linear-gradient(135deg,rgba(170,0,255,0.18),rgba(102,0,170,0.14));
+  color:#d9a8ff;font-size:16px;font-weight:900;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .12s ease, background .12s ease;
+}
+.lbl-copy-stp:hover{background:linear-gradient(135deg,rgba(170,0,255,0.32),rgba(102,0,170,0.26));transform:translateY(-1px)}
+.lbl-copy-stp:active{transform:scale(.92)}
+.lbl-copy-inp{
+  width:52px;height:34px;text-align:center;border-radius:9px;
+  border:1.5px solid var(--border,#2a3340); background:rgba(255,255,255,0.05);
+  color:var(--text,#fff); font-size:17px; font-weight:900; outline:none;
+  font-family:'Cairo',sans-serif;
+}
+.lbl-copy-print{
+  width:100%;height:36px;border:none;border-radius:10px;cursor:pointer;
+  background:linear-gradient(135deg,#aa00ff,#6600aa); color:#fff;
+  font-size:13px;font-weight:800;font-family:'Cairo',sans-serif;
+  transition:filter .12s ease, transform .12s ease;
+}
+.lbl-copy-print:hover{filter:brightness(1.12);transform:translateY(-1px)}
+.lbl-copy-print:active{transform:scale(.97)}
+body.light-mode .lbl-copy-pop{background:#fff;border-color:rgba(140,0,210,0.4)}
+body.light-mode .lbl-copy-inp{background:#f3f0f8;color:#111;border-color:#d5c8e8}
 
 /* طبقة شفافة لإغلاق القائمة بالضغط خارجها */
 #rr-backdrop{
