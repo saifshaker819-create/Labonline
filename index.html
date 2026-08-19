@@ -6005,7 +6005,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
   </div>
 
   <!-- زر الربط (يظهر عند عدم الربط) -->
-  <button id="gdrive-link-btn" class="btn btn-lg" style="width:100%;background:#4285f4;border-color:#4285f4;color:#fff;display:none;gap:10px;font-weight:800" onclick="gdriveLink()">
+  <button id="gdrive-link-btn" class="btn btn-lg" style="width:100%;background:#4285f4;border-color:#4285f4;color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800" onclick="gdriveLink()">
     🔗 ربط Google Drive
   </button>
 
@@ -10981,6 +10981,18 @@ function renderWizStep(){
         <div style="display:flex;flex-wrap:nowrap;gap:6px;margin-top:4px;overflow-x:auto;padding:6px 4px 6px 4px">
           ${titles.map(t=>{const sel=wizPatient.title===t.v;return`<button type="button" id="title-btn-${t.v}" class="btn btn-sm ${sel?'btn-p':'btn-s'}" onclick="selectTitle('${t.v}','${t.g}')" style="font-size:14px;font-family:'Cairo',sans-serif;font-weight:900;padding:8px 12px;white-space:nowrap;flex-shrink:0;${sel?'box-shadow:0 0 0 3px rgba(0,212,255,0.55),0 0 14px rgba(0,212,255,0.35);outline:none;transform:scale(1.08);':''}transition:all 0.15s">${sel?'✓ ':''}${t.v}</button>`;}).join('')}
         </div>
+        <!-- 🧪 سايد لاب — يستثني المريض من شروط اللقب والاسم الثلاثي والعمر -->
+        <div style="margin-top:10px">
+          <button type="button" id="wp-sidelab-btn" class="btn btn-sm ${wizPatient.sideLab?'btn-ok':'btn-s'}"
+            onclick="toggleSideLab()"
+            style="font-size:14px;font-family:'Cairo',sans-serif;font-weight:900;padding:8px 16px;white-space:nowrap;${wizPatient.sideLab?'box-shadow:0 0 0 3px rgba(0,214,143,0.5),0 0 14px rgba(0,214,143,0.35);transform:scale(1.05);':''}transition:all 0.15s"
+            title="عند التفعيل: يمكن إدخال المريض باسم واحد فقط بلا لقب ولا عمر، ويُعتبر مطبوعاً تلقائياً عند إدخال النتائج">
+            ${wizPatient.sideLab?'✓ ':''}🧪 سايد لاب
+          </button>
+          <span id="wp-sidelab-hint" style="font-size:11px;color:var(--text2);margin-right:8px;${wizPatient.sideLab?'':'display:none'}">
+            ✔ مُستثنى من شروط اللقب والاسم الثلاثي والعمر
+          </span>
+        </div>
       </div>
 
       <!-- الاسم (عربي + إنجليزي تلقائي) -->
@@ -11717,11 +11729,67 @@ function filterWizTestsDebounced(){
   }, 120);
 }
 
+/* ══════════════════════════════════════════════════════════════════
+ * 🧪 سايد لاب (Side Lab)
+ * ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ * مريض وارد من مختبر آخر: غالباً لا نملك عنه إلا اسماً واحداً.
+ * عند التفعيل:
+ *   • تُستثنى شروط: اللقب · الاسم الثلاثي · العمر   (الاسم يبقى مطلوباً)
+ *   • يُعتبر الطلب «مطبوعاً» تلقائياً بمجرد إدخال النتائج
+ * لا يمسّ أي مريض عادي — الشروط تبقى كما هي تماماً عند إيقافه.
+ * ══════════════════════════════════════════════════════════════════ */
+function toggleSideLab(){
+  wizPatient.sideLab = !wizPatient.sideLab;
+  var b=document.getElementById('wp-sidelab-btn');
+  var h=document.getElementById('wp-sidelab-hint');
+  if(b){
+    b.className='btn btn-sm '+(wizPatient.sideLab?'btn-ok':'btn-s');
+    b.style.boxShadow=wizPatient.sideLab?'0 0 0 3px rgba(0,214,143,0.5),0 0 14px rgba(0,214,143,0.35)':'';
+    b.style.transform=wizPatient.sideLab?'scale(1.05)':'';
+    b.innerHTML=(wizPatient.sideLab?'✓ ':'')+'🧪 سايد لاب';
+  }
+  if(h) h.style.display=wizPatient.sideLab?'':'none';
+  if(typeof showNotif==='function'){
+    showNotif('🧪 سايد لاب', wizPatient.sideLab
+      ? 'مُفعّل — يكفي اسم واحد بلا لقب أو عمر، وسيُعتبر مطبوعاً عند إدخال النتائج'
+      : 'مُعطّل — عادت الشروط المعتادة (اللقب · الاسم الثلاثي · العمر)',
+      wizPatient.sideLab?'success':'info');
+  }
+}
+
+/* يُعتبر طلب السايد لاب مطبوعاً بمجرد إدخال أي نتيجة — بلا طباعة فعلية.
+   يُستدعى من كل مسارات إدخال النتائج (يدوي · جهاز · CBC). آمن ومتكرّر. */
+function _sideLabAutoPrint(req){
+  try{
+    if(!req || req.printed) return false;
+    var isSide = !!req.sideLab;
+    if(!isSide && typeof patients!=='undefined' && Array.isArray(patients)){
+      var p=patients.find(function(x){ return x.id===req.patientId; });
+      if(p && p.sideLab){ isSide=true; req.sideLab=true; }
+    }
+    if(!isSide) return false;
+    var hasAny=false;
+    if(req.results && typeof req.results==='object'){
+      for(var k in req.results){
+        if(req.results[k]!==null && req.results[k]!==undefined && req.results[k]!==''){ hasAny=true; break; }
+      }
+    }
+    if(!hasAny) return false;
+    req.printed=true;
+    if(!req.resultDate) req.resultDate=new Date().toISOString().split('T')[0];
+    req._updatedAt=Date.now();
+    return true;
+  }catch(e){ return false; }
+}
+
 function wizBack(){wizStep=1;renderWizStep();}
 
 function wizNext(){
+  // 🧪 سايد لاب: تُستثنى شروط اللقب والاسم الثلاثي والعمر (الاسم يبقى مطلوباً)
+  const _sideLab = !!wizPatient.sideLab;
+
   // التحقق من اللقب (مطلوب)
-  if(!wizPatient.title){
+  if(!_sideLab && !wizPatient.title){
     showNotif('⚠️ حقل مطلوب','يرجى اختيار لقب المريض','error');
     // إبراز أزرار اللقب
     document.querySelectorAll('[id^="title-btn-"]').forEach(btn=>{
@@ -11748,7 +11816,7 @@ function wizNext(){
     return;
   }
   const nameParts = name.split(/\s+/).filter(p=>p.length>0);
-  if(nameParts.length < 3){
+  if(!_sideLab && nameParts.length < 3){
     showNotif('⚠️ الاسم الثلاثي مطلوب','يرجى إدخال الاسم الثلاثي كاملاً (الاسم الأول والثاني والثالث)','error');
     document.getElementById('wp-name').focus();
     document.getElementById('wp-name').style.borderColor='#ff2244';
@@ -11774,7 +11842,7 @@ function wizNext(){
   }
 
   // التحقق من العمر (مطلوب)
-  if(!dobVal && !birthYearVal && !ageY && !ageM && !ageD && !ageDisplay){
+  if(!_sideLab && !dobVal && !birthYearVal && !ageY && !ageM && !ageD && !ageDisplay){
     showNotif('⚠️ العمر مطلوب','يرجى إدخال عمر المريض أو تاريخ الميلاد','error');
     const ageEl=document.getElementById('wp-age-y')||document.getElementById('wp-dob');
     if(ageEl){
@@ -11806,6 +11874,7 @@ function wizNext(){
   wizPatient={...wizPatient,name,nameEn,dob:dobVal,birthYear:birthYearVal||wizPatient.birthYear||'',ageVal,ageY,ageM,ageD,ageDisplay,
     ageUnit:'year',
     gender,
+    sideLab:_sideLab,
     title:wizPatient.title||'',
     phone:document.getElementById('wp-phone').value,
     phoneCC:(document.getElementById('wp-phone-cc')||{}).value||'964',
@@ -11914,7 +11983,8 @@ function wizFinish(){
     note:(document.getElementById('wiz-req-note')||{}).value||'',
     doctorId:pt.doctorId, doctorName:pt.doctorName,
     date:today, time:new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}),
-    status:'pending', results:{}, tech:'', resultDate:'', resultNotes:''
+    status:'pending', results:{}, tech:'', resultDate:'', resultNotes:'',
+    sideLab: !!pt.sideLab
   };
   requests.push(req); save('requests',requests);
 
@@ -13987,6 +14057,8 @@ function collectResults(){
   });
   req.tech=document.getElementById('res-tech').value;
   req.resultDate=document.getElementById('res-date').value;
+  // 🧪 سايد لاب: يُعتبر مطبوعاً بمجرد إدخال النتائج
+  _sideLabAutoPrint(req);
   return req;
 }
 
@@ -37266,6 +37338,75 @@ function _cbcIsHistNoise(code){
 }
 function cbcIsParam(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));if(_cbcIsHistNoise(code))return false;return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
 function cbcNormalizeCode(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+/* ══════════════════════════════════════════════════════════════════
+   📈 التقاط مخططات الجهاز (Histogram) — Mindray BC-5000 / BC-10
+   ──────────────────────────────────────────────────────────────────
+   سبب عدم ظهور الرسم في النموذج ٩: دالة buildCBCDeviceHistRow كانت
+   موجودة وتقرأ cbcParams['HIST_WBC/RBC/PLT'] — لكن لا يوجد في هذا
+   الملف أي كود يملأ تلك المفاتيح إطلاقاً، فترجع دائماً بإطار فارغ.
+   هنا نضيف مسار الالتقاط المفقود (نفس منطق النسخة الأخرى بالضبط).
+
+   دليل Mindray 3107 HL7 (القسم ٥.٨ / ٦.٢):
+     15000 = WBC Histogram Binary (ED, Base64)   · 15004 = Meta Length
+     15050 = RBC Histogram Binary                · 15053 = Meta Length
+     15100 = PLT Histogram Binary                · 15113 = Meta Length
+   صيغة القيمة: ^Application^Octer-stream^Base64^<data>
+   ══════════════════════════════════════════════════════════════════ */
+var _CBC_HIST_MAP={
+  '15000':{k:'WBC',t:'bin'}, '15004':{k:'WBC',t:'meta'},
+  '15050':{k:'RBC',t:'bin'}, '15053':{k:'RBC',t:'meta'},
+  '15100':{k:'PLT',t:'bin'}, '15113':{k:'PLT',t:'meta'}
+};
+/* أكواد الصور الجاهزة (BMP/Scattergram). 15000/15050/15100 مكرّرة أعلاه
+   لأن الجهاز قد يرسلها صورةً أو بيانات خام حسب إعداده — نفرّق بالمحتوى. */
+var _CBC_IMG_CODES={
+  '15000':1,'15008':1,'15050':1,'15100':1,'15200':1,'15201':1,
+  '15056':1,'15116':1,'15250':1,'15300':1,'15301':1,'15302':1,
+  '15350':1,'15600':1
+};
+/* فحص سلامة Base64 لصورة + سقف حجم (≈1MB) */
+function _cbcImgValid(b64){
+  var s=String(b64||'').replace(/\s/g,'');
+  if(!s || s.length<32 || s.length>1500000) return false;
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+}
+/* يُعيد true إذا كان الكود مخططاً/صورة (فيتوقف المسار العادي ولا يُخزَّن كصفّ) */
+function cbcCaptureHistogram(sampleId, rawCode, rawValue, obxName){
+  var code=String(rawCode||'').trim();
+  var isHist=!!_CBC_HIST_MAP[code], isImg=!!_CBC_IMG_CODES[code];
+  if(!isHist && !isImg) return false;
+  if(!sampleId) return true;                 // بلا معرّف عينة — تجاهل صامت
+  if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:'',timer:null};
+  var buf=_cbcBuffer[sampleId];
+
+  // ── صورة جاهزة؟ (نفحص محتوى القيمة لا الكود فقط) ──
+  var cl=(typeof _cbcEDClassify==='function')?_cbcEDClassify(rawValue):null;
+  if(cl && cl.kind==='img' && _cbcImgValid(cl.b64)){
+    if(!buf.graphics) buf.graphics=[];
+    var dup=false, d;
+    for(d=0;d<buf.graphics.length;d++){ if(buf.graphics[d].code===code){ dup=true; break; } }
+    if(!dup){
+      buf.graphics.push({code:code,name:String(obxName||'').trim(),b64:cl.b64,mime:cl.mime});
+      try{ lisAddLog('astm','[CBC] صورة '+code+' مُستلمة SID:'+sampleId); }catch(_){}
+    }
+    if(buf.timer) clearTimeout(buf.timer);
+    buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+    return true;
+  }
+
+  // ── بيانات خام / Meta Length ──
+  var hit=_CBC_HIST_MAP[code];
+  if(!hit) return true;                      // كود صورة لكن القيمة غير صالحة
+  var key='HIST_'+hit.k;
+  if(!buf.params[key] || typeof buf.params[key]!=='object') buf.params[key]={value:'',meta:''};
+  if(hit.t==='bin') buf.params[key].value=String(rawValue||'');
+  else              buf.params[key].meta =String(rawValue||'').trim();
+  try{ lisAddLog('astm','[CBC] مخطط '+hit.k+' ('+hit.t+') مُستلم SID:'+sampleId); }catch(_){}
+  // مدّد مؤقّت الإرسال حتى تصل بقية المقاطع (المخططات تصل بعد الأرقام)
+  if(buf.timer) clearTimeout(buf.timer);
+  buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+  return true;
+}
 // ═══════════════════════════════════════════════════════════════
 // 🩸 BC-6000 — تخزين الرسوم البيانية ورايات الإنذار مع عينة الـ CBC
 // ─────────────────────────────────────────────────────────────
@@ -37337,6 +37478,10 @@ const _cbcFlushLog = {};
 function cbcFlush(sampleId){
   const buf=_cbcBuffer[sampleId];
   if(!buf||!Object.keys(buf.params).length) return;
+  // ⭐ لا نُنهي العينة إذا وصلت المخططات (HIST_*) فقط دون أي باراميتر حقيقي —
+  //    وإلا فُلِشَت العينة مبكراً وضاعت الأرقام التي ستصل بعدها.
+  const _realParams=Object.keys(buf.params).filter(function(k){return k.indexOf('HIST_')!==0;});
+  if(!_realParams.length) return;
   delete _cbcBuffer[sampleId];
   // ── حماية التكرار: إذا فُلِشَ نفس المريض خلال آخر 60 ثانية — تجاهل ──
   const _flushNow=Date.now();
@@ -37399,6 +37544,8 @@ function cbcFlush(sampleId){
     const _otherTests=(targetReq.tests||[]).filter(function(t){return t!=='CBC'&&t!=='h001';});
     const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
     if(_otherDone) targetReq.status='done';
+    // 🧪 سايد لاب: يُعتبر مطبوعاً بمجرد وصول نتيجة CBC من الجهاز
+    try{ if(typeof _sideLabAutoPrint==='function') _sideLabAutoPrint(targetReq); }catch(_){}
     // إذا كان هناك تحاليل أخرى لم تُكمَل — يبقى status pending
     if(typeof save==='function') save('requests',requests);
     // تحديث شارة "نتائج الأجهزة" فور وصول CBC دون تغيير التبويب المعروض (المتطلبان ٢ و ٣)
@@ -37575,6 +37722,16 @@ function lisParseHL7(raw,deviceName){
     const codeWithSpaces=(codeRaw[1]||codeRaw[0]||'').trim().toUpperCase();
     const code=codeWithSpaces.replace(/\s+/g,'');  // للتخزين: 'VITB12III'
 
+    // ── 📈 مخططات/صور الجهاز: نلتقطها قبل أي تنظيف للقيمة ──
+    //    القيمة الثنائية (Base64) تتلف إذا مرّت على regex التنظيف أدناه،
+    //    لذا نستخدم f[5] الخام مباشرة ثم نخرج من هذا المقطع.
+    const _histId=(codeRaw[0]||'').trim();
+    if(_CBC_HIST_MAP[_histId]||_CBC_IMG_CODES[_histId]){
+      isCBC=true;
+      cbcCaptureHistogram(pid.id||'HL7', _histId, (f[5]||'').trim(), (codeRaw[1]||''));
+      return;
+    }
+
     // ── تنظيف القيمة ──
     // MAGLUMI يرسل: '442^' — نزيل ^ والأحرف غير الرقمية
     // BC-5000 يرسل: '4.50T' أو '<0.5'
@@ -37688,6 +37845,13 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
     const codeWithSpaces=(obx.testName||obx.testCode||'').trim().toUpperCase();
     const code=codeWithSpaces.replace(/\s+/g,'');
     let value=obx.value||'';
+
+    // ── 📈 مخططات/صور الجهاز (تُطابَق بـ testCode لأن الاسم يحوي مسافات) ──
+    const _histId=String(obx.testCode||'').trim();
+    if(_CBC_HIST_MAP[_histId]||_CBC_IMG_CODES[_histId]){
+      cbcCaptureHistogram(parsed.patientId||'HL7', _histId, value, (obx.testName||''));
+      return;
+    }
     if(!code&&!value) return;
 
     // ⭐ BS-230 فقط: حذف الكسور + النزول لأقرب ٥ (الافتراضي)، مع استثناءات
@@ -38388,6 +38552,81 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
     }
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // 🛡️ حارس المفتاح — لا تُكتب نتيجة تحت مفتاح غير موجود في req.tests
+  // ──────────────────────────────────────────────────────────────
+  // سبب المشكلة: عندما يفشل lisResolveCode يُرجع كود الجهاز الخام كما هو
+  // (مثل "T-β-HCG-II" حيث تتشوّه الحروف غير اللاتينية عند فك التشفير)، فتُكتب
+  // النتيجة في req.results["T-β-HCG-II"] — وهو مفتاح ليس ضمن req.tests،
+  // فلا تظهر في واجهة الإدخال ولا في التقرير، بينما يُسجَّل "تم النقل" بنجاح.
+  // الحل: نُطابق الكود قانونياً مع تحاليل الطلب نفسه، ولا نكتب إطلاقاً إن فشل.
+  // ══════════════════════════════════════════════════════════════
+  function _lisCanonCode(x){
+    return String(x||'').toUpperCase()
+      .replace(/BETA/g,'B')
+      .replace(/[\u03B2\u00DF\u0392]/g,'B')   // β / ß / Β → B
+      .replace(/[^A-Z0-9]+/g,'')               // يُسقط كل بايت مشوّه أو رمز
+      .replace(/(III|II|IV|VI|VII|VIII|IX|XI|XII)$/,'');
+  }
+  const _reqTestList=Array.isArray(req.tests)?req.tests:[];
+  if(_reqTestList.length && _reqTestList.indexOf(resultKey)===-1){
+    const _cCode=_lisCanonCode(code);
+    function _formsOf(tid){
+      const t=_allTests.find(function(x){return x.id===tid||x.code===tid;});
+      const f=[tid];
+      if(t){ f.push(t.id,t.code,t.nameShort,t.nameEn); }
+      return f.map(_lisCanonCode).filter(Boolean);
+    }
+    // المستوى ١ — تطابق قانوني كامل
+    let _pool=_reqTestList.filter(function(tid){
+      return _formsOf(tid).some(function(cf){ return cf===_cCode; });
+    });
+    // المستوى ٢ — بادئة/لاحقة فقط (لا احتواء عشوائي)، بطول ٤ أحرف فأكثر
+    //   يسمح بـ "TBHCG" ⟵ "BHCG" ويمنع الفخّ الخطير "FT3" ⟵ "T3".
+    if(!_pool.length && _cCode.length>=4){
+      _pool=_reqTestList.filter(function(tid){
+        return _formsOf(tid).some(function(cf){
+          if(cf.length<4) return false;
+          if(_iso(cf)!==_codeIso) return false;            // حماية IgA/IgG/IgM
+          return _cCode.endsWith(cf)||cf.endsWith(_cCode)||
+                 _cCode.startsWith(cf)||cf.startsWith(_cCode);
+        });
+      });
+    }
+    // المستوى ٣ — الكود مشوّه فعلاً (حرف غير لاتيني ضاع عند فك التشفير):
+    //   "T-β-HCG-II" تصل كـ "T-?-HCG-II" أو "T-Î²-HCG-II" ⇒ بعد التقنين "THCG"
+    //   بينما التحليل المطلوب "BHCG" — تختلف بحرف واحد فقط ضاع.
+    //   هنا فقط نسمح بالمطابقة على لاحقة مشتركة ≥٣ أحرف، وبشرط مرشح وحيد.
+    const _mangled=/[^\x20-\x7E]/.test(String(code||''))||String(code||'').indexOf('?')>=0;
+    if(!_pool.length && _mangled && _cCode.length>=3){
+      function _sufLen(a,b){
+        let n=0;
+        while(n<a.length && n<b.length && a[a.length-1-n]===b[b.length-1-n]) n++;
+        return n;
+      }
+      _pool=_reqTestList.filter(function(tid){
+        return _formsOf(tid).some(function(cf){
+          if(cf.length<3) return false;
+          if(_iso(cf)!==_codeIso) return false;
+          return _sufLen(_cCode,cf)>=3;
+        });
+      });
+      if(_pool.length===1){
+        lisAddLog('warn','⚠️ كود الجهاز "'+code+'" وصل مشوّهاً (حرف غير لاتيني) — '+
+          'طوبق مع '+_pool[0]+'. يُفضّل إضافة الربط يدوياً من «تعيين التحاليل».');
+      }
+    }
+    if(_pool.length===1){
+      resultKey=_pool[0];
+      lisAddLog('ok','🔗 طوبق كود الجهاز "'+code+'" مع تحليل الطلب: '+resultKey);
+    } else {
+      lisAddLog('err','⛔ لم تُكتب النتيجة: كود الجهاز "'+code+'" لا يطابق أي تحليل في الطلب '+req.id+
+        (_pool.length>1?' (تطابق غامض: '+_pool.join(' / ')+')':'')+
+        ' — أضف الربط من «تعيين التحاليل» ثم أعد النقل');
+      return null;   // ⛔ لا نكتب ولا نُعلن نجاحاً كاذباً
+    }
+  }
+
   // 🔎 Delta Check — تقييم صامت لنتيجة الجهاز (HL7/ASTM) قبل الكتابة
   var _dcViol=null;
   try{
@@ -38404,14 +38643,36 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   if(allDone) req.status='done';
   else if(req.status==='pending') req.status='inprogress';
 
-  // حفظ في IDB + تحديث _MC + تحديث requests العالمية
-  if(typeof IDB!=='undefined'&&idbKey){
-    IDB.set(idbKey, reqs).catch(function(e){console.warn('[LIS] IDB save error',e);});
-  }
-  if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
+  // 🧪 سايد لاب: يُعتبر مطبوعاً بمجرد وصول نتيجة من الجهاز
+  try{ if(typeof _sideLabAutoPrint==='function') _sideLabAutoPrint(req); }catch(e){}
+
+  // ⭐ ختم وقت التعديل — بدونه يعتبره دمج LAN "قديماً" فتطرده نسخة الحاسبة الأخرى
+  req._updatedAt=Date.now();
+
+  // تحديث requests العالمية أولاً كي يبثّ save() النسخة الصحيحة
   if(typeof requests!=='undefined'&&Array.isArray(requests)){
     const idx=requests.findIndex(function(x){return x.id===req.id;});
     if(idx>=0) requests[idx]=req; else requests.push(req);
+  }
+
+  // ⚠️ إصلاح جذري: كان الحفظ يتم بـ IDB.set مباشرةً — وهو مسار لا يمرّ بـ save()
+  //    فلا يُطلق _lanOnSave ⇒ نتيجة الجهاز لا تُبثّ للحاسبة الأخرى إطلاقاً،
+  //    ثم يأتي أول بثّ من تلك الحاسبة بنسخة قديمة فيمحو النتيجة محلياً.
+  //    الآن نمرّ عبر save() ⇒ كتابة IDB + كاش + بثّ LAN في خطوة واحدة.
+  let _saved=false;
+  try{
+    if(typeof save==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
+      save('requests', reqs);
+      _saved=true;
+    }
+  }catch(e){ console.warn('[LIS] save() path failed',e); }
+  if(!_saved){
+    // سقوط آمن على السلوك القديم (مع بثّ يدوي كي لا تُفقد المزامنة)
+    if(typeof IDB!=='undefined'&&idbKey){
+      IDB.set(idbKey, reqs).catch(function(e){console.warn('[LIS] IDB save error',e);});
+    }
+    if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
+    try{ if(typeof window._lanOnSave==='function') window._lanOnSave('requests', reqs); }catch(e){}
   }
   lisAddLog('ok','نُقلت: '+code+'='+res.value+' → طلب '+req.id+' (مريض: '+req.patientName+') [key:'+resultKey+']');
   return resultKey;
@@ -38420,6 +38681,7 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
 async function lisTransferToMedlabPro(list){
   let transferred=0;
   let notFound=0;
+  let unmatched=0;
 
   // ── تحديد prefix المستخدم الحالي ──────────────────────────────
   const _pfx=(typeof DB!=='undefined'&&typeof DB._pfx==='function')?DB._pfx():'mlab2_';
@@ -38470,9 +38732,17 @@ async function lisTransferToMedlabPro(list){
   for(const res of list){
     const req=_lisMatchReqInList(mergedReqs, res, _allPts);
     if(req){
-      _lisApplyResultToReq(req, res, mergedReqs, _idbReqKey);
-      res.transferred=true;
-      transferred++;
+      const _k=_lisApplyResultToReq(req, res, mergedReqs, _idbReqKey);
+      if(_k){
+        res.transferred=true;
+        transferred++;
+      } else {
+        // ⛔ الطلب صحيح لكن كود التحليل لم يُطابق أي تحليل فيه.
+        //    نُبقيها غير منقولة كي تظهر بالأحمر ويمكن إعادة النقل بعد الربط.
+        res.transferred=false;
+        res.unmatchedCode=true;
+        unmatched++;
+      }
     } else {
       // حفظ في قائمة الانتظار للربط اليدوي لاحقاً
       try{
@@ -38503,7 +38773,8 @@ async function lisTransferToMedlabPro(list){
   // إشعار النقل: نُبقيه فقط في السجل (log) — نُزيل الإشعار المرئي الثقيل.
   let msg='تم نقل '+transferred+' نتيجة';
   if(notFound) msg+=' — '+notFound+' بانتظار الربط اليدوي';
-  lisAddLog(transferred>0?'ok':'warn', msg);
+  if(unmatched) msg+=' — ⛔ '+unmatched+' كود جهاز غير مربوط (لم تُكتب)';
+  lisAddLog((transferred>0&&!unmatched)?'ok':'warn', msg);
 }
 
 // تحديث خفيف ومُجمَّع لواجهة MedLab Pro بعد نقل نتائج الأجهزة (المتطلب ٤)
@@ -39310,6 +39581,16 @@ function _fsaUpdateIndicator(connected){
 function dbAccToggle(el){
   var acc = el.closest('.db-acc');
   if(acc) acc.classList.toggle('open');
+  // ☁️ فتح قسم Google Drive ⟵ أعد تقييم الحالة الآن.
+  //    سبب اختفاء زر الربط: initGDrive يعمل مرة واحدة بعد 4.5 ثانية من
+  //    الإقلاع — وقد يكون القسم غير جاهز أو الاتصال بطيئاً، فيبقى الزر
+  //    مخفياً للأبد لأن لا شيء يعيد الفحص. الآن يُعاد عند كل فتح.
+  try{
+    if(acc && acc.id==='db-acc-gdrive' && acc.classList.contains('open')){
+      if(typeof initGDrive==='function') initGDrive();
+      else if(typeof refreshGDriveStatus==='function') refreshGDriveStatus();
+    }
+  }catch(e){ console.warn('[GDrive] accordion refresh', e); }
 }
 
 function _gdKey(suffix){ return 'gdrive_' + (DB._user || 'default') + '_' + suffix; }
@@ -39350,7 +39631,12 @@ function _gdDeobfuscate(b64){
 
 function _gdSavePassword(pw){ try{ localStorage.setItem(_gdPassKey(), _gdObfuscate(pw)); }catch(e){} }
 function _gdGetPassword(){ var v = localStorage.getItem(_gdPassKey()); return v ? _gdDeobfuscate(v) : ''; }
-function _gdHasElectron(){ return !!(window.IS_ELECTRON && window.electronAPI && window.electronAPI.gdriveStatus); }
+function _gdHasElectron(){
+  // نقبل أي جسر متاح: بعض البناءات تُصدّر gdriveLink دون gdriveStatus.
+  var api = window.electronAPI;
+  if(!api) return false;
+  return !!(api.gdriveStatus || api.gdriveLink || api.gdriveInfo);
+}
 
 // ════════════════════════════════════════════════════════════════════
 //  تهيئة القسم + تحديث الحالة
@@ -39358,10 +39644,20 @@ function _gdHasElectron(){ return !!(window.IS_ELECTRON && window.electronAPI &&
 
 async function initGDrive(){
   if(!_gdHasElectron()){
+    // على المتصفح/الهاتف: Google Drive غير متاح. نُخفي أدوات الربط فقط
+    // ونترك رسالة واضحة بدل إخفاء القسم كله بصمت (كان يبدو كأنه عُطل).
     var box = document.getElementById('gdrive-box');
-    if(box) box.style.display = 'none';   // على المتصفح/الهاتف: أخفِ القسم
+    var lb  = document.getElementById('gdrive-link-btn');
+    var lbx = document.getElementById('gdrive-linked-box');
+    var stx = document.getElementById('gdrive-status');
+    if(box) box.style.display = '';
+    if(lb)  lb.style.display  = 'none';
+    if(lbx) lbx.style.display = 'none';
+    if(stx) stx.innerHTML = 'ℹ️ الربط بـ Google Drive متاح في نسخة سطح المكتب فقط (تطبيق ويندوز).';
     return;
   }
+  var _box = document.getElementById('gdrive-box');
+  if(_box) _box.style.display = '';   // تأكيد الظهور لو أخفاه استدعاء سابق
   await refreshGDriveStatus();
   _gdLoadAutoSettings();
   _gdStartAutoScheduler();
@@ -39374,10 +39670,27 @@ async function initGDrive(){
 //   ويُخفي صندوق الحساب — فيبدو الربط وكأنه انفصل بعد كل إعادة تشغيل.
 //   الآن: إن كان الحساب مربوطاً سابقاً (بريد محفوظ محلياً) نعيد السؤال
 //   عدة مرات قبل الحكم، ولا نمسح البريد المحفوظ إطلاقاً.
+// ⏱️ استعلام الحالة بمهلة — إن لم تردّ العملية الرئيسية خلال المهلة نعتبرها
+//    غير مرتبطة بدلاً من الانتظار للأبد (وهو ما كان يُبقي الواجهة على "⏳"
+//    ويترك زر الربط مخفياً فلا يستطيع المستخدم الربط إطلاقاً).
+function _gdStatusOnce(timeoutMs){
+  return new Promise(function(resolve){
+    var done=false;
+    var t=setTimeout(function(){ if(!done){ done=true; resolve(null); } }, timeoutMs||6000);
+    try{
+      if(!window.electronAPI || !window.electronAPI.gdriveStatus){
+        clearTimeout(t); done=true; resolve(null); return;
+      }
+      Promise.resolve(window.electronAPI.gdriveStatus())
+        .then(function(r){ if(!done){ done=true; clearTimeout(t); resolve(r); } })
+        .catch(function(){ if(!done){ done=true; clearTimeout(t); resolve(null); } });
+    }catch(e){ if(!done){ done=true; clearTimeout(t); resolve(null); } }
+  });
+}
 async function _gdStatusWithRetry(tries, gapMs){
   var st = null;
   for(var i = 0; i < tries; i++){
-    try{ st = await window.electronAPI.gdriveStatus(); }catch(e){ st = null; }
+    st = await _gdStatusOnce(6000);
     if(st && st.linked) return st;
     if(i < tries - 1) await new Promise(function(r){ setTimeout(r, gapMs); });
   }
@@ -39412,18 +39725,24 @@ async function refreshGDriveStatus(){
       _gdStartAutoScheduler();
     } else if(savedEmail){
       // مربوط سابقاً لكن العملية الرئيسية لا تُرجع الرمز ⟵ لا نُخفي شيئاً بصمت
-      if(linkBtn)   linkBtn.style.display   = 'block';
+      if(linkBtn)   linkBtn.style.display   = 'flex';
       if(linkedBox) linkedBox.style.display = 'none';
       if(statusEl)  statusEl.innerHTML =
         '⚠️ انقطع الربط بحساب <b>'+savedEmail+'</b> — لم تُستعَد صلاحية الوصول عند التشغيل.'+
         '<br>اضغط «ربط Google Drive» لإعادة التفعيل.';
     } else {
-      if(linkBtn)   linkBtn.style.display   = 'block';
+      if(linkBtn)   linkBtn.style.display   = 'flex';
       if(linkedBox) linkedBox.style.display = 'none';
       if(statusEl)  statusEl.innerHTML = '⚪ غير مرتبط — اضغط "ربط Google Drive" للبدء';
     }
   }catch(e){
-    if(statusEl) statusEl.innerHTML = '⚠️ تعذّر قراءة الحالة: '+e.message;
+    // ⭐ حتى عند فشل قراءة الحالة يجب أن يبقى زر الربط ظاهراً — وإلا فقد
+    //    المستخدم أي وسيلة للربط. هذا كان سبب اختفاء الزر الأزرق نهائياً.
+    if(linkBtn)   linkBtn.style.display   = 'flex';
+    if(linkedBox) linkedBox.style.display = 'none';
+    if(statusEl)  statusEl.innerHTML =
+      '⚠️ تعذّر قراءة حالة الربط ('+(e && e.message ? e.message : 'خطأ غير معروف')+') — '+
+      'يمكنك الضغط على «ربط Google Drive» للمحاولة.';
   }
 }
 
@@ -44429,9 +44748,27 @@ function _lanMergeArrays(localArr, incomingArr){
   }
   function _tsOf(o){
     if(!o || typeof o !== 'object') return 0;
-    var t = o.updatedAt || o.lastModified || o.ts || o.modifiedAt || o.createdAt || o.date || 0;
+    // ⚠️ إصلاح جذري: البرنامج يكتب _updatedAt (بشرطة سفلية) في كل تعديل،
+    //    وكان هذا السطر يقرأ updatedAt فقط → لا يجدها أبداً → يسقط على o.date
+    //    (تاريخ العينة، متطابق في النسختين) → تعادل → تفوز النسخة الواردة دائماً
+    //    ولو كانت أقدم → النتيجة تدخل ثم تختفي بعد ثوانٍ. الآن نقرأ _updatedAt أولاً.
+    var t = o._updatedAt || o.updatedAt || o.lastModified || o.ts || o.modifiedAt || 0;
     var n = (typeof t === 'number') ? t : Date.parse(t);
-    return isNaN(n) ? 0 : n;
+    if(isNaN(n)) n = 0;
+    return n;
+  }
+  // ⭐ شبكة أمان: كم نتيجة مُدخلة في هذا السجل؟ تُستخدم فقط عند تعادل الوقت
+  //    (سجلات قديمة بلا _updatedAt) — نُبقي النسخة الأغنى بالنتائج ولا نمحو شيئاً.
+  function _fillOf(o){
+    var n = 0;
+    try{
+      if(o && o.results && typeof o.results === 'object'){
+        for(var k in o.results){
+          if(o.results[k] !== null && o.results[k] !== undefined && o.results[k] !== '') n++;
+        }
+      }
+    }catch(e){}
+    return n;
   }
   var map = {}, order = [];
   function _put(o, idx){
@@ -44439,7 +44776,11 @@ function _lanMergeArrays(localArr, incomingArr){
     if(!(id in map)){ map[id] = o; order.push(id); return; }
     // تعارض: رجّح الأحدث زمنياً
     var cur = map[id];
-    if(_tsOf(o) >= _tsOf(cur)) map[id] = o;
+    var tNew = _tsOf(o), tCur = _tsOf(cur);
+    if(tNew > tCur){ map[id] = o; return; }
+    if(tNew < tCur) return;                       // الأقدم لا يطرد الأحدث أبداً
+    // تعادل زمني → لا تُخمِّن: أبقِ النسخة التي تحمل نتائج أكثر
+    if(_fillOf(o) > _fillOf(cur)) map[id] = o;
   }
   localArr.forEach(_put);
   incomingArr.forEach(_put);
