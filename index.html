@@ -13597,10 +13597,17 @@ function loadResultsDropdown(){
   const _cbcDoneReqs=requests.filter(r=>r.status==='done'&&(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams)));
   const _pendingReqs=requests.filter(r=>r.status!=='done');
   const _combined=[..._pendingReqs,..._cbcDoneReqs];
+  // ── إبقاء الطلب المفتوح حالياً داخل القائمة حتى لو صار status='done' ──
+  //    (يحدث عند طباعة الأدرار/الخروج من داخل واجهتهما — كان الطلب يختفي فتظهر صفحة فارغة)
+  const _keepOpenId = window._resKeepReqId || currentReqId || sel.value || '';
+  if(_keepOpenId && !_combined.some(r=>r.id===_keepOpenId)){
+    const _keepReq = requests.find(r=>r.id===_keepOpenId);
+    if(_keepReq) _combined.unshift(_keepReq);
+  }
   sel.innerHTML='<option value="">-- اختر طلب --</option>'+_combined.map(r=>`<option value="${r.id}" ${r.status==='done'?'style="color:#00c46a"':''}>${r.id} - ${r.patientName}${r.status==='done'?' ✅':''}</option>`).join('');
   // فقط حدد الطلب إذا currentReqId موجود فعلاً في القائمة
   if(currentReqId){
-    const exists=requests.find(r=>r.id===currentReqId&&(r.status!=='done'||(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams))));
+    const exists=_combined.find(r=>r.id===currentReqId);
     if(exists){sel.value=currentReqId;loadResultEntry();}
     else{currentReqId=null;sel.value='';loadResultEntry();}
   } else {
@@ -13608,9 +13615,33 @@ function loadResultsDropdown(){
   }
 }
 
+// ── البقاء على نفس المريض في واجهة إدخال النتائج بعد حفظ/طباعة فحص خاص ──
+//    (أدرار / خروج / سائل منوي) — يمنع رجوع الشاشة فارغة
+function _resKeepOnSameRequest(reqId){
+  if(!reqId) return;
+  const sel=document.getElementById('res-req-sel'); if(!sel) return;
+  window._resKeepReqId = reqId;
+  currentReqId = reqId;
+  try{ loadResultsDropdown(); }catch(_){}
+  if(sel.value !== reqId){
+    if(!Array.prototype.some.call(sel.options, o=>o.value===reqId)){
+      const rq = requests.find(r=>r.id===reqId);
+      if(rq){
+        const op=document.createElement('option');
+        op.value=rq.id; op.textContent=rq.id+' - '+rq.patientName+(rq.status==='done'?' \u2705':'');
+        sel.insertBefore(op, sel.options[1]||null);
+      }
+    }
+    sel.value = reqId;
+  }
+  try{ loadResultEntry(); }catch(_){}
+}
+
 function loadResultEntry(){
   const sel=document.getElementById('res-req-sel');
   const id=sel?sel.value:'';
+  // تحرير الطلب المُثبَّت مؤقتاً إذا انتقل المستخدم لطلب آخر
+  if(window._resKeepReqId && window._resKeepReqId!==id) window._resKeepReqId=null;
   // دائماً حدّث currentReqId من الـ select — هذا يمنع التداخل
   currentReqId=id||null;
   const bar=document.getElementById('res-pt-bar');
@@ -27210,6 +27241,7 @@ function saveUAEntry(){
   else uaRecords.push(rec);
   saveUARecords();
   // Mark linked request as done
+  const _keepReqId = window._uaReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -27217,11 +27249,8 @@ function saveUAEntry(){
   }
   closeModal('m-ua');
   renderUAList();
-  // Fix 2: Always stay on results page — just reload the entry rows
-  const resSel=document.getElementById('res-req-sel');
-  if(resSel&&resSel.value){
-    loadResultEntry();  // reload rows inline, user stays on results page
-  }
+  // البقاء على نفس المريض في واجهة إدخال النتائج
+  _resKeepOnSameRequest(_keepReqId);
   window._specialExamInlineMode=false;
   showNotif('تم','Urine results saved ✅','success');
 }
@@ -27251,6 +27280,7 @@ function saveAndPrintUA(){
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
   else uaRecords.push(rec);
   saveUARecords();
+  const _keepReqId = window._uaReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -27260,11 +27290,10 @@ function saveAndPrintUA(){
   showNotif('تم','جاري الطباعة 🖨️','success');
   // طباعة فورية بالتوازي مع الحفظ — لا حاجة لانتظار setTimeout
   printUAReport(rec.id);
-  // تحديث القائمة في الخلفية بعد الطباعة
+  // تحديث القائمة + البقاء على نفس المريض بعد الطباعة
   requestAnimationFrame(function(){
     renderUAList();
-    const resSel=document.getElementById('res-req-sel');
-    if(resSel&&resSel.value){ loadResultEntry(); }
+    _resKeepOnSameRequest(_keepReqId);
   });
   window._specialExamInlineMode=false;
 }
@@ -27773,6 +27802,7 @@ function saveStoolEntry(){
   else stoolExamRecords.push(rec);
   saveStoolExamRecords();
   // Mark linked request as done
+  const _keepReqId = window._stoolReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -27780,11 +27810,8 @@ function saveStoolEntry(){
   }
   closeModal('m-stool-exam');
   renderStoolList();
-  // Fix 2: Always stay on results page — just reload the entry rows
-  const resSel=document.getElementById('res-req-sel');
-  if(resSel&&resSel.value){
-    loadResultEntry();  // reload rows inline, user stays on results page
-  }
+  // البقاء على نفس المريض في واجهة إدخال النتائج
+  _resKeepOnSameRequest(_keepReqId);
   window._specialExamInlineMode=false;
   showNotif('تم','Stool results saved ✅','success');
 }
@@ -27818,6 +27845,7 @@ function saveAndPrintStool(){
   if(window._editStoolId){ const idx=stoolExamRecords.findIndex(x=>x.id===window._editStoolId); if(idx>-1)stoolExamRecords[idx]=rec; else stoolExamRecords.push(rec); }
   else stoolExamRecords.push(rec);
   saveStoolExamRecords();
+  const _keepReqId = window._stoolReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -27825,8 +27853,8 @@ function saveAndPrintStool(){
   }
   closeModal('m-stool-exam');
   renderStoolList();
-  const resSel=document.getElementById('res-req-sel');
-  if(resSel&&resSel.value){ loadResultEntry(); }
+  // البقاء على نفس المريض في واجهة إدخال النتائج
+  _resKeepOnSameRequest(_keepReqId);
   window._specialExamInlineMode=false;
   showNotif('تم','جاري الطباعة 🖨️','success');
   setTimeout(()=>printStoolReport(rec.id), 50);
@@ -28121,6 +28149,7 @@ function saveAndShareUAWhatsApp(){
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
   else uaRecords.push(rec);
   saveUARecords();
+  const _keepReqId = window._uaReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -28128,8 +28157,7 @@ function saveAndShareUAWhatsApp(){
   }
   closeModal('m-ua');
   renderUAList();
-  const resSel=document.getElementById('res-req-sel');
-  if(resSel&&resSel.value){ loadResultEntry(); }
+  _resKeepOnSameRequest(_keepReqId);
   window._specialExamInlineMode=false;
   showNotif('تم','تم الحفظ — جاري تحضير PDF...','success');
   // إرسال واتساب
@@ -28169,6 +28197,7 @@ function saveAndShareStoolWhatsApp(){
   if(window._editStoolId){ const idx=stoolExamRecords.findIndex(x=>x.id===window._editStoolId); if(idx>-1)stoolExamRecords[idx]=rec; else stoolExamRecords.push(rec); }
   else stoolExamRecords.push(rec);
   saveStoolExamRecords();
+  const _keepReqId = window._stoolReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -28176,8 +28205,7 @@ function saveAndShareStoolWhatsApp(){
   }
   closeModal('m-stool-exam');
   renderStoolList();
-  const resSel=document.getElementById('res-req-sel');
-  if(resSel&&resSel.value){ loadResultEntry(); }
+  _resKeepOnSameRequest(_keepReqId);
   window._specialExamInlineMode=false;
   showNotif('تم','تم الحفظ — جاري تحضير PDF...','success');
   // إرسال واتساب
@@ -30238,6 +30266,7 @@ function saveSemenEntry(andPrint){
   if(window._semenEditId){ const idx=semenRecords.findIndex(x=>x.id===window._semenEditId); if(idx>-1)semenRecords[idx]=rec; else semenRecords.push(rec); }
   else semenRecords.push(rec);
   saveSemenRecords();
+  const _keepReqId = window._semenReqId || currentReqId || (document.getElementById('res-req-sel')||{}).value || '';
   if(window._semenReqId){
     const req=requests.find(r=>r.id===window._semenReqId);
     if(req){ req.status='done'; req.resultDate=rec.date; save('requests',requests); updateBadges(); }
@@ -30245,8 +30274,7 @@ function saveSemenEntry(andPrint){
   }
   closeModal('m-semen-exam');
   renderSemenList();
-  const resSel=document.getElementById('res-req-sel');
-  if(resSel&&resSel.value) loadResultEntry();
+  _resKeepOnSameRequest(_keepReqId);
   window._specialExamInlineMode=false;
   showNotif('تم','تم حفظ تحليل السائل المنوي ✅','success');
   if(andPrint){ setTimeout(function(){ printSemenReport(rec.id); }, 400); }
@@ -32304,16 +32332,21 @@ function _buildDNAFragModalBody(r){
 
   <!-- إدخال الأرقام -->
   <div style="background:rgba(0,0,0,0.02);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px">
-    <div style="font-size:13px;font-weight:900;color:#0077cc;border-bottom:2px solid #0077cc;padding-bottom:4px;margin-bottom:14px">🔢 إدخال النتائج العددية</div>
+    <div style="font-size:13px;font-weight:900;color:#0077cc;border-bottom:2px solid #0077cc;padding-bottom:4px;margin-bottom:8px">🔢 إدخال النتائج العددية</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:12px;line-height:1.7">
+      عُدّ الخلايا حسب تصنيف الهالة (كبيرة / متوسطة / صغيرة / بدون هالة / متدهورة) — وحقلا <b>مجزأة</b> و<b>غير مجزأة</b> يُحسبان تلقائياً:
+      مجزأة = بدون هالة + صغيرة + متدهورة، وغير مجزأة = كبيرة + متوسطة.
+      إذا تُركت حقول الهالة فارغة يمكن إدخال مجزأة/غير مجزأة يدوياً.
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px">
 
       <div class="fg" style="margin-bottom:0">
-        <label class="fl" style="font-size:11px">غير مجزأة — Non-fragmented (عدد)</label>
+        <label class="fl" style="font-size:11px">غير مجزأة — Non-fragmented (عدد) <span style="color:#0077cc;font-weight:800">⚙ تلقائي</span></label>
         <input class="fc" type="number" id="dnafrag-nonfrag-n" min="0" max="9999" step="1" value="${v('nonfragN')}" placeholder="عدد الحيوانات غير المجزأة" oninput="calcDNAFrag()">
       </div>
 
       <div class="fg" style="margin-bottom:0">
-        <label class="fl" style="font-size:11px">مجزأة — Fragmented (عدد)</label>
+        <label class="fl" style="font-size:11px">مجزأة — Fragmented (عدد) <span style="color:#0077cc;font-weight:800">⚙ تلقائي</span></label>
         <input class="fc" type="number" id="dnafrag-frag-n" min="0" max="9999" step="1" value="${v('fragN')}" placeholder="عدد الحيوانات المجزأة" oninput="calcDNAFrag()">
       </div>
 
@@ -32420,56 +32453,120 @@ function _getDNAFragDoctor(){
   return {id:sel.value, name:opt?opt.dataset.name||opt.text:''};
 }
 
+// ════════════════════════════════════════════════════════════
+// المحرك الحسابي الموحّد لفحص SCD / Halosperm
+//   القاعدة المعتمدة (WHO 6th ed. / Halosperm G2):
+//     Fragmented      = بدون هالة + هالة صغيرة + متدهورة
+//     Non-fragmented  = هالة كبيرة + هالة متوسطة
+//     المقام          = إجمالي الخلايا المفحوصة (مجموع الفئات الخمس)
+//     DFI             = Fragmented %
+//   إذا لم تُدخَل أي هالة → رجوع للوضع اليدوي القديم (nf/fr كما أُدخلا)
+// ════════════════════════════════════════════════════════════
+function _dnafragCompute(c){
+  const nh=+c.nh||0, sh=+c.sh||0, mh=+c.mh||0, bh=+c.bh||0, dg=+c.dg||0;
+  const haloSum = nh+sh+mh+bh+dg;
+  let total, nfN, frN, fromHalo;
+  if(haloSum>0){
+    fromHalo = true;
+    nfN   = bh + mh;
+    frN   = nh + sh + dg;
+    total = haloSum;
+  } else {
+    fromHalo = false;
+    nfN   = +c.nf||0;
+    frN   = +c.fr||0;
+    total = nfN + frN;
+  }
+  const p = n => total>0 ? parseFloat((n/total*100).toFixed(2)) : 0;
+  const dfi = p(frN);
+  return {
+    fromHalo:fromHalo, total:total, totalHalo:(nh+sh+mh+bh),
+    nonfragN:nfN, fragN:frN, degradN:dg,
+    noHaloN:nh, smallHaloN:sh, medHaloN:mh, bigHaloN:bh,
+    nonfragPct:p(nfN), fragPct:p(frN), degradPct:p(dg),
+    noHaloPct:p(nh), smallHaloPct:p(sh), medHaloPct:p(mh), bigHaloPct:p(bh),
+    dfi:dfi,
+    fertility: dfi<15 ? 'Excellent fertility potential' : dfi<=30 ? 'Good fertility potential' : 'Poor fertility potential'
+  };
+}
+
+function _dnafragReadInputs(){
+  const g = id => parseFloat((document.getElementById(id)||{}).value)||0;
+  return {
+    nf:g('dnafrag-nonfrag-n'), fr:g('dnafrag-frag-n'), dg:g('dnafrag-degrad-n'),
+    nh:g('dnafrag-nohalo-n'),  sh:g('dnafrag-smallhalo-n'),
+    mh:g('dnafrag-medhalo-n'), bh:g('dnafrag-bighalo-n')
+  };
+}
+
 // ── حساب DFI والنسب تلقائياً ──
 function calcDNAFrag(){
-  const nf = parseFloat(document.getElementById('dnafrag-nonfrag-n')?.value)||0;
-  const fr = parseFloat(document.getElementById('dnafrag-frag-n')?.value)||0;
-  const dg = parseFloat(document.getElementById('dnafrag-degrad-n')?.value)||0;
-  const nh = parseFloat(document.getElementById('dnafrag-nohalo-n')?.value)||0;
-  const sh = parseFloat(document.getElementById('dnafrag-smallhalo-n')?.value)||0;
-  const mh = parseFloat(document.getElementById('dnafrag-medhalo-n')?.value)||0;
-  const bh = parseFloat(document.getElementById('dnafrag-bighalo-n')?.value)||0;
-  const total = nf + fr;
-  const totalHalo = nh + sh + mh + bh;
+  const inp = _dnafragReadInputs();
+  const R   = _dnafragCompute(inp);
   const grid = document.getElementById('dnafrag-results-grid'); if(!grid) return;
-  if(total <= 0 && totalHalo <= 0){
-    grid.innerHTML='<div style="text-align:center;color:var(--text2);font-size:12px;grid-column:1/-1">أدخل الأرقام أعلاه لحساب النتائج تلقائياً</div>';
+
+  // عند الاعتماد على الهالات: حقلا مجزأة/غير مجزأة يصيران محسوبَين تلقائياً (للقراءة فقط)
+  const nfEl = document.getElementById('dnafrag-nonfrag-n');
+  const frEl = document.getElementById('dnafrag-frag-n');
+  [ [nfEl, R.nonfragN], [frEl, R.fragN] ].forEach(function(pair){
+    const el = pair[0]; if(!el) return;
+    if(R.fromHalo){
+      el.value = pair[1];
+      el.readOnly = true;
+      el.style.background = 'rgba(0,119,204,0.08)';
+      el.style.cursor = 'not-allowed';
+      el.title = 'محسوب تلقائياً من تصنيف الهالات';
+    } else {
+      el.readOnly = false;
+      el.style.background = '';
+      el.style.cursor = '';
+      el.title = '';
+    }
+  });
+
+  if(R.total <= 0){
+    grid.innerHTML = '<div style="text-align:center;color:var(--text2);font-size:12px;grid-column:1/-1">أدخل الأرقام أعلاه لحساب النتائج تلقائياً</div>';
     return;
   }
-  const pct = (n, tot) => tot > 0 ? (n/tot*100).toFixed(2) : '0.00';
-  const dfi = total > 0 ? parseFloat(pct(fr, total)) : 0;
-  let fertility=''; let fColor='';
-  if(dfi < 15){ fertility='Excellent fertility potential'; fColor='#007a00'; }
-  else if(dfi <= 30){ fertility='Good fertility potential'; fColor='#c47a00'; }
-  else { fertility='Poor fertility potential'; fColor='#cc0000'; }
 
-  const card = (label, pctVal, count, color, bold) => `
+  const fColor = R.dfi < 15 ? '#007a00' : R.dfi <= 30 ? '#c47a00' : '#cc0000';
+  const fmt = v => v.toFixed(2);
+
+  const card = (label, pctVal, count, color) => `
     <div style="background:#fff;border:1.5px solid ${color||'#b8b8b8'};border-radius:8px;padding:8px 12px;text-align:center">
       <div style="font-size:10px;font-weight:700;color:#555;margin-bottom:4px">${label}</div>
-      <div style="font-size:18px;font-weight:900;color:${color||'#000'};${bold?'font-size:22px':''}">${pctVal}%</div>
+      <div style="font-size:18px;font-weight:900;color:${color||'#000'}">${fmt(pctVal)}%</div>
       ${count!==null?`<div style="font-size:11px;color:#777">العدد: ${count}</div>`:''}
     </div>`;
+
+  const srcNote = R.fromHalo
+    ? 'محسوب من تصنيف الهالات: مجزأة = بدون هالة + صغيرة + متدهورة'
+    : 'إدخال يدوي: مجزأة / غير مجزأة';
+
+  const lowCount = R.total < 200
+    ? `<div style="grid-column:1/-1;background:#fff8e1;border:1.5px solid #c47a00;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;color:#8a5a00;text-align:center">⚠️ عدد الخلايا المفحوصة ${R.total} — المعيار يوصي بـ 200 خلية على الأقل</div>`
+    : '';
 
   grid.innerHTML = `
     <div style="grid-column:1/-1;background:${fColor}18;border:2px solid ${fColor};border-radius:10px;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <div>
         <div style="font-size:11px;font-weight:700;color:#555">DNA Fragmentation Index (DFI)</div>
-        <div style="font-size:28px;font-weight:900;color:${fColor}">${dfi.toFixed(2)}%</div>
+        <div style="font-size:28px;font-weight:900;color:${fColor}">${fmt(R.dfi)}%</div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:13px;font-weight:800;color:${fColor}">${fertility}</div>
-        <div style="font-size:10px;color:#777;margin-top:3px">إجمالي الخلايا المفحوصة: ${total}</div>
+        <div style="font-size:13px;font-weight:800;color:${fColor}">${R.fertility}</div>
+        <div style="font-size:10px;color:#777;margin-top:3px">إجمالي الخلايا المفحوصة: ${R.total}</div>
+        <div style="font-size:9px;color:#999;margin-top:2px">${srcNote}</div>
       </div>
     </div>
-    ${total>0 ? card('Non-Fragmented',pct(nf,total),nf,'#007a00') : ''}
-    ${total>0 ? card('Fragmented',pct(fr,total),fr,'#cc0000') : ''}
-    ${dg>0 && total>0 ? card('Degraded',pct(dg,total),dg,'#cc5500') : ''}
-    ${totalHalo>0 ? `
-      ${nh>0 ? card('Without Halo',pct(nh,total),nh,'#999') : ''}
-      ${sh>0 ? card('Small Halo',pct(sh,total),sh,'#0077cc') : ''}
-      ${mh>0 ? card('Medium Halo',pct(mh,total),mh,'#0077cc') : ''}
-      ${bh>0 ? card('Big Halo',pct(bh,total),bh,'#005599') : ''}
-    ` : ''}
+    ${lowCount}
+    ${card('Non-Fragmented', R.nonfragPct, R.nonfragN, '#007a00')}
+    ${card('Fragmented',     R.fragPct,    R.fragN,    '#cc0000')}
+    ${R.degradN>0    ? card('Degraded',     R.degradPct,    R.degradN,    '#cc5500') : ''}
+    ${R.noHaloN>0    ? card('Without Halo', R.noHaloPct,    R.noHaloN,    '#999')    : ''}
+    ${R.smallHaloN>0 ? card('Small Halo',   R.smallHaloPct, R.smallHaloN, '#0077cc') : ''}
+    ${R.medHaloN>0   ? card('Medium Halo',  R.medHaloPct,   R.medHaloN,   '#0077cc') : ''}
+    ${R.bigHaloN>0   ? card('Big Halo',     R.bigHaloPct,   R.bigHaloN,   '#005599') : ''}
   `;
 }
 
@@ -32521,18 +32618,9 @@ function saveDNAFragEntry(andPrint){
     const idEl = document.getElementById('dnafrag-pt-id'); if(idEl) idEl.value = ptId;
   }
   const ptObj = patients.find(p=>p.id===ptId)||{};
-  const nf = parseFloat(document.getElementById('dnafrag-nonfrag-n')?.value)||0;
-  const fr = parseFloat(document.getElementById('dnafrag-frag-n')?.value)||0;
-  const dg = parseFloat(document.getElementById('dnafrag-degrad-n')?.value)||0;
-  const nh = parseFloat(document.getElementById('dnafrag-nohalo-n')?.value)||0;
-  const sh = parseFloat(document.getElementById('dnafrag-smallhalo-n')?.value)||0;
-  const mh = parseFloat(document.getElementById('dnafrag-medhalo-n')?.value)||0;
-  const bh = parseFloat(document.getElementById('dnafrag-bighalo-n')?.value)||0;
-  const total = nf + fr;
-  const totalHalo = nh + sh + mh + bh;
-  const pct = (n, tot) => tot > 0 ? parseFloat((n/tot*100).toFixed(2)) : 0;
-  const dfi = pct(fr, total);
-  let fertility = dfi < 15 ? 'Excellent fertility potential' : dfi <= 30 ? 'Good fertility potential' : 'Poor fertility potential';
+  const R = _dnafragCompute(_dnafragReadInputs());
+  const dfi = R.dfi;
+  const fertility = R.fertility;
   const rec = {
     id: window._dnafragEditId || ('dnafrag-'+Date.now()),
     patientId: ptId, patientName: ptName,
@@ -32543,12 +32631,12 @@ function saveDNAFragEntry(andPrint){
     doctorName: _getDNAFragDoctor().name,
     date: (document.getElementById('dnafrag-date')||{}).value || new Date().toISOString().split('T')[0],
     createdAt: Date.now(),
-    nonfragN: nf, fragN: fr, degradN: dg,
-    noHaloN: nh, smallHaloN: sh, medHaloN: mh, bigHaloN: bh,
-    total: total, totalHalo: totalHalo,
-    nonfragPct: pct(nf, total), fragPct: pct(fr, total), degradPct: pct(dg, total),
-    noHaloPct: pct(nh, total), smallHaloPct: pct(sh, total),
-    medHaloPct: pct(mh, total), bigHaloPct: pct(bh, total),
+    nonfragN: R.nonfragN, fragN: R.fragN, degradN: R.degradN,
+    noHaloN: R.noHaloN, smallHaloN: R.smallHaloN, medHaloN: R.medHaloN, bigHaloN: R.bigHaloN,
+    total: R.total, totalHalo: R.totalHalo, calcFromHalo: R.fromHalo,
+    nonfragPct: R.nonfragPct, fragPct: R.fragPct, degradPct: R.degradPct,
+    noHaloPct: R.noHaloPct, smallHaloPct: R.smallHaloPct,
+    medHaloPct: R.medHaloPct, bigHaloPct: R.bigHaloPct,
     dfi: dfi, fertility: fertility,
     note: (document.getElementById('dnafrag-note')||{}).value||'',
     showCliche: (document.getElementById('dnafrag-show-cliche') ? document.getElementById('dnafrag-show-cliche').checked : true),
@@ -32896,24 +32984,16 @@ function printDNAFragReport(id){
   if(id === '_current'){
     const ptName = (document.getElementById('dnafrag-pt-search')||{}).value.trim();
     const ptId   = (document.getElementById('dnafrag-pt-id')||{}).value;
-    const nf = parseFloat(document.getElementById('dnafrag-nonfrag-n')?.value)||0;
-    const fr = parseFloat(document.getElementById('dnafrag-frag-n')?.value)||0;
-    const dg = parseFloat(document.getElementById('dnafrag-degrad-n')?.value)||0;
-    const nh = parseFloat(document.getElementById('dnafrag-nohalo-n')?.value)||0;
-    const sh = parseFloat(document.getElementById('dnafrag-smallhalo-n')?.value)||0;
-    const mh = parseFloat(document.getElementById('dnafrag-medhalo-n')?.value)||0;
-    const bh = parseFloat(document.getElementById('dnafrag-bighalo-n')?.value)||0;
-    const total = nf+fr; const totalHalo = nh+sh+mh+bh;
-    const pct = (n,t) => t>0 ? parseFloat((n/t*100).toFixed(2)) : 0;
-    const dfi = pct(fr,total);
+    const R = _dnafragCompute(_dnafragReadInputs());
     r = { id:'_current', patientId:ptId, patientName:ptName,
       date:(document.getElementById('dnafrag-date')||{}).value||'',
       doctorName:_getDNAFragDoctor().name, doctorId:_getDNAFragDoctor().id,
-      nonfragN:nf,fragN:fr,degradN:dg,noHaloN:nh,smallHaloN:sh,medHaloN:mh,bigHaloN:bh,
-      total:total,totalHalo:totalHalo,
-      nonfragPct:pct(nf,total),fragPct:pct(fr,total),degradPct:pct(dg,total),
-      noHaloPct:pct(nh,total),smallHaloPct:pct(sh,total),medHaloPct:pct(mh,total),bigHaloPct:pct(bh,total),
-      dfi:dfi, fertility:dfi<15?'Excellent fertility potential':dfi<=30?'Good fertility potential':'Poor fertility potential',
+      nonfragN:R.nonfragN,fragN:R.fragN,degradN:R.degradN,
+      noHaloN:R.noHaloN,smallHaloN:R.smallHaloN,medHaloN:R.medHaloN,bigHaloN:R.bigHaloN,
+      total:R.total,totalHalo:R.totalHalo,calcFromHalo:R.fromHalo,
+      nonfragPct:R.nonfragPct,fragPct:R.fragPct,degradPct:R.degradPct,
+      noHaloPct:R.noHaloPct,smallHaloPct:R.smallHaloPct,medHaloPct:R.medHaloPct,bigHaloPct:R.bigHaloPct,
+      dfi:R.dfi, fertility:R.fertility,
       note:(document.getElementById('dnafrag-note')||{}).value||'',
       showCliche:(document.getElementById('dnafrag-show-cliche')?document.getElementById('dnafrag-show-cliche').checked:true),
       patientImg:(document.getElementById('dnafrag-img-data')||{}).value||''
