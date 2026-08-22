@@ -14060,6 +14060,8 @@ function collectResults(){
   });
   req.tech=document.getElementById('res-tech').value;
   req.resultDate=document.getElementById('res-date').value;
+  // ⭐ ختم وقت التعديل — يجعل هذه النسخة تفوز في دمج LAN على أي نسخة أقدم
+  req._updatedAt=Date.now();
   // 🧪 سايد لاب: يُعتبر مطبوعاً بمجرد إدخال النتائج
   _sideLabAutoPrint(req);
   return req;
@@ -27162,7 +27164,7 @@ function saveUAEntry(){
     patientGender: ptObj.gender||'',
     doctorId:uaDr.id, doctorName:uaDr.name,
     date:(document.getElementById('ua-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
@@ -27205,7 +27207,7 @@ function saveAndPrintUA(){
     patientGender: ptObj.gender||'',
     doctorId:uaDr.id, doctorName:uaDr.name,
     date:(document.getElementById('ua-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
@@ -27721,7 +27723,7 @@ function saveStoolEntry(){
     patientGender: ptObj.gender||'',
     doctorId:stoolDr.id, doctorName:stoolDr.name,
     date:(document.getElementById('stool-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(STOOL_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     if(f.type==='multiselect'){
@@ -27768,7 +27770,7 @@ function saveAndPrintStool(){
     patientGender: ptObj.gender||'',
     doctorId:stoolDr.id, doctorName:stoolDr.name,
     date:(document.getElementById('stool-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(STOOL_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     if(f.type==='multiselect'){
@@ -28076,7 +28078,7 @@ function saveAndShareUAWhatsApp(){
     patientGender:ptObj.gender||'',
     doctorId:uaDr.id, doctorName:uaDr.name,
     date:(document.getElementById('ua-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(UA_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('uaf-'+f.id);
@@ -28119,7 +28121,7 @@ function saveAndShareStoolWhatsApp(){
     patientGender:ptObj.gender||'',
     doctorId:stoolDr.id, doctorName:stoolDr.name,
     date:(document.getElementById('stool-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(STOOL_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     if(f.type==='multiselect'){
@@ -29789,7 +29791,7 @@ function saveSemenEntry(){
     doctorId:_getSemenDoctor().id,
     doctorName:_getSemenDoctor().name,
     date:(document.getElementById('semen-date')||{}).value||new Date().toISOString().split('T')[0],
-    createdAt:Date.now()
+    createdAt:Date.now(), _updatedAt:Date.now()
   };
   Object.values(SEMEN_FIELDS).forEach(sec=>sec.fields.forEach(f=>{
     const el=document.getElementById('semenf-'+f.id);
@@ -35644,14 +35646,33 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   if(allDone) req.status='done';
   else if(req.status==='pending') req.status='inprogress';
 
-  // حفظ في IDB + تحديث _MC + تحديث requests العالمية
-  if(typeof IDB!=='undefined'&&idbKey){
-    IDB.set(idbKey, reqs).catch(function(e){console.warn('[LIS] IDB save error',e);});
-  }
-  if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
+  // ⭐ ختم وقت التعديل — بدونه يعتبره دمج LAN "قديماً" فتطرده الحاسبة الأخرى
+  req._updatedAt=Date.now();
+
+  // تحديث requests العالمية أولاً كي يبثّ save() النسخة الصحيحة
   if(typeof requests!=='undefined'&&Array.isArray(requests)){
     const idx=requests.findIndex(function(x){return x.id===req.id;});
     if(idx>=0) requests[idx]=req; else requests.push(req);
+  }
+
+  // ⚠️ إصلاح جذري: كان الحفظ يتم بـ IDB.set مباشرةً — وهو مسار لا يمرّ
+  //    بـ save() فلا يُطلق _lanOnSave ⇒ نتيجة الجهاز لا تُبثّ للحاسبة
+  //    الأخرى إطلاقاً، ثم يأتي أول بثّ منها بنسخة قديمة فيمحوها محلياً.
+  //    الآن نمرّ عبر save(): كتابة IDB + كاش + بثّ LAN في خطوة واحدة.
+  let _saved=false;
+  try{
+    if(typeof save==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
+      save('requests', reqs);
+      _saved=true;
+    }
+  }catch(e){ console.warn('[LIS] save() path failed',e); }
+  if(!_saved){
+    // سقوط آمن على السلوك القديم (مع بثّ يدوي كي لا تُفقد المزامنة)
+    if(typeof IDB!=='undefined'&&idbKey){
+      IDB.set(idbKey, reqs).catch(function(e){console.warn('[LIS] IDB save error',e);});
+    }
+    if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
+    try{ if(typeof window._lanOnSave==='function') window._lanOnSave('requests', reqs); }catch(e){}
   }
   lisAddLog('ok','نُقلت: '+code+'='+res.value+' → طلب '+req.id+' (مريض: '+req.patientName+') [key:'+resultKey+']');
   return resultKey;
@@ -41606,9 +41627,28 @@ function _lanMergeArrays(localArr, incomingArr){
   }
   function _tsOf(o){
     if(!o || typeof o !== 'object') return 0;
-    var t = o.updatedAt || o.lastModified || o.ts || o.modifiedAt || o.createdAt || o.date || 0;
+    // ⚠️ إصلاح جذري: البرنامج يكتب _updatedAt (بشرطة سفلية) عند كل تعديل،
+    //    وكان هذا السطر يقرأ updatedAt فقط ⇒ لا يجدها أبداً ⇒ يسقط على
+    //    o.date (تاريخ العينة، متطابق في النسختين) ⇒ تعادل دائم، ومع
+    //    الشرط >= أدناه تفوز النسخة الواردة ولو كانت أقدم ⇒ النتيجة
+    //    تدخل ثم تختفي بعد ثوانٍ. الآن نقرأ _updatedAt أولاً.
+    var t = o._updatedAt || o.updatedAt || o.lastModified || o.ts || o.modifiedAt || 0;
     var n = (typeof t === 'number') ? t : Date.parse(t);
-    return isNaN(n) ? 0 : n;
+    if(isNaN(n)) n = 0;
+    return n;
+  }
+  // ⭐ شبكة أمان: عدد النتائج المُدخلة — تُستخدم فقط عند تعادل الوقت
+  //    (سجلات قديمة بلا _updatedAt). نُبقي النسخة الأغنى ولا نمحو شيئاً.
+  function _fillOf(o){
+    var n = 0;
+    try{
+      if(o && o.results && typeof o.results === 'object'){
+        for(var k in o.results){
+          if(o.results[k] !== null && o.results[k] !== undefined && o.results[k] !== '') n++;
+        }
+      }
+    }catch(e){}
+    return n;
   }
   var map = {}, order = [];
   function _put(o, idx){
@@ -41616,7 +41656,11 @@ function _lanMergeArrays(localArr, incomingArr){
     if(!(id in map)){ map[id] = o; order.push(id); return; }
     // تعارض: رجّح الأحدث زمنياً
     var cur = map[id];
-    if(_tsOf(o) >= _tsOf(cur)) map[id] = o;
+    var tNew = _tsOf(o), tCur = _tsOf(cur);
+    if(tNew > tCur){ map[id] = o; return; }
+    if(tNew < tCur) return;                       // الأقدم لا يطرد الأحدث أبداً
+    // تعادل زمني ⇒ لا تُخمّن: أبقِ النسخة التي تحمل نتائج أكثر
+    if(_fillOf(o) > _fillOf(cur)) map[id] = o;
   }
   localArr.forEach(_put);
   incomingArr.forEach(_put);
@@ -42668,4 +42712,662 @@ if(window.electronAPI && window.electronAPI.isElectron){
 }());
 
 
+</script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   MedLab Pro — حزمة الربط بين الحاسبات (LAN Pack v3)
+   ⓪ نقل مُقطّع غير محجوب — يمنع تجمّد الحاسبة/الهاتف عند أول اتصال
+   ① مزامنة «عداد ESR» مع توحيد الوقت بين الأجهزة
+   ② ظهور إدخال/طباعة نتائج الإدرار والخروج فوراً على الجهاز الآخر
+   ③ «المنادات الصوتية» (السبيكر) عبر قناة الربط مباشرة — تعمل على WiFi
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+if(typeof _LAN_SYNC_KEYS === 'undefined' || typeof _lanSendRaw !== 'function') return;
+
+/* ════════════════════════════════════════════════════════════════════
+   ⓪ النقل المُقطّع (السبب الجذري للتجمّد)
+   ────────────────────────────────────────────────────────────────────
+   كان أول اتصال يرسل «الحالة الكاملة» في رسالة واحدة تحوي كل قاعدة
+   البيانات: JSON.stringify ضخم عند المرسِل و JSON.parse + دمج ضخم عند
+   المستقبِل ⇒ تجمّد الطرفين (والهاتف أشدّ تأثراً).
+   الآن: البيانات تُقسَّم إلى دفعات ٢٠٠ سجل، تُرسل عبر طابور بفاصل
+   ٢٥ms، وتُجمَّع عند المستقبِل ثم تُدمج مرة واحدة بعد هدوء الإرسال.
+   وأي حفظ لاحق يبثّ «الفرق فقط» بدل المصفوفة كاملة.
+   ════════════════════════════════════════════════════════════════════ */
+var CHUNK   = 200;     // سجل لكل رسالة
+var GAP_MS  = 25;      // فاصل بين الرسائل (يُبقي الواجهة حيّة)
+
+/* ── طابور إرسال: رسالة واحدة كل GAP_MS ─────────────────────────── */
+var _q = [], _qT = null;
+function _qKick(){
+  if(_qT) return;
+  _qT = setTimeout(function(){
+    _qT = null;
+    var o = _q.shift();
+    if(o){ o.ts = Date.now(); try{ _lanSendRaw(o); }catch(e){} }
+    if(_q.length) _qKick();
+  }, GAP_MS);
+}
+function _qPush(o){ _q.push(o); _qKick(); }
+
+function _sendChunks(key, arr){
+  if(!Array.isArray(arr) || !arr.length) return;
+  var parts = Math.ceil(arr.length / CHUNK);
+  for(var p = 0; p < parts; p++){
+    _qPush({ type:'sync2', key:key, part:p, parts:parts,
+             data:arr.slice(p*CHUNK, (p+1)*CHUNK),
+             from:_lanDeviceId, ts:Date.now() });
+  }
+}
+
+/* ── خط الأساس لكل مفتاح: id → آخر ختم تعديل بُثَّ ──────────────── */
+var _base = {};
+function _idOf(o){
+  return o.id || o.reqId || o.patientId || o.invoiceId || o._id || null;
+}
+function _baseline(arr){
+  var m = {};
+  if(!Array.isArray(arr)) return m;
+  for(var i=0;i<arr.length;i++){
+    var o = arr[i];
+    if(!o || typeof o !== 'object') continue;
+    var id = _idOf(o); if(!id) continue;
+    m[id] = o._updatedAt || o.updatedAt || 0;
+  }
+  return m;
+}
+
+/* ── بثّ الفرق فقط بدل المصفوفة كاملة ───────────────────────────── */
+if(typeof _lanEmit === 'function'){
+  window._lanEmit = function(key, data){
+    if(!Array.isArray(data)) return;
+    var b = _base[key];
+    if(!b){                                   // أول بثّ لهذا المفتاح
+      _base[key] = _baseline(data);
+      _sendChunks(key, data);
+      return;
+    }
+    var delta = [], i, o, id, t;
+    for(i=0;i<data.length;i++){
+      o = data[i];
+      if(!o || typeof o !== 'object') continue;
+      id = _idOf(o);
+      if(!id){ delta.push(o); continue; }
+      t = o._updatedAt || o.updatedAt || 0;
+      if(!(id in b) || b[id] !== t) delta.push(o);
+    }
+    _base[key] = _baseline(data);
+    if(delta.length) _sendChunks(key, delta);
+  };
+}
+
+/* ── تطبيق مفتاح محلياً: حدّث خط الأساس فلا نُعيد بثّ ما استقبلناه ── */
+if(typeof _lanApplyKey === 'function'){
+  var _origApplyKey = _lanApplyKey;
+  window._lanApplyKey = function(key, data){
+    _origApplyKey(key, data);
+    if(Array.isArray(data)) _base[key] = _baseline(data);
+  };
+}
+
+/* ── الحالة الكاملة: تُرسل مُقطّعة، ومرة واحدة كل ٥ ثوانٍ كحدّ أقصى ── */
+var _lastFull = 0;
+if(typeof _lanSendFullState === 'function'){
+  window._lanSendFullState = function(){
+    var now = Date.now();
+    if(now - _lastFull < 5000) return;        // منع الإرسال المزدوج
+    _lastFull = now;
+    for(var i=0;i<_LAN_SYNC_KEYS.length;i++){
+      var k = _LAN_SYNC_KEYS[i];
+      var arr = _lanGetLocal(k);
+      _base[k] = _baseline(arr);
+      _sendChunks(k, arr);
+    }
+    // علامة صغيرة تُنهي المصالحة عند الطرف الآخر (تفتح بوّابة البثّ)
+    _qPush({ type:'fullstate', from:_lanDeviceId, ts:Date.now(), total:0, data:{} });
+  };
+}
+
+/* ── استقبال الدفعات: تجميع ثم دمج واحد بعد هدوء الإرسال ───────── */
+var _rxAcc = {}, _rxT = {};
+function _rxChunk(msg, off){
+  var key = msg.key;
+  if(_LAN_SYNC_KEYS.indexOf(key) === -1) return;
+  var arr = msg.data;
+  if(!Array.isArray(arr)) return;
+
+  // وحّد الطوابع على ساعتنا المحلية فوراً (تعديل بالمكان — بلا نسخ)
+  if(off && Math.abs(off) > 3000){
+    for(var j=0;j<arr.length;j++){
+      var o = arr[j];
+      if(!o || typeof o !== 'object') continue;
+      if(typeof o._updatedAt === 'number' && o._updatedAt > 0) o._updatedAt -= off;
+      if(typeof o.updatedAt  === 'number' && o.updatedAt  > 0) o.updatedAt  -= off;
+    }
+  }
+
+  var acc = _rxAcc[key] || (_rxAcc[key] = []);
+  for(var i=0;i<arr.length;i++) acc.push(arr[i]);
+
+  if(_rxT[key]) clearTimeout(_rxT[key]);
+  _rxT[key] = setTimeout(function(){
+    delete _rxT[key];
+    var incoming = _rxAcc[key]; delete _rxAcc[key];
+    try{
+      window._lanPeerOffset = 0;              // الطوابع مُوحّدة سلفاً
+      var merged = _lanMergeArrays(_lanGetLocal(key), incoming);
+      _lanApplyKey(key, merged);
+      if(typeof showNotif === 'function')
+        showNotif('🌐 LAN','تمت مزامنة: '+key,'info');
+    }catch(e){ console.warn('[LAN chunk]', e); }
+  }, 500);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   تعويض فارق الساعة بين الأجهزة
+   الدمج يرجّح الأحدث بـ _updatedAt؛ فإن اختلفت ساعتا الجهازين بدا
+   التعديل الجديد أقدم فيُرفض ⇒ «النتيجة لا تظهر في الجهاز الآخر».
+   ════════════════════════════════════════════════════════════════════ */
+window._lanPeerOffset = 0;
+if(typeof _lanMergeArrays === 'function'){
+  var _origMerge = _lanMergeArrays;
+  window._lanMergeArrays = function(localArr, incomingArr){
+    var off = window._lanPeerOffset || 0;
+    if(off && Math.abs(off) > 3000 && Array.isArray(incomingArr)){
+      for(var i=0;i<incomingArr.length;i++){
+        var o = incomingArr[i];
+        if(!o || typeof o !== 'object') continue;
+        if(typeof o._updatedAt === 'number' && o._updatedAt > 0) o._updatedAt -= off;
+        if(typeof o.updatedAt  === 'number' && o.updatedAt  > 0) o.updatedAt  -= off;
+      }
+    }
+    return _origMerge(localArr, incomingArr);
+  };
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   ② إعادة رسم الواجهة بعد وصول الفحوصات الخاصة
+   كانت _LAN_RENDER تنادي window._syncLightRender وهي غير معرَّفة أصلاً،
+   فتصل نتائج الإدرار/الخروج وتُحفظ… بلا أي تحديث للواجهة.
+   ════════════════════════════════════════════════════════════════════ */
+var _spRefreshT = null;
+function _refreshAfterSpecialExam(){
+  if(_spRefreshT) return;
+  _spRefreshT = setTimeout(function(){
+    _spRefreshT = null;
+    try{ window._spLoadedTick = false; }catch(e){}
+    try{
+      var pill = document.querySelector('#sec-requests .req-pill[data-filter].active');
+      var rf   = pill ? pill.getAttribute('data-filter') : 'today';
+      var rs   = document.getElementById('req-srch-inp');
+      if(typeof renderRequestsFiltered === 'function')
+        renderRequestsFiltered(rf, (rs && rs.value) || '');
+    }catch(e){}
+    try{ if(typeof updateBadges        === 'function') updateBadges();        }catch(e){}
+    try{ if(typeof loadResultsDropdown === 'function') loadResultsDropdown(); }catch(e){}
+    try{ if(typeof loadPrintDropdown   === 'function') loadPrintDropdown();   }catch(e){}
+    try{ document.dispatchEvent(new CustomEvent('dp:refresh')); }catch(e){}
+  }, 700);
+}
+
+var _lightT = {};
+window._syncLightRender = function(key){
+  if(!_lightT[key]){
+    _lightT[key] = setTimeout(function(){
+      delete _lightT[key];
+      try{
+        if(key === 'uaRecords'){             if(typeof renderUAList     === 'function') renderUAList();      }
+        else if(key === 'stoolExamRecords'){ if(typeof renderStoolList  === 'function') renderStoolList();   }
+        else if(key === 'semenRecords'){     if(typeof renderSemenList  === 'function') renderSemenList();   }
+        else if(key === 'cultureRecords'){   if(typeof renderCultureList=== 'function') renderCultureList(); }
+        else if(key === 'phoneBook'){        if(typeof renderPhoneBook  === 'function') renderPhoneBook();   }
+      }catch(e){}
+    }, 400);
+  }
+  if(key === 'uaRecords' || key === 'stoolExamRecords' ||
+     key === 'semenRecords' || key === 'cultureRecords'){
+    _refreshAfterSpecialExam();
+  }
+};
+
+/* ════════════════════════════════════════════════════════════════════
+   ① مزامنة عداد ESR (رسالة صغيرة مستقلة تماماً عن مزامنة البيانات)
+   endTime يُحوَّل إلى ساعة الجهاز المستقبِل ⇒ الوقت المتبقي متطابق،
+   ثم يعدّ كل جهاز محلياً بلا أي شبكة. الحذف يُزامَن بشواهد حذف.
+   ════════════════════════════════════════════════════════════════════ */
+var _esrTombs = {}, _esrApplying = false, _esrBcT = null;
+
+function _esrSaveTombs(){ try{ save('esrTombs', _esrTombs); }catch(e){} }
+function _esrLoadTombs(){
+  try{
+    var v = load('esrTombs', {});
+    _esrTombs = (v && typeof v === 'object') ? v : {};
+    var cut = Date.now() - 12*3600*1000;
+    for(var k in _esrTombs){ if(!(_esrTombs[k] > cut)) delete _esrTombs[k]; }
+  }catch(e){ _esrTombs = {}; }
+}
+function _esrList(){
+  return (typeof _esrTimers !== 'undefined' && Array.isArray(_esrTimers)) ? _esrTimers : [];
+}
+function _esrSnapshot(){
+  return _esrList().map(function(t){
+    return { id:t.id, name:t.name, totalSec:t.totalSec, endTime:t.endTime,
+             done:!!t.done, _updatedAt:t._updatedAt || 0 };
+  });
+}
+function esrLanBroadcast(){
+  if(_esrApplying) return;
+  if(typeof _lanMode === 'undefined' || !_lanMode) return;
+  if(_esrBcT) return;
+  _esrBcT = setTimeout(function(){
+    _esrBcT = null;
+    try{
+      _lanSendRaw({ type:'esr:sync', from:_lanDeviceId, ts:Date.now(),
+                    timers:_esrSnapshot(), tombs:_esrTombs });
+    }catch(e){}
+  }, 200);
+}
+window.esrLanBroadcast = esrLanBroadcast;
+
+if(typeof esrSave === 'function'){
+  window.esrSave = function(){
+    try{
+      _esrList().forEach(function(t){ if(!t._updatedAt) t._updatedAt = Date.now(); });
+      var data = _esrSnapshot();
+      save('esrTimers', data);
+      try{ IDB.set(DB._pfx() + 'esrTimers', data).catch(function(){}); }catch(e){}
+    }catch(e){}
+    esrLanBroadcast();
+  };
+}
+
+if(typeof esrLoad === 'function'){
+  window.esrLoad = function(){
+    _esrLoadTombs();
+    var pfx = ''; try{ pfx = DB._pfx(); }catch(e){}
+    var p; try{ p = IDB.get(pfx + 'esrTimers'); }catch(e){ p = null; }
+    return Promise.resolve(p).catch(function(){ return null; }).then(function(idbVal){
+      var lsVal = [];
+      try{ lsVal = load('esrTimers', []) || []; }catch(e){ lsVal = []; }
+      var raw = [];
+      if(idbVal && Array.isArray(idbVal) && idbVal.length){
+        raw = idbVal.slice();
+        var seen = {};
+        raw.forEach(function(x){ if(x && x.id) seen[x.id] = 1; });
+        lsVal.forEach(function(r){ if(r && r.id && !seen[r.id]) raw.push(r); });
+      } else { raw = Array.isArray(lsVal) ? lsVal : []; }
+      _esrTimers = raw.filter(function(r){ return r && r.id; }).map(function(r){
+        return { id:r.id, name:r.name, totalSec:r.totalSec, endTime:r.endTime,
+                 done:!!r.done, alerted:!!r.done, _updatedAt:r._updatedAt || 0 };
+      }).filter(function(t){
+        var d = _esrTombs[t.id];
+        return !(d && d >= (t._updatedAt || 0));
+      });
+    });
+  };
+}
+
+if(typeof esrAddTimer === 'function'){
+  var _origEsrAdd = esrAddTimer;
+  window.esrAddTimer = function(){
+    var before = _esrList().length;
+    _origEsrAdd.apply(this, arguments);
+    var L = _esrList();
+    if(L.length > before){
+      var t = L[L.length - 1];
+      if(t){ t._updatedAt = Date.now(); esrSave(); }
+    }
+  };
+}
+if(typeof esrDeleteTimer === 'function'){
+  var _origEsrDel = esrDeleteTimer;
+  window.esrDeleteTimer = function(id){
+    _esrTombs[id] = Date.now(); _esrSaveTombs();
+    _origEsrDel.apply(this, arguments);
+    esrLanBroadcast();
+  };
+}
+if(typeof esrClearAll === 'function'){
+  var _origEsrClear = esrClearAll;
+  window.esrClearAll = function(){
+    var ids = _esrList().map(function(t){ return t.id; });
+    _origEsrClear.apply(this, arguments);
+    if(ids.length && _esrList().length === 0){
+      var now = Date.now();
+      ids.forEach(function(i){ _esrTombs[i] = now; });
+      _esrSaveTombs(); esrLanBroadcast();
+    }
+  };
+}
+
+function _esrApplyIncoming(msg){
+  if(typeof _esrTimers === 'undefined' || !Array.isArray(_esrTimers)) _esrTimers = [];
+  var off = (typeof msg.ts === 'number') ? (msg.ts - Date.now()) : 0;
+  var changed = false, id, tt;
+
+  var tb = msg.tombs || {};
+  for(id in tb){
+    if(!Object.prototype.hasOwnProperty.call(tb, id)) continue;
+    tt = tb[id] - off;
+    if(!_esrTombs[id] || _esrTombs[id] < tt){ _esrTombs[id] = tt; changed = true; }
+  }
+
+  var byId = {};
+  _esrTimers.forEach(function(t){ byId[t.id] = t; });
+
+  (msg.timers || []).forEach(function(r){
+    if(!r || !r.id) return;
+    var nEnd = (r.endTime || 0) - off;          // ⭐ إلى ساعتنا المحلية
+    var nUpd = (r._updatedAt || 0) - off;
+    var cur  = byId[r.id];
+    if(!cur){
+      var tomb = _esrTombs[r.id];
+      if(tomb && tomb >= nUpd) return;
+      var nt = { id:r.id, name:r.name, totalSec:r.totalSec, endTime:nEnd,
+                 done:!!r.done, alerted:!!r.done, _updatedAt:nUpd };
+      if(!nt.done && nt.endTime <= Date.now()){ nt.done = true; nt.alerted = true; }
+      _esrTimers.push(nt); byId[r.id] = nt; changed = true;
+    } else if(nUpd > (cur._updatedAt || 0)){
+      cur.name = r.name; cur.totalSec = r.totalSec;
+      cur.endTime = nEnd; cur._updatedAt = nUpd;
+      if(r.done){ cur.done = true; cur.alerted = true; }
+      changed = true;
+    }
+  });
+
+  var before = _esrTimers.length;
+  _esrTimers = _esrTimers.filter(function(t){
+    var d = _esrTombs[t.id];
+    return !(d && d >= (t._updatedAt || 0));
+  });
+  if(_esrTimers.length !== before) changed = true;
+  if(!changed) return;
+
+  _esrApplying = true;
+  try{ _esrSaveTombs(); if(typeof esrSave === 'function') esrSave(); }
+  finally{ _esrApplying = false; }
+
+  try{ if(typeof esrRenderList  === 'function') esrRenderList();  }catch(e){}
+  try{ if(typeof esrUpdateBadge === 'function') esrUpdateBadge(); }catch(e){}
+  try{
+    if(_esrTimers.some(function(t){ return !t.done && t.endTime > Date.now(); }) &&
+       typeof esrStartTick === 'function') esrStartTick();
+  }catch(e){}
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   اعتراض الرسائل الواردة — بأقل كلفة ممكنة
+   لا JSON.parse لأي رسالة كبيرة قديمة (sync/fullstate): نلتقط النوع من
+   أول ٢٠٠ حرف والطوابع من آخر ٣٠٠ حرف، ثم نمرّر النص كما هو.
+   ════════════════════════════════════════════════════════════════════ */
+if(typeof _lanHandleMessage === 'function'){
+  var _origLanHandle = _lanHandleMessage;
+  var RX_TYPE = /"type"\s*:\s*"([^"]{1,40})"/;
+  var RX_FROM = /"from"\s*:\s*"([^"]{1,60})"/;
+  var RX_TS   = /"ts"\s*:\s*(\d{10,16})/;
+
+  window._lanHandleMessage = function(raw){
+    try{
+      if(typeof raw === 'string'){
+        var head = raw.length > 200 ? raw.substring(0, 200) : raw;
+        var mt   = RX_TYPE.exec(head);
+        var type = mt ? mt[1] : '';
+        var tail = raw.length > 300 ? raw.substring(raw.length - 300) : raw;
+        var mf   = RX_FROM.exec(tail) || RX_FROM.exec(head);
+        var ms   = RX_TS.exec(tail)   || RX_TS.exec(head);
+        var mine = mf && mf[1] === _lanDeviceId;
+        var off  = (ms && !mine) ? (parseInt(ms[1], 10) - Date.now()) : 0;
+
+        if(type === 'sync2'){
+          if(mine) return;
+          _rxChunk(JSON.parse(raw), off);
+          return;
+        }
+        if(type === 'esr:sync' || type === 'esr:req' || type.indexOf('ic:') === 0){
+          var msg = JSON.parse(raw);
+          if(typeof _lanMode !== 'undefined' && _lanMode === 'server' && !msg._relayed){
+            msg._relayed = 1; try{ _lanSendRaw(msg); }catch(e){}
+          }
+          if(msg.from === _lanDeviceId) return;
+          if(type === 'esr:sync'){ _esrApplyIncoming(msg); return; }
+          if(type === 'esr:req'){  esrLanBroadcast();      return; }
+          try{ if(window.Intercom) window.Intercom.onSignal(msg); }catch(e){}
+          return;
+        }
+        window._lanPeerOffset = off;
+      } else {
+        window._lanPeerOffset = 0;
+      }
+    }catch(e){ window._lanPeerOffset = 0; }
+    return _origLanHandle(raw);
+  };
+}
+
+/* تبادل حالة ESR بعد أن تهدأ المصالحة الأولى للبيانات */
+if(typeof _lanAnnounce === 'function'){
+  var _origAnnounce = _lanAnnounce;
+  window._lanAnnounce = function(){
+    _origAnnounce.apply(this, arguments);
+    setTimeout(function(){
+      try{ _lanSendRaw({ type:'esr:req', from:_lanDeviceId, ts:Date.now() }); }catch(e){}
+      esrLanBroadcast();
+    }, 4000);
+  };
+}
+
+/* شبكة أمان: إعادة مزامنة ESR كل ٦٠ ثانية (رسالة صغيرة) */
+setInterval(function(){
+  try{
+    if(typeof _lanMode === 'undefined' || !_lanMode) return;
+    if(!_esrList().length && !Object.keys(_esrTombs).length) return;
+    esrLanBroadcast();
+  }catch(e){}
+}, 60000);
+
+
+/* ════════════════════════════════════════════════════════════════════
+   ③ المنادات الصوتية (السبيكر) — الصوت عبر قناة الربط مباشرة
+   WebRTC كان يحتاج تفاوض ICE، وداخل Electron تُخفى عناوين الشبكة خلف
+   أسماء mDNS (*.local) التي لا تُحلّ غالباً ⇒ اتصال بلا صوت على WiFi.
+   الآن: PCM أحادي 16kHz عبر نفس WebSocket، ولا يُرسل شيء إلا أثناء
+   الضغط الفعلي على الزر.
+   ════════════════════════════════════════════════════════════════════ */
+var IC = (function(){
+  var SR_OUT = 16000, JITTER = 0.14, BTN_ID = 'intercom-btn';
+  var _active = false, _stream = null, _actx = null, _srcNode = null, _proc = null;
+  var _pctx = null, _heads = {}, _remote = {}, _remoteT = {};
+
+  function _me(){ return (typeof _lanDeviceId !== 'undefined') ? _lanDeviceId : 'me'; }
+  function _ready(){ return (typeof _lanMode !== 'undefined') && (_lanMode === 'server' || _lanMode === 'client'); }
+  function _send(o){ o.from = _me(); o.ts = Date.now(); try{ _lanSendRaw(o); }catch(e){} }
+
+  function _encode(f32){
+    var n = f32.length, buf = new ArrayBuffer(n*2), dv = new DataView(buf), i, s;
+    for(i=0;i<n;i++){
+      s = f32[i]; if(s > 1) s = 1; else if(s < -1) s = -1;
+      dv.setInt16(i*2, s < 0 ? s*0x8000 : s*0x7FFF, true);
+    }
+    var b = new Uint8Array(buf), out = '', CH = 0x8000;
+    for(i=0;i<b.length;i+=CH) out += String.fromCharCode.apply(null, b.subarray(i, i+CH));
+    return btoa(out);
+  }
+  function _decode(b64){
+    var bin = atob(b64), len = bin.length, b = new Uint8Array(len), i;
+    for(i=0;i<len;i++) b[i] = bin.charCodeAt(i);
+    var dv = new DataView(b.buffer), n = len >> 1, out = new Float32Array(n), v;
+    for(i=0;i<n;i++){ v = dv.getInt16(i*2, true); out[i] = v / (v < 0 ? 0x8000 : 0x7FFF); }
+    return out;
+  }
+  function _downsample(input, inRate){
+    if(inRate === SR_OUT) return input;
+    var ratio = inRate / SR_OUT, outLen = Math.floor(input.length / ratio);
+    var out = new Float32Array(outLen), pos = 0, i, j, sum, cnt, next;
+    for(i=0;i<outLen;i++){
+      next = Math.floor((i+1) * ratio); sum = 0; cnt = 0;
+      for(j=pos; j<next && j<input.length; j++){ sum += input[j]; cnt++; }
+      out[i] = cnt ? sum/cnt : 0;
+      pos = next;
+    }
+    return out;
+  }
+
+  function _playCtx(){
+    if(!_pctx){
+      var C = window.AudioContext || window.webkitAudioContext;
+      if(!C) return null;
+      try{ _pctx = new C(); }catch(e){ return null; }
+    }
+    if(_pctx.state === 'suspended'){ try{ _pctx.resume(); }catch(e){} }
+    return _pctx;
+  }
+  document.addEventListener('click',    function(){ _playCtx(); }, true);
+  document.addEventListener('keydown',  function(){ _playCtx(); }, true);
+  document.addEventListener('touchend', function(){ _playCtx(); }, true);
+
+  function _play(from, f32, sr){
+    if(_active) return;                        // نصف مزدوج — يمنع الصدى
+    var ctx = _playCtx(); if(!ctx) return;
+    var buf;
+    try{ buf = ctx.createBuffer(1, f32.length, sr); }catch(e){ return; }
+    if(buf.copyToChannel) buf.copyToChannel(f32, 0);
+    else buf.getChannelData(0).set(f32);
+    var src = ctx.createBufferSource();
+    src.buffer = buf; src.connect(ctx.destination);
+    var now = ctx.currentTime, head = _heads[from] || 0;
+    if(head < now + 0.02)     head = now + JITTER;
+    else if(head - now > 0.9) head = now + JITTER;
+    try{ src.start(head); }catch(e){ return; }
+    _heads[from] = head + buf.duration;
+  }
+
+  function _anyRemote(){ for(var k in _remote){ if(_remote[k]) return true; } return false; }
+  function _refreshBtn(){
+    var b = document.getElementById(BTN_ID); if(!b) return;
+    if(_active){
+      b.classList.add('ic-talking'); b.classList.remove('ic-incoming');
+      b.title = 'تتحدّث الآن — اترك الزر للإيقاف';
+    } else if(_anyRemote()){
+      b.classList.add('ic-incoming'); b.classList.remove('ic-talking');
+      b.title = 'مكالمة واردة';
+    } else {
+      b.classList.remove('ic-talking','ic-incoming');
+      b.title = 'المنادات الصوتية (اضغط مع الاستمرار للتحدث)';
+    }
+  }
+
+  function start(){
+    if(_active) return;
+    if(!_ready()){
+      if(typeof showNotif === 'function')
+        showNotif('📢 المنادات','فعّل الربط بين الأجهزة أولاً من قسم «الربط»','warning');
+      return;
+    }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      if(typeof showNotif === 'function') showNotif('📢 المنادات','الميكروفون غير مدعوم هنا','error');
+      return;
+    }
+    _active = true; _refreshBtn();
+    navigator.mediaDevices.getUserMedia({
+      audio:{ echoCancellation:{ideal:true}, noiseSuppression:{ideal:true},
+              autoGainControl:{ideal:true}, channelCount:1 }, video:false
+    }).then(function(stream){
+      if(!_active){ stream.getTracks().forEach(function(t){ try{t.stop();}catch(e){} }); return; }
+      _stream = stream;
+      var C = window.AudioContext || window.webkitAudioContext;
+      _actx    = new C();
+      _srcNode = _actx.createMediaStreamSource(stream);
+      _proc    = _actx.createScriptProcessor(4096, 1, 1);
+      var inRate = _actx.sampleRate;
+      _proc.onaudioprocess = function(ev){
+        if(!_active) return;
+        try{
+          var pcm = _downsample(ev.inputBuffer.getChannelData(0), inRate);
+          _send({ type:'ic:pcm', sr:SR_OUT, b:_encode(pcm) });
+        }catch(e){}
+      };
+      _srcNode.connect(_proc);
+      _proc.connect(_actx.destination);
+      _send({ type:'ic:talk_start' });
+      if(typeof showNotif === 'function')
+        showNotif('📢 المنادات','🎙️ تتحدّث الآن — الصوت يُبثّ للأجهزة المتصلة','success');
+    }).catch(function(e){
+      _active = false; _refreshBtn();
+      if(typeof showNotif === 'function') showNotif('📢 المنادات','لم يُسمح بالوصول للميكروفون','error');
+      console.warn('[Intercom] mic', e);
+    });
+  }
+
+  function stop(){
+    if(!_active) return;
+    _active = false;
+    try{ if(_proc){ _proc.onaudioprocess = null; _proc.disconnect(); } }catch(e){}
+    try{ if(_srcNode) _srcNode.disconnect(); }catch(e){}
+    try{ if(_actx) _actx.close(); }catch(e){}
+    _proc = _srcNode = _actx = null;
+    if(_stream){
+      _stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
+      _stream = null;
+    }
+    _send({ type:'ic:talk_stop' });
+    _refreshBtn();
+  }
+
+  function toggle(){ if(_active) stop(); else start(); }
+  function closeAll(){
+    stop(); _remote = {}; _heads = {};
+    for(var k in _remoteT){ clearTimeout(_remoteT[k]); }
+    _remoteT = {}; _refreshBtn();
+  }
+
+  function onSignal(msg){
+    if(!msg || typeof msg.type !== 'string' || msg.type.indexOf('ic:') !== 0) return false;
+    var from = msg.from;
+    if(!from || from === _me()) return true;
+    if(msg.type === 'ic:pcm'){
+      _remote[from] = true;
+      if(_remoteT[from]) clearTimeout(_remoteT[from]);
+      _remoteT[from] = setTimeout(function(){
+        _remote[from] = false; delete _heads[from]; _refreshBtn();
+      }, 1200);
+      try{ _play(from, _decode(msg.b), msg.sr || SR_OUT); }catch(e){}
+      _refreshBtn(); return true;
+    }
+    if(msg.type === 'ic:talk_start'){
+      _remote[from] = true; delete _heads[from]; _playCtx(); _refreshBtn(); return true;
+    }
+    if(msg.type === 'ic:talk_stop'){
+      _remote[from] = false; delete _heads[from];
+      if(_remoteT[from]){ clearTimeout(_remoteT[from]); delete _remoteT[from]; }
+      _refreshBtn(); return true;
+    }
+    return true;
+  }
+
+  function bindButton(){
+    var b = document.getElementById(BTN_ID);
+    if(!b || b._ic2Bound) return;
+    b._ic2Bound = true;
+    b.addEventListener('mousedown',  function(e){ e.preventDefault(); start(); });
+    b.addEventListener('mouseup',    function(e){ e.preventDefault(); stop();  });
+    b.addEventListener('mouseleave', function(){ if(_active) stop(); });
+    b.addEventListener('touchstart', function(e){ e.preventDefault(); start(); }, {passive:false});
+    b.addEventListener('touchend',   function(e){ e.preventDefault(); stop();  }, {passive:false});
+    b.addEventListener('touchcancel',function(){ if(_active) stop(); });
+    b.addEventListener('contextmenu',function(e){ e.preventDefault(); });
+  }
+  window.addEventListener('blur', function(){ if(_active) stop(); });
+
+  return { start:start, stop:stop, toggle:toggle, onSignal:onSignal,
+           bindButton:bindButton, closeAll:closeAll,
+           isActive:function(){ return _active; } };
+}());
+
+window.Intercom = IC;
+try{ IC.bindButton(); }catch(e){}
+document.addEventListener('DOMContentLoaded', function(){ try{ IC.bindButton(); }catch(e){} });
+
+})();
 </script>
