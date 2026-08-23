@@ -4179,11 +4179,23 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                       <div id="lan-mode-lbl" style="font-weight:700;margin-bottom:4px">⚪ غير مفعّل</div>
                       <div id="lan-ip-lbl"></div>
                       <div id="lan-clients-lbl"></div>
+                      <div id="lan-sync-lbl" style="margin-top:5px;font-size:10px;color:var(--text2)">⚡ مزامنة ذكية — الجديد فقط</div>
+                    </div>
+                    <div style="margin-top:6px;font-size:9.5px;color:var(--text2);line-height:1.7">
+                      ⛔ لا تُزامَن: <b>الفواتير</b> · <b>الحسابات</b> · <b>دفتر الهواتف</b> (محلية لكل حاسبة)
                     </div>
                   </div>
                   <div style="margin-bottom:10px">
                     <label class="fl" style="font-size:11px;margin-bottom:4px">IP السيرفير (للعميل)</label>
                     <input class="fc" id="lan-server-ip" placeholder="مثال: 192.168.1.5" style="font-size:12px">
+                  </div>
+                  <div style="margin-bottom:10px;background:rgba(255,170,0,0.06);border:1px solid rgba(255,170,0,0.25);border-radius:8px;padding:9px 10px">
+                    <label class="fl" style="font-size:11px;margin-bottom:5px">🔢 رقم هذه الحاسبة (1–99) — يمنع تكرار أرقام الملفات</label>
+                    <div style="display:flex;gap:6px">
+                      <input class="fc" id="lan-dev-no" type="number" min="1" max="99" style="font-size:12px;flex:1" placeholder="مثال: 1">
+                      <button class="btn btn-p btn-sm" style="font-size:11px" onclick="lisSaveDevNo()">حفظ</button>
+                    </div>
+                    <div id="lan-dev-hint" style="font-size:9.5px;color:var(--text2);margin-top:5px;line-height:1.7"></div>
                   </div>
                   <!-- روابط الحاسبات المحفوظة -->
                   <div style="margin-bottom:10px">
@@ -4193,6 +4205,10 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <div style="display:flex;gap:6px">
                     <button class="btn btn-s btn-sm" style="flex:1" onclick="lisLanDisconnect()">⛔ قطع LAN</button>
                     <button class="btn btn-s btn-sm" style="flex:1" onclick="lisLanCheckStatus()">🔍 حالة الشبكة</button>
+                  </div>
+                  <div style="display:flex;gap:6px;margin-top:6px">
+                    <button class="btn btn-s btn-sm" style="flex:1;font-size:10px" onclick="lisLanFullResync()" title="يُستخدم مرة واحدة فقط عند الشك بفقدان بيانات قديمة">♻️ إعادة مزامنة كاملة (مرة واحدة)</button>
+                    <button class="btn btn-s btn-sm" style="flex:1;font-size:10px" onclick="lisScanIdConflicts()" title="يكشف المرضى الذين اختلطت ملفاتهم بسبب تكرار الأرقام">🩺 فحص تضارب الأرقام</button>
                   </div>
                 </div>
               </div>
@@ -11461,7 +11477,7 @@ function addDoctorInline(){
   const name=document.getElementById('inline-dr-name').value.trim();
   if(!name){showNotif('خطأ','أدخل اسم الطبيب','error');return;}
   const spec=document.getElementById('inline-dr-spec').value;
-  const newDoc={id:'dr'+Date.now(),name,spec,phone:'',hosp:'',comm:0,email:''};
+  const newDoc={id:_uid('dr'),name,spec,phone:'',hosp:'',comm:0,email:''};
   doctors.push(newDoc);
   save('doctors',doctors);
   const sel=document.getElementById('wp-doctor');
@@ -11819,24 +11835,12 @@ function wizFinish(){
   // ⚠️ البحث يكون فقط بـ id — رقم الهاتف لا يُستخدم أبداً لتحديد هوية المريض
   let pt=wizPatient.id?patients.find(p=>p.id===wizPatient.id):null;
   if(!pt){
-    // توليد رقم ملف فريد مضمون — يستخدم عداداً متصاعداً محفوظاً + طابع زمني
-    function _genUniquePid(){
-      const counterKey='medlab_pt_counter';
-      let counter=parseInt(localStorage.getItem(counterKey)||'0',10);
-      counter++;
-      localStorage.setItem(counterKey, String(counter));
-      // تحقق أن الرقم غير مستخدم مسبقاً
-      let candidate=String(100000+counter);
-      while(patients.find(p=>p.id===candidate)){
-        counter++;
-        localStorage.setItem(counterKey, String(counter));
-        candidate=String(100000+counter);
-      }
-      return candidate;
-    }
-    const pid=_genUniquePid();
+    // ⭐ رقم ملف فريد بين كل الحاسبات — يحمل رقم هذه الحاسبة في مقدّمته
+    //    (حاسبة 1 ⇒ 1000001…  حاسبة 2 ⇒ 2000001…) فلا يتكرّر أبداً بعد المزامنة
+    const pid=_newPatientId();
     const barcode=pid;
     pt={...wizPatient,id:pid,barcode,registered:today,regTime:Date.now(),visits:0,status:'active'};
+    _stamp(pt);                       // ختم المنشأ: جهاز + لحظة الإنشاء
     patients.push(pt);
   } else {
     const oldChron=pt.chronic;
@@ -11847,22 +11851,8 @@ function wizFinish(){
   save('patients',patients);
   if(pt.phone) addToPhoneBook(pt.name, pt.phone);
 
-  // توليد رقم طلب فريد مضمون — يتجنب التكرار عند الحذف وإعادة الإدخال
-  function _genUniqueRqid(){
-    const counterKey='medlab_rq_counter';
-    let counter=parseInt(localStorage.getItem(counterKey)||'0',10);
-    if(counter<1000+requests.length) counter=1000+requests.length;
-    counter++;
-    localStorage.setItem(counterKey, String(counter));
-    let candidate='RQ-'+counter;
-    while(requests.find(r=>r.id===candidate)){
-      counter++;
-      localStorage.setItem(counterKey, String(counter));
-      candidate='RQ-'+counter;
-    }
-    return candidate;
-  }
-  const rqid=_genUniqueRqid();
+  // ⭐ رقم طلب فريد بين كل الحاسبات: RQ<رقم الحاسبة>-<تسلسل>
+  const rqid=_newRequestId();
   const req={
     id:rqid, patientId:pt.id, patientName:pt.name,
     tests:wizSelectedTests.map(t=>t.id),
@@ -11875,6 +11865,7 @@ function wizFinish(){
     status:'pending', results:{}, tech:'', resultDate:'', resultNotes:'',
     sideLab: !!pt.sideLab
   };
+  _stamp(req);
   requests.push(req); save('requests',requests);
 
   // الفاتورة مع الخصم وحالة الدفع
@@ -18369,7 +18360,7 @@ function editDoctor(id){
 }
 function saveDoctor(){
   const name=document.getElementById('dr-name').value.trim();if(!name)return;
-  doctors.push({id:'dr'+Date.now(),name,spec:document.getElementById('dr-spec').value,phone:document.getElementById('dr-phone').value,hosp:document.getElementById('dr-hosp').value,comm:document.getElementById('dr-comm').value,email:document.getElementById('dr-email').value});
+  doctors.push({id:_uid('dr'),name,spec:document.getElementById('dr-spec').value,phone:document.getElementById('dr-phone').value,hosp:document.getElementById('dr-hosp').value,comm:document.getElementById('dr-comm').value,email:document.getElementById('dr-email').value});
   save('doctors',doctors);renderDoctors();closeModal('m-doctor');showNotif('تم','تم إضافة الطبيب ✅','success');
 }
 function deleteDoctor(id){if(confirm('حذف؟')){doctors=doctors.filter(d=>d.id!==id);save('doctors',doctors);IDB.set(DB._pfx()+'doctors',doctors).catch(e=>console.warn('[MedLab] IDB doctors save error',e));renderDoctors();}}
@@ -18391,7 +18382,7 @@ function renderPackages(){
       </div>
     </div>`).join('');
 }
-function savePkg(){const name=document.getElementById('pkg-name').value.trim();if(!name)return;packages.push({id:'pkg'+Date.now(),name,price:parseFloat(document.getElementById('pkg-price').value)||0,ic:document.getElementById('pkg-ic').value||'📦',desc:document.getElementById('pkg-desc').value});save('packages',packages);renderPackages();closeModal('m-pkg');showNotif('تم','تم إضافة الباقة ✅','success');}
+function savePkg(){const name=document.getElementById('pkg-name').value.trim();if(!name)return;packages.push({id:_uid('pkg'),name,price:parseFloat(document.getElementById('pkg-price').value)||0,ic:document.getElementById('pkg-ic').value||'📦',desc:document.getElementById('pkg-desc').value});save('packages',packages);renderPackages();closeModal('m-pkg');showNotif('تم','تم إضافة الباقة ✅','success');}
 function deletePkg(id){if(confirm('حذف؟')){packages=packages.filter(p=>p.id!==id);save('packages',packages);renderPackages();}}
 
 // ============================================================
@@ -18566,7 +18557,7 @@ function saveInvItem(){
   if(kits>0&&perKit>0) qty=kits*perKit;
 
   const item={
-    id:editId||'inv'+Date.now(),
+    id:editId||_uid('inv'),
     name, qty, kits, perKit,
     unit:document.getElementById('ii-unit').value||'',
     min:parseFloat(document.getElementById('ii-min').value)||10,
@@ -22169,7 +22160,7 @@ function saveTestGroup(){
     const g = testGroups.find(x=>x.id===editId);
     if(g){ g.name=name; g.tests=[...grpSelectedTests]; }
   } else {
-    testGroups.push({ id:'grp_'+Date.now(), name, tests:[...grpSelectedTests] });
+    testGroups.push({ id:_uid('grp_'), name, tests:[...grpSelectedTests] });
   }
   saveGroupsData();
   clearGrpForm();
@@ -26307,7 +26298,7 @@ async function saveCultureEntry(){
 
   // إذا لم يكن المريض مسجلاً (إدخال يدوي)، أنشئ رقم ملف تلقائياً
   if(!ptId){
-    ptId=String(100000+parseInt(Date.now().toString().slice(-5)));
+    ptId=_newPatientId();   // ⭐ رقم فريد بين الحاسبات
     const existPt=patients.find(p=>p.name===ptName);
     if(existPt){
       ptId=existPt.id;
@@ -26319,6 +26310,7 @@ async function saveCultureEntry(){
         registered:new Date().toISOString().split('T')[0],
         visits:1, status:'active', barcode:ptId
       };
+      _stamp(newPt);
       patients.push(newPt);
       save('patients',patients);
       if(newPt.phone) addToPhoneBook(newPt.name, newPt.phone);
@@ -26335,7 +26327,7 @@ async function saveCultureEntry(){
   const isNoGrowth=organism.includes('No Growth');
 
   const rec={
-    id: window._editCultureId || ('cult-'+Date.now()),
+    id: window._editCultureId || _uid('cult-'),
     patientId: ptId,
     patientName: ptName,
     patientPhone: (document.getElementById('cult-pt-phone')||{}).value||'',
@@ -27157,7 +27149,7 @@ function saveUAEntry(){
   const uaDr=_getUADoctor();
   const ptObj=patients.find(p=>p.id===ptId)||{};
   const rec={
-    id: window._editUAId||('ua-'+Date.now()),
+    id: window._editUAId||_uid('ua-'),
     reqId: window._uaReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge: ptObj.ageDisplay||'',
@@ -27200,7 +27192,7 @@ function saveAndPrintUA(){
   const uaDr=_getUADoctor();
   const ptObj=patients.find(p=>p.id===ptId)||{};
   const rec={
-    id: window._editUAId||('ua-'+Date.now()),
+    id: window._editUAId||_uid('ua-'),
     reqId: window._uaReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge: ptObj.ageDisplay||'',
@@ -27716,7 +27708,7 @@ function saveStoolEntry(){
   const stoolDr=_getStoolDoctor();
   const ptObj=patients.find(p=>p.id===ptId)||{};
   const rec={
-    id:window._editStoolId||('stl-'+Date.now()),
+    id:window._editStoolId||_uid('stl-'),
     reqId: window._stoolReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge: ptObj.ageDisplay||'',
@@ -27763,7 +27755,7 @@ function saveAndPrintStool(){
   const stoolDr=_getStoolDoctor();
   const ptObj=patients.find(p=>p.id===ptId)||{};
   const rec={
-    id:window._editStoolId||('stl-'+Date.now()),
+    id:window._editStoolId||_uid('stl-'),
     reqId: window._stoolReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge: ptObj.ageDisplay||'',
@@ -28071,7 +28063,7 @@ function saveAndShareUAWhatsApp(){
   if(!phone){showNotif('تنبيه','لا يوجد رقم هاتف للمريض — أضف الرقم أولاً','warning');return;}
   // حفظ أولاً
   const rec={
-    id:window._editUAId||('ua-'+Date.now()),
+    id:window._editUAId||_uid('ua-'),
     reqId:window._uaReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge:ptObj.ageDisplay||'',
@@ -28114,7 +28106,7 @@ function saveAndShareStoolWhatsApp(){
   if(!phone){showNotif('تنبيه','لا يوجد رقم هاتف للمريض — أضف الرقم أولاً','warning');return;}
   // حفظ أولاً
   const rec={
-    id:window._editStoolId||('stl-'+Date.now()),
+    id:window._editStoolId||_uid('stl-'),
     reqId:window._stoolReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge:ptObj.ageDisplay||'',
@@ -29761,7 +29753,7 @@ function saveSemenEntry(){
 
   // إذا لم يكن المريض مسجلاً (إدخال يدوي)، أنشئ رقم ملف تلقائياً
   if(!ptId){
-    ptId=String(100000+parseInt(Date.now().toString().slice(-5)));
+    ptId=_newPatientId();   // ⭐ رقم فريد بين الحاسبات
     const existPt=patients.find(p=>p.name===ptName);
     if(existPt){
       ptId=existPt.id;
@@ -29773,6 +29765,7 @@ function saveSemenEntry(){
         registered:new Date().toISOString().split('T')[0],
         visits:1, status:'active', barcode:ptId
       };
+      _stamp(newPt);
       patients.push(newPt);
       save('patients',patients);
       if(newPt.phone) addToPhoneBook(newPt.name, newPt.phone);
@@ -29782,7 +29775,7 @@ function saveSemenEntry(){
   }
   const ptObj=patients.find(p=>p.id===ptId)||{};
   const rec={
-    id: window._semenEditId||('semen-'+Date.now()),
+    id: window._semenEditId||_uid('semen-'),
     reqId: window._semenReqId||'',
     patientId:ptId, patientName:ptName,
     patientAge: ptObj.ageDisplay||'',
@@ -41547,9 +41540,13 @@ var _lanMode      = null;   // 'server' | 'client' | null
 var _lanHttpServer= null;
 var _LAN_PORT     = 8797;
 // ⭐ مزامنة شاملة — كل أقسام البرنامج (وليس 4 مفاتيح فقط)
-var _LAN_SYNC_KEYS= ['patients','requests','invoices','doctors','testGroups',
-                     'packages','inventory','qc','billing','cultureRecords',
-                     'uaRecords','stoolExamRecords','semenRecords','phoneBook'];
+// ⛔ أُخرِجت من المزامنة بطلب المستخدم (كانت تسبّب تجمّد البرنامج):
+//    invoices (الفواتير) · billing (الحسابات) · phoneBook (دفتر الهواتف)
+//    هذه الأقسام تبقى محلية في كل حاسبة ولا تُبثّ ولا تُستقبل إطلاقاً.
+var _LAN_SYNC_EXCLUDED = ['invoices','billing','phoneBook'];
+var _LAN_SYNC_KEYS= ['patients','requests','doctors','testGroups',
+                     'packages','inventory','qc','cultureRecords',
+                     'uaRecords','stoolExamRecords','semenRecords'];
 
 // ⭐ خريطة إعادة الرسم لكل مفتاح — تُستخدم بعد تطبيق أي تحديث وارد
 var _LAN_RENDER = {
@@ -43370,4 +43367,1503 @@ try{ IC.bindButton(); }catch(e){}
 document.addEventListener('DOMContentLoaded', function(){ try{ IC.bindButton(); }catch(e){} });
 
 })();
+</script>
+
+
+<!-- ══════════ LAN Smart Sync v4 — مزامنة تفاضلية ذكية — لا تحذف ══════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   MedLab Pro — LAN Smart Sync v4   (المزامنة الذكية بين الحاسبتين)
+   ──────────────────────────────────────────────────────────────────────
+   المشكلة السابقة:
+     • عند كل اتصال كانت الحاسبة ترسل «الحالة الكاملة» (fullstate): كل
+       المرضى وكل الطلبات وكل الفواتير والحسابات ودفتر الهواتف من أول يوم.
+       JSON ضخم عند المرسِل ودمج ضخم عند المستقبِل ⇒ تجمّد الحاسبتين عند
+       كل اتصال أو إعادة اتصال.
+     • وأي حفظ لاحق قد يبثّ المصفوفة كاملة إن لم يكن هناك خط أساس.
+
+   الحل هنا:
+     ① لكل جهاز آخر نحفظ «مؤشّراً زمنياً» (cursor) = آخر لحظة استلمنا منه
+        بياناته عندها، ويُخزَّن في localStorage فيصمد بعد إغلاق البرنامج.
+     ② عند الاتصال تُتبادل رسالة صغيرة hello2 تحمل المؤشّرات فقط، فيرسل
+        كل طرف «ما تغيّر بعد ذلك المؤشّر» لا أكثر. أول اتصال فقط
+        (cursor = 0) يُرسل كل شيء — مرة واحدة في العمر.
+     ③ أثناء الاتصال: كل حفظ يبثّ السجلات المتغيّرة فقط (خط أساس id→وقت).
+     ④ كل الإرسال عبر طابور دفعات ٢٠٠ سجل / ٢٥ms فلا تتجمّد الواجهة.
+     ⑤ المسار القديم الثقيل (inventory / fullstate / request_state) مُعطَّل.
+     ⑥ مصافحة استدراك خفيفة كل ٥ دقائق: تُرسل ما استجدّ فقط (غالباً لا شيء).
+
+   ملاحظة: الفواتير (invoices) والحسابات (billing) ودفتر الهواتف (phoneBook)
+   مُخرَجة أصلاً من _LAN_SYNC_KEYS — لا تُبثّ ولا تُستقبل إطلاقاً.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+if(typeof _LAN_SYNC_KEYS === 'undefined' || typeof _lanSendRaw !== 'function') return;
+
+var CUR_KEY  = 'lis_lan_cursors';  // مخزن المؤشّرات الدائم
+var CHUNK    = 200;                // سجل لكل رسالة
+var GAP_MS   = 25;                 // فاصل بين الرسائل (يُبقي الواجهة حيّة)
+var SKEW_MS  = 120000;             /* هامش أمان صغير. المؤشّر يعود إلينا بساعتنا
+                                      نحن (أرسلناه نحن أصلاً كـ upto) فلا حاجة
+                                      لتحويل، والهامش لتغطية قفزات الساعة فقط. */
+var FRESH_MS = 300000;             // نافذة أمان عند غياب خط الأساس (٥ دقائق)
+var TOPUP_MS = 300000;             // فاصل مصافحة الاستدراك (٥ دقائق)
+
+/* ── المؤشّرات الدائمة: deviceId → آخر لحظة استلمنا منه ────────────── */
+var _cursors = {};
+try{ _cursors = JSON.parse(localStorage.getItem(CUR_KEY) || '{}') || {}; }catch(e){ _cursors = {}; }
+var _curT = null;
+function _saveCursors(){
+  if(_curT) return;
+  _curT = setTimeout(function(){
+    _curT = null;
+    try{ localStorage.setItem(CUR_KEY, JSON.stringify(_cursors)); }catch(e){}
+  }, 800);
+}
+
+/* ── حالة الجلسة ──────────────────────────────────────────────────── */
+var _greeted  = {};   // peerId → صافحناه (منع تكرار المصافحة)
+var _pushed   = {};   // peerId → أُرسلت له دفعة المصالحة الأولى
+var _pullDone = {};   // peerId → اكتمل السحب الأولي منه
+var _lastPushAt = {}; // peerId → لحظة آخر دفعة (كابح التكرار)
+var _lastInfo = '⚡ مزامنة ذكية — الجديد فقط';
+
+/* ── طابور إرسال غير محجوب ────────────────────────────────────────── */
+var _q = [], _qT = null;
+function _kick(){
+  if(_qT) return;
+  _qT = setTimeout(function(){
+    _qT = null;
+    var o = _q.shift();
+    if(o){ o.ts = Date.now(); try{ _lanSendRaw(o); }catch(e){} }
+    if(_q.length) _kick();
+  }, GAP_MS);
+}
+function _push(o){ _q.push(o); _kick(); }
+
+/* ── أدوات ────────────────────────────────────────────────────────── */
+function _idOf(o){
+  if(!o || typeof o !== 'object') return null;
+  return o.id || o.reqId || o.patientId || o.invoiceId || o._id || null;
+}
+function _tsOf(o){
+  if(!o || typeof o !== 'object') return 0;
+  var t = o._updatedAt || o.updatedAt || o.lastModified || o.ts || o.modifiedAt || 0;
+  var n = (typeof t === 'number') ? t : Date.parse(t);
+  return isNaN(n) ? 0 : n;
+}
+function _arr(key){
+  try{ var v = _lanGetLocal(key); return Array.isArray(v) ? v : []; }catch(e){ return []; }
+}
+function _synced(key){ return _LAN_SYNC_KEYS.indexOf(key) !== -1; }
+
+/* ── خط الأساس: id → آخر ختم تعديل بُثَّ (للبثّ التفاضلي عند الحفظ) ── */
+var _base = {};
+function _baseline(arr){
+  var m = {};
+  if(!Array.isArray(arr)) return m;
+  for(var i=0;i<arr.length;i++){
+    var id = _idOf(arr[i]);
+    if(id) m[id] = _tsOf(arr[i]);
+  }
+  return m;
+}
+function _primeBase(){
+  for(var i=0;i<_LAN_SYNC_KEYS.length;i++){
+    var k = _LAN_SYNC_KEYS[i];
+    _base[k] = _baseline(_arr(k));
+  }
+}
+
+/* ── إرسال سجلات على شكل دفعات ────────────────────────────────────── */
+function _sendRows(key, rows){
+  if(!Array.isArray(rows) || !rows.length) return 0;
+  var parts = Math.ceil(rows.length / CHUNK);
+  for(var p=0;p<parts;p++){
+    /* ترتيب الحقول مقصود: data أولاً ثم from/ts ليقعا في ذيل الرسالة،
+       فيلتقطهما المستقبِل بلا JSON.parse للرسائل الكبيرة. */
+    _push({ type:'sync2', key:key, part:p, parts:parts,
+            data:rows.slice(p*CHUNK, (p+1)*CHUNK),
+            from:_lanDeviceId, ts:Date.now() });
+  }
+  return rows.length;
+}
+
+/* ── ما تغيّر بعد لحظة معيّنة ──────────────────────────────────────── */
+function _changedSince(key, since){
+  var arr = _arr(key);
+  if(!since) return arr;                       // أول مزامنة مع هذا الجهاز
+  var out = [];
+  for(var i=0;i<arr.length;i++){
+    if(_tsOf(arr[i]) > since) out.push(arr[i]);
+  }
+  return out;
+}
+
+/* ── دفع التغييرات لجهاز معيّن ────────────────────────────────────── */
+function _pushChanges(peer, since, force){
+  if(!peer) return;
+  var i, k, n = 0, now = Date.now();
+
+  /* الطرفان يُعلنان عند الاتصال ⇒ تصل مصافحتان متتاليتان.
+     كابح قصير يمنع دفع الدفعة نفسها مرّتين. */
+  if(!force && _lastPushAt[peer] && (now - _lastPushAt[peer]) < 4000) return;
+  _lastPushAt[peer] = now;
+
+  /* مصافحة استدراك (ليست الأولى): ما استجدّ فقط وبلا هامش — عادةً صفر */
+  if(_pushed[peer] && !force){
+    if(!since) return;                         // لا مؤشّر ⇒ لا تُعِد إرسال الأرشيف
+    for(i=0;i<_LAN_SYNC_KEYS.length;i++){
+      k = _LAN_SYNC_KEYS[i];
+      n += _sendRows(k, _changedSince(k, since));
+    }
+    _push({ type:'synced2', from:_lanDeviceId, to:peer, upto:now, n:n, ts:Date.now() });
+    if(n) _info('استُدرك ' + n + ' سجل');
+    return;
+  }
+
+  /* الدفعة الأولى في هذه الجلسة (أو إعادة مزامنة كاملة) */
+  _pushed[peer] = 1;
+  var eff = since ? Math.max(0, since - SKEW_MS) : 0;
+  for(i=0;i<_LAN_SYNC_KEYS.length;i++){
+    k = _LAN_SYNC_KEYS[i];
+    n += _sendRows(k, _changedSince(k, eff));
+  }
+  _primeBase();                                // خط أساس محدَّث بعد الدفع
+  _push({ type:'synced2', from:_lanDeviceId, to:peer, upto:now, n:n, ts:Date.now() });
+  _info(since ? ('أُرسل الجديد فقط: ' + n + ' سجل')
+              : ('مزامنة أولى كاملة: ' + n + ' سجل'));
+}
+
+/* ── المصافحة ─────────────────────────────────────────────────────── */
+function _hello(){
+  _push({ type:'hello2', from:_lanDeviceId, cur:_cursors, ts:Date.now() });
+}
+
+/* ── سطر الحالة في بطاقة LAN ──────────────────────────────────────── */
+function _info(txt){
+  var t = new Date();
+  _lastInfo = '⚡ ' + txt + ' — ' +
+    ('0'+t.getHours()).slice(-2) + ':' + ('0'+t.getMinutes()).slice(-2);
+  var el = document.getElementById('lan-sync-lbl');
+  if(el) el.textContent = _lastInfo;
+}
+setInterval(function(){
+  var el = document.getElementById('lan-sync-lbl');
+  if(el && el.textContent !== _lastInfo) el.textContent = _lastInfo;
+}, 4000);
+
+/* ══ ① بثّ الفرق فقط عند كل حفظ ═══════════════════════════════════ */
+window._lanEmit = function(key, data){
+  if(!Array.isArray(data) || !_synced(key)) return;
+  var b = _base[key], delta = [], i, o, id, t;
+
+  if(!b){
+    /* لا خط أساس (أول حفظ بعد التشغيل): لا تبثّ الأرشيف كاملاً —
+       المصالحة تكفّلت بالقديم، فابثّ آخر التعديلات القريبة فقط. */
+    var cut = Date.now() - FRESH_MS;
+    for(i=0;i<data.length;i++){
+      o = data[i];
+      if(o && typeof o === 'object' && _tsOf(o) > cut) delta.push(o);
+    }
+  } else {
+    for(i=0;i<data.length;i++){
+      o = data[i];
+      if(!o || typeof o !== 'object') continue;
+      id = _idOf(o);
+      if(!id) continue;                        // سجل بلا معرّف لا يمكن دمجه
+      t = _tsOf(o);
+      if(!(id in b) || b[id] !== t) delta.push(o);
+    }
+  }
+  _base[key] = _baseline(data);
+  if(delta.length) _sendRows(key, delta);
+};
+
+/* ══ ② تحديث خط الأساس بعد تطبيق أي وارد (منع إعادة بثّ ما استقبلناه) ══ */
+if(typeof _lanApplyKey === 'function'){
+  var _prevApply = window._lanApplyKey || _lanApplyKey;
+  window._lanApplyKey = function(key, data){
+    if(!_synced(key)) return;                  // حارس: الأقسام المستبعَدة لا تُطبَّق
+    try{ _prevApply(key, data); }catch(e){ console.warn('[LAN v4] apply', e); }
+    if(Array.isArray(data)) _base[key] = _baseline(data);
+  };
+}
+
+/* ══ ③ إلغاء المسار الثقيل: لا «حالة كاملة» بعد اليوم ═════════════ */
+window._lanSendFullState = function(){ _hello(); };
+
+/* ══ ④ المصافحة عند كل اتصال ═════════════════════════════════════ */
+if(typeof _lanAnnounce === 'function'){
+  var _prevAnnounce = window._lanAnnounce || _lanAnnounce;
+  window._lanAnnounce = function(){
+    _greeted = {}; _pushed = {}; _pullDone = {};
+    _primeBase();
+    try{ _prevAnnounce.apply(this, arguments); }catch(e){}
+    setTimeout(_hello, 300);
+  };
+}
+
+/* ══ ⑤ استقبال رسائل التحكّم ═════════════════════════════════════ */
+function _onCtrl(msg){
+  if(!msg || !msg.from || msg.from === _lanDeviceId) return;
+  var peer = msg.from;
+
+  /* السيرفير مركز التوزيع: مرّر الرسالة لبقية العملاء */
+  if(typeof _lanMode !== 'undefined' && _lanMode === 'server' && !msg._r){
+    if(!msg.to || msg.to !== _lanDeviceId){
+      msg._r = 1;
+      try{ _lanSendRaw(msg); }catch(e){}
+    }
+  }
+  if(msg.to && msg.to !== _lanDeviceId) return;
+
+  if(msg.type === 'hello2'){
+    var since = (msg.cur && msg.cur[_lanDeviceId]) || 0;
+    _pushChanges(peer, since, false);
+    if(!_greeted[peer]){ _greeted[peer] = 1; setTimeout(_hello, 150); }
+    try{ if(typeof _lanOpenGate === 'function') _lanOpenGate(); }catch(e){}
+  }
+  else if(msg.type === 'synced2'){
+    /* أنهى الطرف الآخر إرسال دفعته — ثبّت المؤشّر بعد أن تُدمج الدفعات
+       فعلياً (الدمج يتم بعد ٥٠٠ms من هدوء الإرسال) */
+    var upto = msg.upto || 0;
+    setTimeout(function(){
+      if(upto > (_cursors[peer] || 0)){ _cursors[peer] = upto; _saveCursors(); }
+      _pullDone[peer] = 1;
+    }, 1500);
+    if(msg.n) _info('استُلم من الحاسبة الأخرى: ' + msg.n + ' سجل');
+    try{ if(typeof _lanOpenGate === 'function') _lanOpenGate(); }catch(e){}
+  }
+  else if(msg.type === 'resync2'){
+    _pushChanges(peer, 0, true);               // طُلبت إعادة مزامنة كاملة
+  }
+}
+
+/* ══ ⑥ اعتراض الرسائل الواردة ════════════════════════════════════ */
+if(typeof _lanHandleMessage === 'function'){
+  var _prevHandle = window._lanHandleMessage || _lanHandleMessage;
+  var RX_TYPE = /"type"\s*:\s*"([^"]{1,40})"/;
+  var RX_FROM = /"from"\s*:\s*"([^"]{1,60})"/;
+  var RX_TS   = /"ts"\s*:\s*(\d{10,16})/;
+
+  window._lanHandleMessage = function(raw){
+    try{
+      if(typeof raw === 'string'){
+        var head = raw.length > 200 ? raw.substring(0, 200) : raw;
+        var mt   = RX_TYPE.exec(head);
+        var type = mt ? mt[1] : '';
+
+        /* المسار القديم الثقيل — يُهمَل تماماً (كان سبب التجمّد) */
+        if(type === 'inventory' || type === 'fullstate' || type === 'request_state'){
+          try{ if(typeof _lanOpenGate === 'function') _lanOpenGate(); }catch(e){}
+          return;
+        }
+        /* رسائل تحكّم المزامنة الذكية — صغيرة، تُفكّ مباشرة */
+        if(type === 'hello2' || type === 'synced2' || type === 'resync2'){
+          _onCtrl(JSON.parse(raw));
+          return;
+        }
+        /* بثّ حيّ وارد: قدّم المؤشّر بعد اكتمال السحب الأولي */
+        if(type === 'sync2'){
+          var tail = raw.length > 300 ? raw.substring(raw.length - 300) : raw;
+          var mf = RX_FROM.exec(tail) || RX_FROM.exec(head);
+          var ms = RX_TS.exec(tail)   || RX_TS.exec(head);
+          if(mf && ms && mf[1] !== _lanDeviceId && _pullDone[mf[1]]){
+            var v = parseInt(ms[1], 10);
+            if(v > (_cursors[mf[1]] || 0)){ _cursors[mf[1]] = v; _saveCursors(); }
+          }
+        }
+      }
+    }catch(e){}
+    return _prevHandle(raw);
+  };
+}
+
+/* ══ ⑦ إعادة مزامنة كاملة يدوية (زر في بطاقة LAN) ════════════════ */
+window.lisLanFullResync = function(){
+  if(typeof _lanMode === 'undefined' || !_lanMode){
+    if(typeof showNotif === 'function')
+      showNotif('LAN','فعّل الربط أولاً (سيرفير أو عميل)','warning');
+    return;
+  }
+  if(!confirm('إعادة مزامنة كاملة مع الحاسبة الأخرى؟\n\nستُنقل كل السجلات من أول يوم مرة واحدة، وقد يستغرق ذلك دقيقة.\nلا يُستخدم إلا عند الشكّ بفقدان بيانات قديمة.')) return;
+  _cursors = {};
+  try{ localStorage.setItem(CUR_KEY, '{}'); }catch(e){}
+  _greeted = {}; _pushed = {}; _pullDone = {};
+  _primeBase();
+  _push({ type:'resync2', from:_lanDeviceId, ts:Date.now() });
+  setTimeout(_hello, 250);
+  _info('جارٍ إعادة مزامنة كاملة…');
+  if(typeof showNotif === 'function')
+    showNotif('🌐 LAN','بدأت إعادة المزامنة الكاملة — انتظر قليلاً','info');
+};
+
+/* ══ ⑧ شبكة أمان: مصافحة استدراك خفيفة (رسالة صغيرة جداً) ════════ */
+setInterval(function(){
+  try{
+    if(typeof _lanMode === 'undefined' || !_lanMode) return;
+    _hello();
+  }catch(e){}
+}, TOPUP_MS);
+
+})();
+</script>
+
+
+<!-- ══════════ ID Safety v1 — منع تضارب أرقام الملفات — لا تحذف ══════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   MedLab Pro — ID Safety v1
+   ──────────────────────────────────────────────────────────────────────
+   المشكلة: كل حاسبة كانت تولّد رقم الملف من عدّاد محلي يبدأ من الصفر
+   (100001, 100002…) فتُنتج الحاسبتان الرقم نفسه لمريضين مختلفين، ثم
+   يدمجهما الدمج على أنهما مريض واحد ⇒ مريض يختفي وآخر يرث سجلات غيره.
+   ونفس العلّة في أرقام الطلبات (RQ-1001).
+
+   العلاج هنا ثلاث طبقات:
+     ① رقم لكل حاسبة (1–99) يدخل في مقدّمة الرقم:
+        حاسبة 1 ⇒ 1000001…   حاسبة 2 ⇒ 2000001…   حاسبة 7 ⇒ 7000001…
+        والطلبات: RQ1-1001 / RQ2-1001 … فلا يلتقي رقمان أبداً.
+        (الأرقام القديمة ذات الست خانات 100xxx تبقى كما هي — لا تصطدم بالمدى الجديد)
+     ② حارس الدمج: إذا وصل سجل بمعرّف موجود لكنه كيان مختلف (بصمة منشأ
+        مختلفة) لا يُطمس أحدهما — يُعاد ترقيم الأحدث ترقيماً حتمياً
+        (النتيجة نفسها على كل الحاسبات) وتُنقل ارتباطاته معه.
+     ③ أداة إصلاح للبيانات الحالية: تستعيد المرضى الذين ضاعوا في تضاربات
+        سابقة اعتماداً على اسم المريض المحفوظ داخل الطلبات والسجلات.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+var DEV_KEY = 'lis_device_no';
+
+/* ── تجزئة نصية قصيرة (حتمية على كل الأجهزة) ──────────────────────── */
+function _h32(str){
+  var h = 5381, i = String(str).length;
+  while(i) h = ((h * 33) ^ String(str).charCodeAt(--i)) >>> 0;
+  return h >>> 0;
+}
+function _code4(str){
+  return ('000' + _h32(str).toString(36)).slice(-4);
+}
+
+/* ── رقم هذه الحاسبة (1–99) ───────────────────────────────────────── */
+window._devNo = function(){
+  var v = parseInt(localStorage.getItem(DEV_KEY) || '0', 10);
+  if(v >= 1 && v <= 99) return v;
+  /* لم يُضبط يدوياً ⇒ اشتقّه من بصمة الجهاز الفريدة وثبّته.
+     يبقى فريداً غالباً، وحارس الدمج يلتقط أي تصادم نادر. */
+  var base = (typeof _lanDeviceId === 'string' && _lanDeviceId)
+             ? _lanDeviceId : ('x' + Date.now() + Math.random());
+  v = 11 + (_h32(base) % 89);                     // 11..99
+  try{ localStorage.setItem(DEV_KEY, String(v)); }catch(e){}
+  return v;
+};
+
+window._setDevNo = function(n){
+  n = parseInt(n, 10);
+  if(!(n >= 1 && n <= 99)) return false;
+  try{ localStorage.setItem(DEV_KEY, String(n)); }catch(e){}
+  return true;
+};
+
+/* ── معرّف فريد لأي سجل (يحمل رقم الحاسبة) ────────────────────────── */
+window._uid = function(prefix){
+  return (prefix || '') + Date.now().toString(36) + '-' + _devNo() +
+         Math.random().toString(36).slice(2, 5);
+};
+
+/* ── ختم المنشأ: أي جهاز أنشأ السجل ومتى (أساس كشف التضارب) ───────── */
+window._stamp = function(o){
+  if(o && typeof o === 'object'){
+    if(!o._dev) o._dev = (typeof _lanDeviceId === 'string' && _lanDeviceId)
+                         ? _lanDeviceId : ('d' + _devNo());
+    if(!o._org) o._org = Date.now();
+  }
+  return o;
+};
+
+/* ── رقم ملف مريض فريد بين كل الحاسبات ────────────────────────────── */
+window._newPatientId = function(){
+  var d = _devNo(), key = 'medlab_pt_counter';
+  var c = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+  var base = d * 1000000, cand;
+  var all = (typeof patients !== 'undefined' && Array.isArray(patients)) ? patients : [];
+  var guard = 0;
+  do{
+    c++; cand = String(base + c);
+    if(++guard > 200000) break;
+  } while(all.some(function(p){ return p && p.id === cand; }));
+  try{ localStorage.setItem(key, String(c)); }catch(e){}
+  return cand;
+};
+
+/* ── رقم طلب فريد بين كل الحاسبات ─────────────────────────────────── */
+window._newRequestId = function(){
+  var d = _devNo(), key = 'medlab_rq_counter';
+  var c = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+  if(c < 1000) c = 1000;
+  var all = (typeof requests !== 'undefined' && Array.isArray(requests)) ? requests : [];
+  var cand, guard = 0;
+  do{
+    c++; cand = 'RQ' + d + '-' + c;
+    if(++guard > 200000) break;
+  } while(all.some(function(r){ return r && r.id === cand; }));
+  try{ localStorage.setItem(key, String(c)); }catch(e){}
+  return cand;
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   ② حارس الدمج — لا يُطمَس سجل بسجل آخر يحمل الرقم نفسه
+   ══════════════════════════════════════════════════════════════════ */
+
+/* لحظة المنشأ (أقوى حقل متاح) */
+function _orgOf(o){
+  if(!o || typeof o !== 'object') return 0;
+  return o._org || o.regTime || o.createdAt || 0;
+}
+/* هل السجلان كيانان مختلفان فعلاً؟ نقارن بأقوى بصمة يشترك فيها الاثنان.
+   عند غياب البصمة نتحفّظ ونعتبرهما السجل نفسه (السلوك القديم). */
+function _isDifferent(a, b){
+  if(!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if(a._org && b._org)
+    return (a._org + '/' + (a._dev || '')) !== (b._org + '/' + (b._dev || ''));
+  if(a.regTime && b.regTime)     return String(a.regTime)   !== String(b.regTime);
+  if(a.createdAt && b.createdAt) return String(a.createdAt) !== String(b.createdAt);
+  return false;
+}
+/* أيّهما يحتفظ بالرقم؟ الأقدم منشأً يفوز، وعند التعادل تُرجَّح بصمة الجهاز
+   الأصغر نصّياً — قاعدة حتمية تعطي النتيجة نفسها على كل الحاسبات. */
+function _loserOf(a, b){
+  var ta = _orgOf(a), tb = _orgOf(b);
+  if(ta && tb && ta !== tb) return (ta < tb) ? b : a;
+  var da = String(a._dev || ''), db = String(b._dev || '');
+  if(da !== db) return (da < db) ? b : a;
+  return b;
+}
+/* الرقم البديل — حتمي: يُشتقّ من السجل الخاسر نفسه */
+function _renamed(o){
+  return String(o.id) + '~' + _code4(_orgOf(o) + '|' + (o._dev || '') + '|' +
+                                     (o.name || o.patientName || ''));
+}
+
+function _norm(s){
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+var _renameJobs = [];   // {oldId,newId,dev,name,winnerName,isPatient}
+var _renameT    = null;
+
+function _queueRename(job){
+  for(var i=0;i<_renameJobs.length;i++){
+    if(_renameJobs[i].oldId === job.oldId && _renameJobs[i].newId === job.newId) return;
+  }
+  _renameJobs.push(job);
+  if(_renameT) clearTimeout(_renameT);
+  _renameT = setTimeout(_flushRenames, 700);
+}
+
+/* هل هذا السجل تابع للكيان الخاسر؟ (بختم الجهاز أو باسم المريض المحفوظ) */
+function _belongsToLoser(rec, job){
+  if(!rec) return false;
+  if(job.dev && rec._dev && rec._dev === job.dev) return true;
+  if(job.name && job.winnerName && _norm(job.name) !== _norm(job.winnerName)){
+    var n = _norm(rec.patientName);
+    if(n && n === _norm(job.name)) return true;
+  }
+  return false;
+}
+
+var _LINKED = ['requests','cultureRecords','uaRecords','stoolExamRecords',
+               'semenRecords','invoices','billing'];
+
+function _flushRenames(){
+  _renameT = null;
+  var jobs = _renameJobs.slice(); _renameJobs = [];
+  if(!jobs.length) return;
+  var touched = {}, moved = 0;
+
+  for(var j=0;j<jobs.length;j++){
+    var job = jobs[j];
+    for(var L=0;L<_LINKED.length;L++){
+      var key = _LINKED[L];
+      var arr;
+      try{ arr = load(key, []); }catch(e){ continue; }
+      if(!Array.isArray(arr) || !arr.length) continue;
+      var hit = 0;
+      for(var i=0;i<arr.length;i++){
+        var rec = arr[i];
+        if(!rec || typeof rec !== 'object') continue;
+        if(job.isPatient){
+          if(rec.patientId === job.oldId && _belongsToLoser(rec, job)){
+            rec.patientId = job.newId; rec._updatedAt = Date.now(); hit++;
+          }
+        } else {
+          if(rec.reqId === job.oldId && _belongsToLoser(rec, job)){
+            rec.reqId = job.newId; rec._updatedAt = Date.now(); hit++;
+          }
+        }
+      }
+      if(hit){ touched[key] = arr; moved += hit; }
+    }
+  }
+  for(var k in touched){
+    try{
+      if(window._smSetters && window._smSetters[k]) window._smSetters[k](touched[k]);
+      save(k, touched[k]);
+    }catch(e){}
+  }
+  if(typeof showNotif === 'function'){
+    showNotif('🛡️ حماية الأرقام',
+      'تضارب في ' + jobs.length + ' رقم — أُعيد ترقيمها بلا فقدان' +
+      (moved ? (' ونُقل ' + moved + ' سجل مرتبط') : ''), 'warning');
+  }
+  try{ document.dispatchEvent(new CustomEvent('dp:refresh')); }catch(e){}
+}
+
+/* اعتراض الدمج: قبل أن يقرّر «الأحدث يفوز» افصل الكيانات المختلفة */
+if(typeof _lanMergeArrays === 'function'){
+  var _prevMerge = window._lanMergeArrays || _lanMergeArrays;
+  window._lanMergeArrays = function(localArr, incomingArr){
+    try{
+      if(Array.isArray(localArr) && Array.isArray(incomingArr) && incomingArr.length){
+        var byId = {}, i, o, cur, loser, isPt;
+        for(i=0;i<localArr.length;i++){
+          o = localArr[i];
+          if(o && typeof o === 'object' && o.id) byId[o.id] = o;
+        }
+        for(i=0;i<incomingArr.length;i++){
+          o = incomingArr[i];
+          if(!o || typeof o !== 'object' || !o.id) continue;
+          cur = byId[o.id];
+          if(!cur || !_isDifferent(cur, o)) continue;
+
+          loser = _loserOf(cur, o);
+          var winner = (loser === o) ? cur : o;
+          var nid = _renamed(loser);
+          if(nid === loser.id) continue;
+          isPt = !!(loser.name && (loser.registered || loser.regTime || loser.visits !== undefined));
+
+          _queueRename({ oldId: loser.id, newId: nid, dev: loser._dev || '',
+                         name: loser.name || loser.patientName || '',
+                         winnerName: winner.name || winner.patientName || '',
+                         isPatient: isPt });
+          loser.id = nid;
+          if(isPt && loser.barcode) loser.barcode = nid;
+          loser._updatedAt = Date.now();
+          if(loser === cur) byId[nid] = cur;
+        }
+      }
+    }catch(e){ console.warn('[ID Safety] merge guard', e); }
+    return _prevMerge(localArr, incomingArr);
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ③ أداة الإصلاح — استعادة المرضى الذين ضاعوا في تضاربات سابقة
+   ──────────────────────────────────────────────────────────────────
+   كل طلب/سجل يحفظ patientName بداخله. فإذا خالف اسمُ السجل اسمَ الملف
+   الذي يشير إليه (أو كان الملف غير موجود أصلاً) فذاك أثر تضارب قديم.
+   نُنشئ للمجموعة ملفاً جديداً برقم مشتقّ حتمياً — فلو نُفّذت الأداة على
+   أكثر من حاسبة خرجت بالنتيجة نفسها بلا تكرار.
+   ══════════════════════════════════════════════════════════════════ */
+
+var _SCAN = ['requests','cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+var _SCAN_LBL = { requests:'الطلبات', cultureRecords:'الزرع', uaRecords:'الإدرار',
+                  stoolExamRecords:'الخروج', semenRecords:'المنوي' };
+
+function _scanConflicts(){
+  var pts = [];
+  try{ pts = load('patients', []) || []; }catch(e){}
+  if(!Array.isArray(pts)) pts = [];
+  var byId = {};
+  for(var i=0;i<pts.length;i++){ if(pts[i] && pts[i].id) byId[pts[i].id] = pts[i]; }
+
+  var groups = {};
+  for(var k=0;k<_SCAN.length;k++){
+    var key = _SCAN[k], arr;
+    try{ arr = load(key, []) || []; }catch(e){ continue; }
+    if(!Array.isArray(arr)) continue;
+    for(var j=0;j<arr.length;j++){
+      var rec = arr[j];
+      if(!rec || typeof rec !== 'object') continue;
+      var pid = rec.patientId, nm = _norm(rec.patientName);
+      if(!pid || !nm) continue;
+      var pt = byId[pid];
+      var reason = !pt ? 'missing' : (_norm(pt.name) !== nm ? 'mismatch' : '');
+      if(!reason) continue;
+      var gk = pid + '||' + nm;
+      if(!groups[gk]){
+        groups[gk] = { oldId: pid, name: rec.patientName, reason: reason,
+                       fileName: pt ? pt.name : '(الملف غير موجود)',
+                       newId: pid + '~' + _code4(pid + '|' + nm),
+                       counts: {}, total: 0, sample: rec };
+      }
+      groups[gk].counts[key] = (groups[gk].counts[key] || 0) + 1;
+      groups[gk].total++;
+    }
+  }
+  var out = [];
+  for(var g in groups) out.push(groups[g]);
+  out.sort(function(a,b){ return b.total - a.total; });
+  return out;
+}
+
+function _applyFix(list){
+  var pts;
+  try{ pts = load('patients', []) || []; }catch(e){ pts = []; }
+  if(!Array.isArray(pts)) pts = [];
+  var byId = {};
+  for(var i=0;i<pts.length;i++){ if(pts[i] && pts[i].id) byId[pts[i].id] = pts[i]; }
+
+  var touched = {}, made = 0, moved = 0;
+
+  for(var g=0; g<list.length; g++){
+    var G = list[g];
+    if(!byId[G.newId]){
+      var src = G.sample || {};
+      var seed = _h32(G.newId) % 1000000;          /* ختم منشأ حتمي */
+      var np = {
+        id: G.newId, name: G.name,
+        phone: src.patientPhone || '',
+        gender: src.patientGender || '',
+        ageDisplay: src.patientAge || '', ageVal: 0,
+        registered: src.date || (new Date().toISOString().split('T')[0]),
+        visits: 0, status: 'active', barcode: G.newId,
+        _dev: 'fix', _org: 1000000 + seed,
+        _restoredFrom: G.oldId,
+        _updatedAt: Date.now()
+      };
+      pts.push(np); byId[G.newId] = np; made++;
+      touched['patients'] = pts;
+    }
+    for(var k=0;k<_SCAN.length;k++){
+      var key = _SCAN[k], arr;
+      try{ arr = load(key, []) || []; }catch(e){ continue; }
+      if(!Array.isArray(arr)) continue;
+      var hit = 0;
+      for(var j=0;j<arr.length;j++){
+        var rec = arr[j];
+        if(!rec || typeof rec !== 'object') continue;
+        if(rec.patientId === G.oldId && _norm(rec.patientName) === _norm(G.name)){
+          rec.patientId = G.newId; rec._updatedAt = Date.now(); hit++; moved++;
+        }
+      }
+      if(hit) touched[key] = arr;
+    }
+  }
+  for(var t in touched){
+    try{
+      if(window._smSetters && window._smSetters[t]) window._smSetters[t](touched[t]);
+      save(t, touched[t]);
+    }catch(e){}
+  }
+  return { made: made, moved: moved };
+}
+
+/* ── نافذة المعاينة ───────────────────────────────────────────────── */
+function _closeFix(){
+  var el = document.getElementById('idfix-overlay');
+  if(el && el.parentNode) el.parentNode.removeChild(el);
+}
+window._idFixClose = _closeFix;
+
+window.lisScanIdConflicts = function(){
+  _closeFix();
+  var list = _scanConflicts();
+  var box = document.createElement('div');
+  box.id = 'idfix-overlay';
+  box.setAttribute('dir','rtl');
+  box.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.72);'+
+    'display:flex;align-items:center;justify-content:center;padding:14px;font-family:Cairo,sans-serif';
+
+  var rows = '';
+  if(!list.length){
+    rows = '<div style="padding:26px;text-align:center;font-size:13px;color:var(--text2,#9aa)">'+
+           '✅ لا يوجد أي تضارب — كل السجلات مرتبطة بملفاتها الصحيحة</div>';
+  } else {
+    rows = '<table style="width:100%;border-collapse:collapse;font-size:11px">'+
+      '<thead><tr style="background:rgba(0,140,255,0.12)">'+
+      '<th style="padding:7px;text-align:right">اسم المريض في السجلات</th>'+
+      '<th style="padding:7px;text-align:right">الرقم الحالي</th>'+
+      '<th style="padding:7px;text-align:right">الاسم في الملف</th>'+
+      '<th style="padding:7px;text-align:right">السجلات</th>'+
+      '<th style="padding:7px;text-align:right">الرقم الجديد</th></tr></thead><tbody>';
+    for(var i=0;i<list.length;i++){
+      var G = list[i], det = [];
+      for(var c in G.counts) det.push((_SCAN_LBL[c]||c) + ':' + G.counts[c]);
+      rows += '<tr style="border-bottom:1px solid rgba(255,255,255,0.07)">'+
+        '<td style="padding:6px;font-weight:700">' + _esc(G.name) + '</td>'+
+        '<td style="padding:6px;font-family:monospace">' + _esc(G.oldId) + '</td>'+
+        '<td style="padding:6px;color:var(--danger,#f46)">' + _esc(G.fileName) + '</td>'+
+        '<td style="padding:6px">' + _esc(det.join(' · ')) + '</td>'+
+        '<td style="padding:6px;font-family:monospace;color:var(--success,#0d8)">' + _esc(G.newId) + '</td></tr>';
+    }
+    rows += '</tbody></table>';
+  }
+
+  box.innerHTML =
+    '<div style="background:var(--card,#12161d);border:1px solid var(--border,#2a3340);border-radius:14px;'+
+      'max-width:820px;width:100%;max-height:86vh;display:flex;flex-direction:column;overflow:hidden">'+
+      '<div style="padding:13px 16px;border-bottom:1px solid var(--border,#2a3340);display:flex;'+
+        'align-items:center;justify-content:space-between">'+
+        '<div style="font-weight:800;font-size:14px">🩺 فحص تضارب أرقام الملفات</div>'+
+        '<button onclick="_idFixClose()" style="background:none;border:none;color:var(--text2,#9aa);'+
+          'font-size:20px;cursor:pointer;line-height:1">×</button>'+
+      '</div>'+
+      '<div style="padding:10px 16px;font-size:11px;color:var(--text2,#9aa);line-height:1.9;'+
+        'border-bottom:1px solid var(--border,#2a3340)">'+
+        (list.length
+          ? ('وُجد <b style="color:var(--danger,#f46)">' + list.length + '</b> حالة: سجلات تحمل اسم مريض '+
+             'يخالف اسم الملف المرتبطة به — أثر تضارب أرقام قديم.<br>'+
+             'الإصلاح يُنشئ ملفاً مستقلاً لكل حالة وينقل سجلاتها إليه. '+
+             '<b>لا يُحذف أي سجل.</b><br>'+
+             '💡 الأرقام الجديدة مشتقّة حتمياً، فلو نفّذتها على أكثر من حاسبة خرجت بالنتيجة نفسها بلا تكرار.')
+          : 'كل شيء سليم.') +
+      '</div>'+
+      '<div style="overflow:auto;padding:0 16px 8px">' + rows + '</div>'+
+      '<div style="padding:12px 16px;border-top:1px solid var(--border,#2a3340);display:flex;gap:8px">'+
+        (list.length
+          ? '<button class="btn btn-p btn-sm" style="flex:1" onclick="_idFixApply()">✅ نفّذ الإصلاح</button>'
+          : '') +
+        '<button class="btn btn-s btn-sm" style="flex:1" onclick="_idFixClose()">إغلاق</button>'+
+      '</div>'+
+    '</div>';
+
+  document.body.appendChild(box);
+  window.__idFixList = list;
+};
+
+function _esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+window._idFixApply = function(){
+  var list = window.__idFixList || [];
+  if(!list.length){ _closeFix(); return; }
+  if(!confirm('تنفيذ الإصلاح على ' + list.length + ' حالة؟\n\n'+
+              'سيُنشأ ملف مستقل لكل حالة وتُنقل سجلاتها إليه. لا يُحذف أي سجل.\n'+
+              'يُنصح بأخذ نسخة احتياطية أولاً من قسم قاعدة البيانات.')) return;
+  var r = _applyFix(list);
+  _closeFix();
+  if(typeof showNotif === 'function')
+    showNotif('✅ تم الإصلاح',
+      'أُنشئ ' + r.made + ' ملف مستقل ونُقل ' + r.moved + ' سجل', 'success');
+  try{
+    if(typeof renderPatients === 'function') renderPatients('all','');
+    if(typeof updateBadges === 'function') updateBadges();
+    if(typeof updateDashboard === 'function') updateDashboard();
+    document.dispatchEvent(new CustomEvent('dp:refresh'));
+  }catch(e){}
+};
+
+/* ── حفظ رقم الحاسبة من الواجهة ───────────────────────────────────── */
+window.lisSaveDevNo = function(){
+  var inp = document.getElementById('lan-dev-no');
+  if(!inp) return;
+  var n = parseInt(inp.value, 10);
+  if(!(n >= 1 && n <= 99)){
+    if(typeof showNotif === 'function') showNotif('تنبيه','أدخل رقماً بين 1 و 99','warning');
+    return;
+  }
+  var dup = false;
+  try{
+    var pts = load('patients', []) || [];
+    dup = pts.some(function(p){
+      return p && p._dev && p._dev !== ((typeof _lanDeviceId==='string')?_lanDeviceId:'') &&
+             String(p.id).indexOf(String(n)) === 0 && String(p.id).length >= 7;
+    });
+  }catch(e){}
+  if(dup && !confirm('يبدو أن الرقم ' + n + ' مستخدم من حاسبة أخرى.\nهل تريد المتابعة رغم ذلك؟')) return;
+
+  _setDevNo(n);
+  _syncDevNoUI();
+  if(typeof showNotif === 'function')
+    showNotif('✅ تم','رقم هذه الحاسبة: ' + n + ' — يسري على الملفات الجديدة فقط','success');
+};
+
+function _syncDevNoUI(){
+  var inp  = document.getElementById('lan-dev-no');
+  var hint = document.getElementById('lan-dev-hint');
+  if(!inp) return;
+  var d = _devNo();
+  if(document.activeElement !== inp) inp.value = d;
+  if(hint) hint.textContent = 'الملفات الجديدة هنا تبدأ بـ ' + (d * 1000000 + 1) +
+                              ' والطلبات RQ' + d + '- — أعطِ كل حاسبة رقماً مختلفاً';
+}
+setInterval(function(){ try{ _syncDevNoUI(); }catch(e){} }, 3000);
+document.addEventListener('DOMContentLoaded', function(){
+  setTimeout(function(){ try{ _syncDevNoUI(); }catch(e){} }, 900);
+});
+
+})();
+</script>
+
+<!-- ══════════ MedLabChat Link Pack v1.1 — لا تحذف ══════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   MedLab Pro ⇄ MedLabChat — حزمة الربط  (v1.0)
+   ──────────────────────────────────────────────────────────────────────
+   تُضاف في نهاية الملف ولا تعدّل أي كود سابق — تعيد تعريف دوال المحادثة
+   فقط بعد تحميل الصفحة.
+
+   ما تضيفه:
+   1) تشفير الرسائل (AES-GCM) قبل رفعها إلى Firebase.
+   2) حفظ كل رسالة محلياً في IndexedDB وحذفها من Firebase فور استلامها.
+   3) إرسال/استقبال ملفات PDF حقيقية مع فتح · تنزيل · طباعة مباشرة.
+   4) إرسال نتيجة المريض من داخل البرنامج كملف PDF (نفس مولّد PDF الحالي).
+   5) البحث: يظهر الاسم العربي وتحته اليوزر — ومختبرات MedLabChat لا تظهر
+      إلا إذا أضافت هذا المختبر عندها (sllink).
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+var MAX_FILE   = 5*1024*1024;
+var CHUNK_SIZE = 180*1024;
+
+/* ── التشفير (مطابق تماماً لـ MedLabChat) ── */
+var _SB=[23,63,62,22,59,56,25,50,59,46,96,96,44,104,96,96,40,63,41,57,47,41,63,96,96,59,99,28,105,49,121];
+function SEC(){ return _SB.map(function(c){ return String.fromCharCode(c^0x5a); }).join(''); }
+var _hasSubtle=!!(window.crypto&&window.crypto.subtle&&window.crypto.subtle.digest);
+var _keyCache={};
+function b64enc(bytes){ var s='',CH=0x8000; for(var i=0;i<bytes.length;i+=CH) s+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH)); return btoa(s); }
+function b64dec(str){ var b=atob(str),o=new Uint8Array(b.length); for(var i=0;i<b.length;i++) o[i]=b.charCodeAt(i); return o; }
+function _fnv(s){ var h=0x811c9dc5; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h*0x01000193)>>>0; } return h>>>0; }
+function _xor(bytes,seed){ var h=_fnv(seed),o=new Uint8Array(bytes.length);
+  for(var i=0;i<bytes.length;i++){ h^=h<<13;h>>>=0;h^=h>>17;h^=h<<5;h>>>=0; o[i]=bytes[i]^(h&0xff); } return o; }
+function convKey(cid){
+  if(_keyCache[cid]) return _keyCache[cid];
+  _keyCache[cid]=window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(SEC()+'::'+cid))
+    .then(function(raw){ return window.crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']); });
+  return _keyCache[cid];
+}
+function encPayload(cid,obj){
+  var json=JSON.stringify(obj);
+  if(!_hasSubtle) return Promise.resolve('X'+b64enc(_xor(new TextEncoder().encode(json), SEC()+'::'+cid)));
+  return convKey(cid).then(function(k){
+    var iv=window.crypto.getRandomValues(new Uint8Array(12));
+    return window.crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,new TextEncoder().encode(json)).then(function(ct){
+      var c=new Uint8Array(ct),out=new Uint8Array(12+c.length); out.set(iv,0); out.set(c,12);
+      return 'A'+b64enc(out);
+    });
+  });
+}
+function decPayload(cid,s){
+  if(!s) return Promise.reject(new Error('empty'));
+  var tag=s.charAt(0), body=s.slice(1);
+  if(tag==='X') return Promise.resolve(JSON.parse(new TextDecoder().decode(_xor(b64dec(body), SEC()+'::'+cid))));
+  if(!_hasSubtle) return Promise.reject(new Error('no-subtle'));
+  return convKey(cid).then(function(k){
+    var all=b64dec(body);
+    return window.crypto.subtle.decrypt({name:'AES-GCM',iv:all.slice(0,12)},k,all.slice(12));
+  }).then(function(pt){ return JSON.parse(new TextDecoder().decode(pt)); });
+}
+
+/* ── التخزين المحلي: ذاكرة + IndexedDB (يعمل حتى لو تعذّر IndexedDB) ── */
+var IDB=null, _ready=null, STORE_MODE='mem', STORE_ERR='';
+var _M={ msgs:{}, convs:{}, kv:{} };
+function _keyOf(store,obj){ return store==='convs'?obj.cid:obj.k; }
+function idbOpen(){
+  return new Promise(function(res,rej){
+    var rq;
+    try{ rq=indexedDB.open('medlabchat',1); }catch(e){ rej(e); return; }
+    rq.onupgradeneeded=function(e){
+      var d=e.target.result;
+      if(!d.objectStoreNames.contains('msgs')){ var st=d.createObjectStore('msgs',{keyPath:'k'}); st.createIndex('cid','cid',{unique:false}); }
+      if(!d.objectStoreNames.contains('convs')) d.createObjectStore('convs',{keyPath:'cid'});
+      if(!d.objectStoreNames.contains('kv'))    d.createObjectStore('kv',{keyPath:'k'});
+    };
+    rq.onsuccess=function(e){ IDB=e.target.result; res(IDB); };
+    rq.onerror  =function(){ rej(rq.error||new Error('idb-error')); };
+    rq.onblocked=function(){ rej(new Error('idb-blocked')); };
+  });
+}
+function _st(s,m){ return IDB.transaction(s,m||'readonly').objectStore(s); }
+function _allRaw(store){
+  return new Promise(function(r,j){
+    try{ var q=_st(store).getAll(); q.onsuccess=function(){ r(q.result||[]); }; q.onerror=function(){ j(q.error); }; }
+    catch(e){ j(e); }
+  });
+}
+function idbReady(){
+  if(_ready) return _ready;
+  _ready=new Promise(function(res){
+    var done=false, fin=function(m,e){ if(done) return; done=true; STORE_MODE=m; STORE_ERR=e||''; res(m); };
+    var to=setTimeout(function(){ fin('mem','timeout'); }, 6000);
+    idbOpen().then(function(){
+      return Promise.all([_allRaw('msgs'), _allRaw('convs'), _allRaw('kv')]);
+    }).then(function(r){
+      clearTimeout(to);
+      r[0].forEach(function(o){ _M.msgs[o.k]=o; });
+      r[1].forEach(function(o){ _M.convs[o.cid]=o; });
+      r[2].forEach(function(o){ _M.kv[o.k]=o; });
+      fin('idb');
+    }).catch(function(e){
+      clearTimeout(to);
+      fin('mem',(e&&(e.name||e.message))||'idb');
+      try{ _notif('تنبيه','تخزين المحادثات المحلي غير متاح — الرسائل لهذه الجلسة فقط','warning'); }catch(x){}
+    });
+  });
+  return _ready;
+}
+function _persist(store,obj,del){
+  if(STORE_MODE!=='idb') return;
+  try{ var s=_st(store,'readwrite'); if(del) s.delete(obj); else s.put(obj); }catch(e){}
+}
+function idbPut(store,obj){
+  return idbReady().then(function(){
+    _M[store][_keyOf(store,obj)]=obj; _persist(store,obj,false); return obj;
+  });
+}
+function idbGet(store,key){ return idbReady().then(function(){ return _M[store][key]||null; }); }
+function idbByCid(cid){
+  return idbReady().then(function(){
+    return Object.keys(_M.msgs).map(function(k){ return _M.msgs[k]; })
+      .filter(function(m){ return m.cid===cid; })
+      .sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  });
+}
+function idbClearCid(cid){
+  return idbReady().then(function(){
+    Object.keys(_M.msgs).forEach(function(k){
+      if(_M.msgs[k].cid===cid){ delete _M.msgs[k]; _persist('msgs',k,true); }
+    });
+  });
+}
+
+/* ── أدوات ── */
+function _esc(s){ return (typeof esc==='function')?esc(s):String(s==null?'':s)
+  .replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function _notif(t,m,k){ if(typeof showNotif==='function') showNotif(t,m,k||'info'); }
+/* هذه المتغيّرات معرّفة بـ let في الملف الأصلي — لا تظهر على window */
+function _me(){ try{ return meUsername||''; }catch(e){ return ''; } }
+function _labName(){ try{ return meLabName||_me(); }catch(e){ return _me(); } }
+function _db(){ try{ return fbDb||null; }catch(e){ return null; } }
+function _acid(){ try{ return activeConvId; }catch(e){ return null; } }
+function _setAcid(v){ try{ activeConvId=v; }catch(e){} }
+function _sendType(){ try{ return _chatSendType||'pdf-device'; }catch(e){ return 'pdf-device'; } }
+function _selReq(){ try{ return _chatSelectedReqId||null; }catch(e){ return null; } }
+function _reqs(){ try{ return requests||[]; }catch(e){ return []; } }
+function _getCurReq(){ try{ return currentReqId; }catch(e){ return null; } }
+function _setCurReq(v){ try{ currentReqId=v; }catch(e){} }
+function _fmtSize(b){ b=b||0; return b<1024?b+' B':b<1048576?(b/1024).toFixed(0)+' KB':(b/1048576).toFixed(1)+' MB'; }
+function _time(ts){ return (typeof chatTime==='function')?chatTime(ts):new Date(ts||0).toLocaleTimeString('ar-IQ',{hour:'2-digit',minute:'2-digit'}); }
+function _preview(p){
+  return p.t==='img'?'🖼️ صورة': p.t==='file'?'📄 '+(p.name||'ملف PDF'):
+         p.t==='voice'?'🎤 رسالة صوتية':(p.tx||'').substring(0,46);
+}
+
+/* ══════ الاستماع + الاستلام + الحذف من Firebase ══════ */
+var _att={};
+function attach(cid){
+  var db=_db(); if(!db||!cid||_att[cid]) return;
+  var ref=db.ref('msgs/'+cid);
+  _att[cid]=ref;
+  ref.on('child_added', function(snap){
+    var m=snap.val(); if(!m) return;
+    if(m.from===_me()){
+      // رسالة قديمة غير مشفّرة أرسلتها أنا (نسخة سابقة) — انقلها محلياً ثم احذفها
+      if(!m.v && (m.t||m.tx||m.d)) importLegacyMine(cid, snap.key, m);
+      return;
+    }
+    receive(cid, snap.key, m);
+  });
+  ref.on('child_removed', function(snap){
+    var m=snap.val(); if(!m||m.from!==_me()) return;
+    var k=cid+'|'+snap.key;
+    idbGet('msgs',k).then(function(rec){
+      if(!rec||rec.st==='delivered') return;
+      rec.st='delivered';
+      idbPut('msgs',rec).then(function(){ if(_acid()===cid) render(cid); });
+    });
+  });
+}
+function importLegacyMine(cid,key,m){
+  var rec={ k:cid+'|'+key, id:key, cid:cid, from:m.from, ts:m.ts||Date.now(), st:'delivered',
+            t:m.t||'txt', tx:m.tx||'', d:m.d||'', dur:m.dur||0, name:m.name||'', size:m.size||0 };
+  idbPut('msgs',rec).then(function(){
+    _db().ref('msgs/'+cid+'/'+key).remove().catch(function(){});
+    if(_acid()===cid) render(cid);
+  });
+}
+function receive(cid,key,m){
+  var db=_db(); if(!db) return;
+  var get;
+  if(m.n){
+    get=db.ref('mcx/'+cid+'/'+(m.id||key)).once('value').then(function(s){
+      var p=s.val()||{}, str='';
+      for(var i=0;i<m.n;i++){ if(p[i]==null) throw new Error('incomplete'); str+=p[i]; }
+      return decPayload(cid,str);
+    });
+  } else if(m.e){
+    get=decPayload(cid,m.e);
+  } else {
+    // رسالة بصيغة قديمة غير مشفّرة — مدعومة للتوافق
+    get=Promise.resolve({ t:m.t||'txt', tx:m.tx||'', d:m.d||'', dur:m.dur||0, name:m.name||'', size:m.size||0 });
+  }
+  get.then(function(payload){
+    var rec=Object.assign({},payload,{ k:cid+'|'+key, id:key, cid:cid, from:m.from, ts:m.ts||Date.now(), st:'recv' });
+    return idbPut('msgs',rec).then(function(){ return payload; });
+  }).then(function(payload){
+    var ups={};
+    ups['msgs/'+cid+'/'+key]=null;
+    if(m.n) ups['mcx/'+cid+'/'+(m.id||key)]=null;
+    db.ref().update(ups).catch(function(){});
+    if(_acid()===cid){
+      render(cid);
+      db.ref('uc/'+_me()+'/'+cid).update({ur:0});
+      if(typeof pingSound==='function') pingSound();
+    } else {
+      if(typeof pingSound==='function') pingSound();
+      db.ref('uc/'+_me()+'/'+cid).once('value').then(function(s){
+        var c=s.val()||{};
+        _notif('💬 '+(c.on||'مختبر'), _preview(payload), 'info');
+      });
+    }
+  }).catch(function(e){ console.warn('[mlc receive]',e); });
+}
+
+/* ══════ الرسم من التخزين المحلي ══════ */
+function render(cid){
+  var box=document.getElementById('chat-messages'); if(!box) return;
+  idbByCid(cid).then(function(msgs){
+    if(_acid()!==cid) return;
+    if(!msgs.length){
+      box.innerHTML='<div class="chat-empty"><div class="chat-empty-ic">💬</div><div style="font-size:12px">ابدأ المحادثة الآن</div></div>';
+      return;
+    }
+    var html='', lastDate='';
+    msgs.forEach(function(m){
+      var d=new Date(m.ts||Date.now());
+      var ds=d.toLocaleDateString('ar-SA',{day:'numeric',month:'long',year:'numeric'});
+      if(ds!==lastDate){ html+='<div class="chat-date-sep">'+ds+'</div>'; lastDate=ds; }
+      var sent=(m.from===_me());
+      html+='<div style="display:flex;justify-content:'+(sent?'flex-end':'flex-start')+';margin-bottom:10px;padding:0 6px">'+
+        '<div style="max-width:75%">'+
+          '<div style="background:'+(sent?'linear-gradient(135deg,#0077cc,#0055aa)':'rgba(255,255,255,0.10)')+';'+
+            'border:1px solid '+(sent?'rgba(0,140,255,0.5)':'rgba(255,255,255,0.15)')+';'+
+            'border-radius:'+(sent?'16px 16px 4px 16px':'16px 16px 16px 4px')+';padding:10px 14px;font-size:13px;'+
+            'color:'+(sent?'#ffffff':'var(--text)')+';box-shadow:'+(sent?'0 2px 8px rgba(0,100,200,0.3)':'0 1px 4px rgba(0,0,0,0.2)')+'">'+
+            body(m)+
+          '</div>'+
+          '<div style="font-size:10px;color:var(--text2);margin-top:4px;text-align:'+(sent?'right':'left')+';padding:0 4px">'+
+            (sent?(m.st==='delivered'?'✓✓ ':'✓ '):'')+_time(m.ts)+
+          '</div>'+
+        '</div></div>';
+    });
+    box.innerHTML=html;
+    requestAnimationFrame(function(){ box.scrollTop=box.scrollHeight; });
+  });
+}
+function body(m){
+  if(m.t==='img')
+    return '<img src="'+m.d+'" style="max-width:190px;border-radius:10px;cursor:pointer;display:block" onclick="MLCP.view(\''+m.k+'\')">'+
+           (m.tx?'<div style="margin-top:6px;white-space:pre-wrap">'+_esc(m.tx)+'</div>':'');
+  if(m.t==='file')
+    return '<div onclick="MLCP.view(\''+m.k+'\')" style="display:flex;align-items:center;gap:10px;cursor:pointer;min-width:190px">'+
+      '<div style="width:38px;height:38px;border-radius:10px;background:rgba(255,60,90,0.18);border:1px solid rgba(255,60,90,0.4);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">📄</div>'+
+      '<div style="min-width:0">'+
+        '<div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px">'+_esc(m.name||'تقرير.pdf')+'</div>'+
+        '<div style="font-size:10px;opacity:0.75">'+_fmtSize(m.size)+' · اضغط للفتح</div>'+
+      '</div></div>'+
+      (m.tx?'<div style="margin-top:6px;white-space:pre-wrap">'+_esc(m.tx)+'</div>':'');
+  if(m.t==='voice')
+    return '<div style="display:flex;align-items:center;gap:8px;min-width:150px;padding:2px 0">'+
+      '<button onclick="MLCP.play(this)" data-k="'+m.k+'" style="width:32px;height:32px;border-radius:50%;background:var(--primary);color:#000;border:none;cursor:pointer;font-size:14px;flex-shrink:0">▶</button>'+
+      '<div style="flex:1;height:6px;border-radius:4px;background:rgba(255,255,255,0.2)"></div>'+
+      '<span style="font-size:10px;color:var(--text2)">'+Math.round(m.dur||0)+'ث</span></div>';
+  return '<div style="white-space:pre-wrap;word-break:break-word">'+_esc(m.tx||'')+'</div>';
+}
+
+/* ══════ الإرسال ══════ */
+function sendPayload(payload){
+  var db=_db(), cid=_acid(), me=_me();
+  if(!db){ _notif('خطأ','لا يوجد اتصال بالخادم','error'); return; }
+  if(!cid){ _notif('خطأ','لا توجد محادثة مفتوحة','error'); return; }
+  if(!me){ _notif('خطأ','يرجى إعادة تسجيل الدخول','error'); return; }
+  var view=document.getElementById('chat-conv-view');
+  var ou=view?view.dataset.ou:null;
+  var ts=Date.now();
+  var ref=db.ref('msgs/'+cid).push(), key=ref.key;
+  var rec=Object.assign({},payload,{ k:cid+'|'+key, id:key, cid:cid, from:me, ts:ts, st:'sent' });
+  idbPut('msgs',rec).then(function(){
+    render(cid);
+    return encPayload(cid,payload);
+  }).then(function(e){
+    if(e.length<=CHUNK_SIZE) return ref.set({ v:2, from:me, ts:ts, e:e });
+    var parts={}, n=Math.ceil(e.length/CHUNK_SIZE);
+    for(var i=0;i<n;i++) parts[i]=e.substr(i*CHUNK_SIZE,CHUNK_SIZE);
+    return db.ref('mcx/'+cid+'/'+key).set(parts).then(function(){ return ref.set({ v:2, from:me, ts:ts, id:key, n:n }); });
+  }).then(function(){
+    db.ref('uc/'+me+'/'+cid).update({ lm:'', ts:ts, ur:0 });
+    if(ou) db.ref('uc/'+ou+'/'+cid).transaction(function(cur){
+      if(!cur) return { cid:cid, ou:me, on:_labName(), oa:'', lm:'', ts:ts, ur:1 };
+      cur.lm=''; cur.ts=ts; cur.ur=(cur.ur||0)+1; return cur;
+    });
+  }).catch(function(err){
+    console.error('[mlc push]',err);
+    _notif('خطأ','فشل إرسال الرسالة','error');
+  });
+}
+
+/* ══════ العارض: تنزيل + طباعة ══════ */
+var _v=null;
+function _mkViewer(){
+  if(document.getElementById('mlcp-viewer')) return;
+  var d=document.createElement('div');
+  d.id='mlcp-viewer';
+  d.style.cssText='position:fixed;inset:0;z-index:99999995;display:none;flex-direction:column;background:rgba(3,7,14,0.95);backdrop-filter:blur(14px)';
+  d.innerHTML=
+    '<div style="display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid rgba(255,255,255,0.15);flex-shrink:0">'+
+      '<button onclick="MLCP.closeView()" style="width:34px;height:34px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;cursor:pointer;font-size:15px">✕</button>'+
+      '<div id="mlcp-v-title" style="flex:1;color:#fff;font-size:13px;font-weight:800;font-family:Cairo,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>'+
+      '<button onclick="MLCP.download()" title="تنزيل" style="width:34px;height:34px;border-radius:10px;border:1px solid rgba(0,212,255,0.4);background:rgba(0,212,255,0.12);color:#00d4ff;cursor:pointer;font-size:15px">⬇</button>'+
+      '<button onclick="MLCP.print()" title="طباعة" style="width:34px;height:34px;border-radius:10px;border:1px solid rgba(0,245,147,0.4);background:rgba(0,245,147,0.12);color:#00f593;cursor:pointer;font-size:15px">🖨</button>'+
+    '</div>'+
+    '<div id="mlcp-v-body" style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:12px"></div>';
+  document.body.appendChild(d);
+}
+function _blobOf(dataUrl){
+  var p=dataUrl.split(','), mime=(p[0].match(/:(.*?);/)||[])[1]||'application/octet-stream';
+  var bin=atob(p[1]), arr=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new Blob([arr],{type:mime});
+}
+function view(k){
+  _mkViewer();
+  idbGet('msgs',k).then(function(m){
+    if(!m||!m.d){ _notif('تنبيه','الملف غير متوفر على هذا الجهاز','warning'); return; }
+    showFile(m.d, m.name||(m.t==='file'?'تقرير.pdf':'صورة.jpg'), m.t==='file');
+  });
+}
+function showFile(dataUrl, name, isPdf){
+  _mkViewer();
+  if(_v&&_v.url) URL.revokeObjectURL(_v.url);
+  var url=URL.createObjectURL(_blobOf(dataUrl));
+  _v={ d:dataUrl, url:url, name:name, isPdf:isPdf };
+  document.getElementById('mlcp-v-title').textContent=name;
+  document.getElementById('mlcp-v-body').innerHTML = isPdf
+    ? '<iframe id="mlcp-v-frame" src="'+url+'" style="width:100%;height:100%;border:none;border-radius:10px;background:#fff"></iframe>'
+    : '<img src="'+dataUrl+'" style="max-width:100%;max-height:100%;border-radius:10px">';
+  document.getElementById('mlcp-viewer').style.display='flex';
+}
+function closeView(){
+  var d=document.getElementById('mlcp-viewer');
+  if(d){ d.style.display='none'; document.getElementById('mlcp-v-body').innerHTML=''; }
+  if(_v&&_v.url) URL.revokeObjectURL(_v.url);
+  _v=null;
+}
+function download(){
+  if(!_v) return;
+  var a=document.createElement('a'); a.href=_v.url; a.download=_v.name;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ try{document.body.removeChild(a);}catch(e){} },200);
+  _notif('تم','تم تنزيل الملف','success');
+}
+function printFile(){
+  if(!_v) return;
+  if(_v.isPdf){
+    var f=document.getElementById('mlcp-v-frame');
+    try{ f.contentWindow.focus(); f.contentWindow.print(); return; }catch(e){}
+    var w=window.open(_v.url); if(w) setTimeout(function(){ try{w.print();}catch(e){} },700);
+    return;
+  }
+  var fr=document.createElement('iframe');
+  fr.style.cssText='position:fixed;left:-9999px;width:794px;height:1123px;border:none';
+  document.body.appendChild(fr);
+  var doc=fr.contentDocument; doc.open();
+  doc.write('<html><head><meta charset="utf-8"><style>@page{margin:8mm}body{margin:0;text-align:center}img{max-width:100%}</style></head><body><img src="'+_v.d+'"></body></html>');
+  doc.close();
+  setTimeout(function(){
+    try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){ _notif('خطأ','تعذّرت الطباعة','error'); }
+    setTimeout(function(){ try{document.body.removeChild(fr);}catch(e){} },1500);
+  },450);
+}
+function play(btn){
+  var k=btn.getAttribute('data-k');
+  if(btn._a){ btn._a.pause(); btn._a=null; btn.innerHTML='▶'; return; }
+  idbGet('msgs',k).then(function(m){
+    if(!m||!m.d) return;
+    var a=new Audio(m.d); btn._a=a; btn.innerHTML='⏸';
+    a.play().catch(function(){ btn.innerHTML='▶'; });
+    a.onended=function(){ btn.innerHTML='▶'; btn._a=null; };
+  });
+}
+
+/* حالة الاتصال لمختبرات MedLabChat (غير موجودة في dir) */
+var _stRef=null;
+function sideStatus(cid){
+  var db=_db(); if(!db) return;
+  var view=document.getElementById('chat-conv-view');
+  var ou=view?view.dataset.ou:null; if(!ou) return;
+  if(_stRef){ try{ _stRef.off(); }catch(e){} _stRef=null; }
+  db.ref('dir/'+ou).once('value').then(function(d){
+    if(d.val()) return;                       // مختبر ميدلاب برو — الأصل يتكفّل
+    _stRef=db.ref('sldir/'+ou);
+    _stRef.on('value', function(s){
+      var v=s.val(); if(!v) return;
+      var el=document.getElementById('chat-conv-status');
+      if(el && _acid()===cid) el.textContent = v.online?'● متصل الآن':'● غير متصل';
+    });
+  }).catch(function(){});
+}
+
+/* ══════ إرسال نتيجة كملف PDF ══════ */
+function sendReportPdf(req){
+  if(typeof generatePDFBlob!=='function'){
+    if(typeof chatSendResultAsText==='function') chatSendResultAsText(req,'');
+    return;
+  }
+  var prev=_getCurReq();
+  _setCurReq(req.id);
+  _notif('','⏳ جاري إنشاء ملف PDF...','info');
+  try{
+    generatePDFBlob(function(doc, fileName){
+      _setCurReq(prev);
+      try{
+        var uri=doc.output('datauristring');
+        if(uri.indexOf('data:')!==0) throw new Error('bad');
+        var approx=Math.round((uri.length-uri.indexOf(',')-1)*0.75);
+        if(approx>MAX_FILE){ _notif('تنبيه','حجم التقرير أكبر من 5 ميغابايت','warning'); return; }
+        sendPayload({ t:'file', d:uri, name:fileName||((req.id||'report')+'.pdf'), mime:'application/pdf', size:approx });
+        _notif('تم','تم إرسال التقرير بصيغة PDF 📄','success');
+      }catch(e){
+        console.error(e);
+        if(typeof chatSendResultAsText==='function') chatSendResultAsText(req,'');
+      }
+    });
+  }catch(e){
+    _setCurReq(prev);
+    if(typeof chatSendResultAsText==='function') chatSendResultAsText(req,'');
+  }
+}
+
+/* ══════ استبدال الدوال الأصلية ══════ */
+function installOverrides(){
+
+  /* 1) الإرسال */
+  window.push = function(data){ sendPayload(data); };
+
+  /* 2) الاستماع للرسائل */
+  window.listenMessages = function(cid){ attach(cid); render(cid); setTimeout(function(){ sideStatus(cid); },300); };
+  window._startBgListener = function(c){ if(c&&c.cid) attach(c.cid); };
+  window._stopBgListener  = function(){};
+  window.drawMessages     = function(){ var _a=_acid(); if(_a) render(_a); };
+  window._renderMsgs      = function(){ var _a=_acid(); if(_a) render(_a); };
+
+  /* 3) إرسال صورة — مضغوطة ومشفّرة */
+  window.sendImageMsg = function(fileInput){
+    var file=fileInput.files[0];
+    if(!file||!_acid()) return;
+    fileInput.value='';
+    var rd=new FileReader();
+    rd.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var c=document.createElement('canvas');
+        var sc=Math.min(1, 1400/Math.max(img.width,img.height));
+        c.width=img.width*sc; c.height=img.height*sc;
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        var d=c.toDataURL('image/jpeg',0.82);
+        sendPayload({ t:'img', d:d, name:file.name, size:Math.round(d.length*0.75) });
+      };
+      img.src=e.target.result;
+    };
+    rd.readAsDataURL(file);
+  };
+
+  /* 4) نتيجة المريض ⇒ PDF حقيقي */
+  window._sendReportAsImage = function(req){ sendReportPdf(req); };
+  window.chatSendResultAsPDF = function(req){ sendReportPdf(req); };
+
+  /* 5) نافذة الإرسال الموحّدة */
+  window.chatSendConfirm = function(){
+    var msgEl=document.getElementById('chat-send-msg');
+    var msg=(msgEl&&msgEl.value||'').trim();
+    var btn=document.getElementById('chat-send-confirm-btn');
+    var reset=function(){ if(btn){ btn.disabled=false; btn.textContent='📤 إرسال'; } };
+    if(btn){ btn.disabled=true; btn.textContent='⏳ جاري الإرسال...'; }
+
+    var type=_sendType();
+    if(type==='pdf-device'){
+      var input=document.getElementById('chat-pdf-file');
+      var file=input&&input.files[0];
+      if(!file){ _notif('خطأ','يرجى اختيار ملف','error'); reset(); return; }
+      if(file.size>MAX_FILE){ _notif('خطأ','حجم الملف أكبر من 5 ميغابايت','error'); reset(); return; }
+      var rd=new FileReader();
+      rd.onload=function(e){
+        var d=e.target.result;
+        if(file.type==='application/pdf'){
+          sendPayload({ t:'file', d:d, name:file.name||'ملف.pdf', mime:'application/pdf', size:file.size, tx:msg||'' });
+          _notif('تم','تم إرسال ملف PDF 📄','success');
+        } else {
+          var img=new Image();
+          img.onload=function(){
+            var c=document.createElement('canvas');
+            var sc=Math.min(1,1400/Math.max(img.width,img.height));
+            c.width=img.width*sc; c.height=img.height*sc;
+            c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+            var dd=c.toDataURL('image/jpeg',0.85);
+            sendPayload({ t:'img', d:dd, name:file.name, size:Math.round(dd.length*0.75), tx:msg||'' });
+            _notif('تم','تم إرسال الصورة ✅','success');
+          };
+          img.src=d;
+        }
+        if(typeof closeModal==='function') closeModal('m-chat-result');
+        reset();
+      };
+      rd.onerror=function(){ _notif('خطأ','فشل قراءة الملف','error'); reset(); };
+      rd.readAsDataURL(file);
+      return;
+    }
+
+    var rid=_selReq();
+    if(!rid){ _notif('خطأ','يرجى اختيار طلب','error'); reset(); return; }
+    var req=_reqs().filter(function(r){ return r.id===rid; })[0];
+    if(!req){ _notif('خطأ','الطلب غير موجود','error'); reset(); return; }
+    if(typeof closeModal==='function') closeModal('m-chat-result');
+    if(msg) sendPayload({ t:'txt', tx:msg });
+    sendReportPdf(req);
+    reset();
+  };
+
+  /* 6) العارض للصور القديمة */
+  window.zoomImg = function(src){ showFile(src, 'صورة.jpg', false); };
+
+  /* 7) مسح/حذف المحادثة — محلياً وعلى الخادم */
+  var _origDelete=window.deleteConv;
+  window.deleteConv = function(cid,e){
+    if(e){ e.stopPropagation(); e.preventDefault(); }
+    if(!cid) return;
+    if(!confirm('حذف هذه المحادثة؟ سيتم حذف رسائلها من هذا الجهاز أيضاً.')) return;
+    var db=_db(), me=_me();
+    var other=cid.split('||').filter(function(p){ return p!==me; })[0]||null;
+    if(_acid()===cid){
+      _setAcid(null);
+      var cv=document.getElementById('chat-conv-view'), lv=document.getElementById('chat-list-view');
+      if(cv) cv.style.display='none';
+      if(lv) lv.style.display='flex';
+    }
+    if(_att[cid]){ _att[cid].off(); delete _att[cid]; }
+    idbClearCid(cid).then(function(){
+      if(!db) return;
+      var ups={};
+      ups['msgs/'+cid]=null; ups['mcx/'+cid]=null;
+      ups['uc/'+me+'/'+cid]=null;
+      if(other) ups['uc/'+other+'/'+cid]=null;
+      db.ref().update(ups).catch(function(){});
+    });
+    _notif('تم','تم حذف المحادثة 🗑️','success');
+  };
+  window.clearConvMessages = function(){
+    var cid=_acid();
+    if(!cid) return;
+    if(!confirm('مسح جميع رسائل هذه المحادثة من هذا الجهاز؟')) return;
+    idbClearCid(cid).then(function(){
+      render(cid);
+      if(_db()) _db().ref('msgs/'+cid).remove().catch(function(){});
+      if(typeof closeConvSettings==='function') closeConvSettings();
+      _notif('تم','تم مسح رسائل المحادثة','success');
+    });
+  };
+  window._autoCleanOldMsgs = function(){};   // لم تعد هناك رسائل مخزّنة على الخادم
+
+  /* 8) البحث: مختبرات ميدلاب برو + مختبرات MedLabChat المرتبطة فقط */
+  window.searchLabs = function(q){
+    var res=document.getElementById('chat-search-results');
+    if(!res) return;
+    q=(q||'').trim();
+    if(!q){ res.style.display='none'; res.innerHTML=''; return; }
+    res.style.display='block';
+    res.innerHTML='<div style="padding:12px;text-align:center;color:var(--text2);font-size:12px">⏳ جاري البحث...</div>';
+    var db=_db(), me=_me();
+    if(!db){ res.innerHTML='<div style="padding:12px;text-align:center;color:var(--danger);font-size:12px">⚠️ لا يوجد اتصال</div>'; return; }
+    var ql=q.toLowerCase();
+    Promise.all([ db.ref('dir').once('value'), db.ref('sllink/'+me).once('value') ]).then(function(r){
+      var found=[];
+      (r[0].val()? Object.keys(r[0].val()):[]).forEach(function(u){
+        var l=r[0].val()[u]||{};
+        if(u===me) return;
+        if(((l.labName||'')+' '+(u||'')+' '+(l.labAddress||'')).toLowerCase().indexOf(ql)>=0)
+          found.push({ u:u, n:l.labName||u, addr:l.labAddress||'', dir:l.labDir||'', online:!!l.online, side:false });
+      });
+      var links=r[1].val()||{};
+      Object.keys(links).forEach(function(u){
+        var l=links[u]||{};
+        if(((l.n||'')+' '+u).toLowerCase().indexOf(ql)>=0)
+          found.push({ u:u, n:l.n||u, addr:'', dir:'', online:false, side:true });
+      });
+      if(!found.length){
+        res.innerHTML='<div style="padding:18px;text-align:center;color:var(--text2)">'+
+          '<div style="font-size:28px;margin-bottom:8px">🔍</div>'+
+          '<div style="font-weight:700;color:var(--text);font-size:12px">لم يُعثر على مختبر</div>'+
+          '<div style="font-size:11px;margin-top:4px">مختبرات MedLabChat تظهر بعد أن تضيفك عندها فقط</div></div>';
+        return;
+      }
+      res.innerHTML=found.slice(0,25).map(function(l){
+        return '<div class="chat-search-result-item" onclick="startChat(\''+l.u+'\',\''+_esc(l.n).replace(/'/g,"")+'\',\'\',\'\')">'+
+          '<div class="chat-lab-avatar" style="font-size:14px;width:40px;height:40px;flex-shrink:0">'+_esc((l.n||'?').charAt(0))+'</div>'+
+          '<div class="chat-lab-info">'+
+            '<div class="chat-lab-name">'+_esc(l.n)+(l.side?' <span style="font-size:9px;color:var(--secondary);border:1px solid var(--secondary);border-radius:6px;padding:1px 5px">سايد لاب</span>':'')+'</div>'+
+            '<div class="chat-lab-sub"><span style="color:var(--primary)">@'+_esc(l.u)+'</span>'+(l.addr?' · '+_esc(l.addr):'')+'</div>'+
+          '</div>'+
+          '<span style="font-size:18px">💬</span>'+
+        '</div>';
+      }).join('');
+    }).catch(function(){
+      res.innerHTML='<div style="padding:12px;text-align:center;color:var(--danger);font-size:12px">تعذّر البحث</div>';
+    });
+  };
+
+  /* 9) منع مراسلة سايد لاب لم يُضِف هذا المختبر */
+  var _origStart=window.startChat;
+  window.startChat = function(ou,on,oa,od){
+    var db=_db(), me=_me();
+    if(!db||!ou){ if(_origStart) _origStart(ou,on,oa,od); return; }
+    db.ref('dir/'+ou).once('value').then(function(s){
+      if(s.val()){ _origStart(ou,on,oa,od); return; }        // مختبر ميدلاب برو
+      return db.ref('sllink/'+me+'/'+ou).once('value').then(function(l){
+        if(l.val()) _origStart(ou,on,oa,od);
+        else _notif('غير متاح','هذا المختبر لم يضِف مختبرك في MedLabChat بعد','warning');
+      });
+    }).catch(function(){ if(_origStart) _origStart(ou,on,oa,od); });
+  };
+}
+
+/* ══════ الإقلاع ══════ */
+function start(){
+  installOverrides();
+  idbReady().then(function(){
+    var db=_db(), me=_me();
+    if(db&&me) db.ref('uc/'+me).once('value').then(function(s){
+      s.forEach(function(c){ var v=c.val(); if(v&&v.cid) attach(v.cid); });
+    });
+    var a=_acid(); if(a) render(a);
+  }).catch(function(e){ console.error('[MLCP] IndexedDB',e); });
+  // إعادة الربط عند تسجيل الدخول لاحقاً
+  var t=0;
+  var iv=setInterval(function(){
+    var db=_db(), me=_me();
+    if(db&&me){
+      clearInterval(iv);
+      db.ref('uc/'+me).on('child_added', function(s){ var v=s.val(); if(v&&v.cid) attach(v.cid); });
+    }
+    if(++t>240) clearInterval(iv);
+  }, 1000);
+}
+var _tries=0;
+(function waitReady(){
+  if(typeof window.push==='function' && typeof window.searchLabs==='function'){ start(); return; }
+  if(++_tries>60) { start(); return; }
+  setTimeout(waitReady,500);
+})();
+
+window.MLCP = {
+  view:view, closeView:closeView, download:download, print:printFile, play:play,
+  showFile:showFile, render:render, attach:attach, sendReportPdf:sendReportPdf
+};
+})();
+
 </script>
