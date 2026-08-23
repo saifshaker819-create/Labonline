@@ -5588,6 +5588,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                       style="min-width:52px;padding:7px 16px;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;transition:all .15s">١</button>
                     <button type="button" id="semen-tpl-btn-2" onclick="setSemenTemplate('2')"
                       style="min-width:52px;padding:7px 16px;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;transition:all .15s">٢</button>
+                    <button type="button" id="semen-tpl-btn-3" onclick="setSemenTemplate('3')"
+                      style="min-width:52px;padding:7px 16px;border-radius:9px;border:1.5px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;transition:all .15s">٣</button>
                   </div>
                 </div>
                 <div id="semen-tpl-hint" style="font-size:11px;color:var(--text2);margin-top:8px;line-height:1.6"></div>
@@ -8471,7 +8473,7 @@ window.load = load;
 // BIG settings on IDB (صور الرأس/التذييل + الحقول المخصصة لتحاليل الإدرار/البراز/المنوي)
 // تذهب مباشرة لـ IDB بمفاتيح مستقلة، ولا تُخزَّن في كائن settings (لتفادي امتلاء localStorage)
 // ══════════════════════════════════════════════════════════════
-const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','semenFieldsCustom2','hdrImgH','ftrImgH','wmImg']);
+const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','semenFieldsCustom2','semenFieldsCustom3','hdrImgH','ftrImgH','wmImg']);
 const _BIG_MC={};   // كاش ذاكرة فوري لقيم BIG (بدون تأخير)
 
 async function getBig(k){
@@ -28505,6 +28507,14 @@ function applyCustomExamFields(){
       Object.keys(saved2).forEach(k=>{ if(SEMEN_FIELDS_2[k]) SEMEN_FIELDS_2[k].fields=saved2[k].fields; });
     }
   }catch(e){}
+  // ⭐ تخصيصات نموذج السائل المنوي رقم ٣ (البسيط) — مخزن منفصل تماماً
+  try{
+    const sm3 = getBigCached('semenFieldsCustom3');
+    if(sm3){
+      const saved3 = (typeof sm3==='string') ? JSON.parse(sm3) : sm3;
+      Object.keys(saved3).forEach(k=>{ if(SEMEN_FIELDS_3[k]) SEMEN_FIELDS_3[k].fields=saved3[k].fields; });
+    }
+  }catch(e){}
 }
 
 // ============================================================
@@ -29917,17 +29927,107 @@ const SEMEN_FIELDS_2 = {
   }
 };
 
-// ── مُبدِّل النموذج: '1' (افتراضي) أو '2' — محفوظ دائماً في قاعدة البيانات ──
+// ════════════════════════════════════════════════════════════════════
+// 🔬 نموذج السائل المنوي رقم ٣ (Model 3) — النموذج البسيط
+//    بلا Grade A/B/C/D وبلا أي جمع تلقائي بين حقلين.
+//    الحركة: PR / NP / IM · المورفولوجيا: أرقام فقط (عيوب الرأس/الوسط/الذيل + TZI)
+//    له مخزن تخصيصات مستقل (semenFieldsCustom3) فيبقى بسيطاً مهما عُدّل غيره.
+// ════════════════════════════════════════════════════════════════════
+const SEMEN_FIELDS_3 = {
+  specimen: {
+    label: '🧪 معلومات العينة',
+    fields: [
+      {id:'s_abstinence',   label:'Abstinence Period',     type:'select', normal:'3-5 days',    options:['3-5 days','< 3 days','> 5 days','Not recorded'], ref:'3-5 days'},
+      {id:'s_collection',   label:'طريقة الجمع',          type:'select', normal:'Masturbation', options:['Masturbation','Condom','Coitus Interruptus']},
+      {id:'s_volume',       label:'الحجم (mL)',            type:'number', normal:'',  placeholder:'≥ 1.4 mL',   min:'0', max:'20', step:'0.1', ref:'≥ 1.4'},
+      {id:'s_appearance',   label:'المظهر',               type:'select', normal:'Opaque-White', options:['Opaque-White','Yellowish','Transparent','Reddish','Brown']},
+      {id:'s_liquefaction', label:'وقت التميع (دقيقة)',   type:'select', normal:'< 60 min',    options:['< 15 min','15-30 min','30-60 min','> 60 min (Abnormal)']},
+      {id:'s_viscosity',    label:'اللزوجة',              type:'select', normal:'Nil',           options:['Nil','Few','+','++','+++']},
+      {id:'s_ph',           label:'الرقم الهيدروجيني (pH)',type:'number', normal:'',  placeholder:'7.2 - 8.0',  min:'5', max:'10', step:'0.1', ref:'7.2 - 8.0'},
+    ]
+  },
+  spermCount: {
+    label: '📊 تعداد الحيوانات المنوية',
+    fields: [
+      {id:'s_conc',         label:'التركيز (مليون/mL)',     type:'number', normal:'', placeholder:'≥ 16 M/mL',  min:'0', max:'300', step:'0.1', ref:'≥ 16'},
+      {id:'s_total_count',  label:'العدد الكلي (مليون)',   type:'number', normal:'', placeholder:'≥ 39 مليون', min:'0', max:'1000',step:'0.1', ref:'≥ 39'},
+      {id:'s_azoospermia',  label:'لا حيوانات (Azoospermia)',type:'select',normal:'No', options:['No','Yes']},
+    ]
+  },
+  motility: {
+    label: '🏃 الحركة (WHO 2021)',
+    fields: [
+      {id:'s_pr',           label:'حركة تقدمية PR (%)',   type:'number', normal:'', placeholder:'≥ 30%', min:'0',max:'100',step:'0.1', ref:'≥ 30%'},
+      {id:'s_np',           label:'حركة غير تقدمية NP (%)',type:'number',normal:'', placeholder:'',      min:'0',max:'100',step:'0.1'},
+      {id:'s_im',           label:'بلا حركة IM (%)',      type:'number', normal:'', placeholder:'',      min:'0',max:'100',step:'0.1'},
+      {id:'s_total_motile', label:'إجمالي المتحرك PR+NP (%)',type:'number',normal:'',placeholder:'≥ 42%',min:'0',max:'100',step:'0.1', ref:'≥ 42%'},
+      {id:'s_vitality',     label:'حيوية الحيوانات (%)',  type:'number', normal:'', placeholder:'≥ 54%', min:'0',max:'100',step:'0.1', ref:'≥ 54%'},
+    ]
+  },
+  morphology: {
+    label: '🔬 المورفولوجيا (Kruger)',
+    fields: [
+      {id:'s_normal_forms', label:'الأشكال الطبيعية (%)', type:'number', normal:'', placeholder:'≥ 4%', min:'0',max:'100',step:'0.1', ref:'≥ 4%'},
+      {id:'s_head_defect',  label:'عيوب الرأس (%)',        type:'number', normal:'', placeholder:'',     min:'0',max:'100',step:'0.1'},
+      {id:'s_mid_defect',   label:'عيوب المنطقة الوسطى (%)',type:'number',normal:'', placeholder:'',     min:'0',max:'100',step:'0.1'},
+      {id:'s_tail_defect',  label:'عيوب الذيل (%)',        type:'number', normal:'', placeholder:'',     min:'0',max:'100',step:'0.1'},
+      {id:'s_teratozoospermia',label:'مؤشر التشوه (TZI)',  type:'number', normal:'', placeholder:'1.0-1.5',min:'0',max:'3',step:'0.01'},
+    ]
+  },
+  biochemistry: {
+    label: '🧬 الكيمياء الحيوية للسائل',
+    fields: [
+      {id:'s_fructose',     label:'الفركتوز (µmol/ejac)', type:'select', normal:'Positive', options:['Positive','Negative','Reduced']},
+      {id:'s_zinc',         label:'الزنك (µmol/ejac)',     type:'number', normal:'', placeholder:'≥ 2.4',  min:'0',max:'50',step:'0.1', ref:'≥ 2.4'},
+      {id:'s_citric_acid',  label:'حمض الستريك (µmol/ejac)',type:'number',normal:'', placeholder:'≥ 52',   min:'0',max:'200',step:'0.1', ref:'≥ 52'},
+      {id:'s_wbc',          label:'Pus Cells (/mL)',        type:'select', normal:'< 1 M/mL', options:['< 1 M/mL','1-2','2-3','3-6','6-10','+','++','+++']},
+      {id:'s_rbc',          label:'كريات حمراء',           type:'select', normal:'Absent',   options:['Absent','Rare','Present']},
+      {id:'s_bacteria',     label:'بكتيريا',               type:'select', normal:'Absent',   options:['Absent','Rare','Present (Culture needed)']},
+      {id:'s_agglutination',label:'التكتل (Agglutination)',type:'select', normal:'Nil',   options:['Nil','Few','+','++','+++']},
+    ]
+  },
+  advanced: {
+    label: '⚗️ مؤشرات متقدمة',
+    fields: [
+      {id:'s_dna_frag',     label:'تشرذم الـ DNA (%)',     type:'number', normal:'', placeholder:'< 15% (طبيعي)',min:'0',max:'100',step:'0.1', ref:'< 15%'},
+      {id:'s_oxidative',    label:'الإجهاد التأكسدي (ROS)',type:'select', normal:'Normal', options:['Normal','Mildly Elevated','Elevated','Highly Elevated']},
+      {id:'s_antisperm_ab', label:'أجسام مضادة للحيوانات',type:'select', normal:'Negative', options:['Negative','Positive IgG','Positive IgA','Positive IgM']},
+      {id:'s_round_cells',  label:'الخلايا المستديرة',    type:'select', normal:'< 5 M/mL', options:['< 1 M/mL','1-5 M/mL','> 5 M/mL']},
+    ]
+  },
+  conclusion: {
+    label: '📋 التشخيص والتوصية',
+    fields: [
+      {id:'s_diagnosis',    label:'التشخيص',              type:'select', normal:'Normozoospermia',
+        options:['Normozoospermia','Oligozoospermia','Asthenozoospermia','Teratozoospermia',
+                 'Oligoasthenoteratozoospermia (OAT)','Azoospermia','Cryptozoospermia',
+                 'Hypospermia','Hyperspermia','Necrozoospermia','Leukocytospermia']},
+      {id:'s_recommendation',label:'التوصية',             type:'textarea', normal:'', placeholder:'توصية الطبيب...'},
+      {id:'s_note',         label:'ملاحظات إضافية',      type:'textarea', normal:'', placeholder:'أي ملاحظات...'},
+    ]
+  }
+};
+
+// ── مُبدِّل النموذج: '1' (افتراضي) أو '2' أو '3' — محفوظ دائماً في قاعدة البيانات ──
 function semenTpl(){
-  try{ return String((settings&&settings.semenTemplate)||'1')==='2' ? '2' : '1'; }catch(e){ return '1'; }
+  try{
+    var v=String((settings&&settings.semenTemplate)||'1');
+    return (v==='2'||v==='3') ? v : '1';
+  }catch(e){ return '1'; }
 }
 // الحقول الفعّالة حسب النموذج المختار
-function SEMEN_F(){ return semenTpl()==='2' ? SEMEN_FIELDS_2 : SEMEN_FIELDS; }
-// مفتاح حفظ تخصيصات الحقول — منفصل لكل نموذج حتى لا يتداخلا
-function semenBigKey(){ return semenTpl()==='2' ? 'semenFieldsCustom2' : 'semenFieldsCustom'; }
+function SEMEN_F(){
+  var t=semenTpl();
+  return t==='2' ? SEMEN_FIELDS_2 : (t==='3' ? SEMEN_FIELDS_3 : SEMEN_FIELDS);
+}
+// مفتاح حفظ تخصيصات الحقول — منفصل لكل نموذج حتى لا تتداخل
+function semenBigKey(){
+  var t=semenTpl();
+  return t==='2' ? 'semenFieldsCustom2' : (t==='3' ? 'semenFieldsCustom3' : 'semenFieldsCustom');
+}
 // تغيير النموذج من الإعدادات
 function setSemenTemplate(v){
-  const t = String(v)==='2' ? '2' : '1';
+  const t = (String(v)==='2'||String(v)==='3') ? String(v) : '1';
   settings.semenTemplate = t;
   save('settings', settings);
   try{ _renderSemenTplBtns(); }catch(e){}
@@ -29937,7 +30037,7 @@ function setSemenTemplate(v){
 }
 function _renderSemenTplBtns(){
   const t=semenTpl();
-  ['1','2'].forEach(function(n){
+  ['1','2','3'].forEach(function(n){
     const b=document.getElementById('semen-tpl-btn-'+n); if(!b) return;
     if(n===t){
       b.style.background='var(--primary)'; b.style.color='#00131f';
@@ -29948,9 +30048,12 @@ function _renderSemenTplBtns(){
     }
   });
   const lbl=document.getElementById('semen-tpl-hint');
-  if(lbl) lbl.textContent = t==='2'
+  if(!lbl) return;
+  lbl.textContent = t==='2'
     ? 'النموذج ٢ — Grade A/B مع جمع تلقائي PR = A+B، مورفولوجيا متعددة الاختيار، وأعمدة M/mL و Last Result'
-    : 'النموذج ١ — النموذج الكلاسيكي (PR / NP / IM ومورفولوجيا رقمية)';
+    : (t==='3'
+      ? 'النموذج ٣ — البسيط: بلا Grade A/B/C/D وبلا أي جمع تلقائي · الحركة PR / NP / IM ومورفولوجيا رقمية'
+      : 'النموذج ١ — النموذج الكلاسيكي (PR / NP / IM ومورفولوجيا رقمية)');
 }
 function _syncSemenNewSecOptions(){
   const sel=document.getElementById('semen-new-sec'); if(!sel) return;
