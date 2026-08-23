@@ -8473,7 +8473,7 @@ window.load = load;
 // BIG settings on IDB (صور الرأس/التذييل + الحقول المخصصة لتحاليل الإدرار/البراز/المنوي)
 // تذهب مباشرة لـ IDB بمفاتيح مستقلة، ولا تُخزَّن في كائن settings (لتفادي امتلاء localStorage)
 // ══════════════════════════════════════════════════════════════
-const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','semenFieldsCustom2','semenFieldsCustom3','hdrImgH','ftrImgH','wmImg']);
+const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','semenFieldsCustom2','semenFieldsCustom3','hdrImgH','ftrImgH','wmImg','mrtCodes']);
 const _BIG_MC={};   // كاش ذاكرة فوري لقيم BIG (بدون تأخير)
 
 async function getBig(k){
@@ -8547,6 +8547,22 @@ async function loadAllBigToCache(){
     }
   }catch(e){console.warn('[MedLab] loadAllBigToCache error',e);}
 }
+
+// ⭐ إضافة كل مفاتيح BIG (صور الرأس/الذيل + الحقول المخصصة + التحاليل الأكثر
+//    طلباً) إلى أي نسخة احتياطية، ليُستعاد كل شيء عند نقل الحساب لجهاز آخر.
+async function collectBigIdbData(pfx, idbData){
+  try{
+    for(const k of _BIG_KEYS){
+      const key = pfx + 'big_' + k;
+      let val = null;
+      try{ val = await IDB.get(key); }catch(e){}
+      if(val===null || val===undefined || val==='') continue;
+      idbData[key] = JSON.stringify(val);
+    }
+  }catch(e){ console.warn('[MedLab] collectBigIdbData',e); }
+  return idbData;
+}
+window.collectBigIdbData = collectBigIdbData;
 
 // مفاتيح البيانات الرئيسية (للتوافق مع الكود القديم)
 const _ARCHIVE_KEYS=[..._IDB_KEYS];
@@ -9850,6 +9866,8 @@ function startApp(){
     const inpFH = document.getElementById('st-ftr-img-h');
     if(inpFH) inpFH.value = settings.ftrImgH;
 
+    // ⭐ التحاليل الأكثر طلباً — ترحيل/تحميل من IDB
+    try{ if(typeof _mrtMigrateToIDB==='function') _mrtMigrateToIDB(); }catch(e){}
     // 2) الحقول المخصصة لتحاليل الإدرار/البراز/المنوي
     applyCustomExamFields();
     // إعادة رسم محرّرات الحقول إن كانت مفتوحة حالياً
@@ -23961,6 +23979,8 @@ async function exportDatabase(){
       const val=await IDB.get(pfx+k);
       if(val!==null) idbData[pfx+k]=JSON.stringify(val);
     }
+    // ⭐ مفاتيح BIG (الصور + الحقول المخصصة + التحاليل الأكثر طلباً)
+    await collectBigIdbData(pfx, idbData);
 
     // ── 3. دمج الكل في ملف JSON واحد ──────────────────────
     const exportObj = {
@@ -27171,7 +27191,7 @@ const UA_FIELDS = {
       {id:'rbc_ua',      label:'RBCs / HPF',           type:'select', options:['1–2','2–4','4–6','6–8','8–10','10–15','15–20','20–25','25–30','+','++','+++','++++','+++++','TNTC'], normal:'1–2'},
       {id:'epithelial',  label:'Epithelial Cells / HPF',type:'select', options:['Few','+','++','+++','++++'], normal:'Few'},
       {id:'casts',       label:'Casts / LPF',          type:'select', options:['Absent','Hyaline few','Hyaline +','Hyaline ++','Hyaline +++','Granular (fine) few','Granular (fine) +','Granular (fine) ++','Granular (fine) +++','Granular (coarse) few','Granular (coarse) +','Granular (coarse) ++','Granular (coarse) +++','Waxy','RBC casts','WBC casts','Epithelial casts','Broad'], normal:'Absent', hideIfNormal:true},
-      {id:'am_urate',    label:'Am. Urate',            type:'select', options:['Am.urate Few','Am.urate +','Am.urate ++','Am.urate +++','Am.urate ++++','Am.phosphate Few','Am.phosphate +','Am.phosphate ++','Am.phosphate +++','Am.phosphate ++++'], normal:'Am.urate Few'},
+      {id:'am_urate',    label:'Amorphous',            type:'select', options:['Am.urate Few','Am.urate +','Am.urate ++','Am.urate +++','Am.urate ++++','Am.phosphate Few','Am.phosphate +','Am.phosphate ++','Am.phosphate +++','Am.phosphate ++++'], normal:'Am.urate Few'},
       {id:'crystals',    label:'Crystals',             type:'select', options:['Uric acid Few','Uric acid +','Uric acid ++','Uric acid +++','Uric acid ++++','Calcium oxalate Few','Calcium oxalate +','Calcium oxalate ++','Calcium oxalate +++','Calcium oxalate ++++','Triple phosphate Few','Triple phosphate +','Triple phosphate ++','Triple phosphate +++','Triple phosphate ++++','Calcium phosphate Few','Calcium phosphate +','Calcium phosphate ++','Calcium phosphate +++','Calcium phosphate ++++','Cystine Few','Cystine +','Cystine ++','Cystine +++','Cystine ++++','Leucine Few','Leucine +','Leucine ++','Leucine +++','Leucine ++++','Tyrosine Few','Tyrosine +','Tyrosine ++','Tyrosine +++','Tyrosine ++++','Cholesterol Few','Cholesterol +','Cholesterol ++','Cholesterol +++','Cholesterol ++++'], normal:'Uric acid Few'},
       {id:'bacteria_ua', label:'Bacteria',             type:'select', options:['None seen','Few seen','Moderate seen','Many seen','+  seen','++ seen','+++ seen'], normal:'None seen', hideIfNormal:true},
       {id:'yeast_ua',    label:'Monillia',             type:'select', options:['Absent','Few','+','++','+++','++++'], normal:'Absent'},
@@ -28522,6 +28542,29 @@ function applyCustomExamFields(){
   }catch(e){}
   // ⭐ ترحيل بنود الإدرار/الخروج لمرة واحدة
   try{ _migrateExamFieldsV2(); }catch(e){}
+  try{ _migrateExamFieldsV3(); }catch(e){}
+}
+
+// ⭐ ترحيل V3 — إعادة تسمية عنصر الإدرار Am. Urate إلى Amorphous
+function _migrateExamFieldsV3(){
+  try{ if(!settings || settings._examFieldsMigV3) return; }catch(e){ return; }
+  var _changed=false;
+  try{
+    Object.keys(UA_FIELDS).forEach(function(k){
+      var sec=UA_FIELDS[k]; if(!sec||!Array.isArray(sec.fields)) return;
+      sec.fields.forEach(function(f){
+        if(f && f.id==='am_urate' && f.label!=='Amorphous'){ f.label='Amorphous'; _changed=true; }
+      });
+    });
+  }catch(e){}
+  if(_changed){
+    try{
+      if(getBigCached('uaFieldsCustom') || settings._uaFieldsCustom){
+        setBig('uaFieldsCustom', JSON.stringify(UA_FIELDS)); delete settings._uaFieldsCustom;
+      }
+    }catch(e){}
+  }
+  try{ settings._examFieldsMigV3 = 1; save('settings', settings); }catch(e){}
 }
 
 // ============================================================
@@ -28565,7 +28608,7 @@ function _migrateExamFieldsV2(){
     }
 
     if(!_find(UA_FIELDS,'am_urate') && UA_FIELDS.microscopy && Array.isArray(UA_FIELDS.microscopy.fields)){
-      var _am={id:'am_urate', label:'Am. Urate', type:'select',
+      var _am={id:'am_urate', label:'Amorphous', type:'select',
         options:['Am.urate Few','Am.urate +','Am.urate ++','Am.urate +++','Am.urate ++++','Am.phosphate Few','Am.phosphate +','Am.phosphate ++','Am.phosphate +++','Am.phosphate ++++'],
         normal:'Am.urate Few'};
       var _ci=-1;
@@ -29713,16 +29756,58 @@ let _mrtCodes=null;
 let _mrtDragSrc=null;
 let _mrtEditMode=false;
 
+const MRT_BIG_KEY='mrtCodes';
+const MRT_LEGACY_KEY='mrt_codes';
+
+// القراءة: IDB أولاً (المصدر المعتمد) ← ثم القائمة القديمة في localStorage ← ثم الافتراضي
 function _getMRTCodes(){
   if(_mrtCodes) return _mrtCodes;
-  try{ const s=localStorage.getItem('mrt_codes'); if(s){ _mrtCodes=JSON.parse(s); return _mrtCodes; } }catch(e){}
+  try{
+    const b=getBigCached(MRT_BIG_KEY);
+    if(b){
+      const a=(typeof b==='string')?JSON.parse(b):b;
+      if(Array.isArray(a)&&a.length){ _mrtCodes=a; return _mrtCodes; }
+    }
+  }catch(e){}
+  try{
+    const lg=localStorage.getItem(MRT_LEGACY_KEY);
+    if(lg){
+      const a=JSON.parse(lg);
+      if(Array.isArray(a)&&a.length){
+        _mrtCodes=a;
+        try{ setBig(MRT_BIG_KEY, JSON.stringify(a)); }catch(e){}   // ترحيل فوري
+        return _mrtCodes;
+      }
+    }
+  }catch(e){}
   _mrtCodes=[...MRT_DEFAULT];
   return _mrtCodes;
 }
+
+// الحفظ: IDB (يدخل ضمن النسخة الاحتياطية) + نسخة احتياطية في localStorage للتوافق
 function _saveMRTCodes(codes){
   _mrtCodes=codes;
-  localStorage.setItem('mrt_codes',JSON.stringify(codes));
+  try{ setBig(MRT_BIG_KEY, JSON.stringify(codes)); }catch(e){}
+  try{ localStorage.setItem(MRT_LEGACY_KEY, JSON.stringify(codes)); }catch(e){}
 }
+
+// ترحيل لمرة واحدة بعد تحميل كاش IDB — يحافظ على ترتيب المستخدمين القدماء
+async function _mrtMigrateToIDB(){
+  try{
+    const cur=getBigCached(MRT_BIG_KEY);
+    if(!cur){
+      const lg=localStorage.getItem(MRT_LEGACY_KEY);
+      if(lg){
+        const a=JSON.parse(lg);
+        if(Array.isArray(a)&&a.length) await setBig(MRT_BIG_KEY, JSON.stringify(a));
+      }
+    }
+  }catch(e){}
+  _mrtCodes=null;                                    // أعد القراءة من المصدر الجديد
+  try{ renderMRTButtons(); }catch(e){}
+  try{ if(_mrtEditMode) _renderMRTSortable(); }catch(e){}
+}
+window._mrtMigrateToIDB=_mrtMigrateToIDB;
 
 function renderMRTButtons(){
   const area=document.getElementById('mrt-buttons-area'); if(!area) return;
@@ -30694,9 +30779,12 @@ function _buildSemenPrintHTML(r){
         +'</td>'
         +'</tr>';
     }).join('');
-    return '<tr><td colspan="5" style="background:#f0f4fa;padding:2px 8px;border-bottom:1px solid #ccd0d8;border-top:2px solid #b0bcd8">'
+    // ⭐ كل قسم في tbody مستقل مع منع القطع — إن لم يتّسع في أسفل الورقة يعبر كاملاً للورقة التالية
+    return '<tbody style="page-break-inside:avoid;break-inside:avoid">'
+      +'<tr><td colspan="5" style="background:#f0f4fa;padding:2px 8px;border-bottom:1px solid #ccd0d8;border-top:2px solid #b0bcd8">'
       +'<span style="font-size:12px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">'+_smLiveSecLabel(secKey)+'</span>'
-      +'</td></tr>'+rows;
+      +'</td></tr>'+rows
+      +'</tbody>';
   };
 
   const renderSec=(secKey)=>{
@@ -30731,7 +30819,7 @@ function _buildSemenPrintHTML(r){
         <td style="font-size:15px;font-weight:700;color:#000000;padding:1px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${ref||'—'}</td>
       </tr>`;
     }).join('');
-    return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:2px;overflow:hidden;page-break-inside:avoid">
+    return `<div class="sm-sec" style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:2px;page-break-inside:avoid;break-inside:avoid">
       <div style="background:#ffffff;padding:1px 10px;border-bottom:1.5px solid #b8b8b8">
         <span style="font-size:16px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${secDef.label}</span>
       </div>
@@ -30754,39 +30842,61 @@ function _buildSemenPrintHTML(r){
     const _smLiveOrder=Object.keys(_SMF2).filter(k=>k!=='conclusion');
     const _smSecOrder=_smLiveOrder.length?_smLiveOrder:_smKnownOrder;
     const _allSectionRows=_smSecOrder.map(renderSec2).join('');
-    _smBodyHTML=`<div style="border:1.5px solid #b8b8b8;border-radius:0;overflow:hidden">
+    _smBodyHTML=`<div style="border:1.5px solid #b8b8b8;border-radius:0">
         <table style="width:100%;border-collapse:collapse">
           ${_globalThead}
-          <tbody>${_allSectionRows}</tbody>
+          ${_allSectionRows}
         </table>
       </div>`;
   } else {
     _smBodyHTML=`<div>${['specimen','spermCount','motility','morphology','biochemistry','advanced'].map(renderSec).join('')}</div>`;
   }
 
+  // ⭐⭐ حجز مساحة الذيل في *كل* ورقة تلقائياً ⭐⭐
+  // الذيل position:fixed يُرسم أسفل منطقة المحتوى في كل ورقة، لذلك كان يغطّي
+  // آخر سطور الورقة. الحل: صف tfoot فارغ بارتفاع الذيل — المتصفح يكرّره في
+  // كل ورقة ويحجز المساحة داخل تدفّق المحتوى، فلا يلامس أي قسم الذيل أبداً.
+  // القيمة تُشتقّ من ارتفاع صورة الذيل نفسه، فتتكيّف تلقائياً مع أي طابعة/هامش.
+  const _smFtrPx   = ((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50);
+  const _smFtrGuard = ftrHTML ? (_smFtrPx + 10) : 0;   // +10px هامش أمان بسيط
+
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
     *{margin:0;padding:0;box-sizing:border-box;}
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:15px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .sm-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
+    .sm-content{padding-bottom:0;}
+    .sm-sheet{width:100%;border-collapse:collapse;}
+    .sm-sheet>tbody>tr>td,.sm-sheet>tfoot>tr>td{padding:0;border:0;vertical-align:top;}
+    .sm-sheet>tfoot{display:table-footer-group;}
     .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 6mm ${Math.ceil(((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
+    @page{margin:1mm 6mm ${Math.ceil(_smFtrPx*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @media print{
+      .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;}
+      /* لا يُقطع صفّ نتيجة ولا قسم في منتصفه */
+      .sm-content tr{page-break-inside:avoid;break-inside:avoid;}
+      .sm-content thead{display:table-header-group;}
+      .sm-sec{page-break-inside:avoid;break-inside:avoid;}
+    }
   </style></head><body>
-    <div class="sm-content">
-      ${_buildWatermarkHTML(false)}
-      ${hdrHTML}
-      <div style="background:${color};color:#fff;padding:3px 12px;text-align:center;font-weight:900;font-size:14px;letter-spacing:1px">
-        SEMEN ANALYSIS REPORT (SPERMIOGRAM)
-      </div>
-      <div style="border:1.5px solid #b8b8b8;margin:3px 0 4px;padding:4px 10px;background:#fafafa">
-        ${_smPtBox}
-      </div>
-      <div style="margin:0 0 3px;height:2px;background:${color}"></div>
-      ${_smBodyHTML}
-      ${r.s_recommendation?`<div style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px"><span style="font-size:13px;font-weight:800;color:#996600">📋 Recommendation: </span><span style="font-size:13px;color:#333">${r.s_recommendation}</span></div>`:''}
-      ${r.s_note?`<div style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.s_note}</span></div>`:''}
-    </div>
+    <table class="sm-sheet">
+      <tbody><tr><td>
+        <div class="sm-content">
+          ${_buildWatermarkHTML(false)}
+          ${hdrHTML}
+          <div style="background:${color};color:#fff;padding:3px 12px;text-align:center;font-weight:900;font-size:14px;letter-spacing:1px">
+            SEMEN ANALYSIS REPORT (SPERMIOGRAM)
+          </div>
+          <div style="border:1.5px solid #b8b8b8;margin:3px 0 4px;padding:4px 10px;background:#fafafa">
+            ${_smPtBox}
+          </div>
+          <div style="margin:0 0 3px;height:2px;background:${color}"></div>
+          ${_smBodyHTML}
+          ${r.s_recommendation?`<div class="sm-sec" style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px;page-break-inside:avoid;break-inside:avoid"><span style="font-size:13px;font-weight:800;color:#996600">📋 Recommendation: </span><span style="font-size:13px;color:#333">${r.s_recommendation}</span></div>`:''}
+          ${r.s_note?`<div class="sm-sec" style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px;page-break-inside:avoid;break-inside:avoid"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.s_note}</span></div>`:''}
+        </div>
+      </td></tr></tbody>
+      <tfoot><tr><td><div style="height:${_smFtrGuard}px"></div></td></tr></tfoot>
+    </table>
     <div class="sm-footer">${ftrHTML}</div>
   </body></html>`;
 }
@@ -37920,6 +38030,7 @@ async function _fsaBuildFullBackup(){
     const val = await IDB.get(pfx+k);
     if(val!==null) idbData[pfx+k] = JSON.stringify(val);
   }
+  await collectBigIdbData(pfx, idbData);   // ⭐ مفاتيح BIG
   return {
     _medlab_backup: true,
     _version: '4.0',
@@ -38467,6 +38578,7 @@ async function _fsa_buildDownloadBackup(){
       if(val!==null) idbData[pfx+k]=JSON.stringify(val);
     }catch(e){}
   }
+  try{ await collectBigIdbData(pfx, idbData); }catch(e){}   // ⭐ مفاتيح BIG
   return JSON.stringify({
     _medlab_backup:true, _version:'3.0',
     _exportDate:new Date().toISOString(),
