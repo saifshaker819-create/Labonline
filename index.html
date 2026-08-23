@@ -44201,6 +44201,179 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 </script>
 
+<!-- ══════════ Live Result Sync v1 — مزامنة النتائج بلا تأكيد — لا تحذف ══════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   MedLab Pro — Live Result Sync v1
+   ──────────────────────────────────────────────────────────────────────
+   المشكلة: النتيجة كانت تُحفظ محلياً تلقائياً (_autoSaveResults) لكنها لا
+   تصل الحاسبة الأخرى إلا بعد «✅ تأكيد النتائج» أو الطباعة.
+   السبب: البثّ التفاضلي يقارن ختم التعديل _updatedAt لكل سجل، و
+   _autoSaveResults كانت تحفظ الطلب بلا تحديث _updatedAt ⇒ يراه خط
+   الأساس «بلا تغيير» فلا يُبثّ. أما collectResults (التي يناديها زر
+   التأكيد والطباعة) فتضع _updatedAt ⇒ عندها فقط كان يُبثّ.
+
+   العلاج: بعد ٣ ثوانٍ من آخر كتابة في أي حقل نتيجة — دون انتظار أي
+   تأكيد — تُجمع القيم، ويُختم الطلب بـ _updatedAt، ويُحفظ، فيُبثّ
+   الطلب المتغيّر وحده (سجل واحد لا أكثر).
+   ولماذا ٣ ثوانٍ؟ كي تكتمل قيمة الحقل أثناء الكتابة فلا تُبثّ ناقصة.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+var SYNC_DELAY = 3000;   // مهلة اكتمال الكتابة قبل البثّ
+var IDLE_GUARD = 8000;   // لا نُحدّث شاشة الإدخال إن كان المستخدم يكتب
+
+var _t = null, _pendingId = null, _lastTypeAt = 0, _lastSeen = {};
+
+function _reqById(id){
+  if(typeof requests === 'undefined' || !Array.isArray(requests)) return null;
+  for(var i=0;i<requests.length;i++) if(requests[i] && requests[i].id === id) return requests[i];
+  return null;
+}
+function _selId(){
+  var el = document.getElementById('res-req-sel');
+  return (el && el.value) || '';
+}
+
+/* جمع ما في الحقول إلى الطلب — نسخة مختصرة مطابقة لمنطق الحفظ التلقائي.
+   تُنفَّذ فقط إن كانت شاشة الإدخال ما زالت على الطلب نفسه. */
+function _collectInto(req){
+  if(_selId() !== req.id) return;
+  var all = (typeof tests !== 'undefined' && Array.isArray(tests)) ? tests : [];
+  var reqTests = (req.tests || []).map(function(tid){
+    for(var i=0;i<all.length;i++) if(all[i] && all[i].id === tid) return all[i];
+    return null;
+  }).filter(Boolean);
+  if(!reqTests.length) return;
+
+  if(!req.results)        req.results = {};
+  if(!req.resultNotesPer) req.resultNotesPer = {};
+
+  reqTests.forEach(function(t){
+    if(t.isSpecialExam) return;
+    var sel = document.getElementById('rv-' + t.id);
+    if(!sel) return;
+    var v = sel.value;
+    if(v === '__manual__'){
+      var m = document.getElementById('rv-manual-' + t.id);
+      v = m ? m.value : '';
+    }
+    if(v !== undefined && v !== '') req.results[t.id] = v;
+    var n = document.getElementById('rnote-' + t.id);
+    if(n && n.value) req.resultNotesPer[t.id] = n.value;
+  });
+
+  var tech = document.getElementById('res-tech'); if(tech) req.tech = tech.value;
+  var rd   = document.getElementById('res-date'); if(rd)  req.resultDate = rd.value;
+
+  var regular = reqTests.filter(function(t){ return !t.isSpecialExam; });
+  var allFilled = regular.length > 0 && regular.every(function(t){
+    var v = req.results[t.id];
+    return v !== undefined && v !== null && String(v).trim() !== '';
+  });
+  if(allFilled) req.status = 'done';
+  else if(req.status !== 'done') req.status = 'inprogress';
+}
+
+/* البثّ الفعلي: ختم + حفظ ⇒ يمرّ على البثّ التفاضلي فيرسل هذا الطلب وحده */
+function _flush(){
+  if(_t){ clearTimeout(_t); _t = null; }
+  var id = _pendingId; _pendingId = null;
+  if(!id) return;
+  var req = _reqById(id);
+  if(!req) return;
+  try{ _collectInto(req); }catch(e){ console.warn('[ResultSync] collect', e); }
+  req._updatedAt = Date.now();          // ⭐ الختم الذي كان ناقصاً
+  _lastSeen[req.id] = req._updatedAt;   // لا تُعِد رسم شاشتنا بسبب بثّنا
+  try{ save('requests', requests); }catch(e){ console.warn('[ResultSync] save', e); }
+}
+window._flushResultSync = _flush;
+
+function _schedule(){
+  var id = _selId();
+  _lastTypeAt = Date.now();
+  if(!id) return;
+  if(_pendingId && _pendingId !== id){   // بدّل الطلب ⇒ ابثّ السابق فوراً
+    _flush();
+  }
+  _pendingId = id;
+  if(_t) clearTimeout(_t);
+  _t = setTimeout(_flush, SYNC_DELAY);
+}
+
+/* ── التقاط كل كتابة في النتائج ───────────────────────────────────── */
+if(typeof _autoSaveResults === 'function'){
+  var _prevAuto = window._autoSaveResults || _autoSaveResults;
+  window._autoSaveResults = function(){
+    try{ _prevAuto.apply(this, arguments); }catch(e){ console.warn('[ResultSync] auto', e); }
+    _schedule();
+  };
+}
+
+/* تبديل الطلب من القائمة ⇒ ابثّ المعلّق قبل تحميل الطلب الجديد */
+if(typeof loadResultEntry === 'function'){
+  var _prevLoad = window.loadResultEntry || loadResultEntry;
+  window.loadResultEntry = function(){
+    try{ _flush(); }catch(e){}
+    return _prevLoad.apply(this, arguments);
+  };
+}
+
+/* الخروج من الصفحة أو إخفاؤها ⇒ لا تترك نتيجة غير مبثوثة */
+window.addEventListener('beforeunload', function(){ try{ _flush(); }catch(e){} });
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden){ try{ _flush(); }catch(e){} }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   ظهور النتيجة الواردة فوراً على الحاسبة الأخرى
+   ──────────────────────────────────────────────────────────────────
+   نُعيد بناء شاشة الإدخال فقط إذا كان المعروض هو الطلب الذي تغيّر،
+   ولم يكن المستخدم يكتب الآن (لا حقل نتيجة تحت التركيز، ومرّت مهلة
+   خمول) — كي لا نمحو ما يكتبه أحد.
+   ══════════════════════════════════════════════════════════════════ */
+function _typingNow(){
+  if(Date.now() - _lastTypeAt < IDLE_GUARD) return true;
+  var a = document.activeElement;
+  if(!a) return false;
+  var tag = (a.tagName || '').toLowerCase();
+  if(tag !== 'input' && tag !== 'select' && tag !== 'textarea') return false;
+  var sec = document.getElementById('sec-results');
+  return !!(sec && sec.contains(a));
+}
+
+document.addEventListener('dp:refresh', function(){
+  try{
+    var sec = document.getElementById('sec-results');
+    if(!sec || sec.offsetParent === null) return;      // القسم غير معروض
+    var id = _selId();
+    if(!id) return;
+    var req = _reqById(id);
+    if(!req) return;
+    var seen = _lastSeen[id] || 0;
+    var cur  = req._updatedAt || 0;
+    if(cur <= seen) return;                            // لا جديد
+    if(_pendingId) return;                             // لدينا بثّ معلّق
+    if(_typingNow()) return;                           // المستخدم يكتب الآن
+    _lastSeen[id] = cur;
+    if(typeof loadResultEntry === 'function') loadResultEntry();
+    if(typeof showNotif === 'function')
+      showNotif('🔄 تحديث','وصلت نتائج محدَّثة لهذا الطلب','info');
+  }catch(e){}
+});
+
+/* عند فتح طلب: سجّل ختمه الحالي كي لا يُعاد الرسم بلا سبب */
+document.addEventListener('change', function(e){
+  if(e.target && e.target.id === 'res-req-sel'){
+    var r = _reqById(e.target.value);
+    if(r) _lastSeen[r.id] = r._updatedAt || 0;
+  }
+}, true);
+
+})();
+</script>
+
 <!-- ══════════ MedLabChat Link Pack v1.1 — لا تحذف ══════════ -->
 <script>
 /* ══════════════════════════════════════════════════════════════════════
