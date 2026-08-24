@@ -45262,7 +45262,7 @@ document.addEventListener('change', function(e){
 })();
 </script>
 
-<!-- ══════════ MedLabChat Link Pack v1.1 — لا تحذف ══════════ -->
+<!-- ══════════ MedLabChat Link Pack v1.3 — لا تحذف ══════════ -->
 <script>
 /* ══════════════════════════════════════════════════════════════════════
    MedLab Pro ⇄ MedLabChat — حزمة الربط  (v1.0)
@@ -45454,7 +45454,7 @@ function receive(cid,key,m){
   var get;
   if(m.n){
     get=db.ref('mcx/'+cid+'/'+(m.id||key)).once('value').then(function(s){
-      var p=s.val()||{}, str='';
+      var v=s.val()||{}, p=v.p||v, str='';
       for(var i=0;i<m.n;i++){ if(p[i]==null) throw new Error('incomplete'); str+=p[i]; }
       return decPayload(cid,str);
     });
@@ -45539,33 +45539,46 @@ function body(m){
 }
 
 /* ══════ الإرسال ══════ */
+function _other(cid, me){
+  if(!cid) return null;
+  var p=cid.split('||');
+  return p[0]===me ? (p[1]||null) : (p[0]||null);
+}
 function sendPayload(payload){
   var db=_db(), cid=_acid(), me=_me();
   if(!db){ _notif('خطأ','لا يوجد اتصال بالخادم','error'); return; }
   if(!cid){ _notif('خطأ','لا توجد محادثة مفتوحة','error'); return; }
   if(!me){ _notif('خطأ','يرجى إعادة تسجيل الدخول','error'); return; }
   var view=document.getElementById('chat-conv-view');
-  var ou=view?view.dataset.ou:null;
+  var ou=(view&&view.dataset.ou) || _other(cid, me);
+  if(!ou){ _notif('خطأ','تعذّر تحديد المختبر المستلم','error'); return; }
   var ts=Date.now();
   var ref=db.ref('msgs/'+cid).push(), key=ref.key;
-  var rec=Object.assign({},payload,{ k:cid+'|'+key, id:key, cid:cid, from:me, ts:ts, st:'sent' });
+  var rec=Object.assign({},payload,{ k:cid+'|'+key, id:key, cid:cid, from:me, to:ou, ts:ts, st:'sent' });
   idbPut('msgs',rec).then(function(){
     render(cid);
     return encPayload(cid,payload);
   }).then(function(e){
-    if(e.length<=CHUNK_SIZE) return ref.set({ v:2, from:me, ts:ts, e:e });
+    if(e.length<=CHUNK_SIZE) return ref.set({ v:2, from:me, to:ou, ts:ts, e:e });
     var parts={}, n=Math.ceil(e.length/CHUNK_SIZE);
     for(var i=0;i<n;i++) parts[i]=e.substr(i*CHUNK_SIZE,CHUNK_SIZE);
-    return db.ref('mcx/'+cid+'/'+key).set(parts).then(function(){ return ref.set({ v:2, from:me, ts:ts, id:key, n:n }); });
+    return db.ref('mcx/'+cid+'/'+key).set({ from:me, to:ou, p:parts })
+      .then(function(){ return ref.set({ v:2, from:me, to:ou, ts:ts, id:key, n:n }); });
   }).then(function(){
-    db.ref('uc/'+me+'/'+cid).update({ lm:'', ts:ts, ur:0 });
-    if(ou) db.ref('uc/'+ou+'/'+cid).transaction(function(cur){
+    // ou/on مطلوبان في العقدة حتى تقبلها قواعد الخادم
+    db.ref('uc/'+me+'/'+cid).transaction(function(cur){
+      if(!cur) return { cid:cid, ou:ou, on:(view&&view.dataset.on)||ou, oa:'', lm:'', ts:ts, ur:0 };
+      cur.ou=cur.ou||ou; cur.lm=''; cur.ts=ts; cur.ur=0; return cur;
+    });
+    db.ref('uc/'+ou+'/'+cid).transaction(function(cur){
       if(!cur) return { cid:cid, ou:me, on:_labName(), oa:'', lm:'', ts:ts, ur:1 };
-      cur.lm=''; cur.ts=ts; cur.ur=(cur.ur||0)+1; return cur;
+      cur.ou=cur.ou||me; cur.lm=''; cur.ts=ts; cur.ur=(cur.ur||0)+1; return cur;
     });
   }).catch(function(err){
     console.error('[mlc push]',err);
-    _notif('خطأ','فشل إرسال الرسالة','error');
+    _notif('تعذّر الإرسال', (err&&/permission/i.test(err.message||''))
+      ? 'الخادم رفض الإرسال — تأكد من تفعيل اشتراك السايد لاب من لوحة الأدمن'
+      : 'فشل إرسال الرسالة','error');
   });
 }
 
@@ -45864,11 +45877,14 @@ function installOverrides(){
         return;
       }
       res.innerHTML=found.slice(0,25).map(function(l){
-        return '<div class="chat-search-result-item" onclick="startChat(\''+l.u+'\',\''+_esc(l.n).replace(/'/g,"")+'\',\'\',\'\')">'+
+        var nm=_esc(l.n).replace(/'/g,''), ad=_esc(l.addr).replace(/'/g,''), dr=_esc(l.dir).replace(/'/g,'');
+        return '<div class="chat-search-result-item" onclick="startChat(\''+l.u+'\',\''+nm+'\',\''+ad+'\',\''+dr+'\')">'+
           '<div class="chat-lab-avatar" style="font-size:14px;width:40px;height:40px;flex-shrink:0">'+_esc((l.n||'?').charAt(0))+'</div>'+
           '<div class="chat-lab-info">'+
-            '<div class="chat-lab-name">'+_esc(l.n)+(l.side?' <span style="font-size:9px;color:var(--secondary);border:1px solid var(--secondary);border-radius:6px;padding:1px 5px">سايد لاب</span>':'')+'</div>'+
+            '<div class="chat-lab-name">'+_esc(l.n)+'</div>'+
             '<div class="chat-lab-sub"><span style="color:var(--primary)">@'+_esc(l.u)+'</span>'+(l.addr?' · '+_esc(l.addr):'')+'</div>'+
+            '<div style="font-size:10px;margin-top:2px;color:'+(l.side?'var(--secondary)':(l.online?'var(--success)':'var(--text2)'))+'">● '+
+              (l.side?'مختبر سايد لاب (MedLabChat)':(l.online?'متصل الآن':'غير متصل'))+'</div>'+
           '</div>'+
           '<span style="font-size:18px">💬</span>'+
         '</div>';
