@@ -5535,6 +5535,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <span class="st-card-arrow" id="arr-stc-ua-stool">▼</span>
           </div>
           <div class="st-card-body" id="body-stc-ua-stool" style="display:none">
+            <!-- ⭐ عمود النتيجة السابقة في تقارير الإدرار والخروج -->
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;background:rgba(0,140,255,0.05);border:1px solid rgba(0,140,255,0.35);border-radius:10px;padding:12px 14px">
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:800;color:#2b9bff">📊 عمود النتيجة السابقة (Last Result)</div>
+                <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية جداول تقارير الإدرار والخروج يعرض نتيجة آخر فحص سابق لنفس المريض مع تاريخه — بنفس شكل عمود Last Result في نموذج السائل المنوي. لا يظهر العمود إذا لم يكن للمريض فحص سابق.</div>
+              </div>
+              <div class="tog on" id="tog-uastool-prev" onclick="this.classList.toggle('on');_saveUAStoolShowPrev(this.classList.contains('on'))"><div class="tog-t"></div></div>
+            </div>
             <!-- تبويبات: بول / براز -->
             <div style="display:flex;gap:6px;margin-bottom:16px;background:var(--bg-glass);border-radius:10px;padding:4px">
               <button id="exam-tab-ua" onclick="switchExamSettingsTab('ua')" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--primary);color:#000;cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:800">💧 Urine Examination</button>
@@ -10399,6 +10407,8 @@ function nav(p){
     if(togAC){ if(settings.autoPrintCBC) togAC.classList.add('on'); else togAC.classList.remove('on'); }
     const togCP=document.getElementById('tog-cbc-prev');
     if(togCP){ if(settings.cbcShowPrev) togCP.classList.add('on'); else togCP.classList.remove('on'); }
+    const togUSP=document.getElementById('tog-uastool-prev');
+    if(togUSP){ if(settings.uaStoolShowPrev===false) togUSP.classList.remove('on'); else togUSP.classList.add('on'); }
     _loadCBCTemplateSel();
     _loadReportTemplateSel();
   }
@@ -27465,6 +27475,118 @@ function deleteUARecord(id){
   loadUARecords(); uaRecords=uaRecords.filter(r=>r.id!==id); saveUARecords(); renderUAList();
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ *  📊 عمود «Last Result» — النتيجة السابقة في تقارير الإدرار والخروج
+ *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *  يضيف عموداً رابعاً في نهاية جدول كل قسم يحمل قيمة آخر فحص سابق
+ *  لنفس المريض مع تاريخه — بنفس أسلوب عمود Last Result في نموذج
+ *  السائل المنوي (٢): إطار أزرق فاتح، خلفية زرقاء خفيفة، فاصل أيسر.
+ *
+ *  • لا يظهر العمود إطلاقاً إن لم يوجد فحص سابق لنفس المريض،
+ *    فتبقى التقارير كما كانت حرفياً.
+ *  • التفعيل/الإطفاء: settings.uaStoolShowPrev (مفعّل افتراضياً).
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* هل عمود النتيجة السابقة مُفعَّل؟ (مفعّل ما لم يُطفأ صراحةً) */
+function _spPrevEnabled(){
+  try{ return !(typeof settings==='object' && settings && settings.uaStoolShowPrev===false); }
+  catch(e){ return true; }
+}
+
+/* حفظ حالة المفتاح من الإعدادات */
+function _saveUAStoolShowPrev(val){
+  try{
+    if(typeof settings!=='object'||!settings) return;
+    settings.uaStoolShowPrev = !!val;
+    if(typeof save==='function') save('settings', settings);
+    if(typeof showNotif==='function')
+      showNotif('تم', val ? '📊 أُضيف عمود النتيجة السابقة لتقارير الإدرار والخروج'
+                          : 'أُزيل عمود النتيجة السابقة — التقارير كما كانت','success');
+  }catch(e){}
+}
+window._saveUAStoolShowPrev = _saveUAStoolShowPrev;
+
+/* الطابع الزمني لسجل فحص (createdAt أولاً ثم التاريخ) */
+function _spRecTs(rec){
+  try{
+    if(!rec) return 0;
+    var n = Number(rec.createdAt);
+    if(!isNaN(n) && n > 0) return n;
+    var t = new Date(rec.date||'').getTime();
+    return isNaN(t) ? 0 : t;
+  }catch(e){ return 0; }
+}
+
+/* آخر فحص سابق لنفس المريض (أقدم من الفحص الحالي) */
+function _spFindPrev(list, r){
+  try{
+    if(!_spPrevEnabled()) return null;
+    if(!r || !r.patientId || !list || !list.length) return null;
+    var cur = _spRecTs(r);
+    var cands = [];
+    for(var i=0;i<list.length;i++){
+      var x = list[i];
+      if(!x || x.id===r.id) continue;
+      if(x.patientId !== r.patientId) continue;
+      var t = _spRecTs(x);
+      if(cur>0 && t>0 && t>=cur) continue;      // أحدث أو بنفس اللحظة ⇒ ليس سابقاً
+      cands.push(x);
+    }
+    if(!cands.length) return null;
+    cands.sort(function(a,b){ return _spRecTs(b) - _spRecTs(a); });
+    return cands[0];
+  }catch(e){ return null; }
+}
+
+/* قيمة المُعامل في الفحص السابق — جاهزة للعرض داخل الخلية */
+function _spPrevValue(prev, f){
+  try{
+    if(!prev || !f) return '—';
+    var raw = prev[f.id];
+    if(f.type==='multiselect'){
+      if(raw===undefined || raw===null) return '—';
+      var arr = String(raw).split('||').map(function(p){ return p.trim(); }).filter(Boolean);
+      if(!arr.length) return 'Absent';
+      return arr.map(function(p){ return '<div style="padding:1px 0;word-break:break-word;line-height:1.5">'+p+'</div>'; }).join('');
+    }
+    if(raw===undefined || raw===null) return '—';
+    if(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL) return '—';
+    var v = String(raw).trim();
+    return v==='' ? '—' : v;
+  }catch(e){ return '—'; }
+}
+
+/* رأس العمود — يحمل تاريخ الفحص السابق بخط صغير */
+function _spPrevTh(prev, o){
+  o = o || {};
+  var d = (prev && prev.date) ? String(prev.date) : '';
+  return '<th style="width:'+(o.w||'24%')+';font-size:'+(o.fs||'13px')+';font-weight:800;color:#1a4fa0;padding:'+(o.pad||'2px 8px')
+    + ';text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;border-left:2px solid #b0c4e8;background:#eef3ff;'
+    + '-webkit-print-color-adjust:exact;print-color-adjust:exact;white-space:nowrap">Last Result'
+    + (d ? '<div style="font-size:9px;font-weight:700;color:#5a6b8a;margin-top:-1px;letter-spacing:0">'+d+'</div>' : '')
+    + '</th>';
+}
+
+/* خلية العمود — مربع بنفس شكل مربع النتيجة الحالية لكن بلون أزرق هادئ */
+function _spPrevTd(html, o){
+  o = o || {};
+  var inner = (html===undefined || html===null || html==='') ? '—' : html;
+  var isDash = (inner === '—');
+  return '<td style="width:'+(o.w||'24%')+';padding:'+(o.pad||'2px 8px')
+    + ';border:none;border-bottom:1px solid #e0e0e0;text-align:center;border-left:2px solid #d0d8ea;background:#f4f8ff;'
+    + '-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+    + '<span style="display:inline-block;border:1.5px solid #b0c4e8;border-radius:4px;padding:1px 8px;'
+    + (o.wrap ? 'min-width:0;width:100%;box-sizing:border-box;white-space:normal;word-break:break-word;' : 'min-width:'+(o.minw||'70px')+';')
+    + 'text-align:'+(o.align||'center')+';background:#fff;color:'+(isDash?'#9fb0c8':'#1a4fa0')
+    + ';font-size:'+(o.fs||'14px')+';font-weight:700;line-height:1.5">'+inner+'</span></td>';
+}
+
+window._spFindPrev  = _spFindPrev;
+window._spPrevValue = _spPrevValue;
+window._spPrevTh    = _spPrevTh;
+window._spPrevTd    = _spPrevTd;
+
+
 function _buildUAPrintHTML(r){
   if(typeof r === 'string'){ loadUARecords(); r=uaRecords.find(x=>x.id===r); }
   if(!r) return '';
@@ -27479,6 +27601,12 @@ function _buildUAPrintHTML(r){
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
   else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+
+  // ⭐ آخر فحص إدرار سابق لنفس المريض — يُعرض في عمود «Last Result»
+  if((!uaRecords||!uaRecords.length) && typeof loadUARecords==='function'){ try{ loadUARecords(); }catch(e){} }
+  const _uaPrevRec = (typeof _spFindPrev==='function') ? _spFindPrev(uaRecords, r) : null;
+  const _uaHasPrev = !!_uaPrevRec;
+  const _uaW = _uaHasPrev ? ['30%','23%','23%','24%'] : ['38%','32%','30%'];
 
   const renderSec=(sec)=>{
     const validFields=sec.fields.filter(f=>{
@@ -27495,13 +27623,14 @@ function _buildUAPrintHTML(r){
       const isAbn=!isEmpty&&f.normal&&val!=='—'&&val!==f.normal;
       const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
       return `<tr style="background:${rowBg}">
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[0]};border:none;border-bottom:1px solid #e0e0e0">
           <span style="color:#000;margin-right:5px">■</span>${f.label}
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
           <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}">${val}</span>
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        ${_uaHasPrev?_spPrevTd(_spPrevValue(_uaPrevRec,f),{w:_uaW[3],fs:'14px',pad:'2px 8px',minw:'70px'}):''}
       </tr>`;
     }).join('');
 
@@ -27509,12 +27638,13 @@ function _buildUAPrintHTML(r){
       <div style="background:#ffffff;padding:2px 8px;border-bottom:1px solid #b8b8b8">
         <span style="font-size:14px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${sec.label}</span>
       </div>
-      <table style="width:100%;border-collapse:collapse">
+      <table style="width:100%;border-collapse:collapse${_uaHasPrev?';table-layout:fixed':''}">
         <thead>
           <tr style="background:#f0f0f0">
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:38%">Parameter</th>
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:32%">Result</th>
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:30%">Normal Range</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[0]}">Parameter</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[1]}">Result</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[2]}">Normal Range</th>
+            ${_uaHasPrev?_spPrevTh(_uaPrevRec,{w:_uaW[3],fs:'13px',pad:'2px 8px'}):''}
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -28102,6 +28232,12 @@ function _buildStoolPrintHTML(r){
     </div>
   </div></div>`;
 
+  // ⭐ آخر فحص براز سابق لنفس المريض — يُعرض في عمود «Last Result»
+  if((!stoolExamRecords||!stoolExamRecords.length) && typeof loadStoolExamRecords==='function'){ try{ loadStoolExamRecords(); }catch(e){} }
+  const _stPrevRec = (typeof _spFindPrev==='function') ? _spFindPrev(stoolExamRecords, r) : null;
+  const _stHasPrev = !!_stPrevRec;
+  const _stW = _stHasPrev ? ['30%','23%','23%','24%'] : ['38%','32%','30%'];
+
   const renderSec=(sec)=>{
     const validFields=sec.fields.filter(f=>{
       // multiselect (parasites) always shows — even when empty (will display Absent)
@@ -28113,18 +28249,20 @@ function _buildStoolPrintHTML(r){
     if(!validFields.length) return '';
     const rows=validFields.map((f,fi)=>{
       const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
+      const prevTd=_stHasPrev?_spPrevTd(_spPrevValue(_stPrevRec,f),{w:_stW[3],fs:(f.type==='multiselect'?'13px':'14px'),pad:'2px 8px',minw:'70px',align:(f.type==='multiselect'?'left':'center'),wrap:(f.type==='multiselect')}):'';
       if(f.type==='multiselect'){
         const parasites=(r[f.id]||'').split('||').filter(p=>p.trim());
         const isAbn=parasites.length>0;
         const parasiteLines=isAbn
-          ? parasites.map(p=>`<div style="white-space:nowrap;padding:1px 0">${p}</div>`).join('')
+          ? parasites.map(p=>`<div style="white-space:${_stHasPrev?'normal':'nowrap'};word-break:break-word;padding:1px 0">${p}</div>`).join('')
           : '<div>Absent</div>';
         return `<tr style="background:${rowBg}">
-          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
-          <td style="font-size:14px;font-weight:700;padding:2px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
-            <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:3px 10px;min-width:220px;text-align:left;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};line-height:1.6">${parasiteLines}</span>
+          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
+          <td style="font-size:14px;font-weight:700;padding:2px 8px;width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+            <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:3px 10px;${_stHasPrev?'min-width:0;width:100%;box-sizing:border-box;font-size:13px;':'min-width:220px;'}text-align:left;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};line-height:1.6">${parasiteLines}</span>
           </td>
-          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+          ${prevTd}
         </tr>`;
       }
       // ── EMPTY_VAL ("فارغ"): مربع نتيجة فارغ بدون تلوين أحمر ──
@@ -28132,22 +28270,24 @@ function _buildStoolPrintHTML(r){
       const val=isEmpty?'':(r[f.id]||'—');
       const isAbn=!isEmpty&&f.normal&&val!=='—'&&val!==f.normal;
       return `<tr style="background:${rowBg}">
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
           <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}">${val}</span>
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        ${prevTd}
       </tr>`;
     }).join('');
     return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:4px;overflow:hidden;page-break-inside:avoid">
       <div style="background:#ffffff;padding:3px 12px;border-bottom:1.5px solid #b8b8b8">
         <span style="font-size:15px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${sec.label}</span>
       </div>
-      <table style="width:100%;border-collapse:collapse">
+      <table style="width:100%;border-collapse:collapse${_stHasPrev?';table-layout:fixed':''}">
         <thead><tr style="background:#f0f0f0">
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:38%">Parameter</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:32%">Result</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:30%">Normal Range</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[0]}">Parameter</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[1]}">Result</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[2]}">Normal Range</th>
+          ${_stHasPrev?_spPrevTh(_stPrevRec,{w:_stW[3],fs:'14px',pad:'3px 8px'}):''}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
