@@ -3399,6 +3399,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="overflow-x:auto;margin-bottom:18px">
               <table class="res-tbl"><thead><tr><th>الفحص</th><th>النتيجة</th><th>الوحدة</th><th>المدى الطبيعي</th><th>التفسير</th><th>ملاحظة</th><th id="res-del-col" style="display:none">حذف</th></tr></thead><tbody id="res-entry-tbody"></tbody></table>
             </div>
+            <!-- 🔬 لوحة نتيجة CBC (تُبنى من CBCEdit) -->
+            <div id="res-cbc-panel" style="display:none"></div>
             <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:16px">
               <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
                 <div class="fg" style="margin-bottom:0;flex:1;min-width:160px"><label class="fl">تاريخ الفحص</label><input class="fc" type="date" id="res-date"></div>
@@ -4720,6 +4722,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                         <option value="6">✨ النموذج 6 — عصري ببطاقات ناعمة وتدرّج لوني</option>
                         <option value="7">📈 النموذج 7 — مرئي بأشرطة موضع القيمة ضمن المدى</option>
                         <option value="8">🎯 النموذج 8 — أنيق مينيمال بإبراز ذكي للقيم الشاذة</option>
+                        <option value="9">🩸 النموذج 9 — نمط الجهاز (CBC 3-Diff مطابق للورقة + صناديق رسائل + رسوم مرقّمة)</option>
                       </select>
                       <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
 
@@ -29127,6 +29130,225 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   }
 }
 
+
+/* ══════════════════════════════════════════════════════════════════
+   وحدة مخططات العدّاد الدموي (Histograms) — Mindray BC-10/BC-5000
+   ──────────────────────────────────────────────────────────────────
+   معزولة تماماً: لا تُعدّل أي جهاز أو منطق قائم. تُستدعى فقط عند
+   الطباعة، وإن لم تتوفر بيانات مخطط تُعيد '' فيبقى التقرير كما هو.
+
+   حسب دليل Mindray 3107 HL7 (القسم 5.8 / 6.2):
+     15000 = WBC Histogram Binary (ED, Base64)
+     15050 = RBC Histogram Binary (ED, Base64)
+     15100 = PLT Histogram Binary (ED, Base64)
+     15004 / 15053 / 15113 = Meta Length (عدد البايتات لكل نقطة)
+   صيغة القيمة: ^Application^Octer-stream^Base64^<data>
+   ══════════════════════════════════════════════════════════════════ */
+var CBC_HIST_DEFS=[
+  {key:'WBC', bin:'15000', meta:'15004', label:'WBC', color:'#1565c0', xmax:'fL'},
+  {key:'RBC', bin:'15050', meta:'15053', label:'RBC', color:'#b71c1c', xmax:'fL'},
+  {key:'PLT', bin:'15100', meta:'15113', label:'PLT', color:'#00695c', xmax:'fL'}
+];
+
+/* ── تصنيف قيمة ED: صورة جاهزة أم بيانات خام ──────────────────────
+   دليل Mindray القسم ٦.٢ «Binary Data Communication»:
+     "^Image^BMP^Base64^<data>"             ← صورة جاهزة للعرض
+     "^Application^Octer-stream^Base64^<..>" ← ثنائي خام (نرسمه بأنفسنا)
+   ⚠️ الدليل يكتبها «Octer-stream» (وليس Octet) — لذا نتحقق من
+      Image/BMP فقط، فلا يهمّ الإملاء في الطرف الآخر.
+   تُعيد: {kind:'img'|'raw', b64, mime} أو null                        */
+function _cbcEDClassify(v){
+  var s=String(v||'').trim();
+  if(!s) return null;
+  if(s.indexOf('^')<0) return {kind:'raw', b64:s.replace(/\s/g,''), mime:'image/bmp'};
+  var p=s.split('^'), bi=-1, i;
+  for(i=0;i<p.length;i++){ if(/^base64$/i.test((p[i]||'').trim())){ bi=i; break; } }
+  var data=(bi>=0)?p.slice(bi+1).join('^'):p[p.length-1];
+  data=String(data||'').replace(/\s/g,'');
+  if(!data) return null;
+  var t1=(p[1]||'').trim(), t2=(p[2]||'').trim();
+  var isImg=/^image$/i.test(t1)||/^bmp$/i.test(t2)||/^jpe?g$/i.test(t2)||/^png$/i.test(t2);
+  var mime=/^png$/i.test(t2)?'image/png':(/^jpe?g$/i.test(t2)?'image/jpeg':'image/bmp');
+  return {kind:isImg?'img':'raw', b64:data, mime:mime};
+}
+
+/* فحص سلامة Base64 لصورة + سقف الحجم (≈1MB) */
+function _cbcImgValid(b64){
+  var s=String(b64||'').replace(/\s/g,'');
+  if(!s || s.length<32 || s.length>1500000) return false;
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+}
+
+/* ── الصور الجاهزة من الجهاز (هيستوغرام + Scattergram) ────────────
+   جدول ٥.٨: 15008 WBC BMP · 15200/15201 WBC DIFF Scattergram
+   وBC-6000: 15056 RBC · 15116 PLT · 15250 BASO · 15300 RET ... إلخ.
+   الترتيب هنا هو ترتيب العرض في التقرير.                              */
+var CBC_IMG_ORDER=['15000','15008','15050','15100','15200','15201',
+                   '15056','15116','15250','15300','15301','15302','15350','15600'];
+var CBC_IMG_LABEL={
+  '15000':'WBC Histogram','15008':'WBC Histogram',
+  '15050':'RBC Histogram','15100':'PLT Histogram',
+  '15200':'WBC DIFF Scattergram','15201':'WBC DIFF Scattergram',
+  '15056':'RBC Histogram','15116':'PLT Histogram',
+  '15250':'BASO Scattergram','15300':'RET Scattergram',
+  '15301':'PLT-O Scattergram','15302':'RET-EXT Scattergram',
+  '15350':'NRBC Scattergram','15600':'WNB Scattergram'
+};
+
+/* استخراج جزء Base64 من قيمة ED */
+function _cbcHistExtractB64(v){
+  var s=String(v||'').trim();
+  if(!s) return '';
+  // ^Application^Octer-stream^Base64^DATA → آخر مقطع بعد ^
+  if(s.indexOf('^')>=0){
+    var parts=s.split('^');
+    s=parts[parts.length-1];
+  }
+  return s.replace(/\s/g,'');
+}
+
+/* فك ترميز Base64 إلى مصفوفة نقاط */
+function _cbcHistDecode(b64, metaLen){
+  var _cl=_cbcEDClassify(b64);
+  if(_cl && _cl.kind==='img') return null;   // صورة جاهزة — لا تُرسم كمنحنى
+  var s=_cbcHistExtractB64(b64);
+  if(!s || s.length<8) return null;
+  if(!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null;   // حماية: Base64 صالح فقط
+  if(s.length%4!==0) return null;
+  var bin;
+  try{
+    var str=atob(s);
+    bin=new Uint8Array(str.length);
+    for(var i=0;i<str.length;i++) bin[i]=str.charCodeAt(i);
+  }catch(e){ return null; }
+  if(!bin || bin.length<16) return null;
+  // حماية إضافية: إن كانت البيانات صورة BMP/PNG/JPEG بلا بادئة ^Image^
+  // (توقيع الملف) فلا نرسمها كمنحنى — تُعرض كصورة في مسار الصور.
+  if(bin[0]===0x42 && bin[1]===0x4D) return null;                    // 'BM'  = BMP
+  if(bin[0]===0x89 && bin[1]===0x50) return null;                    // \x89P = PNG
+  if(bin[0]===0xFF && bin[1]===0xD8) return null;                    // JPEG
+  var n=bin.length, pts=[], ml=parseInt(metaLen,10);
+  // Meta Length = عدد البايتات لكل نقطة (1 أو 2). إن غاب نستنتجه.
+  if(ml!==1 && ml!==2) ml=(n%2===0 && n/2>=200 && n/2<=300)?2:1;
+  if(ml===2){ for(var a=0;a+1<n;a+=2) pts.push(bin[a]|(bin[a+1]<<8)); }
+  else { for(var b=0;b<n;b++) pts.push(bin[b]); }
+  if(!pts.length) return null;
+  var mx=0; for(var c=0;c<pts.length;c++) if(pts[c]>mx) mx=pts[c];
+  if(mx<=0) return null;   // كل القيم صفر → لا يوجد منحنى
+  return pts;
+}
+
+/* بناء منحنى SVG ناعم من النقاط */
+function _cbcHistSVG(pts, color, label, W, H){
+  W=W||300; H=H||88;
+  var pad=7, n=pts.length, mx=0, i;
+  for(i=0;i<n;i++) if(pts[i]>mx) mx=pts[i];
+  if(!mx) return '';
+  var X=function(k){ return pad+(k/(n-1))*(W-2*pad); };
+  var Y=function(v){ return H-pad-(v/mx)*(H-2*pad-8); };
+  var d='M '+X(0).toFixed(1)+' '+Y(pts[0]).toFixed(1);
+  for(i=1;i<n;i++){
+    var x0=X(i-1),y0=Y(pts[i-1]),x1=X(i),y1=Y(pts[i]),cx=(x0+x1)/2;
+    d+=' C '+cx.toFixed(1)+' '+y0.toFixed(1)+', '+cx.toFixed(1)+' '+y1.toFixed(1)+', '+x1.toFixed(1)+' '+y1.toFixed(1);
+  }
+  var fill=d+' L '+X(n-1).toFixed(1)+' '+(H-pad).toFixed(1)+' L '+X(0).toFixed(1)+' '+(H-pad).toFixed(1)+' Z';
+  var grid='';
+  for(i=1;i<4;i++){
+    var gx=(pad+(i/4)*(W-2*pad)).toFixed(1);
+    grid+='<line x1="'+gx+'" y1="'+pad+'" x2="'+gx+'" y2="'+(H-pad)+'" stroke="#e2e6ea" stroke-width="0.6" stroke-dasharray="2,2"/>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:'+H+'px;display:block">'
+    +grid
+    +'<path d="'+fill+'" fill="'+color+'" fill-opacity="0.13"/>'
+    +'<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.4" stroke-linejoin="round"/>'
+    +'<line x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad)+'" y2="'+(H-pad)+'" stroke="#9aa4ae" stroke-width="0.9"/>'
+    +'<text x="'+(pad+3)+'" y="'+(pad+9)+'" font-family="Arial" font-size="10" font-weight="700" fill="'+color+'">'+label+'</text>'
+    +'</svg>';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   منحنى هيستوغرام بنمط الجهاز — مطابق للصورة المرجعية:
+   خلفية بيضاء · منحنى خطّي أسود رفيع · محور سفلي مرقّم بوحدة fL
+   (WBC/RBC: 0 100 200 300 · PLT: 0 10 20 30 40) · خطوط عتبة منقّطة.
+   يُستخدم في النموذج 9 فقط. لا يمسّ بقية المخططات.
+   pts = مصفوفة النقاط · axisMax = أقصى قيمة على المحور (fL)
+   ticks = مصفوفة علامات المحور · label = اسم القناة (WBC/RBC/PLT)   */
+function _cbcHistDeviceSVG(pts, label, ticks, axisMax){
+  var W=320, H=150, padL=6, padR=6, padT=8, axisH=16;
+  var plotB=H-axisH;                    // أسفل منطقة الرسم (فوق المحور)
+  var n=pts.length, mx=0, i;
+  for(i=0;i<n;i++) if(pts[i]>mx) mx=pts[i];
+  if(!mx) return '';
+  var X=function(k){ return padL+(k/(n-1))*(W-padL-padR); };
+  var Y=function(v){ return plotB-(v/mx)*(plotB-padT); };
+  // منحنى خطّي مستقيم (كما يرسم الجهاز) — بلا تنعيم مبالغ
+  var d='M '+X(0).toFixed(1)+' '+Y(pts[0]).toFixed(1);
+  for(i=1;i<n;i++){
+    var x0=X(i-1),y0=Y(pts[i-1]),x1=X(i),y1=Y(pts[i]),cx=(x0+x1)/2;
+    d+=' C '+cx.toFixed(1)+' '+y0.toFixed(1)+', '+cx.toFixed(1)+' '+y1.toFixed(1)+', '+x1.toFixed(1)+' '+y1.toFixed(1);
+  }
+  // خطوط العتبة المنقّطة (خطّان أفقيان قصيران بأعلى الرسم — كما في الصورة)
+  var thr='';
+  var _t1=padT+(plotB-padT)*0.30, _t2=padT+(plotB-padT)*0.55;
+  thr+='<line x1="'+padL+'" y1="'+_t1.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+_t1.toFixed(1)+'" stroke="#000" stroke-width="0.7" stroke-dasharray="3,3"/>';
+  thr+='<line x1="'+padL+'" y1="'+_t2.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+_t2.toFixed(1)+'" stroke="#000" stroke-width="0.7" stroke-dasharray="3,3"/>';
+  // محور سفلي + علامات مرقّمة بوحدة fL
+  var axis='<line x1="'+padL+'" y1="'+plotB+'" x2="'+(W-padR)+'" y2="'+plotB+'" stroke="#000" stroke-width="0.9"/>';
+  var _tk=ticks||[];
+  for(i=0;i<_tk.length;i++){
+    var frac=(axisMax>0)?(_tk[i]/axisMax):0;
+    var tx=padL+frac*(W-padL-padR);
+    axis+='<line x1="'+tx.toFixed(1)+'" y1="'+plotB+'" x2="'+tx.toFixed(1)+'" y2="'+(plotB+3)+'" stroke="#000" stroke-width="0.8"/>';
+    var anchor=(i===0)?'start':(i===_tk.length-1?'end':'middle');
+    axis+='<text x="'+tx.toFixed(1)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="'+anchor+'">'+_tk[i]+'</text>';
+  }
+  axis+='<text x="'+(W-padR)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="start" dx="2">fL</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;background:#fff">'
+    +thr
+    +'<path d="'+d+'" fill="none" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>'
+    +axis
+    +'</svg>';
+}
+
+/* بناء بطاقات المخططات الثلاث بنمط الجهاز (WBC · RBC · PLT) للنموذج 9.
+   يعتمد فقط على البيانات الخام الواردة من الجهاز (HIST_*). إن لم تتوفّر
+   بيانات مُعامل، تبقى بطاقته فارغة الرسم مع إبقاء العنوان والمحور. */
+function buildCBCDeviceHistRow(cbcParams){
+  var DEF=[
+    {key:'WBC', label:'WBC', ticks:[0,100,200,300], axisMax:300, meta:'15004'},
+    {key:'RBC', label:'RBC', ticks:[0,100,200,300], axisMax:300, meta:'15053'},
+    {key:'PLT', label:'PLT', ticks:[0,10,20,30,40], axisMax:40,  meta:'15113'}
+  ];
+  var cards='', any=false, i;
+  for(i=0;i<DEF.length;i++){
+    var def=DEF[i], svg='';
+    if(cbcParams){
+      var raw=cbcParams['HIST_'+def.key];
+      if(raw){
+        var val=(raw&&typeof raw==='object')?raw.value:raw;
+        var meta=(raw&&typeof raw==='object')?raw.meta:'';
+        var pts=_cbcHistDecode(val, meta);
+        if(pts){ svg=_cbcHistDeviceSVG(pts, def.label, def.ticks, def.axisMax); if(svg) any=true; }
+      }
+    }
+    if(!svg){
+      // لا بيانات — نعرض إطاراً بمحور مرقّم فقط (كي يبقى التصميم مطابقاً)
+      var W=320,H=150,padL=6,padR=6,axisH=16,plotB=H-axisH,ax='';
+      ax+='<line x1="'+padL+'" y1="'+plotB+'" x2="'+(W-padR)+'" y2="'+plotB+'" stroke="#000" stroke-width="0.9"/>';
+      for(var t=0;t<def.ticks.length;t++){
+        var frac=def.axisMax>0?def.ticks[t]/def.axisMax:0, tx=padL+frac*(W-padL-padR);
+        var anc=(t===0)?'start':(t===def.ticks.length-1?'end':'middle');
+        ax+='<line x1="'+tx.toFixed(1)+'" y1="'+plotB+'" x2="'+tx.toFixed(1)+'" y2="'+(plotB+3)+'" stroke="#000" stroke-width="0.8"/>';
+        ax+='<text x="'+tx.toFixed(1)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="'+anc+'">'+def.ticks[t]+'</text>';
+      }
+      ax+='<text x="'+(W-padR)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="start" dx="2">fL</text>';
+      svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;background:#fff">'+ax+'</svg>';
+    }
+    cards+='<div class="dh-card"><div class="dh-lbl">'+def.label+'</div>'+svg+'</div>';
+  }
+  return '<div class="dh-row">'+cards+'</div>';
+}
+
 /* ─── بناء التقرير حسب النموذج المختار (النواة) ─── */
 function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
   const tableColor=settings.tableColor||'#003366';
@@ -29156,8 +29378,85 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
   // ⭐ العلامة المائية — تظهر في وسط الورقة خلف النصوص في كل نماذج CBC
   try{ if(typeof _buildWatermarkHTML==='function'){ hdr = _buildWatermarkHTML(false) + hdr; } }catch(e){}
 
-  const ORDERED=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
-  const LABELS={'WBC':'WBC','NEU#':'Neu#','LYM#':'Lym#','MON#':'Mon#','EOS#':'Eos#','BAS#':'Bas#','NEU%':'Neu%','LYM%':'Lym%','MON%':'Mon%','EOS%':'Eos%','BAS%':'Bas%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT'};
+  // ══════════════════════════════════════════════════════════
+  // كشف نمط 3-DIFF (ثلاثي التفاضل) تلقائياً — Mindray BC-5000 وغيره
+  // ══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════
+  // كشف نمط 3-DIFF (ثلاثي التفاضل) — Mindray BC-5000 وغيره
+  // ══════════════════════════════════════════════════════════
+  // في نمط 3diff يرسل الجهاز سلسلة WBC كـ: WBC + Lym + Mid + Gran
+  //   (بالعدد #/بالنسبة %) — أكواد Mindray: 10027..10030 بأسماء Lym/Mid/Gran.
+  //   ولا يرسل التفاضل الخماسي (Neu/Mon/Eos/Bas).
+  // أما 5diff فيرسل Neu/Mon/Eos/Bas ولا يرسل Gran/Mid.
+  // القاعدة (أمتن نسخة): 3diff = يوجد WBC، ويوجد Gran أو Mid (علامة العدّاد
+  //   الثلاثي القاطعة)، وتغيب سلسلة الخماسي. نستخدم قيم الجهاز الحقيقية إن
+  //   وصلت، ونشتقّ الناقص فقط عند غيابه. لا يمسّ هذا 5diff ولا الأجهزة الأخرى.
+  function _numOf(key){
+    const p=cbcParams&&cbcParams[key];
+    if(!p) return NaN;
+    return parseFloat(String(p.value==null?'':p.value).replace(/[<>]/g,''));
+  }
+  function _has(key){ return !isNaN(_numOf(key)); }
+  const _five=['NEU#','MON#','EOS#','BAS#','NEU%','MON%','EOS%','BAS%'];
+  const _fiveAbsent=_five.every(function(k){ return !_has(k); });
+  const _wbcPresent=_has('WBC');
+  const _lymPresent=_has('LYM%')||_has('LYM#');
+  const _granOrMid=_has('GRAN%')||_has('GRAN#')||_has('MID%')||_has('MID#');
+  // 3diff إذا: (وصل Gran/Mid من الجهاز صراحةً) أو (WBC+Lym موجودان والخماسي غائب)
+  const is3Diff = _wbcPresent && (_granOrMid || (_lymPresent && _fiveAbsent));
+
+  if(is3Diff){
+    cbcParams=Object.assign({}, cbcParams); // نسخة معزولة — لا نغيّر بيانات الجهاز الأصلية
+    const wbc=_numOf('WBC');
+    // ── Lym: استخدم قيمة الجهاز، وأكمل الناقص (%↔#) عند الحاجة ──
+    let lymPct=_numOf('LYM%'), lymAbs=_numOf('LYM#');
+    if(isNaN(lymAbs)&&!isNaN(lymPct)&&!isNaN(wbc)) lymAbs=+(wbc*lymPct/100).toFixed(2);
+    if(isNaN(lymPct)&&!isNaN(lymAbs)&&!isNaN(wbc)&&wbc>0) lymPct=+(lymAbs/wbc*100).toFixed(1);
+    if(!_has('LYM#')&&!isNaN(lymAbs)) cbcParams['LYM#']={value:String(lymAbs),unit:'10^9/L',refRange:'0.8-4.0',flag:''};
+    if(!_has('LYM%')&&!isNaN(lymPct)) cbcParams['LYM%']={value:String(lymPct),unit:'%',refRange:'20-40',flag:''};
+    // ── Mid: إن أرسله الجهاز نبقيه ونكمل الناقص من %↔# ──
+    const _hasMid=_has('MID%')||_has('MID#');
+    let midPct=_numOf('MID%'), midAbs=_numOf('MID#');
+    if(_hasMid){
+      if(isNaN(midAbs)&&!isNaN(midPct)&&!isNaN(wbc)) midAbs=+(wbc*midPct/100).toFixed(2);
+      if(isNaN(midPct)&&!isNaN(midAbs)&&!isNaN(wbc)&&wbc>0) midPct=+(midAbs/wbc*100).toFixed(1);
+      if(!_has('MID#')&&!isNaN(midAbs)) cbcParams['MID#']={value:String(midAbs),unit:'10^9/L',refRange:'0.10-1.50',flag:''};
+      if(!_has('MID%')&&!isNaN(midPct)) cbcParams['MID%']={value:String(midPct),unit:'%',refRange:'3-15',flag:''};
+    }
+    // ── Gran: استخدم قيمة الجهاز إن وصلت، وإلا اشتقّها ──
+    //   إن توفّر Mid: Gran = WBC − Lym − Mid ، وإلا Gran = WBC − Lym.
+    let granPct=_numOf('GRAN%'), granAbs=_numOf('GRAN#');
+    if(isNaN(granAbs)){
+      if(!isNaN(wbc)&&!isNaN(lymAbs)) granAbs=+(wbc-lymAbs-(_hasMid&&!isNaN(midAbs)?midAbs:0)).toFixed(2);
+    }
+    if(isNaN(granPct)){
+      if(!isNaN(lymPct)) granPct=+(100-lymPct-(_hasMid&&!isNaN(midPct)?midPct:0)).toFixed(1);
+    } else if(isNaN(granPct)===false){ /* قيمة الجهاز مُحترمة */ }
+    if(isNaN(granAbs)===false && !_has('GRAN#')) cbcParams['GRAN#']={value:String(granAbs),unit:'10^9/L',refRange:'2.0-7.0',flag:''};
+    if(isNaN(granPct)===false && !_has('GRAN%')) cbcParams['GRAN%']={value:String(granPct),unit:'%',refRange:'50-70',flag:''};
+  }
+
+  // هل أرسل الجهاز مجموعة Mid المتوسطة؟ (يحدّد الترتيب: ثلاثي كامل أم مبسّط)
+  const _midShown = is3Diff && (_has('MID%')||_has('MID#'));
+
+  // الترتيب والتسميات — ديناميكي حسب النمط (3diff مقابل 5diff)
+  const ORDERED_5=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  const ORDERED_3= _midShown
+    ? ['WBC','LYM#','MID#','GRAN#','LYM%','MID%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC']
+    : ['WBC','LYM#','GRAN#','LYM%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  const _ORDERED_BASE= is3Diff ? ORDERED_3 : ORDERED_5;
+  // ── أظهر فقط الحقول التي أرسلها الجهاز فعلاً (قيمة رقمية) ──
+  // أي حقل لم يرسله الجهاز لا يظهر إطلاقاً — لا باسمه ولا بـ "---".
+  // نُبقي دائماً الأساسيات (حتى لو غابت نادراً) لضمان بنية تقرير متماسكة.
+  const _ALWAYS=['WBC','RBC','HGB','HCT','PLT'];
+  const ORDERED=_ORDERED_BASE.filter(function(k){ return _has(k) || _ALWAYS.indexOf(k)>=0; });
+  const LABELS={'WBC':'WBC','NEU#':'Neu#','LYM#':'Lym#','MON#':'Mon#','EOS#':'Eos#','BAS#':'Bas#','NEU%':'Neu%','LYM%':'Lym%','MON%':'Mon%','EOS%':'Eos%','BAS%':'Bas%','MID#':'Mid#','GRAN#':'Gran#','MID%':'Mid%','GRAN%':'Gran%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT','P-LCR':'P-LCR','P-LCC':'P-LCC'};
+
+  // مرجع القيم للمشتقّات في 3diff (لتلوين تلقائي صحيح)
+  const _REF3={'GRAN#':'2.0-7.0','GRAN%':'50-70','MID#':'0.10-1.50','MID%':'3-15'};
+
+  // عنوان التقرير — يوضّح النمط
+  const _reportModeTitle = is3Diff ? 'WB-CBC+3DIFF' : 'WB-CBC+DIFF';
 
   // استخراج القيمة والعلم لكل مُعامل
   function getParam(key){
@@ -29165,8 +29464,8 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     const info=(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])||{};
     const val=p?p.value:'---';
     const numVal=parseFloat(val);
-    const ref=(p&&p.refRange)||info.refM||'';
-    const unit=(p&&p.unit)||info.unit||'';
+    const ref=(p&&p.refRange)||info.refM||_REF3[key]||'';
+    const unit=(p&&p.unit)||info.unit||((key==='GRAN%'||key==='MID%')?'%':((key==='GRAN#'||key==='MID#')?'10^9/L':''));
     let flag=(p&&p.flag)||'';
     let flagColor='#000';
     const _fRaw=(flag||'').toUpperCase().trim();
@@ -29576,6 +29875,117 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'<div class="foot"><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
   }
 
+
+  // ══════════════════════════════════════════════════════════
+  // النموذج 9 — نمط الجهاز المطابق (Device-Style — كما في ورقة الجهاز)
+  //   • ترتيب الأعمدة: # · Modules · Result · Flag(H/L) · Unit · Ref. Ranges
+  //   • رؤوس الجدول بخلفية بيضاء والنصوص ملوّنة فقط
+  //   • القيم العالية حمراء والمنخفضة زرقاء، وحرف العلم ملوّن
+  //   • ثلاثة صناديق تعليقات: WBC Message · RBC Message · PLT Message
+  //   • ثلاثة مخططات (WBC · RBC · PLT) خطّية بمحاور مرقّمة بوحدة fL
+  //     تُرسم على خلفية بيضاء تماماً كما في صورة الجهاز.
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='9'){
+    const ac=tableColor;
+    // ── صفوف الجدول ──
+    let rows='',rowNum=1;
+    ORDERED.forEach(function(key){
+      const p=cbcParams[key];
+      if(!p&&!(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])) return;
+      const {val,flag,flagColor,ref,unit}=getParam(key);
+      const isAbn=flag&&flag!=='N';
+      const fShow=isAbn?flag:'';
+      // فاصل علوي رفيع عند بداية كل مجموعة رئيسية
+      const sTop=(key==='WBC'||key==='RBC'||key==='PLT')?'border-top:1.5px solid '+ac+';':'';
+      rows+='<tr style="'+sTop+'">'
+        +'<td class="c-num">'+rowNum+'</td>'
+        +'<td class="c-name">'+(LABELS[key]||key)+'</td>'
+        +'<td class="c-res" style="color:'+flagColor+'">'+val+'</td>'
+        +'<td class="c-flag" style="color:'+flagColor+'">'+fShow+'</td>'
+        +'<td class="c-unit">'+unit+'</td>'
+        +'<td class="c-ref">'+ref+'</td>'
+        +'</tr>';
+      rowNum++;
+    });
+
+    // ── تجميع تعليقات الجهاز حسب القناة (WBC / RBC / PLT) ──
+    let _cmtsAll=[];
+    if(req && Array.isArray(req.cbcComments)) _cmtsAll=req.cbcComments;
+    else if(req && req.resultDetails && req.resultDetails.CBC && Array.isArray(req.resultDetails.CBC.cbcComments)) _cmtsAll=req.resultDetails.CBC.cbcComments;
+    _cmtsAll=(_cmtsAll||[]).map(function(c){return String(c||'').trim();}).filter(Boolean);
+    const _msg={WBC:[],RBC:[],PLT:[]};
+    _cmtsAll.forEach(function(c){
+      const u=c.toUpperCase();
+      if(u.indexOf('PLT')>-1||u.indexOf('PLATELET')>-1) _msg.PLT.push(c);
+      else if(u.indexOf('RBC')>-1||u.indexOf('HGB')>-1||u.indexOf('RED')>-1||u.indexOf('ANISO')>-1||u.indexOf('MICRO')>-1||u.indexOf('MACRO')>-1) _msg.RBC.push(c);
+      else _msg.WBC.push(c);
+    });
+    function _msgBox(title,list){
+      const body=(list&&list.length)
+        ? list.map(function(c){return '<div class="mb-line">'+c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>';}).join('')
+        : '<div class="mb-empty">&nbsp;</div>';
+      return '<div class="msgbox"><div class="mb-head">'+title+'</div><div class="mb-body">'+body+'</div></div>';
+    }
+    const _msgCol=_msgBox('WBC Message',_msg.WBC)+_msgBox('RBC Message',_msg.RBC)+_msgBox('PLT Message',_msg.PLT);
+
+    // ── صفّ المخططات الثلاثة بنمط الجهاز ──
+    const _histRow=(typeof buildCBCDeviceHistRow==='function')?buildCBCDeviceHistRow(cbcParams):'';
+
+    const css='*{margin:0;padding:0;box-sizing:border-box}'
+      +'html,body{background:#fff;color:#000;font-family:Arial,"Segoe UI",sans-serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.ttl{text-align:center;font-size:13px;font-weight:800;color:'+ac+';border:1.5px solid '+ac+';padding:3px;margin:5px 0;border-radius:3px;}'
+      +'.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1px solid #999;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}'
+      +'.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}'
+      +'.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:5px 10px;gap:3px;border-left:1px solid #999;min-width:150px;}'
+      +'.pt-field{display:flex;gap:5px;align-items:baseline;}'
+      +'.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:60px;}'
+      +'.pt-val{font-weight:800;font-size:12px;color:#000;}'
+      +'.pt-r{display:flex;gap:5px;font-size:10px;}.pt-rk{color:#555;font-weight:700;}.pt-rv{font-weight:800;color:#000;}'
+      // ── تخطيط: الجدول يسار · صناديق الرسائل يمين ──
+      +'.main-grid{display:grid;grid-template-columns:1fr 250px;gap:8px;align-items:start;margin-top:5px;}'
+      +'table.cbc{width:100%;border-collapse:collapse;}'
+      // رؤوس بخلفية بيضاء ونص ملوّن فقط
+      +'table.cbc thead th{background:#fff;color:'+ac+';border:1px solid #bbb;border-bottom:2px solid '+ac+';padding:4px 6px;font-size:11px;font-weight:800;text-align:center;}'
+      +'table.cbc td{border:1px solid #ddd;padding:3px 6px;font-size:11px;}'
+      +'.c-num{width:26px;text-align:center;color:#666;}'
+      +'.c-name{text-align:left;font-weight:700;color:#000;white-space:nowrap;}'
+      +'.c-res{text-align:center;font-weight:800;font-size:12px;}'
+      +'.c-flag{width:34px;text-align:center;font-weight:800;font-size:11px;}'
+      +'.c-unit{text-align:center;color:#000;}'
+      +'.c-ref{text-align:center;color:#000;white-space:nowrap;}'
+      // صناديق الرسائل
+      +'.msg-col{display:flex;flex-direction:column;gap:9px;}'
+      +'.msgbox{border:1px solid #999;border-radius:4px;overflow:hidden;}'
+      +'.mb-head{background:#fff;color:'+ac+';font-size:12px;font-weight:800;padding:5px 8px;border-bottom:1px solid #ccc;text-align:center;}'
+      +'.mb-body{min-height:90px;padding:7px 9px;font-size:11px;color:#000;line-height:1.5;}'
+      +'.mb-line{padding:1px 0;}.mb-empty{color:#bbb;}'
+      // صفّ المخططات
+      +'.dh-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;padding-top:6px;border-top:1px dashed '+ac+'66;}'
+      +'.dh-card{border:1px solid #ccc;border-radius:4px;padding:3px 4px 2px;background:#fff;break-inside:avoid;page-break-inside:avoid;}'
+      +'.dh-lbl{font-size:11px;font-weight:800;color:#000;text-align:center;padding:1px 0 2px;}'
+      +'.foot{border-top:1.5px solid '+ac+';margin-top:8px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}';
+
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl">Hematology Analysis Report — '+_reportModeTitle+'</div>'
+      +'<div class="pt-bar"><div class="pt-left">'
+      +'<div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div>'
+      +'<div class="pt-field"><span class="pt-lbl">Sex / Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div>'
+      +'<div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:14px">'+doctorName+'</span></div>'
+      +'</div><div class="pt-right">'
+      +'<div class="pt-r"><span class="pt-rk">ID:</span><span class="pt-rv">'+barcodeId+'</span></div>'
+      +'<div class="pt-r"><span class="pt-rk">Date:</span><span class="pt-rv">'+sampleDate+'</span></div>'
+      +'<div class="pt-r"><span class="pt-rk">Mode:</span><span class="pt-rv">'+_reportModeTitle+'</span></div>'
+      +'</div></div>'
+      +'<div class="main-grid">'
+      +'<table class="cbc"><thead><tr><th style="width:26px">#</th><th style="text-align:left">Modules</th><th>Result</th><th style="width:34px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div class="msg-col">'+_msgCol+'</div>'
+      +'</div>'
+      +_histRow
+      +'<div class="foot"><span>Operator: '+operator+'</span><span>'+_reportModeTitle+'</span><span>'+today+'</span></div>'
+      +'</body></html>';
+  }
   // fallback → النموذج 1
   return _buildCBCReportHTML(cbcParams,pt,req,'1');
 }
@@ -35369,6 +35779,12 @@ const CBC_PARAMS_MAP = {
   'MON%':   {ar:'Mon% الوحيدات نسبة',         unit:'%',       refM:'3-12',      order:9},
   'EOS%':   {ar:'Eos% الحمضات نسبة',          unit:'%',       refM:'0.5-5.0',   order:10},
   'BAS%':   {ar:'Bas% القعيدات نسبة',         unit:'%',       refM:'0-1',       order:11},
+  // ── معاملات العدّاد الثلاثي (3-Diff) — Mindray BC-30s/BC-20s وغيرها ──
+  // Mid = الخلايا المتوسطة (Mono+Eos+Baso مدمجة) · Gran = المحبَّبة (Neutrophils أساساً)
+  'MID#':   {ar:'Mid# الخلايا المتوسطة عدد',  unit:'10^9/L',  refM:'0.10-1.50', order:11.3},
+  'GRAN#':  {ar:'Gran# الخلايا المحبَّبة عدد', unit:'10^9/L',  refM:'2.0-7.0',   order:11.5},
+  'MID%':   {ar:'Mid% الخلايا المتوسطة نسبة', unit:'%',       refM:'3-15',      order:11.7},
+  'GRAN%':  {ar:'Gran% الخلايا المحبَّبة نسبة',unit:'%',       refM:'50-70',     order:11.9},
   // RBC Series
   'RBC':    {ar:'RBC  خلايا الدم الحمراء',    unit:'10^12/L', refM:'3.50-5.50', order:12},
   'HGB':    {ar:'HGB  الهيموغلوبين',          unit:'g/dL',    refM:'11.0-17.5', order:13},
@@ -35383,10 +35799,90 @@ const CBC_PARAMS_MAP = {
   'MPV':    {ar:'MPV  متوسط حجم الصفيحة',     unit:'fL',      refM:'7-11',      order:21},
   'PDW':    {ar:'PDW  توزيع الصفائح',         unit:'',        refM:'9-17',      order:22},
   'PCT':    {ar:'PCT  كمية الصفائح',          unit:'mL/L',    refM:'1.08-2.82', order:23},
+  'P-LCR':  {ar:'P-LCR نسبة الصفائح الكبيرة',  unit:'%',       refM:'11-45',     order:24},
+  'P-LCC':  {ar:'P-LCC عدد الصفائح الكبيرة',   unit:'10^9/L',  refM:'30-90',     order:25},
 };
 const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
-function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
-function cbcNormalizeCode(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+// ── مرادفات أكواد العدّاد الثلاثي (تختلف تسميتها بين الأجهزة) ──
+// Sysmex: MXD=Mid ، GR/GRAN=Gran · بعض Mindray: GR% ، LY=Lym.
+// نطبّع هذه الأسماء البديلة إلى المفاتيح القياسية دون المساس ببقية المنطق.
+const _CBC_ALIASES={
+  'MXD#':'MID#','MXD%':'MID%','MID':'MID#',
+  'GR#':'GRAN#','GR%':'GRAN%','GRA#':'GRAN#','GRA%':'GRAN%','GRAN':'GRAN#','GRAN-P':'GRAN%','GRANP':'GRAN%',
+  'GRANULOCYTE#':'GRAN#','GRANULOCYTE%':'GRAN%',
+  'LY#':'LYM#','LY%':'LYM%',
+  'PLCR':'P-LCR','PLCR%':'P-LCR','P_LCR':'P-LCR','PLCC':'P-LCC','P_LCC':'P-LCC'
+};
+function _cbcAlias(c){ return _CBC_ALIASES[c]||c; }
+/* ── كشف أسطر «ضجيج المخطط» النصية (BC-5000 عبر HL7) ────────────────
+   الجهاز يرسل بيانات المخطط بأسماء نصية تبدأ بـ WBC/RBC/PLT مثل:
+     "WBC HISTOGRAM. TOTAL"، "RBC HISTOGRAM. RIGHT LINE"،
+     "WBC GRAN RIGHT LINE"، "WBC LYM MID LINE."، "PLT HISTOGRAM. LEFT LINE"
+   وكذلك أسطر وصفية: "BLOOD MODE"، "TAKE MODE"، "REF GROUP"، "ANEMIA".
+   هذه ليست نتائج تحليل، لكنها تُطابق cbcIsParam بـ startsWith("WBC"/"RBC"/"PLT")
+   فتدهس القيم الحقيقية (WBC=8.0 → 128). نستبعدها هنا قبل التخزين.
+   القيم الحقيقية (WBC/RBC/PLT/LYM#/PLCR...) لا تحتوي أياً من هذه الكلمات. */
+function _cbcIsHistNoise(code){
+  var c=String(code||'').toUpperCase();
+  return /HISTOGRAM|LINE|\bMODE\b|\bGROUP\b|ANEMIA|SCATTER/.test(c);
+}
+function cbcIsParam(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));if(_cbcIsHistNoise(code))return false;return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
+function cbcNormalizeCode(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+/* ── التقاط مخططات الجهاز (Histogram) وتخزينها في مخزن CBC ──────────
+   أكواد Mindray: 15000/15050/15100 = بيانات ثنائية Base64
+                  15004/15053/15113 = Meta Length لكل مخطط.
+   نخزّنها تحت مفاتيح HIST_WBC / HIST_RBC / HIST_PLT كي لا تختلط
+   بباراميترات التحليل ولا تظهر كصفوف في الجدول.
+   تُعيد true إذا كان الكود مخططاً (فيتوقف المسار العادي).            */
+var _CBC_HIST_MAP={
+  '15000':{k:'WBC',t:'bin'}, '15004':{k:'WBC',t:'meta'},
+  '15050':{k:'RBC',t:'bin'}, '15053':{k:'RBC',t:'meta'},
+  '15100':{k:'PLT',t:'bin'}, '15113':{k:'PLT',t:'meta'}
+};
+/* أكواد الصور الجاهزة (BMP) — هيستوغرام وScattergram.
+   15000/15050/15100 موجودة أعلاه أيضاً لأن الجهاز قد يرسلها
+   كصورة أو كبيانات خام حسب إعداده — نفرّق بينهما بمحتوى OBX-5. */
+var _CBC_IMG_CODES={
+  '15000':1,'15008':1,'15050':1,'15100':1,'15200':1,'15201':1,
+  '15056':1,'15116':1,'15250':1,'15300':1,'15301':1,'15302':1,
+  '15350':1,'15600':1
+};
+function cbcCaptureHistogram(sampleId, rawCode, rawValue, obxName){
+  var code=String(rawCode||'').trim();
+  var isHist=!!_CBC_HIST_MAP[code], isImg=!!_CBC_IMG_CODES[code];
+  if(!isHist && !isImg) return false;
+  if(!sampleId) return true;   // بلا معرّف عينة — نتجاهله بصمت
+  if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:'',timer:null};
+  var buf=_cbcBuffer[sampleId];
+
+  // ── صورة جاهزة؟ (نفحص محتوى القيمة لا الكود فقط) ──────────
+  var cl=_cbcEDClassify(rawValue);
+  if(cl && cl.kind==='img' && _cbcImgValid(cl.b64)){
+    if(!buf.graphics) buf.graphics=[];
+    var dup=false;
+    for(var d=0;d<buf.graphics.length;d++){ if(buf.graphics[d].code===code){ dup=true; break; } }
+    if(!dup){
+      buf.graphics.push({code:code,name:String(obxName||'').trim(),b64:cl.b64,mime:cl.mime});
+      try{ lisAddLog('astm','[CBC] صورة '+code+' مُستلمة SID:'+sampleId); }catch(_){}
+    }
+    if(buf.timer) clearTimeout(buf.timer);
+    buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+    return true;
+  }
+
+  // ── بيانات خام / Meta Length ───────────────────────────────
+  var hit=_CBC_HIST_MAP[code];
+  if(!hit) return true;   // كود صورة لكن القيمة ليست صورة صالحة — نتجاهله
+  var key='HIST_'+hit.k;
+  if(!buf.params[key] || typeof buf.params[key]!=='object') buf.params[key]={value:'',meta:''};
+  if(hit.t==='bin') buf.params[key].value=String(rawValue||'');
+  else buf.params[key].meta=String(rawValue||'').trim();
+  try{ lisAddLog('astm','[CBC] مخطط '+hit.k+' ('+hit.t+') مُستلم SID:'+sampleId); }catch(_){}
+  // نمدّد مؤقت الإرسال حتى تصل بقية المقاطع
+  if(buf.timer) clearTimeout(buf.timer);
+  buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+  return true;
+}
 // ═══════════════════════════════════════════════════════════════
 // 🩸 BC-6000 — تخزين الرسوم البيانية ورايات الإنذار مع عينة الـ CBC
 // ─────────────────────────────────────────────────────────────
@@ -35439,8 +35935,17 @@ function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   //   ب) القيمة ليست رقمية (لا يوجد رقم في القيمة)
   const _exactMatch = CBC_PARAM_KEYS.some(k => (code||'').toUpperCase().replace(/\s/g,'')===k);
   if(!_exactMatch && !_numV){
-    // تعليق بحت (مثل RBC ABNORMAL DISTRIBUTION=T) — تجاهل تماماً
-    lisAddLog('astm','[CBC] تجاهل تعليق: '+(code||'')+'='+(value||''));
+    // تعليق بحت (مثل RBC ABNORMAL DISTRIBUTION=T) — لا يُحفظ كباراميتر،
+    // لكن يُجمع في قائمة تعليقات الجهاز لعرضها في صناديق النموذج ٩.
+    if(!buf.comments) buf.comments=[];
+    var _cName=String(code||'').trim();
+    var _cVal=String(value||'').replace(/\^/g,' ').trim();
+    var _cValClean=_cVal.replace(/\b[THL]\b$/i,'').replace(/\s{2,}/g,' ').trim();
+    var _cmtText=_cName;
+    if(_cValClean && _cValClean.toUpperCase()!==_cName.toUpperCase()) _cmtText=(_cName+' '+_cValClean).trim();
+    _cmtText=_cmtText.replace(/\s{2,}/g,' ').trim();
+    if(_cmtText && buf.comments.indexOf(_cmtText)===-1) buf.comments.push(_cmtText);
+    lisAddLog('astm','[CBC] تعليق الجهاز: '+_cmtText);
     if(patName&&!buf.name) buf.name=patName;
     if(buf.timer) clearTimeout(buf.timer);
     buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
@@ -35458,6 +35963,9 @@ const _cbcFlushLog = {};
 function cbcFlush(sampleId){
   const buf=_cbcBuffer[sampleId];
   if(!buf||!Object.keys(buf.params).length) return;
+  // ⭐ لا نُنهي العينة إذا وصلت المخططات (HIST_*) فقط دون أي باراميتر حقيقي
+  const _realParams=Object.keys(buf.params).filter(function(k){return k.indexOf('HIST_')!==0;});
+  if(!_realParams.length) return;
   delete _cbcBuffer[sampleId];
   // ── حماية التكرار: إذا فُلِشَ نفس المريض خلال آخر 60 ثانية — تجاهل ──
   const _flushNow=Date.now();
@@ -35507,6 +36015,8 @@ function cbcFlush(sampleId){
     // الأجهزة الأخرى لا ترسلها فلا يُضاف أي حقل ويبقى شكل الطلب كما هو.
     if(buf.graphics&&buf.graphics.length) targetReq.cbcGraphics=buf.graphics;
     if(buf.alarms&&buf.alarms.length)     targetReq.cbcAlarms=buf.alarms;
+    // 🩸 تعليقات الجهاز — تُعرض في صناديق WBC/RBC/PLT بالنموذج ٩
+    targetReq.cbcComments=(buf.comments&&buf.comments.length)?buf.comments.slice():[];
     // دمج نتيجة CBC فقط — لا نبني results من الصفر
     if(!targetReq.results) targetReq.results={};
     if(!targetReq.resultDetails) targetReq.resultDetails={};
@@ -35515,7 +36025,7 @@ function cbcFlush(sampleId){
     if(!targetReq.cbcHistory) targetReq.cbcHistory=[];
     const _cbcEntry={params:buf.params,datetime:new Date().toISOString(),device:'BC-5000'};
     targetReq.cbcHistory.unshift(_cbcEntry); // الأحدث أولاً
-    targetReq.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:buf.params,fromDevice:'BC-5000',datetime:new Date().toISOString()};
+    targetReq.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:buf.params,cbcComments:targetReq.cbcComments,fromDevice:'BC-5000',datetime:new Date().toISOString()};
     // status=done فقط إذا جميع التحاليل الأخرى مكتملة أيضاً أو لا توجد
     const _otherTests=(targetReq.tests||[]).filter(function(t){return t!=='CBC'&&t!=='h001';});
     const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
@@ -35657,6 +36167,15 @@ function lisParseHL7(raw,deviceName){
     const _c3=(f[3]||'').split('^');
     const _cd=(_c3[0]||'').trim();
     const _nm=(_c3[1]||'').trim();
+
+    // ── 🩸 مخططات الجهاز (Histogram) — أكواد 15xxx ──────────────────
+    // تُلتقط قبل أي تنظيف للقيمة كي لا يتلف الـ Base64، وتُخزَّن تحت
+    // HIST_WBC / HIST_RBC / HIST_PLT أو كصور جاهزة. لا تدخل النتائج أبداً.
+    if(typeof cbcCaptureHistogram==='function' &&
+       (( typeof _CBC_HIST_MAP!=='undefined' && _CBC_HIST_MAP[_cd]) ||
+        ( typeof _CBC_IMG_CODES!=='undefined' && _CBC_IMG_CODES[_cd]))){
+      if(cbcCaptureHistogram(pid.id||'', _cd, (f[5]||''), _nm)) return;
+    }
 
     if(_t2==='ED'){
       const _p=(f[5]||'').split('^');
@@ -35809,7 +36328,16 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
     const codeWithSpaces=(obx.testName||obx.testCode||'').trim().toUpperCase();
     const code=codeWithSpaces.replace(/\s+/g,'');
     let value=obx.value||'';
+    // ── 🩸 مخططات الجهاز (تُطابَق برقم OBX-3 لأن الاسم يحوي مسافات) ──
+    const _histId=String(obx.testCode||'').trim();
+    if(typeof cbcCaptureHistogram==='function' &&
+       (( typeof _CBC_HIST_MAP!=='undefined' && _CBC_HIST_MAP[_histId]) ||
+        ( typeof _CBC_IMG_CODES!=='undefined' && _CBC_IMG_CODES[_histId]))){
+      if(cbcCaptureHistogram(parsed.patientId||'', _histId, value, (obx.testName||''))) return;
+    }
     if(!code&&!value) return;
+    // تخطّي أسطر ضجيج المخطط النصية (HISTOGRAM / LINE / MODE ...)
+    if(typeof _cbcIsHistNoise==='function' && _cbcIsHistNoise(codeWithSpaces)) return;
 
     // ⭐ BS-230 فقط: حذف الكسور + النزول لأقرب ٥ (الافتراضي)، مع استثناءات
     //    القوائم. معزول تماماً — لا يُنفَّذ لأي جهاز HL7 آخر
@@ -36324,6 +36852,132 @@ function lisTransferAll(){
   lisTransferToMedlabPro(pending);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 📌 مطابقة نتيجة الجهاز مع الطلب الصحيح — قاعدة «آخر RQ يحتوي التحليل فارغاً»
+// ───────────────────────────────────────────────────────────────────────────
+// العلّة السابقة (سبب الإدخال «العشوائي حسب رقم RQ»):
+//   ١) عند تعادل المرشّحين كان الترتيب النهائي:
+//        String(b.r.id).localeCompare(String(a.r.id))
+//      وهي مقارنة **نصّية** لا رقمية ⇒ 'RQ-9' تسبق 'RQ-10'، فيُختار الطلب
+//      الأقدم بدل الأحدث (وكذلك RQ1-… مقابل RQ2-… بين الحاسبات).
+//   ٢) وأخطر منها: إن لم يحتوِ أي طلب على التحليل القادم (fit=0 للجميع) كان
+//      يسقط على أي مرشّح ويكتب فيه النتيجة رغم أن التحليل غير مطلوب فيه.
+//
+// القاعدة الآن (بالترتيب الصارم):
+//   ١) اجمع طلبات نفس الـ ID المُرسَل (أو رقم الطلب/الباركود إن أرسله الجهاز).
+//   ٢) رتّب من الأحدث للأقدم: التاريخ ← رقم RQ **رقمياً** تنازلياً.
+//   ٣) خُذ أول (أحدث) طلب يحتوي التحليل المستهدف وخانته **فارغة**.
+//   ٤) إن لم يوجد ⟵ أحدث طلب يحتوي التحليل ولو كانت خانته مُدخلة (تحديث
+//      نتيجة معادة من الجهاز لنفس الطلب — سلوك مطلوب ولا يُلغى).
+//   ٥) إن لم يحتوِ أي طلب هذا التحليل إطلاقاً ⟵ **لا تُدخَل في أي طلب**،
+//      وتُحفظ بانتظار الربط اليدوي. (كِلّ الأمان: _lisSettings.strictReqMatch=false
+//      يُعيد السلوك القديم تماماً.)
+//
+// معزول: تجميع المرشّحين كما هو حرفياً، و_lisApplyResultToReq لم تُمسّ.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// النوع المناعي (isotype) — لمنع خلط IgA/IgG/IgM أثناء المطابقة الجزئية
+function _lisIsoOf(s){
+  var u=(s||'').toUpperCase().replace(/[-\s.]+/g,'');
+  if(u.endsWith('IGA')||/IGA(?![A-Z])/.test(u)) return 'IGA';
+  if(u.endsWith('IGG')||/IGG(?![A-Z])/.test(u)) return 'IGG';
+  if(u.endsWith('IGM')||/IGM(?![A-Z])/.test(u)) return 'IGM';
+  if(u.endsWith('IGE')||/IGE(?![A-Z])/.test(u)) return 'IGE';
+  return '';
+}
+
+// هل يحتوي هذا الطلب على التحليل القادم من الجهاز؟ يُرجع مفتاحه داخل الطلب أو null.
+// نفس منطق تحديد resultKey في _lisApplyResultToReq حتى لا يفترق القراران.
+function _lisReqTestKey(r, code){
+  try{
+    var codeUp=String(code||'').toUpperCase();
+    if(!codeUp) return null;
+    var codeNorm=codeUp.replace(/[-\s]+/g,'');
+    var _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+    var reqTests=Array.isArray(r&&r.tests)?r.tests:[];
+    var i,tid,tidUp,tidNorm,t,tc,tns,tne;
+
+    // (١) تطابق مباشر: معرّف/كود التحليل داخل الطلب
+    for(i=0;i<reqTests.length;i++){
+      tid=reqTests[i];
+      tidUp=String(tid||'').toUpperCase();
+      tidNorm=tidUp.replace(/[-\s]+/g,'');
+      if(tidUp===codeUp||tidNorm===codeNorm) return tid;
+      t=_allTests.find(function(x){return x.id===tid||x.code===tid;});
+      if(t){
+        tc =(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+        tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+        tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+        if(tc===codeNorm||tns===codeNorm||tne===codeNorm||String(t.id||'').toUpperCase()===codeUp) return tid;
+      }
+    }
+
+    // (٢) تطابق جزئي (مثل Cortisol ↔ AM-CORT) مع حماية isotype
+    var _codeIso=_lisIsoOf(codeUp);
+    for(i=0;i<reqTests.length;i++){
+      tid=reqTests[i];
+      t=_allTests.find(function(x){return x.id===tid||x.code===tid;});
+      if(!t) continue;
+      tc =(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+      tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+      tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+      var _tIso=_lisIsoOf(tc)||_lisIsoOf(tns)||_lisIsoOf(tne);
+      if(_codeIso!==_tIso) continue;
+      if((tc &&(tc.startsWith(codeNorm)||codeNorm.startsWith(tc)))||
+         (tns&&(tns.startsWith(codeNorm)||codeNorm.startsWith(tns)))||
+         (tne&&(tne.startsWith(codeNorm)||codeNorm.startsWith(tne)))) return tid;
+    }
+
+    // (٣) CBC: معاملات تعداد الدم تُخزَّن كمفاتيح مستقلة داخل طلب فيه CBC
+    //     (WBC/RBC/HGB… لا تظهر في req.tests) — فنعتبر وجود تحليل CBC كافياً.
+    if(typeof _isCbcKey==='function' && _isCbcKey(codeUp)){
+      for(i=0;i<reqTests.length;i++){
+        try{ if(_isCbcKey(reqTests[i])) return codeUp; }catch(_){}
+      }
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+// هل خانة هذا التحليل مُدخلة مسبقاً في الطلب؟ (نفحص كل المفاتيح المحتملة)
+function _lisReqKeyFilled(r, code, key){
+  try{
+    if(!r||!r.results) return false;
+    var _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+    var codeUp=String(code||'').toUpperCase();
+    var t=_allTests.find(function(x){return x.id===key||x.code===key;})||
+          _allTests.find(function(x){return String(x.code||'').toUpperCase()===codeUp;});
+    var keys=[key,code,codeUp,(t&&t.id)||null,(t&&t.code)||null];
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i];
+      if(k==null||k==='') continue;
+      var v=r.results[k];
+      if(v!=null&&v!=='') return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
+// درجة الملاءمة: 2 = يحتوي التحليل وخانته فارغة · 1 = يحتوي ومُدخل · 0 = لا يحتوي
+function _lisReqFit(r, res){
+  var code=(res&&(res.medlabCode||res.deviceCode))||'';
+  if(!code) return 0;
+  var key=_lisReqTestKey(r, code);
+  if(!key) return 0;
+  return _lisReqKeyFilled(r, code, key)?1:2;
+}
+
+// ترتيب «الأحدث أولاً» حتمي: التاريخ ← رقم RQ رقمياً (لا مقارنة نصّية)
+function _lisNewerFirst(a, b){
+  var ad=(typeof _lisReqDateMs==='function')?_lisReqDateMs(a):0;
+  var bd=(typeof _lisReqDateMs==='function')?_lisReqDateMs(b):0;
+  if(bd!==ad) return bd-ad;
+  var aq=(typeof _lisReqSeqNo==='function')?_lisReqSeqNo(a):0;
+  var bq=(typeof _lisReqSeqNo==='function')?_lisReqSeqNo(b):0;
+  if(bq!==aq) return bq-aq;
+  return 0;
+}
+
 // ── مساعد: مطابقة نتيجة جهاز مع طلب من القائمة ───────────────────────────
 // القاعدة الأساسية: MAGLUMI يرسل رقم المريض كـ SID
 // نبحث عن طلب غير منتهٍ للمريض صاحب هذا الرقم
@@ -36331,41 +36985,6 @@ function _lisMatchReqInList(reqs, res, ptsList){
   const sid=String(res.sampleId||'').trim();
   if(!sid) return undefined;
   const sidNum=sid.replace(/[^0-9]/g,'');
-
-  // ── مساعد (النقطة ١): هل يحتوي هذا الطلب على التحليل القادم من الجهاز؟ ──
-  //   نعيد: 2 = يحتوي التحليل وخانته ما زالت فارغة (الأفضل)
-  //         1 = يحتوي التحليل لكن مُدخل مسبقاً
-  //         0 = لا يحتوي التحليل إطلاقاً
-  // هذا هو جوهر منع الخلط: نتيجة LH يجب أن تذهب للطلب الذي طلب LH فعلاً،
-  // لا لأحدث طلب زمنياً للمريض نفسه.
-  function _reqTestFit(r){
-    try{
-      const code=(res.medlabCode||res.deviceCode||'').toUpperCase();
-      if(!code) return 0;
-      const codeNorm=code.replace(/[-\s]+/g,'');
-      const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
-      const reqTests=Array.isArray(r.tests)?r.tests:[];
-      let matchedKey=null;
-      for(const tid of reqTests){
-        const tidUp=String(tid||'').toUpperCase();
-        const tidNorm=tidUp.replace(/[-\s]+/g,'');
-        // مطابقة مباشرة على كود/معرّف التحليل داخل الطلب
-        if(tidUp===code||tidNorm===codeNorm){ matchedKey=tid; break; }
-        // مطابقة عبر بيانات التحليل (code / nameShort / nameEn / id)
-        const t=_allTests.find(x=>x.id===tid||x.code===tid);
-        if(t){
-          const tc=(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
-          const tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
-          const tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
-          const tid2=(t.id||'').toUpperCase();
-          if(tc===codeNorm||tns===codeNorm||tne===codeNorm||tid2===code){ matchedKey=tid; break; }
-        }
-      }
-      if(!matchedKey) return 0;
-      const filled=r.results && (r.results[matchedKey]!=null && r.results[matchedKey]!=='');
-      return filled?1:2;
-    }catch(e){ return 0; }
-  }
 
   // جمع المرشحين أولاً ثم اختيار الأفضل
   const candidates=[];
@@ -36413,28 +37032,48 @@ function _lisMatchReqInList(reqs, res, ptsList){
 
   if(!candidates.length) return undefined;
 
-  // احسب مدى احتواء كل مرشح للتحليل القادم (2=يحتوي وفارغ، 1=يحتوي ومُدخل، 0=لا)
-  candidates.forEach(function(c){ c.fit=_reqTestFit(c.r); });
+  const _code=(res.medlabCode||res.deviceCode||'');
 
-  // ⭐ إن وُجد مرشح واحد على الأقل يحتوي التحليل فعلاً (fit>0)، فاستبعد كل
-  //    المرشحين الذين لا يحتوونه (fit===0). هذا يمنع نهائياً دخول نتيجة LH
-  //    في طلب لا يحتوي LH (طلب السكر التراكمي) والعكس.
+  // احسب مدى احتواء كل مرشح للتحليل القادم (2=يحتوي وفارغ، 1=يحتوي ومُدخل، 0=لا)
+  candidates.forEach(function(c){ c.fit=_lisReqFit(c.r,res); });
+
+  // ⭐ الصرامة: لا يُكتب تحليل في طلب لا يحتوي هذا التحليل إطلاقاً.
+  //    (كان هذا سبب دخول النتائج في طلبات غير مقصودة «عشوائياً»)
   const _anyFit=candidates.some(function(c){return c.fit>0;});
+  if(!_anyFit){
+    const _strict=(typeof _lisSettings==='undefined')||(_lisSettings.strictReqMatch!==false);
+    if(_strict){
+      try{
+        const _ids=candidates.slice(0,5).map(function(c){return c.r.id;}).join(', ');
+        lisAddLog('warn','⛔ '+_code+' (SID '+sid+'): لا يوجد طلب يحتوي هذا التحليل — لم تُدخَل في أي طلب ['+_ids+']');
+      }catch(_){}
+      return undefined;
+    }
+  }
   const pool=_anyFit?candidates.filter(function(c){return c.fit>0;}):candidates;
 
   // ترتيب الأولوية:
-  //   1) fit أعلى (يحتوي التحليل + خانته فارغة)
-  //   2) score أعلى (قوة مطابقة العينة/المريض)
-  //   3) الطلبات غير المنتهية
-  //   4) الأحدث (id أكبر)
+  //   1) fit أعلى (يحتوي التحليل + خانته فارغة) ⟵ جوهر القاعدة
+  //   2) score أعلى (مطابقة رقم الطلب نفسه تسبق مطابقة رقم المريض)
+  //   3) الأحدث: التاريخ ← رقم RQ رقمياً (لا مقارنة نصّية بعد الآن)
+  //   4) الطلبات غير المنتهية
   pool.sort(function(a,b){
     if(b.fit!==a.fit) return b.fit-a.fit;
     if(b.score!==a.score) return b.score-a.score;
+    const _n=_lisNewerFirst(a.r,b.r);
+    if(_n!==0) return _n;
     const aNotDone=(a.r.status!=='done')?1:0;
     const bNotDone=(b.r.status!=='done')?1:0;
-    if(bNotDone!==aNotDone) return bNotDone-aNotDone;
-    return String(b.r.id).localeCompare(String(a.r.id));
+    return bNotDone-aNotDone;
   });
+
+  // سجل تشخيصي مختصر عند وجود أكثر من مرشّح (يُسهّل تتبّع أي شكوى لاحقاً)
+  try{
+    if(pool.length>1){
+      lisAddLog('info','🎯 '+_code+' (SID '+sid+') → '+pool[0].r.id+
+        ' [fit='+pool[0].fit+'] من بين: '+pool.slice(0,4).map(function(c){return c.r.id+'/'+c.fit;}).join(' · '));
+    }
+  }catch(_){}
 
   return pool[0].r;
 }
@@ -46382,6 +47021,495 @@ window.MLCP = {
   view:view, closeView:closeView, download:download, print:printFile, play:play,
   showFile:showFile, render:render, attach:attach, sendReportPdf:sendReportPdf
 };
+})();
+
+</script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   🔬 محرّر نتائج CBC داخل واجهة «إدخال نتائج التحاليل»
+   ──────────────────────────────────────────────────────────────────────
+   المشكلة السابقة:
+     الطلب القادم من جهاز الـ CBC يُنشأ بـ tests:['CBC'] بينما معرّف
+     التحليل في الكتالوج هو 'h001' — فيسقط الصف من جدول الإدخال
+     (tests.find(t=>t.id==='CBC') = undefined) وتظهر الواجهة فارغة.
+
+   الحل:
+     لوحة مستقلة تُعرض تحت جدول الإدخال، تقرأ باراميترات الـ CBC من
+     req.cbcData (أو resultDetails.CBC.cbcParams للنتائج القديمة)،
+     وتعرضها في جدول مرتّب مقسّم إلى ثلاث سلاسل (WBC / RBC / PLT).
+
+     • كل حقل قابل للتعديل: النتيجة + الوحدة + المدى الطبيعي.
+     • الحفظ تلقائي (بعد ٤٠٠ مللي من آخر ضغطة) في نفس مصدر الطباعة،
+       لذا أي طباعة لاحقة تعتمد آخر تعديل حتماً.
+     • راية H/L تُعاد حسابها فوراً من المدى الطبيعي بعد كل تعديل.
+     • زر ↺ يعيد قيمة الجهاز الأصلية لأي حقل عُدِّل.
+     • قائمة النتائج التاريخية (إن وُجد أكثر من سحبة) — التعديل يقع
+       على النتيجة المختارة، والطباعة تطبع المختارة نفسها.
+     • ينطبق على النتائج السابقة/القديمة تلقائياً (نفس مصدر البيانات).
+     • إن كان الطلب يحوي تحليل CBC ولم تصل نتيجة من الجهاز — تظهر
+       اللوحة فارغة للإدخال اليدوي الكامل.
+   ══════════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window._cbcEditorReady) return;
+  window._cbcEditorReady = true;
+
+  /* ───────────────────────── الأنماط ───────────────────────── */
+  var CSS = ''
+    + '#res-cbc-panel{margin:0 0 18px}'
+    + '.cbcE-card{border:1px solid rgba(0,180,100,.35);border-radius:14px;overflow:hidden;background:var(--bg-card,rgba(255,255,255,.02));box-shadow:0 6px 22px rgba(0,0,0,.10)}'
+    + '.cbcE-hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 13px;background:linear-gradient(135deg,rgba(0,180,100,.18),rgba(0,180,100,.04));border-bottom:1px solid rgba(0,180,100,.28)}'
+    + '.cbcE-ttl{font-size:14px;font-weight:900;color:#00c46a;display:flex;align-items:center;gap:6px;white-space:nowrap}'
+    + '.cbcE-sub{font-size:10.5px;font-weight:700;color:var(--text2);background:rgba(0,180,100,.10);border:1px solid rgba(0,180,100,.25);border-radius:20px;padding:3px 9px}'
+    + '.cbcE-sp{flex:1;min-width:6px}'
+    + '.cbcE-btn{background:rgba(0,180,100,.14);border:1px solid rgba(0,180,100,.45);color:#00c46a;border-radius:9px;padding:6px 11px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}'
+    + '.cbcE-btn:hover{background:rgba(0,180,100,.24)}'
+    + '.cbcE-btn.g{background:rgba(0,212,255,.12);border-color:rgba(0,212,255,.42);color:var(--primary,#00d4ff)}'
+    + '.cbcE-btn.g:hover{background:rgba(0,212,255,.22)}'
+    + '.cbcE-sel{background:var(--bg-modal,rgba(0,0,0,.25));border:1px solid rgba(0,180,100,.4);color:var(--text);border-radius:9px;padding:6px 9px;font-size:11.5px;font-weight:800;font-family:inherit;outline:none;cursor:pointer;max-width:230px}'
+    + '.cbcE-wrap{overflow-x:auto}'
+    + '.cbcE-tbl{width:100%;border-collapse:collapse;font-size:12.5px;min-width:560px}'
+    + '.cbcE-tbl th{background:var(--bg-modal,#101822);color:var(--text2);font-size:10.5px;font-weight:800;letter-spacing:.3px;padding:8px 8px;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap}'
+    + '.cbcE-tbl th:first-child{text-align:right}'
+    + '.cbcE-tbl td{padding:5px 7px;border-bottom:1px solid var(--border);vertical-align:middle}'
+    + '.cbcE-tbl tr.cbcE-row:hover{background:rgba(0,212,255,.045)}'
+    + '.cbcE-sec td{background:linear-gradient(90deg,rgba(0,180,100,.13),transparent);font-size:11.5px;font-weight:900;color:#00c46a;padding:7px 11px;border-bottom:1px solid rgba(0,180,100,.22);letter-spacing:.2px}'
+    + '.cbcE-nm{font-weight:900;font-size:13px;color:var(--text);direction:ltr;text-align:right;display:block;font-family:"Cairo",sans-serif}'
+    + '.cbcE-ar{font-size:9.5px;color:var(--text2);font-weight:700;display:block;margin-top:1px}'
+    + '.cbcE-inp{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--border);border-radius:8px;padding:6px 7px;color:var(--text);font-weight:800;font-size:13px;text-align:center;font-family:"Cairo",sans-serif;outline:none;transition:border-color .12s,box-shadow .12s;direction:ltr}'
+    + '.cbcE-inp:focus{border-color:#00c46a;box-shadow:0 0 0 3px rgba(0,180,100,.16);background:rgba(0,180,100,.06)}'
+    + '.cbcE-v{min-width:82px;font-size:14px;letter-spacing:.3px}'
+    + '.cbcE-v.hi{color:#ff4d4d;border-color:rgba(255,77,77,.45)}'
+    + '.cbcE-v.lo{color:#3d9dff;border-color:rgba(61,157,255,.45)}'
+    + '.cbcE-v.ok{color:#0bbf6a}'
+    + '.cbcE-sm{min-width:74px;font-size:11.5px;font-weight:700;color:var(--text2);opacity:.9}'
+    + '.cbcE-sm:focus{color:var(--text);opacity:1}'
+    + '.cbcE-fl{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:23px;border-radius:7px;font-size:11px;font-weight:900;padding:0 7px}'
+    + '.cbcE-fl.hi{background:rgba(255,77,77,.15);border:1px solid rgba(255,77,77,.45);color:#ff4d4d}'
+    + '.cbcE-fl.lo{background:rgba(61,157,255,.15);border:1px solid rgba(61,157,255,.45);color:#3d9dff}'
+    + '.cbcE-fl.ok{background:rgba(11,191,106,.13);border:1px solid rgba(11,191,106,.38);color:#0bbf6a}'
+    + '.cbcE-fl.na{background:transparent;border:1px dashed var(--border);color:var(--text2)}'
+    + '.cbcE-rv{background:rgba(255,170,0,.14);border:1px solid rgba(255,170,0,.42);color:#ffaa00;border-radius:7px;width:26px;height:24px;font-size:12px;cursor:pointer;font-family:inherit;line-height:1;padding:0}'
+    + '.cbcE-rv:hover{background:rgba(255,170,0,.26)}'
+    + '.cbcE-ed{font-size:9px;color:#ffaa00;font-weight:900;margin-right:4px}'
+    + '.cbcE-ft{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 13px;border-top:1px solid var(--border);background:rgba(255,255,255,.02);font-size:10.5px;color:var(--text2);font-weight:700}'
+    + '.cbcE-dot{width:7px;height:7px;border-radius:50%;background:#0bbf6a;display:inline-block;margin-left:5px}'
+    + '.cbcE-cmt{padding:8px 13px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:700;line-height:1.7}'
+    + '@media(max-width:640px){.cbcE-tbl{min-width:520px;font-size:12px}.cbcE-v{min-width:70px}.cbcE-sm{min-width:62px}}';
+
+  (function injectCss() {
+    try {
+      var s = document.createElement('style');
+      s.id = 'cbcE-style';
+      s.textContent = CSS;
+      document.head.appendChild(s);
+    } catch (e) {}
+  })();
+
+  /* ───────────────────── ترتيب وتسميات المعاملات ───────────────────── */
+  var LBL = {
+    'WBC': 'WBC', 'NEU#': 'Neu#', 'LYM#': 'Lym#', 'MON#': 'Mon#', 'EOS#': 'Eos#', 'BAS#': 'Bas#',
+    'NEU%': 'Neu%', 'LYM%': 'Lym%', 'MON%': 'Mon%', 'EOS%': 'Eos%', 'BAS%': 'Bas%',
+    'MID#': 'Mid#', 'GRAN#': 'Gran#', 'MID%': 'Mid%', 'GRAN%': 'Gran%',
+    'RBC': 'RBC', 'HGB': 'HGB', 'HCT': 'HCT', 'MCV': 'MCV', 'MCH': 'MCH', 'MCHC': 'MCHC',
+    'RDW-CV': 'RDW-CV', 'RDW-SD': 'RDW-SD',
+    'PLT': 'PLT', 'MPV': 'MPV', 'PDW': 'PDW', 'PCT': 'PCT', 'P-LCR': 'P-LCR', 'P-LCC': 'P-LCC'
+  };
+
+  var SECTIONS = [
+    { t: '🩸 سلسلة الكريات البيض — WBC Series',
+      k: ['WBC', 'NEU#', 'LYM#', 'MON#', 'EOS#', 'BAS#', 'MID#', 'GRAN#',
+          'NEU%', 'LYM%', 'MON%', 'EOS%', 'BAS%', 'MID%', 'GRAN%'] },
+    { t: '🔴 سلسلة الكريات الحمر — RBC Series',
+      k: ['RBC', 'HGB', 'HCT', 'MCV', 'MCH', 'MCHC', 'RDW-CV', 'RDW-SD'] },
+    { t: '🟣 سلسلة الصفائح الدموية — PLT Series',
+      k: ['PLT', 'MPV', 'PDW', 'PCT', 'P-LCR', 'P-LCC'] }
+  ];
+
+  function _map(k) {
+    try { return (typeof CBC_PARAMS_MAP !== 'undefined' && CBC_PARAMS_MAP[k]) || {}; }
+    catch (e) { return {}; }
+  }
+  function _arOf(k) {
+    var a = _map(k).ar || '';
+    return a.replace(/^[A-Za-z0-9#%\-]+\s*/, '').trim();
+  }
+  function _esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* ───────────────────── الوصول إلى البيانات ───────────────────── */
+  function _req(id) {
+    if (typeof requests === 'undefined' || !requests) return null;
+    for (var i = 0; i < requests.length; i++) if (requests[i].id === id) return requests[i];
+    return null;
+  }
+  function _cur(req) {
+    if (!req) return null;
+    if (req.cbcData && typeof req.cbcData === 'object' && Object.keys(req.cbcData).length) return req.cbcData;
+    var rd = req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.cbcParams;
+    if (rd && typeof rd === 'object' && Object.keys(rd).length) return rd;
+    return null;
+  }
+  /* يضمن وجود مخزن قابل للكتابة، ويربط resultDetails بنفس الكائن */
+  function _store(req) {
+    var p = _cur(req);
+    if (!p) { p = {}; }
+    req.cbcData = p;
+    if (!req.resultDetails) req.resultDetails = {};
+    if (!req.resultDetails.CBC) req.resultDetails.CBC = { value: 'CBC كامل من الجهاز' };
+    req.resultDetails.CBC.cbcParams = p;
+    return p;
+  }
+  /* المخزن المستهدف حسب النتيجة المختارة من قائمة السجل */
+  function _target(req, sel) {
+    var h = req.cbcHistory || [];
+    if (sel !== '__current__' && sel !== '' && h.length) {
+      var i = parseInt(sel, 10);
+      if (h[i]) { if (!h[i].params || typeof h[i].params !== 'object') h[i].params = {}; return h[i].params; }
+    }
+    return _store(req);
+  }
+  /* قراءة فقط — لا يُنشئ مخزناً جديداً (حتى لا نلوّث الطلبات بلا CBC) */
+  function _targetRO(req, sel) {
+    var h = req.cbcHistory || [];
+    if (sel !== '__current__' && sel !== '' && h.length) {
+      var i = parseInt(sel, 10);
+      if (h[i] && h[i].params) return h[i].params;
+    }
+    return _cur(req) || {};
+  }
+  /* عكس التعديل على النسخة المقابلة (الأحدث ↔ cbcData) */
+  function _mirror(req, sel, key, obj) {
+    var h = req.cbcHistory || [];
+    try {
+      if (sel === '__current__' || sel === '') {
+        if (h[0] && h[0].params && h[0].params !== req.cbcData) h[0].params[key] = obj;
+      } else if (parseInt(sel, 10) === 0) {
+        var cd = _store(req);
+        if (h[0] && cd !== h[0].params) cd[key] = obj;
+      }
+    } catch (e) {}
+  }
+
+  /* ───────────────── حساب الراية H/L (مطابق لمنطق الطباعة) ───────────────── */
+  function _flag(val, ref, devFlag) {
+    var n = parseFloat(String(val == null ? '' : val).replace(/[<>]/g, ''));
+    if (ref && !isNaN(n)) {
+      var parts = String(ref).replace(/[^0-9. ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        var lo = parseFloat(parts[0]), hi = parseFloat(parts[parts.length - 1]);
+        if (!isNaN(lo) && !isNaN(hi)) return n < lo ? 'L' : (n > hi ? 'H' : '');
+      }
+    }
+    var f = String(devFlag || '').toUpperCase().trim();
+    if (f === 'N' || f === 'N-N' || f === 'NORMAL') return '';
+    if (f.charAt(0) === 'L') return 'L';
+    if (f.charAt(0) === 'H') return 'H';
+    return '';
+  }
+  function _flCls(f, hasVal) { return !hasVal ? 'na' : (f === 'H' ? 'hi' : (f === 'L' ? 'lo' : 'ok')); }
+  function _flTxt(f, hasVal) { return !hasVal ? '—' : (f === 'H' ? 'H ↑' : (f === 'L' ? 'L ↓' : 'N')); }
+
+  function _fmtDt(dt) {
+    try {
+      if (typeof _formatCbcDt === 'function') return _formatCbcDt(dt);
+      var d = new Date(dt);
+      return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return dt || '—'; }
+  }
+
+  /* ═══════════════════════════ البناء ═══════════════════════════ */
+  var _showAll = false;
+  var _saveT = null;
+  var _lastReq = '';
+
+  function render() {
+    var panel = document.getElementById('res-cbc-panel');
+    if (!panel) return;
+    var selEl = document.getElementById('res-req-sel');
+    var id = (selEl && selEl.value) || (typeof currentReqId !== 'undefined' ? currentReqId : '') || '';
+    var req = id ? _req(id) : null;
+
+    if (!req) { panel.style.display = 'none'; panel.innerHTML = ''; _lastReq = ''; return; }
+
+    var params = _cur(req);
+    var hasCbcTest = (req.tests || []).some(function (t) { return t === 'CBC' || t === 'h001'; });
+    if (!params && !hasCbcTest) { panel.style.display = 'none'; panel.innerHTML = ''; _lastReq = ''; return; }
+
+    /* لا تُعِد البناء أثناء الكتابة داخل اللوحة لنفس الطلب */
+    var ae = document.activeElement;
+    if (_lastReq === id && ae && panel.contains(ae)) return;
+
+    /* حافظ على اختيار السجل الحالي بين عمليات البناء */
+    var prevSel = null;
+    var oldSel = document.getElementById('cbc-history-sel');
+    if (oldSel && _lastReq === id) prevSel = oldSel.value;
+
+    var hist = req.cbcHistory || [];
+    var selVal = prevSel != null ? prevSel : (hist.length ? '0' : '__current__');
+    var data = _targetRO(req, selVal) || {};
+    var showAll = _showAll || !params;   // لا توجد نتيجة جهاز ⇒ اعرض كل المعاملات للإدخال اليدوي
+
+    /* ── مفاتيح ظاهرة ── */
+    var present = {}, k;
+    for (k in data) { if (k.indexOf('HIST_') === 0) continue; present[k] = 1; }
+
+    var rows = '', shown = 0, filled = 0;
+    SECTIONS.forEach(function (sec) {
+      var keys = sec.k.filter(function (kk) { return showAll || present[kk]; });
+      if (!keys.length) return;
+      rows += '<tr class="cbcE-sec"><td colspan="6">' + sec.t + '</td></tr>';
+      keys.forEach(function (kk) { rows += _row(kk, data[kk]); shown++; });
+    });
+    /* مفاتيح غير قياسية أرسلها الجهاز */
+    var extra = Object.keys(present).filter(function (kk) {
+      return !SECTIONS.some(function (s) { return s.k.indexOf(kk) > -1; });
+    });
+    if (extra.length) {
+      rows += '<tr class="cbcE-sec"><td colspan="6">📋 معاملات إضافية من الجهاز</td></tr>';
+      extra.forEach(function (kk) { rows += _row(kk, data[kk]); shown++; });
+    }
+    Object.keys(present).forEach(function (kk) {
+      var v = data[kk] && data[kk].value;
+      if (v !== undefined && v !== null && String(v).trim() !== '') filled++;
+    });
+
+    function _row(key, p) {
+      var info = _map(key);
+      var val = (p && p.value != null) ? String(p.value) : '';
+      var unit = (p && p.unit) || info.unit || '';
+      var ref = (p && p.refRange) || info.refM || '';
+      var f = _flag(val, ref, p && p.flag);
+      var hasV = String(val).trim() !== '';
+      var edited = !!(p && p._orig !== undefined && String(p._orig) !== String(val));
+      return '<tr class="cbcE-row" data-k="' + _esc(key) + '">'
+        + '<td><span class="cbcE-nm">' + (edited ? '<span class="cbcE-ed">✏️</span>' : '') + _esc(LBL[key] || key) + '</span>'
+        + '<span class="cbcE-ar">' + _esc(_arOf(key)) + '</span></td>'
+        + '<td><input class="cbcE-inp cbcE-v ' + _flCls(f, hasV) + '" data-k="' + _esc(key) + '" data-f="value" '
+        + 'lang="en" dir="ltr" inputmode="decimal" autocomplete="off" value="' + _esc(val) + '" placeholder="—" '
+        + 'oninput="CBCEdit.onEdit(this)" onchange="CBCEdit.onEdit(this)"></td>'
+        + '<td><input class="cbcE-inp cbcE-sm" data-k="' + _esc(key) + '" data-f="unit" lang="en" dir="ltr" '
+        + 'autocomplete="off" value="' + _esc(unit) + '" placeholder="—" oninput="CBCEdit.onEdit(this)"></td>'
+        + '<td><input class="cbcE-inp cbcE-sm" data-k="' + _esc(key) + '" data-f="ref" lang="en" dir="ltr" '
+        + 'autocomplete="off" value="' + _esc(ref) + '" placeholder="—" oninput="CBCEdit.onEdit(this)"></td>'
+        + '<td style="text-align:center"><span class="cbcE-fl ' + _flCls(f, hasV) + '" data-fl="' + _esc(key) + '">' + _flTxt(f, hasV) + '</span></td>'
+        + '<td style="text-align:center">' + (edited
+          ? '<button class="cbcE-rv" title="استرجاع قيمة الجهاز الأصلية (' + _esc(p._orig) + ')" onclick="CBCEdit.revert(\'' + _esc(key).replace(/'/g, '') + '\')">↺</button>'
+          : '') + '</td>'
+        + '</tr>';
+    }
+
+    /* ── قائمة السجل ── */
+    var histHtml = '';
+    if (hist.length > 1) {
+      histHtml = '<select id="cbc-history-sel" class="cbcE-sel" onchange="CBCEdit.onHist()" title="اختر نتيجة CBC — من الأحدث للأقدم">'
+        + hist.map(function (h, i) {
+            return '<option value="' + i + '"' + (String(i) === String(selVal) ? ' selected' : '') + '>'
+              + _fmtDt(h.datetime) + (i === 0 ? ' (الأحدث)' : '') + '</option>';
+          }).join('')
+        + '</select>';
+    } else {
+      histHtml = '<select id="cbc-history-sel" class="cbcE-sel" style="display:none"><option value="__current__" selected></option></select>';
+    }
+
+    var dt = '';
+    if (hist.length && hist[parseInt(selVal, 10)]) dt = hist[parseInt(selVal, 10)].datetime;
+    else if (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.datetime) dt = req.resultDetails.CBC.datetime;
+    var dev = (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.fromDevice)
+      || (hist.length && hist[0] && hist[0].device) || '';
+
+    var cmts = (req.cbcComments && req.cbcComments.length)
+      ? '<div class="cbcE-cmt">💬 تعليقات الجهاز: ' + req.cbcComments.map(_esc).join(' • ') + '</div>' : '';
+
+    panel.innerHTML =
+      '<div class="cbcE-card">'
+      + '<div class="cbcE-hd">'
+      + '<span class="cbcE-ttl">🔬 نتيجة CBC</span>'
+      + (dev ? '<span class="cbcE-sub">' + _esc(dev) + '</span>' : '')
+      + (dt ? '<span class="cbcE-sub">🕒 ' + _esc(_fmtDt(dt)) + '</span>' : '')
+      + '<span class="cbcE-sub">' + filled + ' معامل</span>'
+      + '<span class="cbcE-sp"></span>'
+      + histHtml
+      + '<button class="cbcE-btn g" onclick="CBCEdit.toggleAll()">' + (showAll ? '👁️ المرسَلة فقط' : '➕ كل المعاملات') + '</button>'
+      + '<button class="cbcE-btn" onclick="CBCEdit.print()">🖨️ طباعة CBC</button>'
+      + '</div>'
+      + '<div class="cbcE-wrap"><table class="cbcE-tbl">'
+      + '<thead><tr><th>المعامل</th><th>النتيجة</th><th>الوحدة</th><th>المدى الطبيعي</th><th>الحالة</th><th></th></tr></thead>'
+      + '<tbody>' + (rows || '<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--text2);font-weight:700">لا توجد بيانات CBC لهذا الطلب</td></tr>') + '</tbody>'
+      + '</table></div>'
+      + cmts
+      + '<div class="cbcE-ft"><span class="cbcE-dot"></span><span id="cbcE-status">الحفظ تلقائي — أي تعديل يُطبع في التقرير مباشرة</span></div>'
+      + '</div>';
+
+    panel.style.display = 'block';
+    _lastReq = id;
+    _attachNav(panel);
+  }
+
+  /* ── تنقّل بالأسهم بين حقول النتائج ── */
+  function _attachNav(panel) {
+    if (panel._navH) panel.removeEventListener('keydown', panel._navH, true);
+    panel._navH = function (e) {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('cbcE-inp')) return;
+      var list = Array.prototype.slice.call(panel.querySelectorAll('.cbcE-inp[data-f="' + (t.getAttribute('data-f') || 'value') + '"]'));
+      var i = list.indexOf(t);
+      if (i === -1) return;
+      e.preventDefault();
+      var nx = (e.key === 'ArrowUp') ? list[i - 1] : list[i + 1];
+      if (nx) { nx.focus(); if (nx.select) nx.select(); }
+    };
+    panel.addEventListener('keydown', panel._navH, true);
+  }
+
+  /* ═══════════════════════ التعديل والحفظ ═══════════════════════ */
+  function onEdit(el) {
+    var key = el.getAttribute('data-k');
+    var fld = el.getAttribute('data-f');
+    var selEl = document.getElementById('res-req-sel');
+    var id = (selEl && selEl.value) || (typeof currentReqId !== 'undefined' ? currentReqId : '');
+    var req = _req(id);
+    if (!req || !key) return;
+
+    var histSel = document.getElementById('cbc-history-sel');
+    var sel = histSel ? histSel.value : '__current__';
+    var data = _target(req, sel);
+
+    var p = data[key];
+    if (!p || typeof p !== 'object') {
+      var info = _map(key);
+      p = { value: '', unit: info.unit || '', refRange: info.refM || '', flag: '' };
+      data[key] = p;
+    }
+    if (p._orig === undefined && fld === 'value') p._orig = (p.value == null ? '' : String(p.value));
+
+    var v = el.value;
+    if (fld === 'value') p.value = v;
+    else if (fld === 'unit') p.unit = v;
+    else if (fld === 'ref') p.refRange = v;
+
+    /* إعادة حساب الراية فوراً من المدى الطبيعي */
+    var info2 = _map(key);
+    var refNow = p.refRange || info2.refM || '';
+    var f = _flag(p.value, refNow, '');
+    p.flag = f;
+
+    /* تحديث التلوين والبادج بدون إعادة بناء اللوحة (حفاظاً على التركيز) */
+    try {
+      var row = el.closest('tr');
+      var vIn = row ? row.querySelector('.cbcE-v') : null;
+      var hasV = String(p.value == null ? '' : p.value).trim() !== '';
+      if (vIn) { vIn.className = 'cbcE-inp cbcE-v ' + _flCls(f, hasV); }
+      var fl = row ? row.querySelector('.cbcE-fl') : null;
+      if (fl) { fl.className = 'cbcE-fl ' + _flCls(f, hasV); fl.textContent = _flTxt(f, hasV); }
+    } catch (e) {}
+
+    _mirror(req, sel, key, p);
+    _schedule(req, sel);
+  }
+
+  function _schedule(req, sel) {
+    var st = document.getElementById('cbcE-status');
+    if (st) st.textContent = '⏳ جارٍ الحفظ...';
+    clearTimeout(_saveT);
+    _saveT = setTimeout(function () { _commit(req, sel); }, 400);
+  }
+
+  function _commit(req, sel) {
+    try {
+      var data = _target(req, sel);
+      var any = Object.keys(data).some(function (k) {
+        return k.indexOf('HIST_') !== 0 && data[k] && String(data[k].value || '').trim() !== '';
+      });
+      if (any) {
+        if (!req.results) req.results = {};
+        req.results['CBC'] = 'done';
+        if (!req.resultDetails) req.resultDetails = {};
+        if (!req.resultDetails.CBC) req.resultDetails.CBC = { value: 'CBC كامل من الجهاز' };
+        /* اربط تفاصيل النتيجة بالمخزن الحالي فقط (وليس بسجل قديم) */
+        if (sel === '__current__' || sel === '' || parseInt(sel, 10) === 0) {
+          req.resultDetails.CBC.cbcParams = _store(req);
+        }
+        req.resultDetails.CBC.editedAt = new Date().toISOString();
+      }
+      req._updatedAt = Date.now();
+      if (typeof save === 'function') save('requests', requests);
+      if (typeof updateBadges === 'function') { try { updateBadges(); } catch (e) {} }
+      var st = document.getElementById('cbcE-status');
+      if (st) st.textContent = '✅ تم الحفظ — الطباعة ستعتمد آخر تعديل';
+    } catch (e) {
+      var st2 = document.getElementById('cbcE-status');
+      if (st2) st2.textContent = '⚠️ تعذّر الحفظ';
+      console.warn('[CBCEdit] save', e);
+    }
+  }
+
+  /* ── استرجاع قيمة الجهاز الأصلية لحقل ── */
+  function revert(key) {
+    var selEl = document.getElementById('res-req-sel');
+    var id = (selEl && selEl.value) || (typeof currentReqId !== 'undefined' ? currentReqId : '');
+    var req = _req(id); if (!req) return;
+    var histSel = document.getElementById('cbc-history-sel');
+    var sel = histSel ? histSel.value : '__current__';
+    var data = _target(req, sel);
+    var p = data[key];
+    if (!p || p._orig === undefined) return;
+    p.value = p._orig;
+    delete p._orig;
+    var info = _map(key);
+    p.flag = _flag(p.value, p.refRange || info.refM || '', '');
+    _mirror(req, sel, key, p);
+    _commit(req, sel);
+    _lastReq = '';
+    render();
+  }
+
+  function toggleAll() { _showAll = !_showAll; _lastReq = ''; render(); }
+  function onHist() { _lastReq = ''; render(); }
+
+  /* ── طباعة النتيجة المختارة حالياً ── */
+  function print() {
+    try {
+      if (typeof printCBCFromDeviceSel === 'function') { printCBCFromDeviceSel(); return; }
+      var selEl = document.getElementById('res-req-sel');
+      if (typeof printCBCFromDevice === 'function') printCBCFromDevice(selEl ? selEl.value : '');
+    } catch (e) { console.warn('[CBCEdit] print', e); }
+  }
+
+  window.CBCEdit = { render: render, onEdit: onEdit, revert: revert, toggleAll: toggleAll, onHist: onHist, print: print };
+
+  /* ═════════════════ الربط بواجهة إدخال النتائج ═════════════════ */
+  function _hook() {
+    var prev = window.loadResultEntry;
+    if (typeof prev !== 'function') return false;
+    window.loadResultEntry = function () {
+      var r;
+      try { r = prev.apply(this, arguments); } catch (e) { console.warn('[CBCEdit] load', e); }
+      try { render(); } catch (e) { console.warn('[CBCEdit] render', e); }
+      return r;
+    };
+    return true;
+  }
+  if (!_hook()) {
+    var n = 0, iv = setInterval(function () { if (_hook() || ++n > 60) clearInterval(iv); }, 300);
+  }
+
+  /* عند وصول نتيجة جديدة من الجهاز لنفس الطلب المعروض — حدّث اللوحة */
+  var _prevUpd = window.updateCbcHistorySel;
+  window.updateCbcHistorySel = function (reqId) {
+    try { if (typeof _prevUpd === 'function') _prevUpd.apply(this, arguments); } catch (e) {}
+    try {
+      var selEl = document.getElementById('res-req-sel');
+      if (selEl && selEl.value === reqId) { _lastReq = ''; render(); }
+    } catch (e) {}
+  };
+
+  /* بناء أولي إن كانت الشاشة مفتوحة أصلاً */
+  setTimeout(function () { try { render(); } catch (e) {} }, 1200);
 })();
 
 </script>
