@@ -27563,8 +27563,8 @@ function _spPrevTh(prev, o){
   var d = (prev && prev.date) ? String(prev.date) : '';
   return '<th style="width:'+(o.w||'24%')+';font-size:'+(o.fs||'13px')+';font-weight:800;color:#1a4fa0;padding:'+(o.pad||'2px 8px')
     + ';text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;border-left:2px solid #b0c4e8;background:#eef3ff;'
-    + '-webkit-print-color-adjust:exact;print-color-adjust:exact;white-space:nowrap">Last Result'
-    + (d ? '<div style="font-size:9px;font-weight:700;color:#5a6b8a;margin-top:-1px;letter-spacing:0">'+d+'</div>' : '')
+    + '-webkit-print-color-adjust:exact;print-color-adjust:exact;white-space:nowrap;line-height:1.2">Last Result'
+    + (d ? '<span style="font-size:9px;font-weight:700;color:#5a6b8a;letter-spacing:0"> ('+d+')</span>' : '')
     + '</th>';
 }
 
@@ -27577,7 +27577,7 @@ function _spPrevTd(html, o){
     + ';border:none;border-bottom:1px solid #e0e0e0;text-align:center;border-left:2px solid #d0d8ea;background:#f4f8ff;'
     + '-webkit-print-color-adjust:exact;print-color-adjust:exact">'
     + '<span style="display:inline-block;border:1.5px solid #b0c4e8;border-radius:4px;padding:1px 8px;'
-    + (o.wrap ? 'min-width:0;width:100%;box-sizing:border-box;white-space:normal;word-break:break-word;' : 'min-width:'+(o.minw||'70px')+';')
+    + (o.wrap ? 'min-width:0;width:100%;box-sizing:border-box;white-space:normal;word-break:break-word;' : 'min-width:'+(o.minw||'70px')+';white-space:nowrap;')
     + 'text-align:'+(o.align||'center')+';background:#fff;color:'+(isDash?'#9fb0c8':'#1a4fa0')
     + ';font-size:'+(o.fs||'14px')+';font-weight:700;line-height:1.5">'+inner+'</span></td>';
 }
@@ -27586,6 +27586,37 @@ window._spFindPrev  = _spFindPrev;
 window._spPrevValue = _spPrevValue;
 window._spPrevTh    = _spPrevTh;
 window._spPrevTd    = _spPrevTd;
+
+/* ── ضمان الورقة الواحدة ─────────────────────────────────────────────
+ *  A4 = 297mm ≈ 1122px. الارتفاع المتاح = الورقة − هامش أعلى − هامش أسفل.
+ *  إن تجاوز المحتوى الورقة نُقلّص الحشو (padding) فقط — حجم الخط يبقى
+ *  كما كان تماماً قبل إضافة عمود Last Result.
+ * ─────────────────────────────────────────────────────────────────── */
+function _spPageAvailPx(ftrH){
+  var f = (typeof ftrH==='number' && ftrH>=10 && ftrH<=80) ? ftrH : 50;
+  var botMM = Math.ceil(f*0.2646)+8;          // هامش @page السفلي بالمليمتر
+  return Math.floor(1122 - 4 - botMM*3.7795); // − هامش علوي 1mm
+}
+/* سكربت يُحقن داخل صفحة الطباعة: يقيس الارتفاع ويقلّص الحشو تدريجياً */
+function _spOnePageFitJS(sel, availPx){
+  return '<scr'+'ipt>(function(){try{'
+    + 'var LIMIT='+Math.floor(availPx)+'-16;'
+    + 'var c=document.querySelector("'+sel+'");if(!c)return;'
+    + 'function H(){return c.getBoundingClientRect().height;}'
+    + 'function each(q,fn){var a=document.querySelectorAll(q);for(var i=0;i<a.length;i++)fn(a[i]);}'
+    + 'function padV(q,v){each(q,function(e){e.style.setProperty("padding-top",v,"important");'
+    + 'e.style.setProperty("padding-bottom",v,"important");});}'
+    + 'var steps=[function(){padV("table td,table th","1px");},'
+    + 'function(){padV("table td,table th","0px");},'
+    + 'function(){padV("table td>span","0px");},'
+    + 'function(){each("table",function(t){var d=t.parentNode;if(d&&d.style)d.style.marginBottom="0px";'
+    + 'var hd=d?d.firstElementChild:null;if(hd&&hd.style){hd.style.paddingTop="0px";hd.style.paddingBottom="0px";}});},'
+    + 'function(){each("table td,table th",function(e){e.style.lineHeight="1.15";});}];'
+    + 'for(var i=0;i<steps.length&&H()>LIMIT;i++){steps[i]();}'
+    + '}catch(e){}})();</scr'+'ipt>';
+}
+window._spPageAvailPx  = _spPageAvailPx;
+window._spOnePageFitJS = _spOnePageFitJS;
 
 
 function _buildUAPrintHTML(r){
@@ -27607,7 +27638,27 @@ function _buildUAPrintHTML(r){
   if((!uaRecords||!uaRecords.length) && typeof loadUARecords==='function'){ try{ loadUARecords(); }catch(e){} }
   const _uaPrevRec = (typeof _spFindPrev==='function') ? _spFindPrev(uaRecords, r) : null;
   const _uaHasPrev = !!_uaPrevRec;
-  const _uaW = _uaHasPrev ? ['30%','23%','23%','24%'] : ['38%','32%','30%'];
+  // ⭐ عروض تسمح ببقاء كل صف في سطر واحد (بلا table-layout:fixed) — أهم سبب لانتقال التقرير لورقة ثانية
+  const _uaW = _uaHasPrev ? ['30%','26%','18%','26%'] : ['38%','32%','30%'];
+  // ⭐ ضمان ورقة واحدة: تقدير ارتفاع المحتوى — عند التجاوز نقلّص الحشو فقط (الخط كما هو)
+  const _uaFtrH2 = (typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50;
+  const _uaPageAvail = (typeof _spPageAvailPx==='function') ? _spPageAvailPx(_uaFtrH2) : 950;
+  const _uaHdrH2 = (s.headerImg && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
+      ? ((typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170) : 165;
+  let _uaRowsN=0,_uaSecsN=0;
+  Object.values(UA_FIELDS).forEach(sec=>{
+    let n=0;
+    sec.fields.forEach(f=>{
+      if(!r[f.id]||r[f.id]==='') return;
+      if(f.hideIfNormal && r[f.id]===f.normal) return;
+      n += (f.type==='textarea') ? Math.max(1, Math.ceil(String(r[f.id]||'').length/55)) : 1;
+    });
+    if(n){ _uaSecsN++; _uaRowsN+=n; }
+  });
+  const _uaEst = _uaHdrH2 + 135 + _uaSecsN*46 + _uaRowsN*25 + (_uaFtrH2+8);
+  const _uaTight = _uaEst > _uaPageAvail;
+  const _uaPad   = _uaTight ? '0px 8px' : '2px 8px';
+  const _uaSecMB = _uaTight ? '1px' : '2px';
 
   const renderSec=(sec)=>{
     const validFields=sec.fields.filter(f=>{
@@ -27623,29 +27674,31 @@ function _buildUAPrintHTML(r){
       const val=isEmpty?'':(r[f.id]||'—');
       const isAbn=!isEmpty&&f.normal&&val!=='—'&&val!==f.normal;
       const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
+      // ⭐ منع التفاف النص (سطر واحد لكل صف) عدا حقل الملاحظات الطويل
+      const _nw = (f.type==='textarea') ? '' : ';white-space:nowrap';
       return `<tr style="background:${rowBg}">
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[0]};border:none;border-bottom:1px solid #e0e0e0">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:${_uaPad};width:${_uaW[0]};border:none;border-bottom:1px solid #e0e0e0;white-space:nowrap">
           <span style="color:#000;margin-right:5px">■</span>${f.label}
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
-          <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}">${val}</span>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:${_uaPad};width:${_uaW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+          <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}${_nw}">${val}</span>
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
-        ${_uaHasPrev?_spPrevTd(_spPrevValue(_uaPrevRec,f),{w:_uaW[3],fs:'14px',pad:'2px 8px',minw:'70px'}):''}
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:${_uaPad};width:${_uaW[2]};border:none;border-bottom:1px solid #e0e0e0${_nw}">${f.normal||'—'}</td>
+        ${_uaHasPrev?_spPrevTd(_spPrevValue(_uaPrevRec,f),{w:_uaW[3],fs:'14px',pad:_uaPad,minw:'70px',wrap:(f.type==='textarea')}):''}
       </tr>`;
     }).join('');
 
-    return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:2px;overflow:hidden;page-break-inside:avoid">
-      <div style="background:#ffffff;padding:2px 8px;border-bottom:1px solid #b8b8b8">
+    return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:${_uaSecMB};overflow:hidden;page-break-inside:avoid">
+      <div style="background:#ffffff;padding:${_uaTight?'0px 8px':'2px 8px'};border-bottom:1px solid #b8b8b8">
         <span style="font-size:14px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${sec.label}</span>
       </div>
-      <table style="width:100%;border-collapse:collapse${_uaHasPrev?';table-layout:fixed':''}">
+      <table style="width:100%;border-collapse:collapse">
         <thead>
           <tr style="background:#f0f0f0">
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[0]}">Parameter</th>
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[1]}">Result</th>
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[2]}">Normal Range</th>
-            ${_uaHasPrev?_spPrevTh(_uaPrevRec,{w:_uaW[3],fs:'13px',pad:'2px 8px'}):''}
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:${_uaPad};text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[0]};white-space:nowrap">Parameter</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:${_uaPad};text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[1]};white-space:nowrap">Result</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:${_uaPad};text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[2]};white-space:nowrap">Normal Range</th>
+            ${_uaHasPrev?_spPrevTh(_uaPrevRec,{w:_uaW[3],fs:'13px',pad:_uaPad}):''}
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -27729,7 +27782,7 @@ function _buildUAPrintHTML(r){
     @media print{
       body{font-size:13px;}
       .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;}
-      th,td{font-size:13px !important;padding:2px 7px !important;}
+      th,td{font-size:13px !important;padding:${_uaTight?'0px 7px':'2px 7px'} !important;}
       .ua-title{font-size:13px !important;} .ua-sec-hdr{font-size:13px !important;}
     }
   </style></head><body>
@@ -27748,6 +27801,7 @@ function _buildUAPrintHTML(r){
       </div>
     </div>
     <div class="ua-footer">${ftrHTML}</div>
+    ${(typeof _spOnePageFitJS==='function')?_spOnePageFitJS('.ua-content',_uaPageAvail):''}
   </body></html>`;
 }
 
@@ -28237,7 +28291,33 @@ function _buildStoolPrintHTML(r){
   if((!stoolExamRecords||!stoolExamRecords.length) && typeof loadStoolExamRecords==='function'){ try{ loadStoolExamRecords(); }catch(e){} }
   const _stPrevRec = (typeof _spFindPrev==='function') ? _spFindPrev(stoolExamRecords, r) : null;
   const _stHasPrev = !!_stPrevRec;
-  const _stW = _stHasPrev ? ['30%','23%','23%','24%'] : ['38%','32%','30%'];
+  // ⭐ عروض تسمح ببقاء كل صف في سطر واحد (بلا table-layout:fixed)
+  const _stW = _stHasPrev ? ['30%','26%','18%','26%'] : ['38%','32%','30%'];
+  // ⭐ ضمان ورقة واحدة: تقدير الارتفاع — عند التجاوز نقلّص الحشو فقط (الخط كما هو)
+  const _stFtrH2 = (typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50;
+  const _stPageAvail = (typeof _spPageAvailPx==='function') ? _spPageAvailPx(_stFtrH2) : 950;
+  const _stHdrH2 = (s.headerImg && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
+      ? ((typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170) : 165;
+  let _stRowsN=0,_stSecsN=0;
+  Object.values(STOOL_FIELDS).forEach(sec=>{
+    let n=0;
+    sec.fields.forEach(f=>{
+      if(f.type==='multiselect'){
+        const _ps=String(r[f.id]||'').split('||').filter(p=>p.trim()).length;
+        const _pp=_stPrevRec?String(_stPrevRec[f.id]||'').split('||').filter(p=>p.trim()).length:0;
+        n += Math.max(1,_ps,_pp); return;
+      }
+      if(!r[f.id]||r[f.id]==='') return;
+      if(f.hideIfNormal && r[f.id]===f.normal) return;
+      n += 1;
+    });
+    if(n){ _stSecsN++; _stRowsN+=n; }
+  });
+  const _stEst = _stHdrH2 + 145 + _stSecsN*50 + _stRowsN*26 + (r.s_note?30:0) + (_stFtrH2+8);
+  const _stTight = _stEst > _stPageAvail;
+  const _stPad   = _stTight ? '0px 8px' : '2px 8px';
+  const _stThPad = _stTight ? '0px 10px' : '3px 10px';
+  const _stSecMB = _stTight ? '1px' : '4px';
 
   const renderSec=(sec)=>{
     const validFields=sec.fields.filter(f=>{
@@ -28250,19 +28330,19 @@ function _buildStoolPrintHTML(r){
     if(!validFields.length) return '';
     const rows=validFields.map((f,fi)=>{
       const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
-      const prevTd=_stHasPrev?_spPrevTd(_spPrevValue(_stPrevRec,f),{w:_stW[3],fs:(f.type==='multiselect'?'13px':'14px'),pad:'2px 8px',minw:'70px',align:(f.type==='multiselect'?'left':'center'),wrap:(f.type==='multiselect')}):'';
+      const prevTd=_stHasPrev?_spPrevTd(_spPrevValue(_stPrevRec,f),{w:_stW[3],fs:'14px',pad:_stPad,minw:'70px',align:(f.type==='multiselect'?'left':'center'),wrap:(f.type==='multiselect')}):'';
       if(f.type==='multiselect'){
         const parasites=(r[f.id]||'').split('||').filter(p=>p.trim());
         const isAbn=parasites.length>0;
         const parasiteLines=isAbn
-          ? parasites.map(p=>`<div style="white-space:${_stHasPrev?'normal':'nowrap'};word-break:break-word;padding:1px 0">${p}</div>`).join('')
+          ? parasites.map(p=>`<div style="white-space:${_stHasPrev?'normal':'nowrap'};word-break:break-word;padding:0">${p}</div>`).join('')
           : '<div>Absent</div>';
         return `<tr style="background:${rowBg}">
-          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
-          <td style="font-size:14px;font-weight:700;padding:2px 8px;width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
-            <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:3px 10px;${_stHasPrev?'min-width:0;width:100%;box-sizing:border-box;font-size:13px;':'min-width:220px;'}text-align:left;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};line-height:1.6">${parasiteLines}</span>
+          <td style="font-size:14px;font-weight:700;color:#000000;padding:${_stPad};width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0;white-space:nowrap"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
+          <td style="font-size:14px;font-weight:700;padding:${_stPad};width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+            <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;${_stHasPrev?'min-width:0;width:100%;box-sizing:border-box;':'min-width:220px;'}text-align:left;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};line-height:1.45">${parasiteLines}</span>
           </td>
-          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+          <td style="font-size:14px;font-weight:700;color:#000000;padding:${_stPad};width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0;white-space:nowrap">${f.normal||'—'}</td>
           ${prevTd}
         </tr>`;
       }
@@ -28271,24 +28351,24 @@ function _buildStoolPrintHTML(r){
       const val=isEmpty?'':(r[f.id]||'—');
       const isAbn=!isEmpty&&f.normal&&val!=='—'&&val!==f.normal;
       return `<tr style="background:${rowBg}">
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
-          <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}">${val}</span>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:${_stPad};width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0;white-space:nowrap"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:${_stPad};width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+          <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};white-space:nowrap">${val}</span>
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:${_stPad};width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0;white-space:nowrap">${f.normal||'—'}</td>
         ${prevTd}
       </tr>`;
     }).join('');
-    return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:4px;overflow:hidden;page-break-inside:avoid">
-      <div style="background:#ffffff;padding:3px 12px;border-bottom:1.5px solid #b8b8b8">
+    return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:${_stSecMB};overflow:hidden;page-break-inside:avoid">
+      <div style="background:#ffffff;padding:${_stTight?'0px 12px':'3px 12px'};border-bottom:1.5px solid #b8b8b8">
         <span style="font-size:15px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${sec.label}</span>
       </div>
-      <table style="width:100%;border-collapse:collapse${_stHasPrev?';table-layout:fixed':''}">
+      <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#f0f0f0">
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[0]}">Parameter</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[1]}">Result</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[2]}">Normal Range</th>
-          ${_stHasPrev?_spPrevTh(_stPrevRec,{w:_stW[3],fs:'14px',pad:'3px 8px'}):''}
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:${_stThPad};text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[0]};white-space:nowrap">Parameter</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:${_stThPad};text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[1]};white-space:nowrap">Result</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:${_stThPad};text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[2]};white-space:nowrap">Normal Range</th>
+          ${_stHasPrev?_spPrevTh(_stPrevRec,{w:_stW[3],fs:'14px',pad:_stThPad}):''}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -28318,6 +28398,7 @@ function _buildStoolPrintHTML(r){
       ${r.s_note?`<div style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.s_note}</span></div>`:''}
     </div>
     <div class="se-footer">${ftrHTML}</div>
+    ${(typeof _spOnePageFitJS==='function')?_spOnePageFitJS('.se-content',_stPageAvail):''}
   </body></html>`;
 }
 function printStoolReport(id){
@@ -36764,6 +36845,22 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
       if(parsed.alarms&&parsed.alarms.length){
         lisAddLog('warn','🚩 '+deviceName+' — رايات إنذار: '+parsed.alarms.map(function(a){return a.name;}).join(' · '));
       }
+    }
+  }catch(_){}
+  // ── 🩸 BC-30s/BC-20s (3-Diff): نقاط المخطط الخام + Meta Length ─────────
+  // main.js يمرّرها في مصفوفة histRaw منفصلة (لا تدخل results إطلاقاً).
+  // تُلتقط هنا قبل أي خروج مبكر لأن الجهاز قد يرسلها في رسالة مستقلة بلا
+  // نتائج رقمية. تُخزَّن تحت HIST_WBC/HIST_RBC/HIST_PLT ويرسمها النموذجان ٩ و١٠.
+  // معزول تماماً: المصفوفة فارغة لكل جهاز لا يرسل مخططات خاماً.
+  try{
+    if(!parsed.isQC && parsed.histRaw && parsed.histRaw.length &&
+       typeof cbcCaptureHistogram==='function'){
+      var _sidH=parsed.patientId||'';
+      var _okH=0;
+      parsed.histRaw.forEach(function(h){
+        try{ if(cbcCaptureHistogram(_sidH,h.code,h.value,h.name||'')) _okH++; }catch(_){}
+      });
+      if(_okH) lisAddLog('ok','📈 '+deviceName+' — استُلمت بيانات مخطط ('+_okH+' مقطع) SID:'+_sidH);
     }
   }catch(_){}
   if(!parsed.results||!parsed.results.length) return;
