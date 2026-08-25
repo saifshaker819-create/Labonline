@@ -3399,6 +3399,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="overflow-x:auto;margin-bottom:18px">
               <table class="res-tbl"><thead><tr><th>الفحص</th><th>النتيجة</th><th>الوحدة</th><th>المدى الطبيعي</th><th>التفسير</th><th>ملاحظة</th><th id="res-del-col" style="display:none">حذف</th></tr></thead><tbody id="res-entry-tbody"></tbody></table>
             </div>
+            <!-- 🔬 لوحة نتيجة CBC (تُبنى من CBCEdit) -->
+            <div id="res-cbc-panel" style="display:none"></div>
             <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:16px">
               <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
                 <div class="fg" style="margin-bottom:0;flex:1;min-width:160px"><label class="fl">تاريخ الفحص</label><input class="fc" type="date" id="res-date"></div>
@@ -4720,13 +4722,15 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                         <option value="6">✨ النموذج 6 — عصري ببطاقات ناعمة وتدرّج لوني</option>
                         <option value="7">📈 النموذج 7 — مرئي بأشرطة موضع القيمة ضمن المدى</option>
                         <option value="8">🎯 النموذج 8 — أنيق مينيمال بإبراز ذكي للقيم الشاذة</option>
+                        <option value="9">🩸 النموذج 9 — نمط الجهاز (CBC 3-Diff مطابق للورقة + صناديق رسائل + رسوم مرقّمة)</option>
+                        <option value="10">🧪 النموذج 10 — ورقة المختبر الكلاسيكية (هيستوغرام ملوّن لكل مجموعة + سجل النتائج السابقة أسفل الورقة)</option>
                       </select>
                       <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
 
                       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid rgba(0,180,100,0.25)">
                         <div style="flex:1">
                           <div style="font-size:12px;font-weight:700">📊 عمود النتيجة السابقة</div>
-                          <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية الجدول يعرض قيمة آخر فحص CBC للمريض — بخط أصغر وخلفية شفافة خفيفة. يعمل مع النماذج الثمانية.</div>
+                          <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية الجدول يعرض قيمة آخر فحص CBC للمريض — بخط أصغر وخلفية شفافة خفيفة. يعمل مع النماذج ١–٩. (النموذج ١٠ يعرض سجلاً كاملاً بالنتائج السابقة أسفل الورقة دائماً.)</div>
                         </div>
                         <div class="tog" id="tog-cbc-prev" onclick="this.classList.toggle('on');_saveCBCShowPrev(this.classList.contains('on'))"><div class="tog-t"></div></div>
                       </div>
@@ -5532,6 +5536,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <span class="st-card-arrow" id="arr-stc-ua-stool">▼</span>
           </div>
           <div class="st-card-body" id="body-stc-ua-stool" style="display:none">
+            <!-- ⭐ عمود النتيجة السابقة في تقارير الإدرار والخروج -->
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;background:rgba(0,140,255,0.05);border:1px solid rgba(0,140,255,0.35);border-radius:10px;padding:12px 14px">
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:800;color:#2b9bff">📊 عمود النتيجة السابقة (Last Result)</div>
+                <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية جداول تقارير الإدرار والخروج يعرض نتيجة آخر فحص سابق لنفس المريض مع تاريخه — بنفس شكل عمود Last Result في نموذج السائل المنوي. لا يظهر العمود إذا لم يكن للمريض فحص سابق.</div>
+              </div>
+              <div class="tog on" id="tog-uastool-prev" onclick="this.classList.toggle('on');_saveUAStoolShowPrev(this.classList.contains('on'))"><div class="tog-t"></div></div>
+            </div>
             <!-- تبويبات: بول / براز -->
             <div style="display:flex;gap:6px;margin-bottom:16px;background:var(--bg-glass);border-radius:10px;padding:4px">
               <button id="exam-tab-ua" onclick="switchExamSettingsTab('ua')" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--primary);color:#000;cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:800">💧 Urine Examination</button>
@@ -10396,6 +10408,8 @@ function nav(p){
     if(togAC){ if(settings.autoPrintCBC) togAC.classList.add('on'); else togAC.classList.remove('on'); }
     const togCP=document.getElementById('tog-cbc-prev');
     if(togCP){ if(settings.cbcShowPrev) togCP.classList.add('on'); else togCP.classList.remove('on'); }
+    const togUSP=document.getElementById('tog-uastool-prev');
+    if(togUSP){ if(settings.uaStoolShowPrev===false) togUSP.classList.remove('on'); else togUSP.classList.add('on'); }
     _loadCBCTemplateSel();
     _loadReportTemplateSel();
   }
@@ -27462,6 +27476,118 @@ function deleteUARecord(id){
   loadUARecords(); uaRecords=uaRecords.filter(r=>r.id!==id); saveUARecords(); renderUAList();
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+ *  📊 عمود «Last Result» — النتيجة السابقة في تقارير الإدرار والخروج
+ *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *  يضيف عموداً رابعاً في نهاية جدول كل قسم يحمل قيمة آخر فحص سابق
+ *  لنفس المريض مع تاريخه — بنفس أسلوب عمود Last Result في نموذج
+ *  السائل المنوي (٢): إطار أزرق فاتح، خلفية زرقاء خفيفة، فاصل أيسر.
+ *
+ *  • لا يظهر العمود إطلاقاً إن لم يوجد فحص سابق لنفس المريض،
+ *    فتبقى التقارير كما كانت حرفياً.
+ *  • التفعيل/الإطفاء: settings.uaStoolShowPrev (مفعّل افتراضياً).
+ * ══════════════════════════════════════════════════════════════════════ */
+
+/* هل عمود النتيجة السابقة مُفعَّل؟ (مفعّل ما لم يُطفأ صراحةً) */
+function _spPrevEnabled(){
+  try{ return !(typeof settings==='object' && settings && settings.uaStoolShowPrev===false); }
+  catch(e){ return true; }
+}
+
+/* حفظ حالة المفتاح من الإعدادات */
+function _saveUAStoolShowPrev(val){
+  try{
+    if(typeof settings!=='object'||!settings) return;
+    settings.uaStoolShowPrev = !!val;
+    if(typeof save==='function') save('settings', settings);
+    if(typeof showNotif==='function')
+      showNotif('تم', val ? '📊 أُضيف عمود النتيجة السابقة لتقارير الإدرار والخروج'
+                          : 'أُزيل عمود النتيجة السابقة — التقارير كما كانت','success');
+  }catch(e){}
+}
+window._saveUAStoolShowPrev = _saveUAStoolShowPrev;
+
+/* الطابع الزمني لسجل فحص (createdAt أولاً ثم التاريخ) */
+function _spRecTs(rec){
+  try{
+    if(!rec) return 0;
+    var n = Number(rec.createdAt);
+    if(!isNaN(n) && n > 0) return n;
+    var t = new Date(rec.date||'').getTime();
+    return isNaN(t) ? 0 : t;
+  }catch(e){ return 0; }
+}
+
+/* آخر فحص سابق لنفس المريض (أقدم من الفحص الحالي) */
+function _spFindPrev(list, r){
+  try{
+    if(!_spPrevEnabled()) return null;
+    if(!r || !r.patientId || !list || !list.length) return null;
+    var cur = _spRecTs(r);
+    var cands = [];
+    for(var i=0;i<list.length;i++){
+      var x = list[i];
+      if(!x || x.id===r.id) continue;
+      if(x.patientId !== r.patientId) continue;
+      var t = _spRecTs(x);
+      if(cur>0 && t>0 && t>=cur) continue;      // أحدث أو بنفس اللحظة ⇒ ليس سابقاً
+      cands.push(x);
+    }
+    if(!cands.length) return null;
+    cands.sort(function(a,b){ return _spRecTs(b) - _spRecTs(a); });
+    return cands[0];
+  }catch(e){ return null; }
+}
+
+/* قيمة المُعامل في الفحص السابق — جاهزة للعرض داخل الخلية */
+function _spPrevValue(prev, f){
+  try{
+    if(!prev || !f) return '—';
+    var raw = prev[f.id];
+    if(f.type==='multiselect'){
+      if(raw===undefined || raw===null) return '—';
+      var arr = String(raw).split('||').map(function(p){ return p.trim(); }).filter(Boolean);
+      if(!arr.length) return 'Absent';
+      return arr.map(function(p){ return '<div style="padding:1px 0;word-break:break-word;line-height:1.5">'+p+'</div>'; }).join('');
+    }
+    if(raw===undefined || raw===null) return '—';
+    if(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL) return '—';
+    var v = String(raw).trim();
+    return v==='' ? '—' : v;
+  }catch(e){ return '—'; }
+}
+
+/* رأس العمود — يحمل تاريخ الفحص السابق بخط صغير */
+function _spPrevTh(prev, o){
+  o = o || {};
+  var d = (prev && prev.date) ? String(prev.date) : '';
+  return '<th style="width:'+(o.w||'24%')+';font-size:'+(o.fs||'13px')+';font-weight:800;color:#1a4fa0;padding:'+(o.pad||'2px 8px')
+    + ';text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;border-left:2px solid #b0c4e8;background:#eef3ff;'
+    + '-webkit-print-color-adjust:exact;print-color-adjust:exact;white-space:nowrap">Last Result'
+    + (d ? '<div style="font-size:9px;font-weight:700;color:#5a6b8a;margin-top:-1px;letter-spacing:0">'+d+'</div>' : '')
+    + '</th>';
+}
+
+/* خلية العمود — مربع بنفس شكل مربع النتيجة الحالية لكن بلون أزرق هادئ */
+function _spPrevTd(html, o){
+  o = o || {};
+  var inner = (html===undefined || html===null || html==='') ? '—' : html;
+  var isDash = (inner === '—');
+  return '<td style="width:'+(o.w||'24%')+';padding:'+(o.pad||'2px 8px')
+    + ';border:none;border-bottom:1px solid #e0e0e0;text-align:center;border-left:2px solid #d0d8ea;background:#f4f8ff;'
+    + '-webkit-print-color-adjust:exact;print-color-adjust:exact">'
+    + '<span style="display:inline-block;border:1.5px solid #b0c4e8;border-radius:4px;padding:1px 8px;'
+    + (o.wrap ? 'min-width:0;width:100%;box-sizing:border-box;white-space:normal;word-break:break-word;' : 'min-width:'+(o.minw||'70px')+';')
+    + 'text-align:'+(o.align||'center')+';background:#fff;color:'+(isDash?'#9fb0c8':'#1a4fa0')
+    + ';font-size:'+(o.fs||'14px')+';font-weight:700;line-height:1.5">'+inner+'</span></td>';
+}
+
+window._spFindPrev  = _spFindPrev;
+window._spPrevValue = _spPrevValue;
+window._spPrevTh    = _spPrevTh;
+window._spPrevTd    = _spPrevTd;
+
+
 function _buildUAPrintHTML(r){
   if(typeof r === 'string'){ loadUARecords(); r=uaRecords.find(x=>x.id===r); }
   if(!r) return '';
@@ -27476,6 +27602,12 @@ function _buildUAPrintHTML(r){
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
   else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+
+  // ⭐ آخر فحص إدرار سابق لنفس المريض — يُعرض في عمود «Last Result»
+  if((!uaRecords||!uaRecords.length) && typeof loadUARecords==='function'){ try{ loadUARecords(); }catch(e){} }
+  const _uaPrevRec = (typeof _spFindPrev==='function') ? _spFindPrev(uaRecords, r) : null;
+  const _uaHasPrev = !!_uaPrevRec;
+  const _uaW = _uaHasPrev ? ['30%','23%','23%','24%'] : ['38%','32%','30%'];
 
   const renderSec=(sec)=>{
     const validFields=sec.fields.filter(f=>{
@@ -27492,13 +27624,14 @@ function _buildUAPrintHTML(r){
       const isAbn=!isEmpty&&f.normal&&val!=='—'&&val!==f.normal;
       const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
       return `<tr style="background:${rowBg}">
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[0]};border:none;border-bottom:1px solid #e0e0e0">
           <span style="color:#000;margin-right:5px">■</span>${f.label}
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
           <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}">${val}</span>
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_uaW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        ${_uaHasPrev?_spPrevTd(_spPrevValue(_uaPrevRec,f),{w:_uaW[3],fs:'14px',pad:'2px 8px',minw:'70px'}):''}
       </tr>`;
     }).join('');
 
@@ -27506,12 +27639,13 @@ function _buildUAPrintHTML(r){
       <div style="background:#ffffff;padding:2px 8px;border-bottom:1px solid #b8b8b8">
         <span style="font-size:14px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${sec.label}</span>
       </div>
-      <table style="width:100%;border-collapse:collapse">
+      <table style="width:100%;border-collapse:collapse${_uaHasPrev?';table-layout:fixed':''}">
         <thead>
           <tr style="background:#f0f0f0">
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:38%">Parameter</th>
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:32%">Result</th>
-            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:30%">Normal Range</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[0]}">Parameter</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[1]}">Result</th>
+            <th style="font-size:13px;font-weight:800;color:#000000;padding:2px 8px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_uaW[2]}">Normal Range</th>
+            ${_uaHasPrev?_spPrevTh(_uaPrevRec,{w:_uaW[3],fs:'13px',pad:'2px 8px'}):''}
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -28099,6 +28233,12 @@ function _buildStoolPrintHTML(r){
     </div>
   </div></div>`;
 
+  // ⭐ آخر فحص براز سابق لنفس المريض — يُعرض في عمود «Last Result»
+  if((!stoolExamRecords||!stoolExamRecords.length) && typeof loadStoolExamRecords==='function'){ try{ loadStoolExamRecords(); }catch(e){} }
+  const _stPrevRec = (typeof _spFindPrev==='function') ? _spFindPrev(stoolExamRecords, r) : null;
+  const _stHasPrev = !!_stPrevRec;
+  const _stW = _stHasPrev ? ['30%','23%','23%','24%'] : ['38%','32%','30%'];
+
   const renderSec=(sec)=>{
     const validFields=sec.fields.filter(f=>{
       // multiselect (parasites) always shows — even when empty (will display Absent)
@@ -28110,18 +28250,20 @@ function _buildStoolPrintHTML(r){
     if(!validFields.length) return '';
     const rows=validFields.map((f,fi)=>{
       const rowBg=fi%2===0?'#ffffff':'#f9f9f9';
+      const prevTd=_stHasPrev?_spPrevTd(_spPrevValue(_stPrevRec,f),{w:_stW[3],fs:(f.type==='multiselect'?'13px':'14px'),pad:'2px 8px',minw:'70px',align:(f.type==='multiselect'?'left':'center'),wrap:(f.type==='multiselect')}):'';
       if(f.type==='multiselect'){
         const parasites=(r[f.id]||'').split('||').filter(p=>p.trim());
         const isAbn=parasites.length>0;
         const parasiteLines=isAbn
-          ? parasites.map(p=>`<div style="white-space:nowrap;padding:1px 0">${p}</div>`).join('')
+          ? parasites.map(p=>`<div style="white-space:${_stHasPrev?'normal':'nowrap'};word-break:break-word;padding:1px 0">${p}</div>`).join('')
           : '<div>Absent</div>';
         return `<tr style="background:${rowBg}">
-          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
-          <td style="font-size:14px;font-weight:700;padding:2px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
-            <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:3px 10px;min-width:220px;text-align:left;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};line-height:1.6">${parasiteLines}</span>
+          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
+          <td style="font-size:14px;font-weight:700;padding:2px 8px;width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+            <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:3px 10px;${_stHasPrev?'min-width:0;width:100%;box-sizing:border-box;font-size:13px;':'min-width:220px;'}text-align:left;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'};line-height:1.6">${parasiteLines}</span>
           </td>
-          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+          <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+          ${prevTd}
         </tr>`;
       }
       // ── EMPTY_VAL ("فارغ"): مربع نتيجة فارغ بدون تلوين أحمر ──
@@ -28129,22 +28271,24 @@ function _buildStoolPrintHTML(r){
       const val=isEmpty?'':(r[f.id]||'—');
       const isAbn=!isEmpty&&f.normal&&val!=='—'&&val!==f.normal;
       return `<tr style="background:${rowBg}">
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:38%;border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:32%;border:none;border-bottom:1px solid #e0e0e0;text-align:center">
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[0]};border:none;border-bottom:1px solid #e0e0e0"><span style="color:#000;margin-right:5px">■</span>${f.label}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[1]};border:none;border-bottom:1px solid #e0e0e0;text-align:center">
           <span style="display:inline-block;border:1.5px solid ${isAbn?'#cc0000':'#b0b0b0'};border-radius:4px;padding:1px 8px;min-width:80px;text-align:center;background:${isAbn?'#fff5f5':'#fff'};color:${isAbn?'#cc0000':'#000000'};font-weight:${isAbn?'900':'700'}">${val}</span>
         </td>
-        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:30%;border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        <td style="font-size:14px;font-weight:700;color:#000000;padding:2px 8px;width:${_stW[2]};border:none;border-bottom:1px solid #e0e0e0">${f.normal||'—'}</td>
+        ${prevTd}
       </tr>`;
     }).join('');
     return `<div style="border:1.5px solid #b8b8b8;border-radius:0;margin-bottom:4px;overflow:hidden;page-break-inside:avoid">
       <div style="background:#ffffff;padding:3px 12px;border-bottom:1.5px solid #b8b8b8">
         <span style="font-size:15px;font-weight:900;color:#1a4fa0;letter-spacing:0.3px">${sec.label}</span>
       </div>
-      <table style="width:100%;border-collapse:collapse">
+      <table style="width:100%;border-collapse:collapse${_stHasPrev?';table-layout:fixed':''}">
         <thead><tr style="background:#f0f0f0">
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:38%">Parameter</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:32%">Result</th>
-          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:30%">Normal Range</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[0]}">Parameter</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:center;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[1]}">Result</th>
+          <th style="font-size:15px;font-weight:800;color:#000000;padding:3px 10px;text-align:left;border:none;border-bottom:1.5px solid #b8b8b8;width:${_stW[2]}">Normal Range</th>
+          ${_stHasPrev?_spPrevTh(_stPrevRec,{w:_stW[3],fs:'14px',pad:'3px 8px'}):''}
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -28986,6 +29130,19 @@ function _previewCBCTemplate(){
     RBC:{value:'4.62'}, HGB:{value:'13.5'}, HCT:{value:'40.3'}, MCV:{value:'87.2'},
     MCH:{value:'29.2'}, MCHC:{value:'33.5'}, 'RDW-CV':{value:'13.6'}, 'RDW-SD':{value:'42.1'},
     PLT:{value:'265'}, MPV:{value:'10.2'}, PDW:{value:'12.7'}, PCT:{value:'0.27'} } };
+  /* سجل النتائج السابقة — للمعاينة في النموذج 10 (جدول أسفل الورقة) */
+  demoReq._cbcPrevListDemo=[
+    { when:'2024-12-02', t:new Date('2024-12-02').getTime(), params:{
+      WBC:{value:'6.4'}, 'NEU%':{value:'59.4'}, 'LYM%':{value:'32.8'}, 'MON%':{value:'7.8'},
+      'EOS%':{value:'4.7'}, 'BAS%':{value:'0.4'}, 'MID%':{value:'7.8'}, 'GRAN%':{value:'59.4'},
+      RBC:{value:'4.62'}, HGB:{value:'13.5'}, HCT:{value:'40.3'}, MCV:{value:'87.2'},
+      MCH:{value:'29.2'}, MCHC:{value:'33.5'}, PLT:{value:'265'} } },
+    { when:'2024-08-19', t:new Date('2024-08-19').getTime(), params:{
+      WBC:{value:'7.1'}, 'NEU%':{value:'61.2'}, 'LYM%':{value:'30.1'}, 'MON%':{value:'6.4'},
+      'EOS%':{value:'2.1'}, 'BAS%':{value:'0.2'}, 'MID%':{value:'6.4'}, 'GRAN%':{value:'61.2'},
+      RBC:{value:'4.71'}, HGB:{value:'13.9'}, HCT:{value:'41.0'}, MCV:{value:'87.0'},
+      MCH:{value:'29.5'}, MCHC:{value:'33.9'}, PLT:{value:'281'} } }
+  ];
   const tpl=(document.getElementById('st-cbc-template')||{}).value||settings.cbcTemplate||'1';
   const html=_buildCBCReportHTML(demoParams,demoPt,demoReq,tpl);
   // استخدم Blob URL داخل iframe بدلاً من window.open لتجنب مشكلة اختيار التطبيق
@@ -29060,6 +29217,150 @@ function _prevTh(o){
 /* أعمدة إضافية — لتصحيح colspan في صفوف الفواصل */
 function _prevSpan(){ return _CBC_PREV ? 1 : 0; }
 
+/* ══════════════════════════════════════════════════════════════════════
+ *  🗂️ سجل النتائج السابقة (متعدّد) — يُستخدم في النموذج 10 فقط
+ *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *  يعيد مصفوفة بآخر (max) فحوصات CBC للمريض الأقدم من الفحص الحالي،
+ *  مرتّبة من الأحدث إلى الأقدم: [{params, t, when}] — أو مصفوفة فارغة.
+ *  لا يعتمد على مفتاح settings.cbcShowPrev لأن جدول السجل جزء أصيل من
+ *  تصميم النموذج 10 (كما في ورقة الجهاز المرجعية).
+ * ══════════════════════════════════════════════════════════════════════ */
+function _cbcPrevList(cbcParams, pt, req, max){
+  max = max || 3;
+  try{
+    /* بيانات المعاينة التجريبية */
+    if(req && Array.isArray(req._cbcPrevListDemo)) return req._cbcPrevListDemo.slice(0, max);
+    if(!req || !cbcParams) return [];
+    var pid = req.patientId || (pt && pt.id);
+    if(!pid) return [];
+
+    var snaps = [];
+    function ts(v){ var t = new Date(v).getTime(); return isNaN(t) ? 0 : t; }
+
+    (typeof requests !== 'undefined' ? requests : []).forEach(function(r){
+      if(String(r.patientId) !== String(pid)) return;
+      if(Array.isArray(r.cbcHistory) && r.cbcHistory.length){
+        r.cbcHistory.forEach(function(h){
+          if(h && h.params) snaps.push({ params:h.params, t:ts(h.datetime || r.resultDate || r.date) });
+        });
+      } else {
+        var pr = r.cbcData || (r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.cbcParams);
+        if(pr) snaps.push({ params:pr,
+          t:ts((r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.datetime) || r.resultDate || r.date) });
+      }
+    });
+    if(!snaps.length) return [];
+
+    var curT = 0, found = false, i;
+    for(i = 0; i < snaps.length; i++){
+      if(snaps[i].params === cbcParams){ curT = snaps[i].t; found = true; break; }
+    }
+    if(!found){
+      curT = ts((req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.datetime)
+                || req.resultDate || req.date) || Date.now();
+    }
+
+    var older = snaps.filter(function(s){ return s.params !== cbcParams && s.t <= curT; });
+    older.sort(function(a,b){ return b.t - a.t; });
+
+    var out = [], seen = {};
+    for(i = 0; i < older.length && out.length < max; i++){
+      var k = String(older[i].t || i);
+      if(seen[k]) continue;
+      seen[k] = 1;
+      var when = '';
+      try{
+        if(older[i].t) when = new Date(older[i].t).toLocaleDateString('en-CA',
+          { year:'numeric', month:'2-digit', day:'2-digit' });
+      }catch(e){}
+      out.push({ params:older[i].params, t:older[i].t, when:when });
+    }
+    return out;
+  }catch(e){ console.warn('[cbcPrevList]', e); return []; }
+}
+
+/* قراءة قيمة مُعامل من لقطة سابقة مع مرادفات التسمية الشائعة */
+function _cbcHxVal(params, key){
+  try{
+    if(!params) return '';
+    var ALT = {
+      'NEU%':['NEU%','NEUT%','NE%','GRAN%','GRA%'], 'LYM%':['LYM%','LYMPH%','LY%'],
+      'MON%':['MON%','MONO%','MO%'], 'EOS%':['EOS%','EO%'], 'BAS%':['BAS%','BASO%','BA%'],
+      'GRAN%':['GRAN%','GRA%','NEU%','NEUT%'], 'MID%':['MID%','MI%'],
+      'NEU#':['NEU#','NEUT#','GRAN#'], 'GRAN#':['GRAN#','GRA#','NEU#'],
+      'HGB':['HGB','HB','HEMOGLOBIN'], 'HCT':['HCT','PCV']
+    };
+    var ks = ALT[key] || [key], i, p, v;
+    for(i = 0; i < ks.length; i++){
+      p = params[ks[i]];
+      if(p == null) continue;
+      v = String((p && typeof p === 'object') ? (p.value == null ? '' : p.value) : p).trim();
+      if(v && v !== '---') return v;
+    }
+    return '';
+  }catch(e){ return ''; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  📈 هيستوغرام ملوّن بنمط ورقة الجهاز — للنموذج 10
+ *  منحنى ممتلئ بلون القناة · خطوط فصل عمودية · محور سفلي مرقّم بوحدة fL
+ *  · شارة تعريف صغيرة أعلى اليمين. إن غابت البيانات يُرسم الإطار فقط
+ *  فيبقى التصميم متناسقاً.
+ * ══════════════════════════════════════════════════════════════════════ */
+function _cbcHistColorSVG(pts, color, label, ticks, axisMax, marks){
+  var W = 300, H = 126, padL = 10, padR = 12, padT = 20, axisH = 15;
+  var plotB = H - axisH, i;
+
+  /* المحور السفلي وعلاماته */
+  var axis = '<line x1="' + padL + '" y1="' + plotB + '" x2="' + (W - padR) + '" y2="' + plotB + '" stroke="#41505f" stroke-width="1"/>';
+  var _tk = ticks || [];
+  for(i = 0; i < _tk.length; i++){
+    var frac = (axisMax > 0) ? (_tk[i] / axisMax) : 0;
+    var tx = padL + frac * (W - padL - padR);
+    var anc = (i === 0) ? 'start' : (i === _tk.length - 1 ? 'middle' : 'middle');
+    axis += '<line x1="' + tx.toFixed(1) + '" y1="' + plotB + '" x2="' + tx.toFixed(1) + '" y2="' + (plotB + 3.5) + '" stroke="#41505f" stroke-width="0.9"/>';
+    axis += '<text x="' + tx.toFixed(1) + '" y="' + (plotB + 12) + '" font-family="Arial" font-size="9" fill="#5b6875" text-anchor="' + anc + '">' + _tk[i] + '</text>';
+  }
+  axis += '<text x="' + (W - padR + 2) + '" y="' + (plotB + 12) + '" font-family="Arial" font-size="9" fill="#95a0ab" text-anchor="start">fL</text>';
+
+  /* خطوط الفصل العمودية (Discriminators) */
+  var mk = '';
+  (marks || []).forEach(function(m){
+    var f = (axisMax > 0) ? (m / axisMax) : 0;
+    if(f < 0 || f > 1) return;
+    var x = (padL + f * (W - padL - padR)).toFixed(1);
+    mk += '<line x1="' + x + '" y1="' + (padT - 8) + '" x2="' + x + '" y2="' + plotB + '" stroke="#7f97d8" stroke-width="0.85"/>';
+  });
+
+  /* المنحنى الممتلئ */
+  var curve = '';
+  if(pts && pts.length > 1){
+    var n = pts.length, mx = 0;
+    for(i = 0; i < n; i++) if(pts[i] > mx) mx = pts[i];
+    if(mx > 0){
+      var X = function(k){ return padL + (k / (n - 1)) * (W - padL - padR); };
+      var Y = function(v){ return plotB - (v / mx) * (plotB - padT); };
+      var d = 'M ' + X(0).toFixed(1) + ' ' + Y(pts[0]).toFixed(1);
+      for(i = 1; i < n; i++){
+        var x0 = X(i-1), y0 = Y(pts[i-1]), x1 = X(i), y1 = Y(pts[i]), cx = (x0 + x1) / 2;
+        d += ' C ' + cx.toFixed(1) + ' ' + y0.toFixed(1) + ', ' + cx.toFixed(1) + ' ' + y1.toFixed(1) + ', ' + x1.toFixed(1) + ' ' + y1.toFixed(1);
+      }
+      var area = d + ' L ' + X(n-1).toFixed(1) + ' ' + plotB + ' L ' + X(0).toFixed(1) + ' ' + plotB + ' Z';
+      curve = '<path d="' + area + '" fill="' + color + '" fill-opacity="0.86"/>'
+            + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.1" stroke-linejoin="round"/>';
+    }
+  }
+
+  /* شارة القناة */
+  var lgW = 8 + 6 + (String(label || '').length * 5.6);
+  var lgX = W - padR - lgW;
+  var lg = '<rect x="' + lgX.toFixed(1) + '" y="3.5" width="9" height="6.5" rx="1.5" fill="' + color + '"/>'
+         + '<text x="' + (lgX + 12).toFixed(1) + '" y="9.8" font-family="Arial" font-size="8.6" font-weight="700" fill="#5b6875">' + (label || '') + '</text>';
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;background:#fff">'
+       + mk + curve + axis + lg + '</svg>';
+}
+
 /** يبحث عن آخر فحص CBC للمريض أقدم من الفحص الحالي */
 function _cbcPrevSnapshot(cbcParams, pt, req){
   try{
@@ -29127,6 +29428,225 @@ function _buildCBCReportHTML(cbcParams, pt, req, templateId){
   }
 }
 
+
+/* ══════════════════════════════════════════════════════════════════
+   وحدة مخططات العدّاد الدموي (Histograms) — Mindray BC-10/BC-5000
+   ──────────────────────────────────────────────────────────────────
+   معزولة تماماً: لا تُعدّل أي جهاز أو منطق قائم. تُستدعى فقط عند
+   الطباعة، وإن لم تتوفر بيانات مخطط تُعيد '' فيبقى التقرير كما هو.
+
+   حسب دليل Mindray 3107 HL7 (القسم 5.8 / 6.2):
+     15000 = WBC Histogram Binary (ED, Base64)
+     15050 = RBC Histogram Binary (ED, Base64)
+     15100 = PLT Histogram Binary (ED, Base64)
+     15004 / 15053 / 15113 = Meta Length (عدد البايتات لكل نقطة)
+   صيغة القيمة: ^Application^Octer-stream^Base64^<data>
+   ══════════════════════════════════════════════════════════════════ */
+var CBC_HIST_DEFS=[
+  {key:'WBC', bin:'15000', meta:'15004', label:'WBC', color:'#1565c0', xmax:'fL'},
+  {key:'RBC', bin:'15050', meta:'15053', label:'RBC', color:'#b71c1c', xmax:'fL'},
+  {key:'PLT', bin:'15100', meta:'15113', label:'PLT', color:'#00695c', xmax:'fL'}
+];
+
+/* ── تصنيف قيمة ED: صورة جاهزة أم بيانات خام ──────────────────────
+   دليل Mindray القسم ٦.٢ «Binary Data Communication»:
+     "^Image^BMP^Base64^<data>"             ← صورة جاهزة للعرض
+     "^Application^Octer-stream^Base64^<..>" ← ثنائي خام (نرسمه بأنفسنا)
+   ⚠️ الدليل يكتبها «Octer-stream» (وليس Octet) — لذا نتحقق من
+      Image/BMP فقط، فلا يهمّ الإملاء في الطرف الآخر.
+   تُعيد: {kind:'img'|'raw', b64, mime} أو null                        */
+function _cbcEDClassify(v){
+  var s=String(v||'').trim();
+  if(!s) return null;
+  if(s.indexOf('^')<0) return {kind:'raw', b64:s.replace(/\s/g,''), mime:'image/bmp'};
+  var p=s.split('^'), bi=-1, i;
+  for(i=0;i<p.length;i++){ if(/^base64$/i.test((p[i]||'').trim())){ bi=i; break; } }
+  var data=(bi>=0)?p.slice(bi+1).join('^'):p[p.length-1];
+  data=String(data||'').replace(/\s/g,'');
+  if(!data) return null;
+  var t1=(p[1]||'').trim(), t2=(p[2]||'').trim();
+  var isImg=/^image$/i.test(t1)||/^bmp$/i.test(t2)||/^jpe?g$/i.test(t2)||/^png$/i.test(t2);
+  var mime=/^png$/i.test(t2)?'image/png':(/^jpe?g$/i.test(t2)?'image/jpeg':'image/bmp');
+  return {kind:isImg?'img':'raw', b64:data, mime:mime};
+}
+
+/* فحص سلامة Base64 لصورة + سقف الحجم (≈1MB) */
+function _cbcImgValid(b64){
+  var s=String(b64||'').replace(/\s/g,'');
+  if(!s || s.length<32 || s.length>1500000) return false;
+  return /^[A-Za-z0-9+/]+={0,2}$/.test(s);
+}
+
+/* ── الصور الجاهزة من الجهاز (هيستوغرام + Scattergram) ────────────
+   جدول ٥.٨: 15008 WBC BMP · 15200/15201 WBC DIFF Scattergram
+   وBC-6000: 15056 RBC · 15116 PLT · 15250 BASO · 15300 RET ... إلخ.
+   الترتيب هنا هو ترتيب العرض في التقرير.                              */
+var CBC_IMG_ORDER=['15000','15008','15050','15100','15200','15201',
+                   '15056','15116','15250','15300','15301','15302','15350','15600'];
+var CBC_IMG_LABEL={
+  '15000':'WBC Histogram','15008':'WBC Histogram',
+  '15050':'RBC Histogram','15100':'PLT Histogram',
+  '15200':'WBC DIFF Scattergram','15201':'WBC DIFF Scattergram',
+  '15056':'RBC Histogram','15116':'PLT Histogram',
+  '15250':'BASO Scattergram','15300':'RET Scattergram',
+  '15301':'PLT-O Scattergram','15302':'RET-EXT Scattergram',
+  '15350':'NRBC Scattergram','15600':'WNB Scattergram'
+};
+
+/* استخراج جزء Base64 من قيمة ED */
+function _cbcHistExtractB64(v){
+  var s=String(v||'').trim();
+  if(!s) return '';
+  // ^Application^Octer-stream^Base64^DATA → آخر مقطع بعد ^
+  if(s.indexOf('^')>=0){
+    var parts=s.split('^');
+    s=parts[parts.length-1];
+  }
+  return s.replace(/\s/g,'');
+}
+
+/* فك ترميز Base64 إلى مصفوفة نقاط */
+function _cbcHistDecode(b64, metaLen){
+  var _cl=_cbcEDClassify(b64);
+  if(_cl && _cl.kind==='img') return null;   // صورة جاهزة — لا تُرسم كمنحنى
+  var s=_cbcHistExtractB64(b64);
+  if(!s || s.length<8) return null;
+  if(!/^[A-Za-z0-9+/]+={0,2}$/.test(s)) return null;   // حماية: Base64 صالح فقط
+  if(s.length%4!==0) return null;
+  var bin;
+  try{
+    var str=atob(s);
+    bin=new Uint8Array(str.length);
+    for(var i=0;i<str.length;i++) bin[i]=str.charCodeAt(i);
+  }catch(e){ return null; }
+  if(!bin || bin.length<16) return null;
+  // حماية إضافية: إن كانت البيانات صورة BMP/PNG/JPEG بلا بادئة ^Image^
+  // (توقيع الملف) فلا نرسمها كمنحنى — تُعرض كصورة في مسار الصور.
+  if(bin[0]===0x42 && bin[1]===0x4D) return null;                    // 'BM'  = BMP
+  if(bin[0]===0x89 && bin[1]===0x50) return null;                    // \x89P = PNG
+  if(bin[0]===0xFF && bin[1]===0xD8) return null;                    // JPEG
+  var n=bin.length, pts=[], ml=parseInt(metaLen,10);
+  // Meta Length = عدد البايتات لكل نقطة (1 أو 2). إن غاب نستنتجه.
+  if(ml!==1 && ml!==2) ml=(n%2===0 && n/2>=200 && n/2<=300)?2:1;
+  if(ml===2){ for(var a=0;a+1<n;a+=2) pts.push(bin[a]|(bin[a+1]<<8)); }
+  else { for(var b=0;b<n;b++) pts.push(bin[b]); }
+  if(!pts.length) return null;
+  var mx=0; for(var c=0;c<pts.length;c++) if(pts[c]>mx) mx=pts[c];
+  if(mx<=0) return null;   // كل القيم صفر → لا يوجد منحنى
+  return pts;
+}
+
+/* بناء منحنى SVG ناعم من النقاط */
+function _cbcHistSVG(pts, color, label, W, H){
+  W=W||300; H=H||88;
+  var pad=7, n=pts.length, mx=0, i;
+  for(i=0;i<n;i++) if(pts[i]>mx) mx=pts[i];
+  if(!mx) return '';
+  var X=function(k){ return pad+(k/(n-1))*(W-2*pad); };
+  var Y=function(v){ return H-pad-(v/mx)*(H-2*pad-8); };
+  var d='M '+X(0).toFixed(1)+' '+Y(pts[0]).toFixed(1);
+  for(i=1;i<n;i++){
+    var x0=X(i-1),y0=Y(pts[i-1]),x1=X(i),y1=Y(pts[i]),cx=(x0+x1)/2;
+    d+=' C '+cx.toFixed(1)+' '+y0.toFixed(1)+', '+cx.toFixed(1)+' '+y1.toFixed(1)+', '+x1.toFixed(1)+' '+y1.toFixed(1);
+  }
+  var fill=d+' L '+X(n-1).toFixed(1)+' '+(H-pad).toFixed(1)+' L '+X(0).toFixed(1)+' '+(H-pad).toFixed(1)+' Z';
+  var grid='';
+  for(i=1;i<4;i++){
+    var gx=(pad+(i/4)*(W-2*pad)).toFixed(1);
+    grid+='<line x1="'+gx+'" y1="'+pad+'" x2="'+gx+'" y2="'+(H-pad)+'" stroke="#e2e6ea" stroke-width="0.6" stroke-dasharray="2,2"/>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:'+H+'px;display:block">'
+    +grid
+    +'<path d="'+fill+'" fill="'+color+'" fill-opacity="0.13"/>'
+    +'<path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.4" stroke-linejoin="round"/>'
+    +'<line x1="'+pad+'" y1="'+(H-pad)+'" x2="'+(W-pad)+'" y2="'+(H-pad)+'" stroke="#9aa4ae" stroke-width="0.9"/>'
+    +'<text x="'+(pad+3)+'" y="'+(pad+9)+'" font-family="Arial" font-size="10" font-weight="700" fill="'+color+'">'+label+'</text>'
+    +'</svg>';
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   منحنى هيستوغرام بنمط الجهاز — مطابق للصورة المرجعية:
+   خلفية بيضاء · منحنى خطّي أسود رفيع · محور سفلي مرقّم بوحدة fL
+   (WBC/RBC: 0 100 200 300 · PLT: 0 10 20 30 40) · خطوط عتبة منقّطة.
+   يُستخدم في النموذج 9 فقط. لا يمسّ بقية المخططات.
+   pts = مصفوفة النقاط · axisMax = أقصى قيمة على المحور (fL)
+   ticks = مصفوفة علامات المحور · label = اسم القناة (WBC/RBC/PLT)   */
+function _cbcHistDeviceSVG(pts, label, ticks, axisMax){
+  var W=320, H=150, padL=6, padR=6, padT=8, axisH=16;
+  var plotB=H-axisH;                    // أسفل منطقة الرسم (فوق المحور)
+  var n=pts.length, mx=0, i;
+  for(i=0;i<n;i++) if(pts[i]>mx) mx=pts[i];
+  if(!mx) return '';
+  var X=function(k){ return padL+(k/(n-1))*(W-padL-padR); };
+  var Y=function(v){ return plotB-(v/mx)*(plotB-padT); };
+  // منحنى خطّي مستقيم (كما يرسم الجهاز) — بلا تنعيم مبالغ
+  var d='M '+X(0).toFixed(1)+' '+Y(pts[0]).toFixed(1);
+  for(i=1;i<n;i++){
+    var x0=X(i-1),y0=Y(pts[i-1]),x1=X(i),y1=Y(pts[i]),cx=(x0+x1)/2;
+    d+=' C '+cx.toFixed(1)+' '+y0.toFixed(1)+', '+cx.toFixed(1)+' '+y1.toFixed(1)+', '+x1.toFixed(1)+' '+y1.toFixed(1);
+  }
+  // خطوط العتبة المنقّطة (خطّان أفقيان قصيران بأعلى الرسم — كما في الصورة)
+  var thr='';
+  var _t1=padT+(plotB-padT)*0.30, _t2=padT+(plotB-padT)*0.55;
+  thr+='<line x1="'+padL+'" y1="'+_t1.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+_t1.toFixed(1)+'" stroke="#000" stroke-width="0.7" stroke-dasharray="3,3"/>';
+  thr+='<line x1="'+padL+'" y1="'+_t2.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+_t2.toFixed(1)+'" stroke="#000" stroke-width="0.7" stroke-dasharray="3,3"/>';
+  // محور سفلي + علامات مرقّمة بوحدة fL
+  var axis='<line x1="'+padL+'" y1="'+plotB+'" x2="'+(W-padR)+'" y2="'+plotB+'" stroke="#000" stroke-width="0.9"/>';
+  var _tk=ticks||[];
+  for(i=0;i<_tk.length;i++){
+    var frac=(axisMax>0)?(_tk[i]/axisMax):0;
+    var tx=padL+frac*(W-padL-padR);
+    axis+='<line x1="'+tx.toFixed(1)+'" y1="'+plotB+'" x2="'+tx.toFixed(1)+'" y2="'+(plotB+3)+'" stroke="#000" stroke-width="0.8"/>';
+    var anchor=(i===0)?'start':(i===_tk.length-1?'end':'middle');
+    axis+='<text x="'+tx.toFixed(1)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="'+anchor+'">'+_tk[i]+'</text>';
+  }
+  axis+='<text x="'+(W-padR)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="start" dx="2">fL</text>';
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;background:#fff">'
+    +thr
+    +'<path d="'+d+'" fill="none" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>'
+    +axis
+    +'</svg>';
+}
+
+/* بناء بطاقات المخططات الثلاث بنمط الجهاز (WBC · RBC · PLT) للنموذج 9.
+   يعتمد فقط على البيانات الخام الواردة من الجهاز (HIST_*). إن لم تتوفّر
+   بيانات مُعامل، تبقى بطاقته فارغة الرسم مع إبقاء العنوان والمحور. */
+function buildCBCDeviceHistRow(cbcParams){
+  var DEF=[
+    {key:'WBC', label:'WBC', ticks:[0,100,200,300], axisMax:300, meta:'15004'},
+    {key:'RBC', label:'RBC', ticks:[0,100,200,300], axisMax:300, meta:'15053'},
+    {key:'PLT', label:'PLT', ticks:[0,10,20,30,40], axisMax:40,  meta:'15113'}
+  ];
+  var cards='', any=false, i;
+  for(i=0;i<DEF.length;i++){
+    var def=DEF[i], svg='';
+    if(cbcParams){
+      var raw=cbcParams['HIST_'+def.key];
+      if(raw){
+        var val=(raw&&typeof raw==='object')?raw.value:raw;
+        var meta=(raw&&typeof raw==='object')?raw.meta:'';
+        var pts=_cbcHistDecode(val, meta);
+        if(pts){ svg=_cbcHistDeviceSVG(pts, def.label, def.ticks, def.axisMax); if(svg) any=true; }
+      }
+    }
+    if(!svg){
+      // لا بيانات — نعرض إطاراً بمحور مرقّم فقط (كي يبقى التصميم مطابقاً)
+      var W=320,H=150,padL=6,padR=6,axisH=16,plotB=H-axisH,ax='';
+      ax+='<line x1="'+padL+'" y1="'+plotB+'" x2="'+(W-padR)+'" y2="'+plotB+'" stroke="#000" stroke-width="0.9"/>';
+      for(var t=0;t<def.ticks.length;t++){
+        var frac=def.axisMax>0?def.ticks[t]/def.axisMax:0, tx=padL+frac*(W-padL-padR);
+        var anc=(t===0)?'start':(t===def.ticks.length-1?'end':'middle');
+        ax+='<line x1="'+tx.toFixed(1)+'" y1="'+plotB+'" x2="'+tx.toFixed(1)+'" y2="'+(plotB+3)+'" stroke="#000" stroke-width="0.8"/>';
+        ax+='<text x="'+tx.toFixed(1)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="'+anc+'">'+def.ticks[t]+'</text>';
+      }
+      ax+='<text x="'+(W-padR)+'" y="'+(plotB+12)+'" font-family="Arial" font-size="8.5" fill="#000" text-anchor="start" dx="2">fL</text>';
+      svg='<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;background:#fff">'+ax+'</svg>';
+    }
+    cards+='<div class="dh-card"><div class="dh-lbl">'+def.label+'</div>'+svg+'</div>';
+  }
+  return '<div class="dh-row">'+cards+'</div>';
+}
+
 /* ─── بناء التقرير حسب النموذج المختار (النواة) ─── */
 function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
   const tableColor=settings.tableColor||'#003366';
@@ -29156,8 +29676,85 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
   // ⭐ العلامة المائية — تظهر في وسط الورقة خلف النصوص في كل نماذج CBC
   try{ if(typeof _buildWatermarkHTML==='function'){ hdr = _buildWatermarkHTML(false) + hdr; } }catch(e){}
 
-  const ORDERED=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT'];
-  const LABELS={'WBC':'WBC','NEU#':'Neu#','LYM#':'Lym#','MON#':'Mon#','EOS#':'Eos#','BAS#':'Bas#','NEU%':'Neu%','LYM%':'Lym%','MON%':'Mon%','EOS%':'Eos%','BAS%':'Bas%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT'};
+  // ══════════════════════════════════════════════════════════
+  // كشف نمط 3-DIFF (ثلاثي التفاضل) تلقائياً — Mindray BC-5000 وغيره
+  // ══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════
+  // كشف نمط 3-DIFF (ثلاثي التفاضل) — Mindray BC-5000 وغيره
+  // ══════════════════════════════════════════════════════════
+  // في نمط 3diff يرسل الجهاز سلسلة WBC كـ: WBC + Lym + Mid + Gran
+  //   (بالعدد #/بالنسبة %) — أكواد Mindray: 10027..10030 بأسماء Lym/Mid/Gran.
+  //   ولا يرسل التفاضل الخماسي (Neu/Mon/Eos/Bas).
+  // أما 5diff فيرسل Neu/Mon/Eos/Bas ولا يرسل Gran/Mid.
+  // القاعدة (أمتن نسخة): 3diff = يوجد WBC، ويوجد Gran أو Mid (علامة العدّاد
+  //   الثلاثي القاطعة)، وتغيب سلسلة الخماسي. نستخدم قيم الجهاز الحقيقية إن
+  //   وصلت، ونشتقّ الناقص فقط عند غيابه. لا يمسّ هذا 5diff ولا الأجهزة الأخرى.
+  function _numOf(key){
+    const p=cbcParams&&cbcParams[key];
+    if(!p) return NaN;
+    return parseFloat(String(p.value==null?'':p.value).replace(/[<>]/g,''));
+  }
+  function _has(key){ return !isNaN(_numOf(key)); }
+  const _five=['NEU#','MON#','EOS#','BAS#','NEU%','MON%','EOS%','BAS%'];
+  const _fiveAbsent=_five.every(function(k){ return !_has(k); });
+  const _wbcPresent=_has('WBC');
+  const _lymPresent=_has('LYM%')||_has('LYM#');
+  const _granOrMid=_has('GRAN%')||_has('GRAN#')||_has('MID%')||_has('MID#');
+  // 3diff إذا: (وصل Gran/Mid من الجهاز صراحةً) أو (WBC+Lym موجودان والخماسي غائب)
+  const is3Diff = _wbcPresent && (_granOrMid || (_lymPresent && _fiveAbsent));
+
+  if(is3Diff){
+    cbcParams=Object.assign({}, cbcParams); // نسخة معزولة — لا نغيّر بيانات الجهاز الأصلية
+    const wbc=_numOf('WBC');
+    // ── Lym: استخدم قيمة الجهاز، وأكمل الناقص (%↔#) عند الحاجة ──
+    let lymPct=_numOf('LYM%'), lymAbs=_numOf('LYM#');
+    if(isNaN(lymAbs)&&!isNaN(lymPct)&&!isNaN(wbc)) lymAbs=+(wbc*lymPct/100).toFixed(2);
+    if(isNaN(lymPct)&&!isNaN(lymAbs)&&!isNaN(wbc)&&wbc>0) lymPct=+(lymAbs/wbc*100).toFixed(1);
+    if(!_has('LYM#')&&!isNaN(lymAbs)) cbcParams['LYM#']={value:String(lymAbs),unit:'10^9/L',refRange:'0.8-4.0',flag:''};
+    if(!_has('LYM%')&&!isNaN(lymPct)) cbcParams['LYM%']={value:String(lymPct),unit:'%',refRange:'20-40',flag:''};
+    // ── Mid: إن أرسله الجهاز نبقيه ونكمل الناقص من %↔# ──
+    const _hasMid=_has('MID%')||_has('MID#');
+    let midPct=_numOf('MID%'), midAbs=_numOf('MID#');
+    if(_hasMid){
+      if(isNaN(midAbs)&&!isNaN(midPct)&&!isNaN(wbc)) midAbs=+(wbc*midPct/100).toFixed(2);
+      if(isNaN(midPct)&&!isNaN(midAbs)&&!isNaN(wbc)&&wbc>0) midPct=+(midAbs/wbc*100).toFixed(1);
+      if(!_has('MID#')&&!isNaN(midAbs)) cbcParams['MID#']={value:String(midAbs),unit:'10^9/L',refRange:'0.10-1.50',flag:''};
+      if(!_has('MID%')&&!isNaN(midPct)) cbcParams['MID%']={value:String(midPct),unit:'%',refRange:'3-15',flag:''};
+    }
+    // ── Gran: استخدم قيمة الجهاز إن وصلت، وإلا اشتقّها ──
+    //   إن توفّر Mid: Gran = WBC − Lym − Mid ، وإلا Gran = WBC − Lym.
+    let granPct=_numOf('GRAN%'), granAbs=_numOf('GRAN#');
+    if(isNaN(granAbs)){
+      if(!isNaN(wbc)&&!isNaN(lymAbs)) granAbs=+(wbc-lymAbs-(_hasMid&&!isNaN(midAbs)?midAbs:0)).toFixed(2);
+    }
+    if(isNaN(granPct)){
+      if(!isNaN(lymPct)) granPct=+(100-lymPct-(_hasMid&&!isNaN(midPct)?midPct:0)).toFixed(1);
+    } else if(isNaN(granPct)===false){ /* قيمة الجهاز مُحترمة */ }
+    if(isNaN(granAbs)===false && !_has('GRAN#')) cbcParams['GRAN#']={value:String(granAbs),unit:'10^9/L',refRange:'2.0-7.0',flag:''};
+    if(isNaN(granPct)===false && !_has('GRAN%')) cbcParams['GRAN%']={value:String(granPct),unit:'%',refRange:'50-70',flag:''};
+  }
+
+  // هل أرسل الجهاز مجموعة Mid المتوسطة؟ (يحدّد الترتيب: ثلاثي كامل أم مبسّط)
+  const _midShown = is3Diff && (_has('MID%')||_has('MID#'));
+
+  // الترتيب والتسميات — ديناميكي حسب النمط (3diff مقابل 5diff)
+  const ORDERED_5=['WBC','NEU#','LYM#','MON#','EOS#','BAS#','NEU%','LYM%','MON%','EOS%','BAS%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  const ORDERED_3= _midShown
+    ? ['WBC','LYM#','MID#','GRAN#','LYM%','MID%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC']
+    : ['WBC','LYM#','GRAN#','LYM%','GRAN%','RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  const _ORDERED_BASE= is3Diff ? ORDERED_3 : ORDERED_5;
+  // ── أظهر فقط الحقول التي أرسلها الجهاز فعلاً (قيمة رقمية) ──
+  // أي حقل لم يرسله الجهاز لا يظهر إطلاقاً — لا باسمه ولا بـ "---".
+  // نُبقي دائماً الأساسيات (حتى لو غابت نادراً) لضمان بنية تقرير متماسكة.
+  const _ALWAYS=['WBC','RBC','HGB','HCT','PLT'];
+  const ORDERED=_ORDERED_BASE.filter(function(k){ return _has(k) || _ALWAYS.indexOf(k)>=0; });
+  const LABELS={'WBC':'WBC','NEU#':'Neu#','LYM#':'Lym#','MON#':'Mon#','EOS#':'Eos#','BAS#':'Bas#','NEU%':'Neu%','LYM%':'Lym%','MON%':'Mon%','EOS%':'Eos%','BAS%':'Bas%','MID#':'Mid#','GRAN#':'Gran#','MID%':'Mid%','GRAN%':'Gran%','RBC':'RBC','HGB':'HGB','HCT':'HCT','MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD','PLT':'PLT','MPV':'MPV','PDW':'PDW','PCT':'PCT','P-LCR':'P-LCR','P-LCC':'P-LCC'};
+
+  // مرجع القيم للمشتقّات في 3diff (لتلوين تلقائي صحيح)
+  const _REF3={'GRAN#':'2.0-7.0','GRAN%':'50-70','MID#':'0.10-1.50','MID%':'3-15'};
+
+  // عنوان التقرير — يوضّح النمط
+  const _reportModeTitle = is3Diff ? 'WB-CBC+3DIFF' : 'WB-CBC+DIFF';
 
   // استخراج القيمة والعلم لكل مُعامل
   function getParam(key){
@@ -29165,8 +29762,8 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     const info=(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])||{};
     const val=p?p.value:'---';
     const numVal=parseFloat(val);
-    const ref=(p&&p.refRange)||info.refM||'';
-    const unit=(p&&p.unit)||info.unit||'';
+    const ref=(p&&p.refRange)||info.refM||_REF3[key]||'';
+    const unit=(p&&p.unit)||info.unit||((key==='GRAN%'||key==='MID%')?'%':((key==='GRAN#'||key==='MID#')?'10^9/L':''));
     let flag=(p&&p.flag)||'';
     let flagColor='#000';
     const _fRaw=(flag||'').toUpperCase().trim();
@@ -29574,6 +30171,299 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'</div>'
       +'<table><thead><tr><th class="l">Parameter</th><th class="r">Result</th><th>Flag</th><th>Unit</th><th class="r">Reference</th>'+_prevTh({fs:9,pad:'6px 6px'})+'</tr></thead><tbody>'+rows+'</tbody></table>'
       +'<div class="foot"><span>WB-CBC+DIFF</span><span>'+today+'</span></div></body></html>';
+  }
+
+
+  // ══════════════════════════════════════════════════════════
+  // النموذج 9 — نمط الجهاز المطابق (Device-Style — كما في ورقة الجهاز)
+  //   • ترتيب الأعمدة: # · Modules · Result · Flag(H/L) · Unit · Ref. Ranges
+  //   • رؤوس الجدول بخلفية بيضاء والنصوص ملوّنة فقط
+  //   • القيم العالية حمراء والمنخفضة زرقاء، وحرف العلم ملوّن
+  //   • ثلاثة صناديق تعليقات: WBC Message · RBC Message · PLT Message
+  //   • ثلاثة مخططات (WBC · RBC · PLT) خطّية بمحاور مرقّمة بوحدة fL
+  //     تُرسم على خلفية بيضاء تماماً كما في صورة الجهاز.
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='9'){
+    const ac=tableColor;
+    // ── صفوف الجدول ──
+    let rows='',rowNum=1;
+    ORDERED.forEach(function(key){
+      const p=cbcParams[key];
+      if(!p&&!(typeof CBC_PARAMS_MAP!=='undefined'&&CBC_PARAMS_MAP[key])) return;
+      const {val,flag,flagColor,ref,unit}=getParam(key);
+      const isAbn=flag&&flag!=='N';
+      const fShow=isAbn?flag:'';
+      // فاصل علوي رفيع عند بداية كل مجموعة رئيسية
+      const sTop=(key==='WBC'||key==='RBC'||key==='PLT')?'border-top:1.5px solid '+ac+';':'';
+      rows+='<tr style="'+sTop+'">'
+        +'<td class="c-num">'+rowNum+'</td>'
+        +'<td class="c-name">'+(LABELS[key]||key)+'</td>'
+        +'<td class="c-res" style="color:'+flagColor+'">'+val+'</td>'
+        +'<td class="c-flag" style="color:'+flagColor+'">'+fShow+'</td>'
+        +'<td class="c-unit">'+unit+'</td>'
+        +'<td class="c-ref">'+ref+'</td>'
+        +_prevCell(key,{fs:11,pad:'3px 6px',extra:'border:1px solid #ddd;'})
+        +'</tr>';
+      rowNum++;
+    });
+
+    // ── تجميع تعليقات الجهاز حسب القناة (WBC / RBC / PLT) ──
+    let _cmtsAll=[];
+    if(req && Array.isArray(req.cbcComments)) _cmtsAll=req.cbcComments;
+    else if(req && req.resultDetails && req.resultDetails.CBC && Array.isArray(req.resultDetails.CBC.cbcComments)) _cmtsAll=req.resultDetails.CBC.cbcComments;
+    _cmtsAll=(_cmtsAll||[]).map(function(c){return String(c||'').trim();}).filter(Boolean);
+    const _msg={WBC:[],RBC:[],PLT:[]};
+    _cmtsAll.forEach(function(c){
+      const u=c.toUpperCase();
+      if(u.indexOf('PLT')>-1||u.indexOf('PLATELET')>-1) _msg.PLT.push(c);
+      else if(u.indexOf('RBC')>-1||u.indexOf('HGB')>-1||u.indexOf('RED')>-1||u.indexOf('ANISO')>-1||u.indexOf('MICRO')>-1||u.indexOf('MACRO')>-1) _msg.RBC.push(c);
+      else _msg.WBC.push(c);
+    });
+    function _msgBox(title,list){
+      const body=(list&&list.length)
+        ? list.map(function(c){return '<div class="mb-line">'+c.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>';}).join('')
+        : '<div class="mb-empty">&nbsp;</div>';
+      return '<div class="msgbox"><div class="mb-head">'+title+'</div><div class="mb-body">'+body+'</div></div>';
+    }
+    const _msgCol=_msgBox('WBC Message',_msg.WBC)+_msgBox('RBC Message',_msg.RBC)+_msgBox('PLT Message',_msg.PLT);
+
+    // ── صفّ المخططات الثلاثة بنمط الجهاز ──
+    const _histRow=(typeof buildCBCDeviceHistRow==='function')?buildCBCDeviceHistRow(cbcParams):'';
+
+    const css='*{margin:0;padding:0;box-sizing:border-box}'
+      +'html,body{background:#fff;color:#000;font-family:Arial,"Segoe UI",sans-serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'.ttl{text-align:center;font-size:13px;font-weight:800;color:'+ac+';border:1.5px solid '+ac+';padding:3px;margin:5px 0;border-radius:3px;}'
+      +'.pt-bar{display:flex;justify-content:space-between;align-items:stretch;border:1px solid #999;border-radius:4px;margin:6px 0;overflow:hidden;font-size:11px;}'
+      +'.pt-left{flex:1;padding:5px 10px;display:flex;flex-direction:column;gap:3px;}'
+      +'.pt-right{display:flex;flex-direction:column;align-items:flex-end;padding:5px 10px;gap:3px;border-left:1px solid #999;min-width:150px;}'
+      +'.pt-field{display:flex;gap:5px;align-items:baseline;}'
+      +'.pt-lbl{color:#555;font-size:10px;font-weight:700;min-width:60px;}'
+      +'.pt-val{font-weight:800;font-size:12px;color:#000;}'
+      +'.pt-r{display:flex;gap:5px;font-size:10px;}.pt-rk{color:#555;font-weight:700;}.pt-rv{font-weight:800;color:#000;}'
+      // ── تخطيط: الجدول يسار · صناديق الرسائل يمين ──
+      +'.main-grid{display:grid;grid-template-columns:1fr '+(_CBC_PREV?'218px':'250px')+';gap:8px;align-items:start;margin-top:5px;}'
+      +'table.cbc{width:100%;border-collapse:collapse;}'
+      // رؤوس بخلفية بيضاء ونص ملوّن فقط
+      +'table.cbc thead th{background:#fff;color:'+ac+';border:1px solid #bbb;border-bottom:2px solid '+ac+';padding:4px 6px;font-size:11px;font-weight:800;text-align:center;}'
+      +'table.cbc td{border:1px solid #ddd;padding:3px 6px;font-size:11px;}'
+      +'.c-num{width:26px;text-align:center;color:#666;}'
+      +'.c-name{text-align:left;font-weight:700;color:#000;white-space:nowrap;}'
+      +'.c-res{text-align:center;font-weight:800;font-size:12px;}'
+      +'.c-flag{width:34px;text-align:center;font-weight:800;font-size:11px;}'
+      +'.c-unit{text-align:center;color:#000;}'
+      +'.c-ref{text-align:center;color:#000;white-space:nowrap;}'
+      // صناديق الرسائل
+      +'.msg-col{display:flex;flex-direction:column;gap:9px;}'
+      +'.msgbox{border:1px solid #999;border-radius:4px;overflow:hidden;}'
+      +'.mb-head{background:#fff;color:'+ac+';font-size:12px;font-weight:800;padding:5px 8px;border-bottom:1px solid #ccc;text-align:center;}'
+      +'.mb-body{min-height:90px;padding:7px 9px;font-size:11px;color:#000;line-height:1.5;}'
+      +'.mb-line{padding:1px 0;}.mb-empty{color:#bbb;}'
+      // صفّ المخططات
+      +'.dh-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;padding-top:6px;border-top:1px dashed '+ac+'66;}'
+      +'.dh-card{border:1px solid #ccc;border-radius:4px;padding:3px 4px 2px;background:#fff;break-inside:avoid;page-break-inside:avoid;}'
+      +'.dh-lbl{font-size:11px;font-weight:800;color:#000;text-align:center;padding:1px 0 2px;}'
+      +'.foot{border-top:1.5px solid '+ac+';margin-top:8px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}';
+
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl">Hematology Analysis Report — '+_reportModeTitle+'</div>'
+      +'<div class="pt-bar"><div class="pt-left">'
+      +'<div class="pt-field"><span class="pt-lbl">Patient:</span><span class="pt-val" style="color:'+nameColor+';font-size:15px">'+ptFullName+'</span></div>'
+      +'<div class="pt-field"><span class="pt-lbl">Sex / Age:</span><span class="pt-val">'+gender+' / '+age+'</span></div>'
+      +'<div class="pt-field"><span class="pt-lbl">Doctor:</span><span class="pt-val" style="font-size:14px">'+doctorName+'</span></div>'
+      +'</div><div class="pt-right">'
+      +'<div class="pt-r"><span class="pt-rk">ID:</span><span class="pt-rv">'+barcodeId+'</span></div>'
+      +'<div class="pt-r"><span class="pt-rk">Date:</span><span class="pt-rv">'+sampleDate+'</span></div>'
+      +'<div class="pt-r"><span class="pt-rk">Mode:</span><span class="pt-rv">'+_reportModeTitle+'</span></div>'
+      +'</div></div>'
+      +'<div class="main-grid">'
+      +'<table class="cbc"><thead><tr><th style="width:26px">#</th><th style="text-align:left">Modules</th><th>Result</th><th style="width:34px">Flag</th><th>Unit</th><th>Ref. Ranges</th>'+_prevTh({fs:10,pad:'4px 5px',thExtra:'color:'+ac+';border:1px solid #bbb;border-bottom:2px solid '+ac+';font-weight:800;'})+'</tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<div class="msg-col">'+_msgCol+'</div>'
+      +'</div>'
+      +_histRow
+      +'<div class="foot"><span>Operator: '+operator+'</span><span>'+_reportModeTitle+'</span><span>'+today+'</span></div>'
+      +'</body></html>';
+  }
+  // ══════════════════════════════════════════════════════════
+  // النموذج 10 — ورقة المختبر الكلاسيكية (Classic Lab Sheet)
+  //   • عنوان «Complete Blood Count» بشريط أنيق
+  //   • ثلاث مجموعات (WBC · RBC · PLT) بشريط لوني جانبي لكل مجموعة
+  //   • هيستوغرام ملوّن ممتلئ بجانب كل مجموعة (rowspan) + Hgb% فوق رسم RBC
+  //   • جدول «Patient History In Our Lab» أسفل الورقة بالنتائج السابقة
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='10'){
+    const ac=tableColor;
+    const ttlColor=nameColor||'#c0182b';
+
+    // ── تسميات وصفية كاملة (كما في ورقة الجهاز) ──
+    const L10={
+      'WBC':'WBCs - Leucocytes','NEU#':'NEUT #','LYM#':'LYM #','MID#':'MID #','GRAN#':'GRA #',
+      'MON#':'MONO #','EOS#':'EOS #','BAS#':'BASO #',
+      'NEU%':'NEUT %','LYM%':'LYM %','MID%':'MID %','GRAN%':'GRA %',
+      'MON%':'MONO %','EOS%':'EOS %','BAS%':'BASO %',
+      'RBC':'RBC - Erythrocytes','HGB':'Hemoglobin','HCT':'HCT - Hematocrit',
+      'MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD',
+      'PLT':'Platelets','PCT':'PCT - Plateletcrit','MPV':'MPV','PDW':'PDW-CV',
+      'P-LCR':'P-LCR','P-LCC':'P-LCC'
+    };
+
+    // ── تعريف المجموعات الثلاث ──
+    const G10=[
+      {id:'WBC',color:'#0f9d58',keys:['WBC','NEU#','LYM#','MID#','GRAN#','MON#','EOS#','BAS#','NEU%','LYM%','MID%','GRAN%','MON%','EOS%','BAS%'],
+       ticks:[0,100,200,300],axisMax:320,marks:[38,112]},
+      {id:'RBC',color:'#e01b24',keys:['RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD'],
+       ticks:[0,100,200],axisMax:250,marks:[32,168]},
+      {id:'PLT',color:'#f08000',keys:['PLT','PCT','MPV','PDW','P-LCR','P-LCC'],
+       ticks:[0,10,20,30,40],axisMax:42,marks:[2,30]}
+    ];
+
+    // ── Hgb% (نسبة الهيموغلوبين إلى 13.8 g/dl كما في ورقة الجهاز) ──
+    let _hgbPct='';
+    try{
+      const _hgbN=parseFloat(String((cbcParams['HGB']&&cbcParams['HGB'].value)||'').replace(/[<>]/g,''));
+      if(!isNaN(_hgbN)&&_hgbN>0) _hgbPct=(_hgbN/13.8*100).toFixed(1);
+    }catch(e){}
+
+    // ── بناء صفوف الجدول مجموعةً مجموعة ──
+    let body='';
+    G10.forEach(function(g,gi){
+      /* الترتيب داخل المجموعة يتبع ورقة الجهاز، ولا يُعرض إلا ما أرسله الجهاز */
+      const gKeys=g.keys.filter(function(k){ return ORDERED.indexOf(k)>=0; });
+      if(!gKeys.length) return;
+      // بيانات الهيستوغرام الخام من الجهاز (إن وُجدت)
+      let _pts=null;
+      try{
+        const raw=cbcParams['HIST_'+g.id];
+        if(raw){
+          const _v=(raw&&typeof raw==='object')?raw.value:raw;
+          const _m=(raw&&typeof raw==='object')?raw.meta:'';
+          if(typeof _cbcHistDecode==='function') _pts=_cbcHistDecode(_v,_m);
+        }
+      }catch(e){ _pts=null; }
+      const _svg=(typeof _cbcHistColorSVG==='function')
+        ? _cbcHistColorSVG(_pts,g.color,g.id,g.ticks,g.axisMax,g.marks) : '';
+      const bTop=gi?'border-top:2px solid #ccd6e0;':'';
+      gKeys.forEach(function(key,idx){
+        const {val,flag,flagColor,ref,unit}=getParam(key);
+        const isAbn=flag&&flag!=='N';
+        const tb=(idx===0)?bTop:'';
+        body+='<tr class="'+(idx%2?'zz':'')+'">'
+          +'<td class="t-name" style="'+tb+'box-shadow:inset 3px 0 0 '+g.color+'">'+(L10[key]||LABELS[key]||key)+'</td>'
+          +'<td class="t-res" style="'+tb+'color:'+flagColor+'">'+val+'</td>'
+          +'<td class="t-unit" style="'+tb+'">'+unit+'</td>'
+          +'<td class="t-flag" style="'+tb+'">'+(isAbn?'<span class="fl" style="color:'+flagColor+';border-color:'+flagColor+'66;background:'+flagColor+'14">'+flag+'</span>':'')+'</td>'
+          +'<td class="t-ref" style="'+tb+'">'+ref+'</td>'
+          +(idx===0
+             ? '<td class="t-hist" rowspan="'+gKeys.length+'" style="'+tb+'">'
+               +((g.id==='RBC'&&_hgbPct)?'<div class="hgbp">Hgb% = <b>'+_hgbPct+'</b> %</div>':'')
+               +'<div class="hcard" style="width:'+(gKeys.length>=6?'100%':(gKeys.length>=4?'92%':'72%'))+'">'+_svg+'</div></td>'
+             : '')
+          +'</tr>';
+      });
+    });
+
+    // ── جدول سجل النتائج السابقة أسفل الورقة ──
+    let _hxCols=[];
+    if(is3Diff){
+      _hxCols=[{k:'WBC',t:'WBCs'},{k:'LYM%',t:'Lymp'}];
+      if(_midShown) _hxCols.push({k:'MID%',t:'Mid'});
+      _hxCols.push({k:'GRAN%',t:'Gran'});
+    } else {
+      _hxCols=[{k:'WBC',t:'WBCs'},{k:'NEU%',t:'Neut'},{k:'LYM%',t:'Lymp'},
+               {k:'MON%',t:'Mono'},{k:'EOS%',t:'Eosin'},{k:'BAS%',t:'Baso'}];
+    }
+    _hxCols=_hxCols.concat([{k:'RBC',t:'RBCs'},{k:'HGB',t:'Hgb'},{k:'HCT',t:'Hct'},
+                            {k:'MCV',t:'MCV'},{k:'MCH',t:'MCH'},{k:'MCHC',t:'MCHC'},{k:'PLT',t:'PLT'}]);
+    let _hxPrev=[];
+    try{ if(typeof _cbcPrevList==='function') _hxPrev=_cbcPrevList(cbcParams,pt,req,3)||[]; }catch(e){ _hxPrev=[]; }
+    const _hxV=(typeof _cbcHxVal==='function')?_cbcHxVal:function(){ return ''; };
+    let _hxHTML='';
+    if(_hxPrev.length){
+      let _th='<th class="hx-lbl">Patient History In Our Lab</th>';
+      _hxCols.forEach(function(c){ _th+='<th>'+c.t+'</th>'; });
+      let _tr='<tr class="cur"><td class="dt">'+sampleDate+'<span class="nowtag">Current</span></td>';
+      _hxCols.forEach(function(c){ _tr+='<td>'+(_hxV(cbcParams,c.k)||'–')+'</td>'; });
+      _tr+='</tr>';
+      _hxPrev.forEach(function(sn){
+        _tr+='<tr><td class="dt">'+(sn.when||'—')+'</td>';
+        _hxCols.forEach(function(c){ _tr+='<td>'+(_hxV(sn.params,c.k)||'–')+'</td>'; });
+        _tr+='</tr>';
+      });
+      _hxHTML='<div class="hx-wrap"><table class="hx"><thead><tr>'+_th+'</tr></thead><tbody>'+_tr+'</tbody></table></div>';
+    }
+
+    const css='*{margin:0;padding:0;box-sizing:border-box}'
+      +'html,body{background:#fff;color:#12202e;font-family:"Segoe UI",Arial,sans-serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      // ── العنوان ──
+      +'.ttl10{margin:6px 0 7px;padding:6px 12px 5px;border:1.4px solid '+ac+'55;border-radius:8px;'
+        +'background:linear-gradient(180deg,'+ac+'0f,#ffffff 70%);text-align:center;position:relative;}'
+      +'.ttl10 h1{font-size:19px;font-weight:900;letter-spacing:2.5px;color:'+ttlColor+';text-transform:uppercase;line-height:1.15;}'
+      +'.ttl10 .sub{font-size:8.5px;font-weight:800;letter-spacing:3.5px;color:'+ac+'99;margin-top:2px;}'
+      +'.ttl10 .rule{height:2px;width:120px;margin:4px auto 0;border-radius:2px;'
+        +'background:linear-gradient(90deg,transparent,'+ac+',transparent);}'
+      // ── شريط بيانات المريض ──
+      +'.pbar{display:flex;justify-content:space-between;align-items:stretch;border:1px solid '+ac+'40;'
+        +'border-radius:7px;overflow:hidden;margin:0 0 7px;background:#fff;}'
+      +'.pL{flex:1;padding:6px 12px;display:flex;flex-wrap:wrap;align-items:baseline;}'
+      +'.pF{display:flex;align-items:baseline;font-size:11px;margin:2px 24px 2px 0;}'
+      +'.pK{color:#7a8794;font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;margin-right:7px;}'
+      +'.pV{font-weight:800;color:#12202e;font-size:12px;}'
+      +'.pR{background:linear-gradient(160deg,'+ac+','+ac+'cc);color:#fff;padding:6px 11px;display:flex;'
+        +'flex-direction:column;justify-content:center;min-width:132px;}'
+      +'.chip{background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px;font-size:9.5px;font-weight:800;text-align:center;letter-spacing:.4px;margin:1.5px 0;}'
+      // ── الجدول الرئيسي ──
+      +'table.lab{width:100%;border-collapse:collapse;table-layout:auto;}'
+      +'table.lab thead th{background:linear-gradient(180deg,#ffffff,'+ac+'0c);color:'+ac+';font-size:10px;'
+        +'font-weight:900;letter-spacing:.9px;text-transform:uppercase;padding:6px 8px;text-align:center;'
+        +'border-bottom:2px solid '+ac+';border-top:1px solid '+ac+'33;}'
+      +'table.lab thead th.l{text-align:left;}'
+      +'table.lab td{padding:3.4px 8px;font-size:11.5px;border-bottom:1px solid #eef2f6;vertical-align:middle;}'
+      +'tr.zz td{background:#f8fbfd;}'
+      +'.t-name{text-align:left;font-weight:800;color:#16283d;white-space:nowrap;padding-left:11px!important;}'
+      +'.t-res{text-align:center;font-weight:900;font-size:13px;white-space:nowrap;}'
+      +'.t-unit{text-align:center;font-size:10px;color:#2f4055;font-weight:800;white-space:nowrap;}'
+      +'.t-flag{text-align:center;width:36px;}'
+      +'.fl{display:inline-block;min-width:17px;padding:0 5px;border-radius:9px;border:1px solid;font-size:10px;font-weight:900;line-height:14px;}'
+      +'.t-ref{text-align:center;font-size:10.5px;color:#33475b;font-weight:700;white-space:nowrap;}'
+      +'.t-hist{width:216px;padding:4px 5px!important;border-left:1px solid #e6ebf0;background:#fff;}'
+      +'.hcard{border:1px solid #dde4eb;border-radius:5px;padding:2px 3px 1px;background:#fff;margin:0 auto;}'
+      +'.hgbp{font-size:10.5px;font-weight:700;color:#33475b;text-align:center;padding:1px 0 4px;}'
+      +'.hgbp b{color:'+ttlColor+';font-size:11.5px;}'
+      // ── سجل النتائج السابقة ──
+      +'.hx-wrap{margin-top:9px;border:1.2px solid '+ac+'4d;border-radius:8px;overflow:hidden;'
+        +'break-inside:avoid;page-break-inside:avoid;}'
+      +'table.hx{width:100%;border-collapse:collapse;}'
+      +'table.hx th{background:linear-gradient(180deg,#ffffff,'+ac+'12);color:'+ac+';font-size:9.5px;font-weight:900;'
+        +'padding:5px 3px;text-align:center;border:1px solid '+ac+'26;letter-spacing:.3px;}'
+      +'table.hx th.hx-lbl{color:'+ttlColor+';font-size:10.5px;letter-spacing:.5px;white-space:nowrap;padding:5px 10px;min-width:130px;}'
+      +'table.hx td{font-size:10px;font-weight:700;color:#22303f;text-align:center;padding:4px 3px;border:1px solid #e7ecf1;white-space:nowrap;}'
+      +'table.hx td.dt{font-weight:900;color:#12855a;letter-spacing:.3px;padding:4px 10px;text-align:left;}'
+      +'table.hx tr.cur td{background:'+ac+'0d;}'
+      +'table.hx tr.cur td.dt{color:'+ac+';}'
+      +'.nowtag{display:inline-block;margin-left:7px;background:'+ac+';color:#fff;border-radius:8px;'
+        +'padding:0 6px;font-size:8px;font-weight:800;letter-spacing:.5px;line-height:12px;vertical-align:1px;}'
+      // ── التذييل ──
+      +'.foot{border-top:1.4px solid '+ac+'66;margin-top:8px;padding-top:4px;display:flex;'
+        +'justify-content:space-between;font-size:9.5px;color:#6b7885;font-weight:700;}';
+
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl10"><h1>Complete Blood Count</h1><div class="sub">'+_reportModeTitle+'</div><div class="rule"></div></div>'
+      +'<div class="pbar"><div class="pL">'
+      +'<div class="pF"><span class="pK">Patient</span><span class="pV" style="color:'+nameColor+';font-size:14px">'+ptFullName+'</span></div>'
+      +'<div class="pF"><span class="pK">Sex / Age</span><span class="pV">'+gender+' / '+age+'</span></div>'
+      +'<div class="pF"><span class="pK">Doctor</span><span class="pV">'+doctorName+'</span></div>'
+      +'<div class="pF"><span class="pK">Sample</span><span class="pV">'+sampleDate+'</span></div>'
+      +'</div><div class="pR"><div class="chip">ID: '+barcodeId+'</div><div class="chip">'+_reportModeTitle+'</div></div></div>'
+      +'<table class="lab"><thead><tr>'
+      +'<th class="l">Test details</th><th>Result</th><th>Units</th><th style="width:36px">Flag</th>'
+      +'<th>Normal range</th><th style="width:216px">Histograms</th>'
+      +'</tr></thead><tbody>'+body+'</tbody></table>'
+      +_hxHTML
+      +'<div class="foot"><span>Operator: '+operator+'</span><span>'+_reportModeTitle+'</span><span>'+today+'</span></div>'
+      +'</body></html>';
   }
 
   // fallback → النموذج 1
@@ -35369,6 +36259,12 @@ const CBC_PARAMS_MAP = {
   'MON%':   {ar:'Mon% الوحيدات نسبة',         unit:'%',       refM:'3-12',      order:9},
   'EOS%':   {ar:'Eos% الحمضات نسبة',          unit:'%',       refM:'0.5-5.0',   order:10},
   'BAS%':   {ar:'Bas% القعيدات نسبة',         unit:'%',       refM:'0-1',       order:11},
+  // ── معاملات العدّاد الثلاثي (3-Diff) — Mindray BC-30s/BC-20s وغيرها ──
+  // Mid = الخلايا المتوسطة (Mono+Eos+Baso مدمجة) · Gran = المحبَّبة (Neutrophils أساساً)
+  'MID#':   {ar:'Mid# الخلايا المتوسطة عدد',  unit:'10^9/L',  refM:'0.10-1.50', order:11.3},
+  'GRAN#':  {ar:'Gran# الخلايا المحبَّبة عدد', unit:'10^9/L',  refM:'2.0-7.0',   order:11.5},
+  'MID%':   {ar:'Mid% الخلايا المتوسطة نسبة', unit:'%',       refM:'3-15',      order:11.7},
+  'GRAN%':  {ar:'Gran% الخلايا المحبَّبة نسبة',unit:'%',       refM:'50-70',     order:11.9},
   // RBC Series
   'RBC':    {ar:'RBC  خلايا الدم الحمراء',    unit:'10^12/L', refM:'3.50-5.50', order:12},
   'HGB':    {ar:'HGB  الهيموغلوبين',          unit:'g/dL',    refM:'11.0-17.5', order:13},
@@ -35383,10 +36279,90 @@ const CBC_PARAMS_MAP = {
   'MPV':    {ar:'MPV  متوسط حجم الصفيحة',     unit:'fL',      refM:'7-11',      order:21},
   'PDW':    {ar:'PDW  توزيع الصفائح',         unit:'',        refM:'9-17',      order:22},
   'PCT':    {ar:'PCT  كمية الصفائح',          unit:'mL/L',    refM:'1.08-2.82', order:23},
+  'P-LCR':  {ar:'P-LCR نسبة الصفائح الكبيرة',  unit:'%',       refM:'11-45',     order:24},
+  'P-LCC':  {ar:'P-LCC عدد الصفائح الكبيرة',   unit:'10^9/L',  refM:'30-90',     order:25},
 };
 const CBC_PARAM_KEYS=Object.keys(CBC_PARAMS_MAP);
-function cbcIsParam(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
-function cbcNormalizeCode(code){const c=(code||'').toUpperCase().replace(/\s/g,'');return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+// ── مرادفات أكواد العدّاد الثلاثي (تختلف تسميتها بين الأجهزة) ──
+// Sysmex: MXD=Mid ، GR/GRAN=Gran · بعض Mindray: GR% ، LY=Lym.
+// نطبّع هذه الأسماء البديلة إلى المفاتيح القياسية دون المساس ببقية المنطق.
+const _CBC_ALIASES={
+  'MXD#':'MID#','MXD%':'MID%','MID':'MID#',
+  'GR#':'GRAN#','GR%':'GRAN%','GRA#':'GRAN#','GRA%':'GRAN%','GRAN':'GRAN#','GRAN-P':'GRAN%','GRANP':'GRAN%',
+  'GRANULOCYTE#':'GRAN#','GRANULOCYTE%':'GRAN%',
+  'LY#':'LYM#','LY%':'LYM%',
+  'PLCR':'P-LCR','PLCR%':'P-LCR','P_LCR':'P-LCR','PLCC':'P-LCC','P_LCC':'P-LCC'
+};
+function _cbcAlias(c){ return _CBC_ALIASES[c]||c; }
+/* ── كشف أسطر «ضجيج المخطط» النصية (BC-5000 عبر HL7) ────────────────
+   الجهاز يرسل بيانات المخطط بأسماء نصية تبدأ بـ WBC/RBC/PLT مثل:
+     "WBC HISTOGRAM. TOTAL"، "RBC HISTOGRAM. RIGHT LINE"،
+     "WBC GRAN RIGHT LINE"، "WBC LYM MID LINE."، "PLT HISTOGRAM. LEFT LINE"
+   وكذلك أسطر وصفية: "BLOOD MODE"، "TAKE MODE"، "REF GROUP"، "ANEMIA".
+   هذه ليست نتائج تحليل، لكنها تُطابق cbcIsParam بـ startsWith("WBC"/"RBC"/"PLT")
+   فتدهس القيم الحقيقية (WBC=8.0 → 128). نستبعدها هنا قبل التخزين.
+   القيم الحقيقية (WBC/RBC/PLT/LYM#/PLCR...) لا تحتوي أياً من هذه الكلمات. */
+function _cbcIsHistNoise(code){
+  var c=String(code||'').toUpperCase();
+  return /HISTOGRAM|LINE|\bMODE\b|\bGROUP\b|ANEMIA|SCATTER/.test(c);
+}
+function cbcIsParam(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));if(_cbcIsHistNoise(code))return false;return CBC_PARAM_KEYS.some(k=>c===k||c.startsWith(k));}
+function cbcNormalizeCode(code){const c=_cbcAlias((code||'').toUpperCase().replace(/\s/g,''));return CBC_PARAM_KEYS.find(k=>c===k)||CBC_PARAM_KEYS.find(k=>c.startsWith(k))||c;}
+/* ── التقاط مخططات الجهاز (Histogram) وتخزينها في مخزن CBC ──────────
+   أكواد Mindray: 15000/15050/15100 = بيانات ثنائية Base64
+                  15004/15053/15113 = Meta Length لكل مخطط.
+   نخزّنها تحت مفاتيح HIST_WBC / HIST_RBC / HIST_PLT كي لا تختلط
+   بباراميترات التحليل ولا تظهر كصفوف في الجدول.
+   تُعيد true إذا كان الكود مخططاً (فيتوقف المسار العادي).            */
+var _CBC_HIST_MAP={
+  '15000':{k:'WBC',t:'bin'}, '15004':{k:'WBC',t:'meta'},
+  '15050':{k:'RBC',t:'bin'}, '15053':{k:'RBC',t:'meta'},
+  '15100':{k:'PLT',t:'bin'}, '15113':{k:'PLT',t:'meta'}
+};
+/* أكواد الصور الجاهزة (BMP) — هيستوغرام وScattergram.
+   15000/15050/15100 موجودة أعلاه أيضاً لأن الجهاز قد يرسلها
+   كصورة أو كبيانات خام حسب إعداده — نفرّق بينهما بمحتوى OBX-5. */
+var _CBC_IMG_CODES={
+  '15000':1,'15008':1,'15050':1,'15100':1,'15200':1,'15201':1,
+  '15056':1,'15116':1,'15250':1,'15300':1,'15301':1,'15302':1,
+  '15350':1,'15600':1
+};
+function cbcCaptureHistogram(sampleId, rawCode, rawValue, obxName){
+  var code=String(rawCode||'').trim();
+  var isHist=!!_CBC_HIST_MAP[code], isImg=!!_CBC_IMG_CODES[code];
+  if(!isHist && !isImg) return false;
+  if(!sampleId) return true;   // بلا معرّف عينة — نتجاهله بصمت
+  if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:'',timer:null};
+  var buf=_cbcBuffer[sampleId];
+
+  // ── صورة جاهزة؟ (نفحص محتوى القيمة لا الكود فقط) ──────────
+  var cl=_cbcEDClassify(rawValue);
+  if(cl && cl.kind==='img' && _cbcImgValid(cl.b64)){
+    if(!buf.graphics) buf.graphics=[];
+    var dup=false;
+    for(var d=0;d<buf.graphics.length;d++){ if(buf.graphics[d].code===code){ dup=true; break; } }
+    if(!dup){
+      buf.graphics.push({code:code,name:String(obxName||'').trim(),b64:cl.b64,mime:cl.mime});
+      try{ lisAddLog('astm','[CBC] صورة '+code+' مُستلمة SID:'+sampleId); }catch(_){}
+    }
+    if(buf.timer) clearTimeout(buf.timer);
+    buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+    return true;
+  }
+
+  // ── بيانات خام / Meta Length ───────────────────────────────
+  var hit=_CBC_HIST_MAP[code];
+  if(!hit) return true;   // كود صورة لكن القيمة ليست صورة صالحة — نتجاهله
+  var key='HIST_'+hit.k;
+  if(!buf.params[key] || typeof buf.params[key]!=='object') buf.params[key]={value:'',meta:''};
+  if(hit.t==='bin') buf.params[key].value=String(rawValue||'');
+  else buf.params[key].meta=String(rawValue||'').trim();
+  try{ lisAddLog('astm','[CBC] مخطط '+hit.k+' ('+hit.t+') مُستلم SID:'+sampleId); }catch(_){}
+  // نمدّد مؤقت الإرسال حتى تصل بقية المقاطع
+  if(buf.timer) clearTimeout(buf.timer);
+  buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+  return true;
+}
 // ═══════════════════════════════════════════════════════════════
 // 🩸 BC-6000 — تخزين الرسوم البيانية ورايات الإنذار مع عينة الـ CBC
 // ─────────────────────────────────────────────────────────────
@@ -35439,8 +36415,17 @@ function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
   //   ب) القيمة ليست رقمية (لا يوجد رقم في القيمة)
   const _exactMatch = CBC_PARAM_KEYS.some(k => (code||'').toUpperCase().replace(/\s/g,'')===k);
   if(!_exactMatch && !_numV){
-    // تعليق بحت (مثل RBC ABNORMAL DISTRIBUTION=T) — تجاهل تماماً
-    lisAddLog('astm','[CBC] تجاهل تعليق: '+(code||'')+'='+(value||''));
+    // تعليق بحت (مثل RBC ABNORMAL DISTRIBUTION=T) — لا يُحفظ كباراميتر،
+    // لكن يُجمع في قائمة تعليقات الجهاز لعرضها في صناديق النموذج ٩.
+    if(!buf.comments) buf.comments=[];
+    var _cName=String(code||'').trim();
+    var _cVal=String(value||'').replace(/\^/g,' ').trim();
+    var _cValClean=_cVal.replace(/\b[THL]\b$/i,'').replace(/\s{2,}/g,' ').trim();
+    var _cmtText=_cName;
+    if(_cValClean && _cValClean.toUpperCase()!==_cName.toUpperCase()) _cmtText=(_cName+' '+_cValClean).trim();
+    _cmtText=_cmtText.replace(/\s{2,}/g,' ').trim();
+    if(_cmtText && buf.comments.indexOf(_cmtText)===-1) buf.comments.push(_cmtText);
+    lisAddLog('astm','[CBC] تعليق الجهاز: '+_cmtText);
     if(patName&&!buf.name) buf.name=patName;
     if(buf.timer) clearTimeout(buf.timer);
     buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
@@ -35458,6 +36443,9 @@ const _cbcFlushLog = {};
 function cbcFlush(sampleId){
   const buf=_cbcBuffer[sampleId];
   if(!buf||!Object.keys(buf.params).length) return;
+  // ⭐ لا نُنهي العينة إذا وصلت المخططات (HIST_*) فقط دون أي باراميتر حقيقي
+  const _realParams=Object.keys(buf.params).filter(function(k){return k.indexOf('HIST_')!==0;});
+  if(!_realParams.length) return;
   delete _cbcBuffer[sampleId];
   // ── حماية التكرار: إذا فُلِشَ نفس المريض خلال آخر 60 ثانية — تجاهل ──
   const _flushNow=Date.now();
@@ -35507,6 +36495,8 @@ function cbcFlush(sampleId){
     // الأجهزة الأخرى لا ترسلها فلا يُضاف أي حقل ويبقى شكل الطلب كما هو.
     if(buf.graphics&&buf.graphics.length) targetReq.cbcGraphics=buf.graphics;
     if(buf.alarms&&buf.alarms.length)     targetReq.cbcAlarms=buf.alarms;
+    // 🩸 تعليقات الجهاز — تُعرض في صناديق WBC/RBC/PLT بالنموذج ٩
+    targetReq.cbcComments=(buf.comments&&buf.comments.length)?buf.comments.slice():[];
     // دمج نتيجة CBC فقط — لا نبني results من الصفر
     if(!targetReq.results) targetReq.results={};
     if(!targetReq.resultDetails) targetReq.resultDetails={};
@@ -35515,7 +36505,7 @@ function cbcFlush(sampleId){
     if(!targetReq.cbcHistory) targetReq.cbcHistory=[];
     const _cbcEntry={params:buf.params,datetime:new Date().toISOString(),device:'BC-5000'};
     targetReq.cbcHistory.unshift(_cbcEntry); // الأحدث أولاً
-    targetReq.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:buf.params,fromDevice:'BC-5000',datetime:new Date().toISOString()};
+    targetReq.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:buf.params,cbcComments:targetReq.cbcComments,fromDevice:'BC-5000',datetime:new Date().toISOString()};
     // status=done فقط إذا جميع التحاليل الأخرى مكتملة أيضاً أو لا توجد
     const _otherTests=(targetReq.tests||[]).filter(function(t){return t!=='CBC'&&t!=='h001';});
     const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
@@ -35657,6 +36647,15 @@ function lisParseHL7(raw,deviceName){
     const _c3=(f[3]||'').split('^');
     const _cd=(_c3[0]||'').trim();
     const _nm=(_c3[1]||'').trim();
+
+    // ── 🩸 مخططات الجهاز (Histogram) — أكواد 15xxx ──────────────────
+    // تُلتقط قبل أي تنظيف للقيمة كي لا يتلف الـ Base64، وتُخزَّن تحت
+    // HIST_WBC / HIST_RBC / HIST_PLT أو كصور جاهزة. لا تدخل النتائج أبداً.
+    if(typeof cbcCaptureHistogram==='function' &&
+       (( typeof _CBC_HIST_MAP!=='undefined' && _CBC_HIST_MAP[_cd]) ||
+        ( typeof _CBC_IMG_CODES!=='undefined' && _CBC_IMG_CODES[_cd]))){
+      if(cbcCaptureHistogram(pid.id||'', _cd, (f[5]||''), _nm)) return;
+    }
 
     if(_t2==='ED'){
       const _p=(f[5]||'').split('^');
@@ -35809,7 +36808,16 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
     const codeWithSpaces=(obx.testName||obx.testCode||'').trim().toUpperCase();
     const code=codeWithSpaces.replace(/\s+/g,'');
     let value=obx.value||'';
+    // ── 🩸 مخططات الجهاز (تُطابَق برقم OBX-3 لأن الاسم يحوي مسافات) ──
+    const _histId=String(obx.testCode||'').trim();
+    if(typeof cbcCaptureHistogram==='function' &&
+       (( typeof _CBC_HIST_MAP!=='undefined' && _CBC_HIST_MAP[_histId]) ||
+        ( typeof _CBC_IMG_CODES!=='undefined' && _CBC_IMG_CODES[_histId]))){
+      if(cbcCaptureHistogram(parsed.patientId||'', _histId, value, (obx.testName||''))) return;
+    }
     if(!code&&!value) return;
+    // تخطّي أسطر ضجيج المخطط النصية (HISTOGRAM / LINE / MODE ...)
+    if(typeof _cbcIsHistNoise==='function' && _cbcIsHistNoise(codeWithSpaces)) return;
 
     // ⭐ BS-230 فقط: حذف الكسور + النزول لأقرب ٥ (الافتراضي)، مع استثناءات
     //    القوائم. معزول تماماً — لا يُنفَّذ لأي جهاز HL7 آخر
@@ -36324,6 +37332,132 @@ function lisTransferAll(){
   lisTransferToMedlabPro(pending);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 📌 مطابقة نتيجة الجهاز مع الطلب الصحيح — قاعدة «آخر RQ يحتوي التحليل فارغاً»
+// ───────────────────────────────────────────────────────────────────────────
+// العلّة السابقة (سبب الإدخال «العشوائي حسب رقم RQ»):
+//   ١) عند تعادل المرشّحين كان الترتيب النهائي:
+//        String(b.r.id).localeCompare(String(a.r.id))
+//      وهي مقارنة **نصّية** لا رقمية ⇒ 'RQ-9' تسبق 'RQ-10'، فيُختار الطلب
+//      الأقدم بدل الأحدث (وكذلك RQ1-… مقابل RQ2-… بين الحاسبات).
+//   ٢) وأخطر منها: إن لم يحتوِ أي طلب على التحليل القادم (fit=0 للجميع) كان
+//      يسقط على أي مرشّح ويكتب فيه النتيجة رغم أن التحليل غير مطلوب فيه.
+//
+// القاعدة الآن (بالترتيب الصارم):
+//   ١) اجمع طلبات نفس الـ ID المُرسَل (أو رقم الطلب/الباركود إن أرسله الجهاز).
+//   ٢) رتّب من الأحدث للأقدم: التاريخ ← رقم RQ **رقمياً** تنازلياً.
+//   ٣) خُذ أول (أحدث) طلب يحتوي التحليل المستهدف وخانته **فارغة**.
+//   ٤) إن لم يوجد ⟵ أحدث طلب يحتوي التحليل ولو كانت خانته مُدخلة (تحديث
+//      نتيجة معادة من الجهاز لنفس الطلب — سلوك مطلوب ولا يُلغى).
+//   ٥) إن لم يحتوِ أي طلب هذا التحليل إطلاقاً ⟵ **لا تُدخَل في أي طلب**،
+//      وتُحفظ بانتظار الربط اليدوي. (كِلّ الأمان: _lisSettings.strictReqMatch=false
+//      يُعيد السلوك القديم تماماً.)
+//
+// معزول: تجميع المرشّحين كما هو حرفياً، و_lisApplyResultToReq لم تُمسّ.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// النوع المناعي (isotype) — لمنع خلط IgA/IgG/IgM أثناء المطابقة الجزئية
+function _lisIsoOf(s){
+  var u=(s||'').toUpperCase().replace(/[-\s.]+/g,'');
+  if(u.endsWith('IGA')||/IGA(?![A-Z])/.test(u)) return 'IGA';
+  if(u.endsWith('IGG')||/IGG(?![A-Z])/.test(u)) return 'IGG';
+  if(u.endsWith('IGM')||/IGM(?![A-Z])/.test(u)) return 'IGM';
+  if(u.endsWith('IGE')||/IGE(?![A-Z])/.test(u)) return 'IGE';
+  return '';
+}
+
+// هل يحتوي هذا الطلب على التحليل القادم من الجهاز؟ يُرجع مفتاحه داخل الطلب أو null.
+// نفس منطق تحديد resultKey في _lisApplyResultToReq حتى لا يفترق القراران.
+function _lisReqTestKey(r, code){
+  try{
+    var codeUp=String(code||'').toUpperCase();
+    if(!codeUp) return null;
+    var codeNorm=codeUp.replace(/[-\s]+/g,'');
+    var _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+    var reqTests=Array.isArray(r&&r.tests)?r.tests:[];
+    var i,tid,tidUp,tidNorm,t,tc,tns,tne;
+
+    // (١) تطابق مباشر: معرّف/كود التحليل داخل الطلب
+    for(i=0;i<reqTests.length;i++){
+      tid=reqTests[i];
+      tidUp=String(tid||'').toUpperCase();
+      tidNorm=tidUp.replace(/[-\s]+/g,'');
+      if(tidUp===codeUp||tidNorm===codeNorm) return tid;
+      t=_allTests.find(function(x){return x.id===tid||x.code===tid;});
+      if(t){
+        tc =(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+        tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+        tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+        if(tc===codeNorm||tns===codeNorm||tne===codeNorm||String(t.id||'').toUpperCase()===codeUp) return tid;
+      }
+    }
+
+    // (٢) تطابق جزئي (مثل Cortisol ↔ AM-CORT) مع حماية isotype
+    var _codeIso=_lisIsoOf(codeUp);
+    for(i=0;i<reqTests.length;i++){
+      tid=reqTests[i];
+      t=_allTests.find(function(x){return x.id===tid||x.code===tid;});
+      if(!t) continue;
+      tc =(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
+      tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
+      tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
+      var _tIso=_lisIsoOf(tc)||_lisIsoOf(tns)||_lisIsoOf(tne);
+      if(_codeIso!==_tIso) continue;
+      if((tc &&(tc.startsWith(codeNorm)||codeNorm.startsWith(tc)))||
+         (tns&&(tns.startsWith(codeNorm)||codeNorm.startsWith(tns)))||
+         (tne&&(tne.startsWith(codeNorm)||codeNorm.startsWith(tne)))) return tid;
+    }
+
+    // (٣) CBC: معاملات تعداد الدم تُخزَّن كمفاتيح مستقلة داخل طلب فيه CBC
+    //     (WBC/RBC/HGB… لا تظهر في req.tests) — فنعتبر وجود تحليل CBC كافياً.
+    if(typeof _isCbcKey==='function' && _isCbcKey(codeUp)){
+      for(i=0;i<reqTests.length;i++){
+        try{ if(_isCbcKey(reqTests[i])) return codeUp; }catch(_){}
+      }
+    }
+    return null;
+  }catch(e){ return null; }
+}
+
+// هل خانة هذا التحليل مُدخلة مسبقاً في الطلب؟ (نفحص كل المفاتيح المحتملة)
+function _lisReqKeyFilled(r, code, key){
+  try{
+    if(!r||!r.results) return false;
+    var _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
+    var codeUp=String(code||'').toUpperCase();
+    var t=_allTests.find(function(x){return x.id===key||x.code===key;})||
+          _allTests.find(function(x){return String(x.code||'').toUpperCase()===codeUp;});
+    var keys=[key,code,codeUp,(t&&t.id)||null,(t&&t.code)||null];
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i];
+      if(k==null||k==='') continue;
+      var v=r.results[k];
+      if(v!=null&&v!=='') return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
+// درجة الملاءمة: 2 = يحتوي التحليل وخانته فارغة · 1 = يحتوي ومُدخل · 0 = لا يحتوي
+function _lisReqFit(r, res){
+  var code=(res&&(res.medlabCode||res.deviceCode))||'';
+  if(!code) return 0;
+  var key=_lisReqTestKey(r, code);
+  if(!key) return 0;
+  return _lisReqKeyFilled(r, code, key)?1:2;
+}
+
+// ترتيب «الأحدث أولاً» حتمي: التاريخ ← رقم RQ رقمياً (لا مقارنة نصّية)
+function _lisNewerFirst(a, b){
+  var ad=(typeof _lisReqDateMs==='function')?_lisReqDateMs(a):0;
+  var bd=(typeof _lisReqDateMs==='function')?_lisReqDateMs(b):0;
+  if(bd!==ad) return bd-ad;
+  var aq=(typeof _lisReqSeqNo==='function')?_lisReqSeqNo(a):0;
+  var bq=(typeof _lisReqSeqNo==='function')?_lisReqSeqNo(b):0;
+  if(bq!==aq) return bq-aq;
+  return 0;
+}
+
 // ── مساعد: مطابقة نتيجة جهاز مع طلب من القائمة ───────────────────────────
 // القاعدة الأساسية: MAGLUMI يرسل رقم المريض كـ SID
 // نبحث عن طلب غير منتهٍ للمريض صاحب هذا الرقم
@@ -36331,41 +37465,6 @@ function _lisMatchReqInList(reqs, res, ptsList){
   const sid=String(res.sampleId||'').trim();
   if(!sid) return undefined;
   const sidNum=sid.replace(/[^0-9]/g,'');
-
-  // ── مساعد (النقطة ١): هل يحتوي هذا الطلب على التحليل القادم من الجهاز؟ ──
-  //   نعيد: 2 = يحتوي التحليل وخانته ما زالت فارغة (الأفضل)
-  //         1 = يحتوي التحليل لكن مُدخل مسبقاً
-  //         0 = لا يحتوي التحليل إطلاقاً
-  // هذا هو جوهر منع الخلط: نتيجة LH يجب أن تذهب للطلب الذي طلب LH فعلاً،
-  // لا لأحدث طلب زمنياً للمريض نفسه.
-  function _reqTestFit(r){
-    try{
-      const code=(res.medlabCode||res.deviceCode||'').toUpperCase();
-      if(!code) return 0;
-      const codeNorm=code.replace(/[-\s]+/g,'');
-      const _allTests=(typeof tests!=='undefined'&&tests&&tests.length)?tests:(typeof ALL_TESTS!=='undefined'?ALL_TESTS:[]);
-      const reqTests=Array.isArray(r.tests)?r.tests:[];
-      let matchedKey=null;
-      for(const tid of reqTests){
-        const tidUp=String(tid||'').toUpperCase();
-        const tidNorm=tidUp.replace(/[-\s]+/g,'');
-        // مطابقة مباشرة على كود/معرّف التحليل داخل الطلب
-        if(tidUp===code||tidNorm===codeNorm){ matchedKey=tid; break; }
-        // مطابقة عبر بيانات التحليل (code / nameShort / nameEn / id)
-        const t=_allTests.find(x=>x.id===tid||x.code===tid);
-        if(t){
-          const tc=(t.code||'').toUpperCase().replace(/[-\s]+/g,'');
-          const tns=(t.nameShort||'').toUpperCase().replace(/[-\s]+/g,'');
-          const tne=(t.nameEn||'').toUpperCase().replace(/[-\s]+/g,'');
-          const tid2=(t.id||'').toUpperCase();
-          if(tc===codeNorm||tns===codeNorm||tne===codeNorm||tid2===code){ matchedKey=tid; break; }
-        }
-      }
-      if(!matchedKey) return 0;
-      const filled=r.results && (r.results[matchedKey]!=null && r.results[matchedKey]!=='');
-      return filled?1:2;
-    }catch(e){ return 0; }
-  }
 
   // جمع المرشحين أولاً ثم اختيار الأفضل
   const candidates=[];
@@ -36413,28 +37512,48 @@ function _lisMatchReqInList(reqs, res, ptsList){
 
   if(!candidates.length) return undefined;
 
-  // احسب مدى احتواء كل مرشح للتحليل القادم (2=يحتوي وفارغ، 1=يحتوي ومُدخل، 0=لا)
-  candidates.forEach(function(c){ c.fit=_reqTestFit(c.r); });
+  const _code=(res.medlabCode||res.deviceCode||'');
 
-  // ⭐ إن وُجد مرشح واحد على الأقل يحتوي التحليل فعلاً (fit>0)، فاستبعد كل
-  //    المرشحين الذين لا يحتوونه (fit===0). هذا يمنع نهائياً دخول نتيجة LH
-  //    في طلب لا يحتوي LH (طلب السكر التراكمي) والعكس.
+  // احسب مدى احتواء كل مرشح للتحليل القادم (2=يحتوي وفارغ، 1=يحتوي ومُدخل، 0=لا)
+  candidates.forEach(function(c){ c.fit=_lisReqFit(c.r,res); });
+
+  // ⭐ الصرامة: لا يُكتب تحليل في طلب لا يحتوي هذا التحليل إطلاقاً.
+  //    (كان هذا سبب دخول النتائج في طلبات غير مقصودة «عشوائياً»)
   const _anyFit=candidates.some(function(c){return c.fit>0;});
+  if(!_anyFit){
+    const _strict=(typeof _lisSettings==='undefined')||(_lisSettings.strictReqMatch!==false);
+    if(_strict){
+      try{
+        const _ids=candidates.slice(0,5).map(function(c){return c.r.id;}).join(', ');
+        lisAddLog('warn','⛔ '+_code+' (SID '+sid+'): لا يوجد طلب يحتوي هذا التحليل — لم تُدخَل في أي طلب ['+_ids+']');
+      }catch(_){}
+      return undefined;
+    }
+  }
   const pool=_anyFit?candidates.filter(function(c){return c.fit>0;}):candidates;
 
   // ترتيب الأولوية:
-  //   1) fit أعلى (يحتوي التحليل + خانته فارغة)
-  //   2) score أعلى (قوة مطابقة العينة/المريض)
-  //   3) الطلبات غير المنتهية
-  //   4) الأحدث (id أكبر)
+  //   1) fit أعلى (يحتوي التحليل + خانته فارغة) ⟵ جوهر القاعدة
+  //   2) score أعلى (مطابقة رقم الطلب نفسه تسبق مطابقة رقم المريض)
+  //   3) الأحدث: التاريخ ← رقم RQ رقمياً (لا مقارنة نصّية بعد الآن)
+  //   4) الطلبات غير المنتهية
   pool.sort(function(a,b){
     if(b.fit!==a.fit) return b.fit-a.fit;
     if(b.score!==a.score) return b.score-a.score;
+    const _n=_lisNewerFirst(a.r,b.r);
+    if(_n!==0) return _n;
     const aNotDone=(a.r.status!=='done')?1:0;
     const bNotDone=(b.r.status!=='done')?1:0;
-    if(bNotDone!==aNotDone) return bNotDone-aNotDone;
-    return String(b.r.id).localeCompare(String(a.r.id));
+    return bNotDone-aNotDone;
   });
+
+  // سجل تشخيصي مختصر عند وجود أكثر من مرشّح (يُسهّل تتبّع أي شكوى لاحقاً)
+  try{
+    if(pool.length>1){
+      lisAddLog('info','🎯 '+_code+' (SID '+sid+') → '+pool[0].r.id+
+        ' [fit='+pool[0].fit+'] من بين: '+pool.slice(0,4).map(function(c){return c.r.id+'/'+c.fit;}).join(' · '));
+    }
+  }catch(_){}
 
   return pool[0].r;
 }
@@ -44054,205 +45173,646 @@ setInterval(function(){
 
 
 /* ════════════════════════════════════════════════════════════════════
-   ③ المنادات الصوتية (السبيكر) — الصوت عبر قناة الربط مباشرة
-   WebRTC كان يحتاج تفاوض ICE، وداخل Electron تُخفى عناوين الشبكة خلف
-   أسماء mDNS (*.local) التي لا تُحلّ غالباً ⇒ اتصال بلا صوت على WiFi.
-   الآن: PCM أحادي 16kHz عبر نفس WebSocket، ولا يُرسل شيء إلا أثناء
-   الضغط الفعلي على الزر.
+   ③ المنادات الصوتية (السبيكر) — v4 «سريعة جداً وسلسة»
+   ──────────────────────────────────────────────────────────────────
+   ما عولج في هذه النسخة (بعد v3):
+     ① الحزمة صارت ٢٠ms بدل ٤٠ms، ومخزن الارتجاف يبدأ من ٦٠ms بدل ١٢٠
+        ⇒ زمن الوصول ≈ ٨٠–١٠٠ms (إحساس المكالمة المباشرة).
+     ② مخزن الارتجاف تكيّفي في الاتجاهين: يتوسّع فوراً عند أي نقص
+        (+٥٠ms) ويتقلّص ببطء عند الاستقرار ⇒ لا تقطيع ولا تأخّر زائد.
+     ③ تعويض الفقد (PLC) برقم تسلسلي: أي حزمة ضائعة تُملأ بذيل متلاشٍ
+        بطولها الصحيح فلا ينزاح الصوت ولا تُسمع فرقعة.
+     ④ عقدة التشغيل تبقى حيّة ولا تُهدم بين الجُمل ⇒ لا فجوة بداية.
+     ⑤ حجب رأس الطابور: كان `_lanEmit` (مسار المزامنة الأثقل) يتجاوز
+        `_lanSendRaw` فلا يُحتجز — الآن يُحتجز هو أيضاً أثناء الكلام.
+     ⑥ السيرفير كان يعيد بثّ كل حزمة صوت إلى مُرسِلها نفسه؛ الآن لا
+        يُعاد البثّ إلا إذا كان هناك أكثر من عميل ⇒ نصف الحِمل يختفي
+        على حاسبة العميل (كانت تُحلّل ٥٠ رسالة/ثانية من صداها).
+     ⑦ الميكروفون يُهيَّأ مسبقاً ويبقى حيّاً ⇒ الضغطة تلتقط من أول حرف.
+     ⑧ سلسلة تضخيم للأصوات البعيدة: ضاغط عميق + تضخيم + محدّد ناعم
+        ⇒ يُسمع مَن يتكلم من آخر الغرفة بلا تشويه.
+     ⑨ مؤشّر «يتكلّم الآن» أسفل الزر لمنع تضارب الكلام.
    ════════════════════════════════════════════════════════════════════ */
 var IC = (function(){
-  var SR_OUT = 16000, JITTER = 0.14, BTN_ID = 'intercom-btn';
-  var _active = false, _stream = null, _actx = null, _srcNode = null, _proc = null;
-  var _pctx = null, _heads = {}, _remote = {}, _remoteT = {};
+  'use strict';
 
-  function _me(){ return (typeof _lanDeviceId !== 'undefined') ? _lanDeviceId : 'me'; }
-  function _ready(){ return (typeof _lanMode !== 'undefined') && (_lanMode === 'server' || _lanMode === 'client'); }
-  function _send(o){ o.from = _me(); o.ts = Date.now(); try{ _lanSendRaw(o); }catch(e){} }
+  var RATE    = 24000;   // معدّل العمل (نطاق 12kHz — أوضح من الهاتف)
+  var PKT     = 480;     // ٢٠ms لكل حزمة
+  var JIT0    = 0.06;    // مخزن ارتجاف ابتدائي ٦٠ms
+  var JITMAX  = 0.60;
+  var JITUP   = 0.05;    // توسّع عند كل نقص
+  var JITDN   = 0.015;   // تقلّص عند الاستقرار
+  var CALM_MS = 5000;    // مدة الهدوء قبل التقلّص
+  var BTN_ID  = 'intercom-btn';
 
-  function _encode(f32){
-    var n = f32.length, buf = new ArrayBuffer(n*2), dv = new DataView(buf), i, s;
+  /* ── الالتقاط ─────────────────────────────────────────────────── */
+  var _active=false, _stream=null, _actx=null, _rec=null, _chain=null;
+  var _micReady=false, _micBusy=null, _quiet=false, _seq=0, _tap=null;
+
+  /* ── التشغيل ──────────────────────────────────────────────────── */
+  var _pctx=null, _duck=null, _players={}, _remote={}, _remoteT={}, _names={};
+  var _wlP=false, _wlR=false, _lastErr='';
+  var _peers=null;   // عدد العملاء لدى السيرفير (null = غير معروف)
+
+  function _me(){ return (typeof _lanDeviceId!=='undefined') ? _lanDeviceId : 'me'; }
+  function _ready(){ return (typeof _lanMode!=='undefined') && (_lanMode==='server'||_lanMode==='client'); }
+  function _note(t,m,k){ if(_quiet) return; try{ if(typeof showNotif==='function') showNotif(t,m,k||'info'); }catch(e){} }
+  function _send(o){ o.from=_me(); o.ts=Date.now(); try{ _lanSendRaw(o); }catch(e){} }
+  function _myLabel(){
+    try{
+      if(typeof settings==='object' && settings && settings.deviceName) return settings.deviceName;
+    }catch(e){}
+    return (typeof _lanMode!=='undefined' && _lanMode==='server') ? 'حاسبة السيرفير' : 'حاسبة العميل';
+  }
+
+  /* ════ ترميز PCM 16-bit + محدّد ناعم ══════════════════════════ */
+  function _enc(f32){
+    var n=f32.length, buf=new ArrayBuffer(n*2), dv=new DataView(buf), i, s;
     for(i=0;i<n;i++){
-      s = f32[i]; if(s > 1) s = 1; else if(s < -1) s = -1;
-      dv.setInt16(i*2, s < 0 ? s*0x8000 : s*0x7FFF, true);
+      s=f32[i];
+      /* محدّد ناعم: يمنع القصّ الحاد عند رفع التضخيم للأصوات البعيدة */
+      if(s>0.72)  s = 0.72 + (1-0.72)*Math.tanh((s-0.72)/(1-0.72));
+      else if(s<-0.72) s = -0.72 + (1-0.72)*Math.tanh((s+0.72)/(1-0.72));
+      if(s>1) s=1; else if(s<-1) s=-1;
+      dv.setInt16(i*2, s<0 ? s*0x8000 : s*0x7FFF, true);
     }
-    var b = new Uint8Array(buf), out = '', CH = 0x8000;
-    for(i=0;i<b.length;i+=CH) out += String.fromCharCode.apply(null, b.subarray(i, i+CH));
+    var b=new Uint8Array(buf), out='', CH=0x4000;
+    for(i=0;i<b.length;i+=CH) out += String.fromCharCode.apply(null, b.subarray(i,i+CH));
     return btoa(out);
   }
-  function _decode(b64){
-    var bin = atob(b64), len = bin.length, b = new Uint8Array(len), i;
-    for(i=0;i<len;i++) b[i] = bin.charCodeAt(i);
-    var dv = new DataView(b.buffer), n = len >> 1, out = new Float32Array(n), v;
-    for(i=0;i<n;i++){ v = dv.getInt16(i*2, true); out[i] = v / (v < 0 ? 0x8000 : 0x7FFF); }
+  function _dec(b64){
+    var bin=atob(b64), len=bin.length, b=new Uint8Array(len), i;
+    for(i=0;i<len;i++) b[i]=bin.charCodeAt(i);
+    var dv=new DataView(b.buffer), n=len>>1, out=new Float32Array(n), v;
+    for(i=0;i<n;i++){ v=dv.getInt16(i*2,true); out[i]=v/(v<0?0x8000:0x7FFF); }
     return out;
   }
-  function _downsample(input, inRate){
-    if(inRate === SR_OUT) return input;
-    var ratio = inRate / SR_OUT, outLen = Math.floor(input.length / ratio);
-    var out = new Float32Array(outLen), pos = 0, i, j, sum, cnt, next;
-    for(i=0;i<outLen;i++){
-      next = Math.floor((i+1) * ratio); sum = 0; cnt = 0;
-      for(j=pos; j<next && j<input.length; j++){ sum += input[j]; cnt++; }
-      out[i] = cnt ? sum/cnt : 0;
-      pos = next;
+  function _resample(inp, from, to){
+    if(from===to) return inp;
+    var ratio=from/to, n=Math.floor(inp.length/ratio), out=new Float32Array(n), i,p,i0,fr;
+    for(i=0;i<n;i++){
+      p=i*ratio; i0=p|0; fr=p-i0;
+      out[i] = (i0+1<inp.length) ? inp[i0]*(1-fr)+inp[i0+1]*fr : (inp[i0]||0);
     }
     return out;
   }
 
+  /* ════ معالجات AudioWorklet ═══════════════════════════════════ */
+  var SRC_PLAY = [
+    'class ICPlay extends AudioWorkletProcessor{',
+    '  constructor(o){ super();',
+    '    var sec=(o.processorOptions&&o.processorOptions.sec)||8;',
+    '    this.cap=Math.round(sampleRate*sec);',
+    '    this.buf=new Float32Array(this.cap);',
+    '    this.r=0; this.w=0; this.avail=0; this.on=false; this.last=0;',
+    '    this.target=Math.round(sampleRate*0.06);',
+    '    this.port.onmessage=(e)=>{ var d=e.data;',
+    '      if(d.cmd==="target"){ this.target=d.v|0; return; }',
+    '      if(d.cmd==="flush"){ this.r=this.w=this.avail=0; this.on=false; this.last=0; return; }',
+    '      var p=d.pcm; if(!p) return; var n=p.length,i;',
+    '      if(this.avail+n>this.cap){ var dr=(this.avail+n)-this.cap; this.r=(this.r+dr)%this.cap; this.avail-=dr; }',
+    '      for(i=0;i<n;i++){ this.buf[this.w]=p[i]; this.w=(this.w+1)%this.cap; }',
+    '      this.avail+=n;',
+    '      if(!this.on && this.avail>=this.target) this.on=true;',
+    '    };',
+    '  }',
+    '  process(inputs,outputs){',
+    '    var out=outputs[0][0]; if(!out) return true;',
+    '    var n=out.length,i,s;',
+    '    if(this.on && this.avail<n){ this.on=false; this.port.postMessage({ev:"under"}); }',
+    '    for(i=0;i<n;i++){',
+    '      if(this.on && this.avail>0){ s=this.buf[this.r]; this.r=(this.r+1)%this.cap; this.avail--; this.last=s; }',
+    '      else { this.last*=0.994; s=this.last; }',
+    '      out[i]=s;',
+    '    }',
+    '    return true;',
+    '  }',
+    '}',
+    'registerProcessor("ic-play",ICPlay);'
+  ].join('\n');
+
+  var SRC_REC = [
+    'class ICRec extends AudioWorkletProcessor{',
+    '  constructor(o){ super();',
+    '    this.size=(o.processorOptions&&o.processorOptions.size)||480;',
+    '    this.acc=new Float32Array(this.size); this.n=0;',
+    '  }',
+    '  process(inputs,outputs){',
+    '    var ch=inputs[0]&&inputs[0][0];',
+    '    var out=outputs[0]&&outputs[0][0]; if(out) out.fill(0);',
+    '    if(ch){ for(var i=0;i<ch.length;i++){',
+    '      this.acc[this.n++]=ch[i];',
+    '      if(this.n===this.size){ this.port.postMessage(this.acc.slice(0)); this.n=0; }',
+    '    } }',
+    '    return true;',
+    '  }',
+    '}',
+    'registerProcessor("ic-rec",ICRec);'
+  ].join('\n');
+
+  function _module(ctx, src){
+    if(!ctx.audioWorklet) return Promise.reject(new Error('no-worklet'));
+    var url=URL.createObjectURL(new Blob([src],{type:'text/javascript'}));
+    return ctx.audioWorklet.addModule(url).then(function(){ try{ URL.revokeObjectURL(url); }catch(e){} });
+  }
+
+  /* ════ سياق التشغيل ═══════════════════════════════════════════ */
+  function _mkCtx(){
+    var C=window.AudioContext||window.webkitAudioContext;
+    if(!C) return null;
+    var c=null;
+    try{ c=new C({ sampleRate:RATE, latencyHint:'interactive' }); }catch(e){ c=null; }
+    if(!c){ try{ c=new C({ latencyHint:'interactive' }); }catch(e){ return null; } }
+    return c;
+  }
   function _playCtx(){
     if(!_pctx){
-      var C = window.AudioContext || window.webkitAudioContext;
-      if(!C) return null;
-      try{ _pctx = new C(); }catch(e){ return null; }
+      _pctx=_mkCtx(); if(!_pctx) return null;
+      _duck=_pctx.createGain(); _duck.gain.value=1; _duck.connect(_pctx.destination);
+      _module(_pctx,SRC_PLAY).then(function(){ _wlP=true; }).catch(function(){ _wlP=false; });
     }
-    if(_pctx.state === 'suspended'){ try{ _pctx.resume(); }catch(e){} }
+    if(_pctx.state==='suspended'){ try{ _pctx.resume(); }catch(e){} }
     return _pctx;
   }
-  document.addEventListener('click',    function(){ _playCtx(); }, true);
-  document.addEventListener('keydown',  function(){ _playCtx(); }, true);
-  document.addEventListener('touchend', function(){ _playCtx(); }, true);
+  document.addEventListener('click',    function(){ _playCtx(); _warm(); }, true);
+  document.addEventListener('keydown',  function(){ _playCtx(); _warm(); }, true);
+  document.addEventListener('touchend', function(){ _playCtx(); _warm(); }, true);
 
-  function _play(from, f32, sr){
-    if(_active) return;                        // نصف مزدوج — يمنع الصدى
-    var ctx = _playCtx(); if(!ctx) return;
+  /* ── مشغّل دائم لكل جهاز بعيد (لا يُهدم بين الجُمل) ────────────── */
+  function _player(id){
+    var ctx=_playCtx(); if(!ctx) return null;
+    var p=_players[id]; if(p) return p;
+    p={ node:null, jit:JIT0, head:0, seq:0, calm:Date.now() };
+    _players[id]=p;
+    if(_wlP && ctx.audioWorklet){
+      try{
+        var node=new AudioWorkletNode(ctx,'ic-play',{
+          numberOfInputs:0, numberOfOutputs:1, outputChannelCount:[1],
+          processorOptions:{ sec:8 }
+        });
+        node.port.postMessage({cmd:'target', v:Math.round(ctx.sampleRate*p.jit)});
+        node.port.onmessage=function(e){
+          if(e.data && e.data.ev==='under'){
+            p.calm=Date.now();
+            if(p.jit<JITMAX){
+              p.jit=Math.min(JITMAX,p.jit+JITUP);
+              try{ node.port.postMessage({cmd:'target', v:Math.round(ctx.sampleRate*p.jit)}); }catch(_){}
+            }
+          }
+        };
+        node.connect(_duck);
+        p.node=node;
+      }catch(e){ p.node=null; }
+    }
+    return p;
+  }
+  /* تقليص تدريجي للمخزن عند الاستقرار — يعيد السرعة بعد أي عاصفة */
+  setInterval(function(){
+    var now=Date.now(), ctx=_pctx;
+    if(!ctx) return;
+    for(var id in _players){
+      var p=_players[id];
+      if(!p.node || p.jit<=JIT0) continue;
+      if(now-p.calm < CALM_MS) continue;
+      p.jit=Math.max(JIT0, p.jit-JITDN); p.calm=now;
+      try{ p.node.port.postMessage({cmd:'target', v:Math.round(ctx.sampleRate*p.jit)}); }catch(e){}
+    }
+  }, 2500);
+
+  function _flushPlayer(id){
+    var p=_players[id]; if(!p) return;
+    p.seq=0; p.head=0;
+    try{ if(p.node) p.node.port.postMessage({cmd:'flush'}); }catch(e){}
+  }
+  function _killPlayer(id){
+    var p=_players[id]; if(!p) return;
+    try{ if(p.node){ p.node.port.postMessage({cmd:'flush'}); p.node.disconnect(); } }catch(e){}
+    delete _players[id];
+  }
+
+  /* ── دفع صوت وارد + تعويض الفقد ───────────────────────────────── */
+  function _feed(id, f32, sr, seq){
+    var ctx=_playCtx(); if(!ctx) return;
+    var p=_player(id); if(!p) return;
+    var pcm=_resample(f32, sr||RATE, ctx.sampleRate);
+
+    if(p.node){
+      /* حزمة/حزم ضائعة؟ املأ الفراغ بذيل متلاشٍ بطولها الصحيح */
+      if(seq && p.seq && seq>p.seq+1){
+        var miss=Math.min(5, seq-p.seq-1), k, j, fill;
+        for(k=0;k<miss;k++){
+          fill=new Float32Array(pcm.length);
+          for(j=0;j<fill.length;j++) fill[j]=0;
+          try{ p.node.port.postMessage({pcm:fill},[fill.buffer]); }catch(e){}
+        }
+      }
+      if(seq) p.seq=seq;
+      try{ p.node.port.postMessage({pcm:pcm},[pcm.buffer]); }
+      catch(e){ try{ p.node.port.postMessage({pcm:pcm}); }catch(_){} }
+      return;
+    }
+    /* بديل بلا Worklet */
     var buf;
-    try{ buf = ctx.createBuffer(1, f32.length, sr); }catch(e){ return; }
-    if(buf.copyToChannel) buf.copyToChannel(f32, 0);
-    else buf.getChannelData(0).set(f32);
-    var src = ctx.createBufferSource();
-    src.buffer = buf; src.connect(ctx.destination);
-    var now = ctx.currentTime, head = _heads[from] || 0;
-    if(head < now + 0.02)     head = now + JITTER;
-    else if(head - now > 0.9) head = now + JITTER;
-    try{ src.start(head); }catch(e){ return; }
-    _heads[from] = head + buf.duration;
+    try{ buf=ctx.createBuffer(1,pcm.length,ctx.sampleRate); }catch(e){ return; }
+    if(buf.copyToChannel) buf.copyToChannel(pcm,0); else buf.getChannelData(0).set(pcm);
+    var src=ctx.createBufferSource(); src.buffer=buf; src.connect(_duck);
+    var now=ctx.currentTime;
+    if(p.head<now+0.01) p.head=now+p.jit;
+    else if(p.head-now>1.2) p.head=now+p.jit;
+    try{ src.start(p.head); }catch(e){ return; }
+    p.head+=buf.duration;
   }
 
-  function _anyRemote(){ for(var k in _remote){ if(_remote[k]) return true; } return false; }
-  function _refreshBtn(){
-    var b = document.getElementById(BTN_ID); if(!b) return;
-    if(_active){
-      b.classList.add('ic-talking'); b.classList.remove('ic-incoming');
-      b.title = 'تتحدّث الآن — اترك الزر للإيقاف';
-    } else if(_anyRemote()){
-      b.classList.add('ic-incoming'); b.classList.remove('ic-talking');
-      b.title = 'مكالمة واردة';
-    } else {
-      b.classList.remove('ic-talking','ic-incoming');
-      b.title = 'المنادات الصوتية (اضغط مع الاستمرار للتحدث)';
-    }
-  }
-
-  function start(){
-    if(_active) return;
-    if(!_ready()){
-      if(typeof showNotif === 'function')
-        showNotif('📢 المنادات','فعّل الربط بين الأجهزة أولاً من قسم «الربط»','warning');
-      return;
-    }
+  /* ════ الميكروفون — يُهيَّأ مسبقاً ويبقى حيّاً ═════════════════ */
+  function _ensureMic(){
+    if(_micReady) return Promise.resolve(true);
+    if(_micBusy) return _micBusy;
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      if(typeof showNotif === 'function') showNotif('📢 المنادات','الميكروفون غير مدعوم هنا','error');
-      return;
+      _lastErr='no-mediaDevices';
+      var why=(location.protocol==='http:' && location.hostname &&
+               location.hostname!=='localhost' && location.hostname!=='127.0.0.1')
+        ? 'الصفحة مفتوحة عبر http://'+location.hostname+' — المتصفح يمنع الميكروفون خارج https. افتح برنامج MedLab Pro المكتبي على هذه الحاسبة.'
+        : 'الميكروفون غير مدعوم في هذه البيئة';
+      _note('📢 المنادات', why, 'error');
+      return Promise.reject(new Error(_lastErr));
     }
-    _active = true; _refreshBtn();
-    navigator.mediaDevices.getUserMedia({
+    _micBusy = navigator.mediaDevices.getUserMedia({
       audio:{ echoCancellation:{ideal:true}, noiseSuppression:{ideal:true},
               autoGainControl:{ideal:true}, channelCount:1 }, video:false
     }).then(function(stream){
-      if(!_active){ stream.getTracks().forEach(function(t){ try{t.stop();}catch(e){} }); return; }
-      _stream = stream;
-      var C = window.AudioContext || window.webkitAudioContext;
-      _actx    = new C();
-      _srcNode = _actx.createMediaStreamSource(stream);
-      _proc    = _actx.createScriptProcessor(4096, 1, 1);
-      var inRate = _actx.sampleRate;
-      _proc.onaudioprocess = function(ev){
-        if(!_active) return;
-        try{
-          var pcm = _downsample(ev.inputBuffer.getChannelData(0), inRate);
-          _send({ type:'ic:pcm', sr:SR_OUT, b:_encode(pcm) });
-        }catch(e){}
-      };
-      _srcNode.connect(_proc);
-      _proc.connect(_actx.destination);
-      _send({ type:'ic:talk_start' });
-      if(typeof showNotif === 'function')
-        showNotif('📢 المنادات','🎙️ تتحدّث الآن — الصوت يُبثّ للأجهزة المتصلة','success');
+      _stream=stream;
+      _actx=_mkCtx(); if(!_actx) throw new Error('no-audiocontext');
+      if(_actx.state==='suspended'){ try{ _actx.resume(); }catch(e){} }
+
+      var src=_actx.createMediaStreamSource(stream);
+      /* سلسلة الوضوح + التقاط الأصوات البعيدة */
+      var hp=_actx.createBiquadFilter();
+      hp.type='highpass'; hp.frequency.value=90; hp.Q.value=0.7;
+      var pres=_actx.createBiquadFilter();               // رفع نطاق الوضوح
+      pres.type='peaking'; pres.frequency.value=2600; pres.Q.value=0.9; pres.gain.value=4;
+      var cmp=_actx.createDynamicsCompressor();          // ضغط عميق يرفع الهامس
+      try{
+        cmp.threshold.value=-42; cmp.knee.value=26; cmp.ratio.value=8;
+        cmp.attack.value=0.003; cmp.release.value=0.18;
+      }catch(e){}
+      var gain=_actx.createGain(); gain.gain.value=2.4;  // تضخيم للأصوات البعيدة
+      var lim=_actx.createDynamicsCompressor();          // محدّد يمنع التشويه
+      try{
+        lim.threshold.value=-4; lim.knee.value=2; lim.ratio.value=20;
+        lim.attack.value=0.002; lim.release.value=0.08;
+      }catch(e){}
+      src.connect(hp); hp.connect(pres); pres.connect(cmp);
+      cmp.connect(gain); gain.connect(lim);
+      _chain=lim;
+
+      return _module(_actx,SRC_REC).then(function(){
+        _wlR=true;
+        _rec=new AudioWorkletNode(_actx,'ic-rec',{
+          numberOfInputs:1, numberOfOutputs:1, outputChannelCount:[1],
+          processorOptions:{ size:PKT }
+        });
+        _rec.port.onmessage=function(e){ _onFrame(e.data); };
+      }).catch(function(){
+        _wlR=false;
+        _rec=_actx.createScriptProcessor(512,1,1);
+        var acc=new Float32Array(PKT), n=0;
+        _rec.onaudioprocess=function(ev){
+          var ch=ev.inputBuffer.getChannelData(0), i;
+          for(i=0;i<ch.length;i++){ acc[n++]=ch[i]; if(n===PKT){ _onFrame(acc.slice(0)); n=0; } }
+        };
+      }).then(function(){
+        var sink=_actx.createGain(); sink.gain.value=0;
+        _chain.connect(_rec); _rec.connect(sink); sink.connect(_actx.destination);
+        _stream.getAudioTracks().forEach(function(t){ t.enabled=false; });
+        _micReady=true; _micBusy=null; _lastErr='';
+        return true;
+      });
     }).catch(function(e){
-      _active = false; _refreshBtn();
-      if(typeof showNotif === 'function') showNotif('📢 المنادات','لم يُسمح بالوصول للميكروفون','error');
-      console.warn('[Intercom] mic', e);
+      _micBusy=null; _micReady=false;
+      _lastErr=(e&&(e.name||e.message))||'mic-error';
+      var m='تعذّر فتح الميكروفون';
+      if(e&&e.name==='NotAllowedError')  m='الويندوز أو البرنامج يمنع الميكروفون — اسمح به من إعدادات الخصوصية › الميكروفون';
+      if(e&&e.name==='NotFoundError')    m='لا يوجد ميكروفون موصول بهذه الحاسبة';
+      if(e&&e.name==='NotReadableError') m='الميكروفون مشغول ببرنامج آخر — أغلقه ثم أعد المحاولة';
+      _note('📢 المنادات', m+' ('+_lastErr+')','error');
+      throw e;
     });
+    return _micBusy;
   }
 
+  /* تهيئة صامتة مسبقة: أول تفاعل بعد تفعيل الربط ⇒ الضغطة الأولى فورية */
+  var _warmDone=false;
+  function _warm(){
+    if(_warmDone || _micReady || _micBusy || !_ready()) return;
+    _warmDone=true; _quiet=true;
+    _ensureMic().catch(function(){ _warmDone=false; }).then(function(){ _quiet=false; });
+  }
+  setInterval(_warm, 8000);
+
+  function _releaseMic(){
+    try{ if(_rec){ _rec.onaudioprocess=null; _rec.disconnect(); } }catch(e){}
+    try{ if(_chain) _chain.disconnect(); }catch(e){}
+    try{ if(_actx) _actx.close(); }catch(e){}
+    if(_stream){ _stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} }); }
+    _rec=_chain=_actx=_stream=null; _micReady=false; _micBusy=null; _warmDone=false;
+  }
+
+  function _onFrame(f32){
+    if(_tap){ try{ _tap(f32); }catch(e){} }
+    if(!_active || !_ready()) return;
+    try{
+      var sr=_actx?_actx.sampleRate:RATE;
+      _send({ type:'ic:pcm', sr:sr, sq:(++_seq), b:_enc(f32) });
+    }catch(e){}
+  }
+
+  function _setDuck(on){
+    if(!_duck||!_pctx) return;
+    var t=_pctx.currentTime;
+    try{
+      _duck.gain.cancelScheduledValues(t);
+      _duck.gain.setValueAtTime(_duck.gain.value,t);
+      _duck.gain.linearRampToValueAtTime(on?0.0:1.0, t+0.05);
+    }catch(e){ _duck.gain.value=on?0:1; }
+  }
+
+  /* ════ مؤشّر «يتكلّم الآن» أسفل الزر ══════════════════════════ */
+  function _tagEl(){
+    var el=document.getElementById('ic-live-tag');
+    if(el) return el;
+    var st=document.createElement('style');
+    st.textContent=
+      '#ic-live-tag{position:fixed;z-index:99999;display:none;padding:5px 12px;border-radius:20px;'+
+      'font-size:12px;font-weight:800;white-space:nowrap;pointer-events:none;direction:rtl;'+
+      'box-shadow:0 6px 18px rgba(0,0,0,.28);backdrop-filter:blur(6px);'+
+      'transform:translateX(-50%);transition:opacity .15s;}'+
+      '#ic-live-tag.ic-in{background:rgba(0,140,255,.95);color:#fff;}'+
+      '#ic-live-tag.ic-out{background:rgba(0,200,90,.95);color:#04310f;}'+
+      '#ic-live-tag.ic-clash{background:rgba(255,80,60,.97);color:#fff;}'+
+      '#ic-live-tag .ic-dot{display:inline-block;width:7px;height:7px;border-radius:50%;'+
+      'background:currentColor;margin-inline-end:6px;animation:ic-blink .9s infinite;}'+
+      '@keyframes ic-blink{0%,100%{opacity:1}50%{opacity:.25}}';
+    document.head.appendChild(st);
+    el=document.createElement('div');
+    el.id='ic-live-tag';
+    document.body.appendChild(el);
+    return el;
+  }
+  function _tagShow(cls, text){
+    var el=_tagEl(), b=document.getElementById(BTN_ID);
+    el.className=cls;
+    el.innerHTML='<span class="ic-dot"></span>'+text;
+    el.style.display='block';
+    if(b){
+      var r=b.getBoundingClientRect();
+      el.style.top=(r.bottom+8)+'px';
+      el.style.left=(r.left+r.width/2)+'px';
+    } else { el.style.top='70px'; el.style.left='50%'; }
+  }
+  function _tagHide(){ var el=document.getElementById('ic-live-tag'); if(el) el.style.display='none'; }
+
+  function _speakers(){
+    var out=[]; for(var k in _remote){ if(_remote[k]) out.push(_names[k]||'الحاسبة الأخرى'); }
+    return out;
+  }
+  function _refreshBtn(){
+    var b=document.getElementById(BTN_ID);
+    var sp=_speakers();
+    if(b){
+      if(_active){ b.classList.add('ic-talking'); b.classList.remove('ic-incoming'); b.title='تتحدّث الآن — اترك الزر للإيقاف'; }
+      else if(sp.length){ b.classList.add('ic-incoming'); b.classList.remove('ic-talking'); b.title='مكالمة واردة'; }
+      else { b.classList.remove('ic-talking','ic-incoming'); b.title='المنادات الصوتية (اضغط مع الاستمرار للتحدث · زر يمين = اختبار الميكروفون)'; }
+    }
+    if(_active && sp.length) _tagShow('ic-clash','⚠️ '+sp.join(' و ')+' يتكلّم أيضاً — انتظر');
+    else if(sp.length)       _tagShow('ic-in','🔊 '+sp.join(' و ')+' يتكلّم الآن');
+    else if(_active)         _tagShow('ic-out','🎙️ أنت تتحدّث الآن');
+    else                     _tagHide();
+  }
+  window.addEventListener('resize', function(){ _refreshBtn(); });
+  window.addEventListener('scroll', function(){ if(_active||_speakers().length) _refreshBtn(); }, true);
+
+  /* ════ التشغيل والإيقاف ═══════════════════════════════════════ */
+  function start(){
+    if(_active) return;
+    if(!_ready()){ _note('📢 المنادات','فعّل الربط بين الأجهزة أولاً من قسم «الربط»','warning'); return; }
+    _active=true; _refreshBtn();
+    _playCtx(); _setDuck(true);
+    _send({ type:'ic:talk_start', nm:_myLabel() });   // فوراً — ليظهر المؤشّر عند الطرف الآخر بلا تأخير
+    _ensureMic().then(function(){
+      if(!_active) return;
+      _stream.getAudioTracks().forEach(function(t){ t.enabled=true; });
+    }).catch(function(){
+      _active=false; _setDuck(false); _refreshBtn();
+      try{ _send({ type:'ic:talk_stop' }); }catch(e){}
+    });
+  }
   function stop(){
     if(!_active) return;
-    _active = false;
-    try{ if(_proc){ _proc.onaudioprocess = null; _proc.disconnect(); } }catch(e){}
-    try{ if(_srcNode) _srcNode.disconnect(); }catch(e){}
-    try{ if(_actx) _actx.close(); }catch(e){}
-    _proc = _srcNode = _actx = null;
-    if(_stream){
-      _stream.getTracks().forEach(function(t){ try{ t.stop(); }catch(e){} });
-      _stream = null;
-    }
+    _active=false;
+    if(_stream){ _stream.getAudioTracks().forEach(function(t){ try{ t.enabled=false; }catch(e){} }); }
+    _setDuck(false);
     _send({ type:'ic:talk_stop' });
     _refreshBtn();
   }
-
   function toggle(){ if(_active) stop(); else start(); }
+
   function closeAll(){
-    stop(); _remote = {}; _heads = {};
-    for(var k in _remoteT){ clearTimeout(_remoteT[k]); }
-    _remoteT = {}; _refreshBtn();
+    stop();
+    for(var k in _players) _killPlayer(k);
+    _players={}; _remote={}; _names={};
+    for(var t in _remoteT){ clearTimeout(_remoteT[t]); }
+    _remoteT={};
+    _releaseMic(); _tagHide(); _refreshBtn();
   }
 
   function onSignal(msg){
-    if(!msg || typeof msg.type !== 'string' || msg.type.indexOf('ic:') !== 0) return false;
-    var from = msg.from;
-    if(!from || from === _me()) return true;
-    if(msg.type === 'ic:pcm'){
-      _remote[from] = true;
+    if(!msg || typeof msg.type!=='string' || msg.type.indexOf('ic:')!==0) return false;
+    var from=msg.from;
+    if(!from || from===_me()) return true;
+
+    if(msg.type==='ic:pcm'){
+      if(!_remote[from]){ _remote[from]=true; _refreshBtn(); }
       if(_remoteT[from]) clearTimeout(_remoteT[from]);
-      _remoteT[from] = setTimeout(function(){
-        _remote[from] = false; delete _heads[from]; _refreshBtn();
+      _remoteT[from]=setTimeout(function(){
+        _remote[from]=false; _flushPlayer(from); _refreshBtn();
       }, 1200);
-      try{ _play(from, _decode(msg.b), msg.sr || SR_OUT); }catch(e){}
-      _refreshBtn(); return true;
+      try{ _feed(from, _dec(msg.b), msg.sr||RATE, msg.sq||0); }catch(e){}
+      return true;
     }
-    if(msg.type === 'ic:talk_start'){
-      _remote[from] = true; delete _heads[from]; _playCtx(); _refreshBtn(); return true;
+    if(msg.type==='ic:talk_start'){
+      if(msg.nm) _names[from]=msg.nm;
+      _remote[from]=true; _flushPlayer(from); _playCtx(); _player(from); _refreshBtn();
+      if(_remoteT[from]) clearTimeout(_remoteT[from]);
+      _remoteT[from]=setTimeout(function(){ _remote[from]=false; _flushPlayer(from); _refreshBtn(); }, 2500);
+      return true;
     }
-    if(msg.type === 'ic:talk_stop'){
-      _remote[from] = false; delete _heads[from];
+    if(msg.type==='ic:talk_stop'){
       if(_remoteT[from]){ clearTimeout(_remoteT[from]); delete _remoteT[from]; }
-      _refreshBtn(); return true;
+      /* أمهل ما تبقّى في المخزن حتى ينتهي — فلا تُبتر آخر كلمة */
+      var p=_players[from], wait=Math.round(((p&&p.jit)||JIT0)*1000)+260;
+      _remoteT[from]=setTimeout(function(){
+        _remote[from]=false; _flushPlayer(from); _refreshBtn();
+      }, wait);
+      return true;
     }
     return true;
   }
 
+  /* ── اختبار محلي: ٣ ثوانٍ تسجيل ثم إعادتها ────────────────────── */
+  function test(){
+    if(_tap){ _note('🎙️ اختبار','الاختبار جارٍ بالفعل','warning'); return; }
+    _quiet=false;
+    _note('🎙️ اختبار','تكلّم الآن — سيُسجَّل ٣ ثوانٍ ثم تُعاد عليك','info');
+    _ensureMic().then(function(){
+      var chunks=[], total=0;
+      _tap=function(f32){ chunks.push(f32); total+=f32.length; };
+      _stream.getAudioTracks().forEach(function(t){ t.enabled=true; });
+      setTimeout(function(){
+        _tap=null;
+        if(!_active && _stream) _stream.getAudioTracks().forEach(function(t){ t.enabled=false; });
+        if(!total){ _note('🎙️ اختبار','لم تصل أي عيّنة من الميكروفون — تحقّق من جهاز التسجيل في الويندوز','error'); return; }
+        var all=new Float32Array(total), off=0, i, peak=0;
+        for(i=0;i<chunks.length;i++){ all.set(chunks[i],off); off+=chunks[i].length; }
+        for(i=0;i<all.length;i++){ if(Math.abs(all[i])>peak) peak=Math.abs(all[i]); }
+        var ctx=_playCtx(); if(!ctx) return;
+        var pcm=_resample(all, _actx?_actx.sampleRate:RATE, ctx.sampleRate);
+        var b=ctx.createBuffer(1,pcm.length,ctx.sampleRate);
+        if(b.copyToChannel) b.copyToChannel(pcm,0); else b.getChannelData(0).set(pcm);
+        var s2=ctx.createBufferSource(); s2.buffer=b; s2.connect(ctx.destination); s2.start();
+        _note('🎙️ اختبار','أعلى مستوى: '+Math.round(peak*100)+'% — '+
+              (peak<0.02?'الميكروفون صامت تقريباً ⚠️':'الميكروفون يعمل ✓'),
+              peak<0.02?'warning':'success');
+      },3000);
+    }).catch(function(){ _tap=null; });
+  }
+
+  function diag(){
+    var j={};
+    for(var k in _players) j[k]=Math.round(_players[k].jit*1000)+'ms';
+    return { lanMode:(typeof _lanMode!=='undefined'?_lanMode:null), device:_me(),
+             micReady:_micReady, lastError:_lastErr, workletRec:_wlR, workletPlay:_wlP,
+             captureRate:_actx?_actx.sampleRate:null, playRate:_pctx?_pctx.sampleRate:null,
+             packetMs:Math.round(PKT/RATE*1000), jitter:j, peers:_peers,
+             talking:_active, speakers:_speakers() };
+  }
+
   function bindButton(){
-    var b = document.getElementById(BTN_ID);
-    if(!b || b._ic2Bound) return;
-    b._ic2Bound = true;
-    b.addEventListener('mousedown',  function(e){ e.preventDefault(); start(); });
-    b.addEventListener('mouseup',    function(e){ e.preventDefault(); stop();  });
+    var b=document.getElementById(BTN_ID);
+    if(!b || b._ic4Bound) return;
+    b._ic4Bound=true;
+    b.addEventListener('mousedown',  function(e){ e.preventDefault(); if(e.button===0) start(); });
+    b.addEventListener('mouseup',    function(e){ e.preventDefault(); stop(); });
     b.addEventListener('mouseleave', function(){ if(_active) stop(); });
-    b.addEventListener('touchstart', function(e){ e.preventDefault(); start(); }, {passive:false});
-    b.addEventListener('touchend',   function(e){ e.preventDefault(); stop();  }, {passive:false});
+    b.addEventListener('touchstart', function(e){ e.preventDefault(); start(); },{passive:false});
+    b.addEventListener('touchend',   function(e){ e.preventDefault(); stop(); },{passive:false});
     b.addEventListener('touchcancel',function(){ if(_active) stop(); });
-    b.addEventListener('contextmenu',function(e){ e.preventDefault(); });
+    b.addEventListener('contextmenu',function(e){ e.preventDefault(); test(); });
   }
   window.addEventListener('blur', function(){ if(_active) stop(); });
 
+  /* عدد العملاء لدى السيرفير — يحدّد هل يلزم إعادة بثّ الصوت أصلاً */
+  setInterval(function(){
+    try{
+      if(typeof _lanMode==='undefined' || _lanMode!=='server'){ _peers=null; return; }
+      if(window.electronAPI && window.electronAPI.lanClientCount){
+        window.electronAPI.lanClientCount().then(function(n){ _peers=(typeof n==='number')?n:null; })
+                                           .catch(function(){ _peers=null; });
+      }
+    }catch(e){ _peers=null; }
+  }, 4000);
+
   return { start:start, stop:stop, toggle:toggle, onSignal:onSignal,
-           bindButton:bindButton, closeAll:closeAll,
-           isActive:function(){ return _active; } };
+           bindButton:bindButton, closeAll:closeAll, test:test, diag:diag,
+           isActive:function(){ return _active; },
+           isReceiving:function(){ return _speakers().length>0; },
+           needRelay:function(){ return _peers===null || _peers>1; } };
 }());
 
 window.Intercom = IC;
 try{ IC.bindButton(); }catch(e){}
 document.addEventListener('DOMContentLoaded', function(){ try{ IC.bindButton(); }catch(e){} });
+
+/* ════════════════════════════════════════════════════════════════════
+   مسار سريع للصوت في الاستقبال — يسبق كل المعالجات الأخرى:
+     • صدى رسائلنا يُهمَل بلا JSON.parse إطلاقاً (كان العميل يحلّل ٥٠
+       رسالة/ثانية من صداه العائد من السيرفير).
+     • السيرفير لا يعيد بثّ الصوت إلا إذا كان هناك أكثر من عميل.
+   ════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(typeof window._lanHandleMessage!=='function') return;
+  var next=window._lanHandleMessage;
+  var RXT=/"type"\s*:\s*"(ic:[a-z_]{1,24})"/;
+  var RXF=/"from"\s*:\s*"([^"]{1,60})"/;
+  window._lanHandleMessage=function(raw){
+    try{
+      if(typeof raw==='string' && raw.length>12){
+        var head=raw.length>140?raw.substring(0,140):raw;
+        var mt=RXT.exec(head);
+        if(mt){
+          var tail=raw.length>220?raw.substring(raw.length-220):raw;
+          var mf=RXF.exec(tail)||RXF.exec(head);
+          if(mf && typeof _lanDeviceId!=='undefined' && mf[1]===_lanDeviceId) return;
+          var msg=JSON.parse(raw);
+          if(typeof _lanMode!=='undefined' && _lanMode==='server' && !msg._relayed && IC.needRelay()){
+            msg._relayed=1; try{ _lanSendRaw(msg); }catch(e){}
+          }
+          try{ IC.onSignal(msg); }catch(e){}
+          return;
+        }
+      }
+    }catch(e){}
+    return next(raw);
+  };
+}());
+
+/* ════════════════════════════════════════════════════════════════════
+   أولوية مطلقة للصوت على القناة أثناء الكلام:
+   تُحتجز رسائل المزامنة الثقيلة (sync / sync2 / fullstate / inventory /
+   esr) ثم تُطلَق تدريجياً بعد انتهاء الكلام. هذا هو سبب التقطيع الأكبر:
+   حزمة صوت ٢٠ms تصطفّ خلف رسالة مزامنة بمئات الكيلوبايت على نفس
+   الـ WebSocket. نحتجز مسارَي الإرسال معاً: _lanSendRaw و _lanEmit.
+   ════════════════════════════════════════════════════════════════════ */
+(function(){
+  var HOLD={ sync:1, sync2:1, fullstate:1, inventory:1, request_state:1 };
+  var qRaw=[], qEmit={}, timer=null;
+
+  function busy(){
+    try{ return window.Intercom && (Intercom.isActive() || Intercom.isReceiving()); }
+    catch(e){ return false; }
+  }
+  function arm(){ if(!timer) timer=setInterval(pump,70); }
+  function pump(){
+    if(busy()) return;
+    var k=0;
+    while(qRaw.length && k<10){ try{ origRaw(qRaw.shift()); }catch(e){} k++; }
+    var keys=Object.keys(qEmit);
+    if(keys.length && origEmit){
+      var key=keys[0], d=qEmit[key]; delete qEmit[key];
+      try{ origEmit(key,d); }catch(e){}
+    }
+    if(!qRaw.length && !Object.keys(qEmit).length){ clearInterval(timer); timer=null; }
+  }
+
+  var origRaw = (typeof window._lanSendRaw==='function') ? window._lanSendRaw : null;
+  if(origRaw){
+    window._lanSendRaw=function(obj){
+      try{
+        var ty=obj&&obj.type;
+        if(typeof ty==='string' && (HOLD[ty]||ty.indexOf('esr:')===0) && busy()){
+          if(qRaw.length<800){ qRaw.push(obj); arm(); return; }
+        }
+      }catch(e){}
+      return origRaw(obj);
+    };
+  }
+  var origEmit = (typeof window._lanEmit==='function') ? window._lanEmit : null;
+  if(origEmit){
+    window._lanEmit=function(key,data){
+      if(busy()){ qEmit[key]=data; arm(); return; }   /* أحدث نسخة لكل مفتاح تكفي */
+      return origEmit(key,data);
+    };
+  }
+}());
 
 })();
 </script>
@@ -45941,6 +47501,495 @@ window.MLCP = {
   view:view, closeView:closeView, download:download, print:printFile, play:play,
   showFile:showFile, render:render, attach:attach, sendReportPdf:sendReportPdf
 };
+})();
+
+</script>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   🔬 محرّر نتائج CBC داخل واجهة «إدخال نتائج التحاليل»
+   ──────────────────────────────────────────────────────────────────────
+   المشكلة السابقة:
+     الطلب القادم من جهاز الـ CBC يُنشأ بـ tests:['CBC'] بينما معرّف
+     التحليل في الكتالوج هو 'h001' — فيسقط الصف من جدول الإدخال
+     (tests.find(t=>t.id==='CBC') = undefined) وتظهر الواجهة فارغة.
+
+   الحل:
+     لوحة مستقلة تُعرض تحت جدول الإدخال، تقرأ باراميترات الـ CBC من
+     req.cbcData (أو resultDetails.CBC.cbcParams للنتائج القديمة)،
+     وتعرضها في جدول مرتّب مقسّم إلى ثلاث سلاسل (WBC / RBC / PLT).
+
+     • كل حقل قابل للتعديل: النتيجة + الوحدة + المدى الطبيعي.
+     • الحفظ تلقائي (بعد ٤٠٠ مللي من آخر ضغطة) في نفس مصدر الطباعة،
+       لذا أي طباعة لاحقة تعتمد آخر تعديل حتماً.
+     • راية H/L تُعاد حسابها فوراً من المدى الطبيعي بعد كل تعديل.
+     • زر ↺ يعيد قيمة الجهاز الأصلية لأي حقل عُدِّل.
+     • قائمة النتائج التاريخية (إن وُجد أكثر من سحبة) — التعديل يقع
+       على النتيجة المختارة، والطباعة تطبع المختارة نفسها.
+     • ينطبق على النتائج السابقة/القديمة تلقائياً (نفس مصدر البيانات).
+     • إن كان الطلب يحوي تحليل CBC ولم تصل نتيجة من الجهاز — تظهر
+       اللوحة فارغة للإدخال اليدوي الكامل.
+   ══════════════════════════════════════════════════════════════════════ */
+(function () {
+  if (window._cbcEditorReady) return;
+  window._cbcEditorReady = true;
+
+  /* ───────────────────────── الأنماط ───────────────────────── */
+  var CSS = ''
+    + '#res-cbc-panel{margin:0 0 18px}'
+    + '.cbcE-card{border:1px solid rgba(0,180,100,.35);border-radius:14px;overflow:hidden;background:var(--bg-card,rgba(255,255,255,.02));box-shadow:0 6px 22px rgba(0,0,0,.10)}'
+    + '.cbcE-hd{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:10px 13px;background:linear-gradient(135deg,rgba(0,180,100,.18),rgba(0,180,100,.04));border-bottom:1px solid rgba(0,180,100,.28)}'
+    + '.cbcE-ttl{font-size:14px;font-weight:900;color:#00c46a;display:flex;align-items:center;gap:6px;white-space:nowrap}'
+    + '.cbcE-sub{font-size:10.5px;font-weight:700;color:var(--text2);background:rgba(0,180,100,.10);border:1px solid rgba(0,180,100,.25);border-radius:20px;padding:3px 9px}'
+    + '.cbcE-sp{flex:1;min-width:6px}'
+    + '.cbcE-btn{background:rgba(0,180,100,.14);border:1px solid rgba(0,180,100,.45);color:#00c46a;border-radius:9px;padding:6px 11px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap}'
+    + '.cbcE-btn:hover{background:rgba(0,180,100,.24)}'
+    + '.cbcE-btn.g{background:rgba(0,212,255,.12);border-color:rgba(0,212,255,.42);color:var(--primary,#00d4ff)}'
+    + '.cbcE-btn.g:hover{background:rgba(0,212,255,.22)}'
+    + '.cbcE-sel{background:var(--bg-modal,rgba(0,0,0,.25));border:1px solid rgba(0,180,100,.4);color:var(--text);border-radius:9px;padding:6px 9px;font-size:11.5px;font-weight:800;font-family:inherit;outline:none;cursor:pointer;max-width:230px}'
+    + '.cbcE-wrap{overflow-x:auto}'
+    + '.cbcE-tbl{width:100%;border-collapse:collapse;font-size:12.5px;min-width:560px}'
+    + '.cbcE-tbl th{background:var(--bg-modal,#101822);color:var(--text2);font-size:10.5px;font-weight:800;letter-spacing:.3px;padding:8px 8px;border-bottom:1px solid var(--border);text-align:center;white-space:nowrap}'
+    + '.cbcE-tbl th:first-child{text-align:right}'
+    + '.cbcE-tbl td{padding:5px 7px;border-bottom:1px solid var(--border);vertical-align:middle}'
+    + '.cbcE-tbl tr.cbcE-row:hover{background:rgba(0,212,255,.045)}'
+    + '.cbcE-sec td{background:linear-gradient(90deg,rgba(0,180,100,.13),transparent);font-size:11.5px;font-weight:900;color:#00c46a;padding:7px 11px;border-bottom:1px solid rgba(0,180,100,.22);letter-spacing:.2px}'
+    + '.cbcE-nm{font-weight:900;font-size:13px;color:var(--text);direction:ltr;text-align:right;display:block;font-family:"Cairo",sans-serif}'
+    + '.cbcE-ar{font-size:9.5px;color:var(--text2);font-weight:700;display:block;margin-top:1px}'
+    + '.cbcE-inp{width:100%;background:rgba(255,255,255,.045);border:1px solid var(--border);border-radius:8px;padding:6px 7px;color:var(--text);font-weight:800;font-size:13px;text-align:center;font-family:"Cairo",sans-serif;outline:none;transition:border-color .12s,box-shadow .12s;direction:ltr}'
+    + '.cbcE-inp:focus{border-color:#00c46a;box-shadow:0 0 0 3px rgba(0,180,100,.16);background:rgba(0,180,100,.06)}'
+    + '.cbcE-v{min-width:82px;font-size:14px;letter-spacing:.3px}'
+    + '.cbcE-v.hi{color:#ff4d4d;border-color:rgba(255,77,77,.45)}'
+    + '.cbcE-v.lo{color:#3d9dff;border-color:rgba(61,157,255,.45)}'
+    + '.cbcE-v.ok{color:#0bbf6a}'
+    + '.cbcE-sm{min-width:74px;font-size:11.5px;font-weight:700;color:var(--text2);opacity:.9}'
+    + '.cbcE-sm:focus{color:var(--text);opacity:1}'
+    + '.cbcE-fl{display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:23px;border-radius:7px;font-size:11px;font-weight:900;padding:0 7px}'
+    + '.cbcE-fl.hi{background:rgba(255,77,77,.15);border:1px solid rgba(255,77,77,.45);color:#ff4d4d}'
+    + '.cbcE-fl.lo{background:rgba(61,157,255,.15);border:1px solid rgba(61,157,255,.45);color:#3d9dff}'
+    + '.cbcE-fl.ok{background:rgba(11,191,106,.13);border:1px solid rgba(11,191,106,.38);color:#0bbf6a}'
+    + '.cbcE-fl.na{background:transparent;border:1px dashed var(--border);color:var(--text2)}'
+    + '.cbcE-rv{background:rgba(255,170,0,.14);border:1px solid rgba(255,170,0,.42);color:#ffaa00;border-radius:7px;width:26px;height:24px;font-size:12px;cursor:pointer;font-family:inherit;line-height:1;padding:0}'
+    + '.cbcE-rv:hover{background:rgba(255,170,0,.26)}'
+    + '.cbcE-ed{font-size:9px;color:#ffaa00;font-weight:900;margin-right:4px}'
+    + '.cbcE-ft{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 13px;border-top:1px solid var(--border);background:rgba(255,255,255,.02);font-size:10.5px;color:var(--text2);font-weight:700}'
+    + '.cbcE-dot{width:7px;height:7px;border-radius:50%;background:#0bbf6a;display:inline-block;margin-left:5px}'
+    + '.cbcE-cmt{padding:8px 13px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);font-weight:700;line-height:1.7}'
+    + '@media(max-width:640px){.cbcE-tbl{min-width:520px;font-size:12px}.cbcE-v{min-width:70px}.cbcE-sm{min-width:62px}}';
+
+  (function injectCss() {
+    try {
+      var s = document.createElement('style');
+      s.id = 'cbcE-style';
+      s.textContent = CSS;
+      document.head.appendChild(s);
+    } catch (e) {}
+  })();
+
+  /* ───────────────────── ترتيب وتسميات المعاملات ───────────────────── */
+  var LBL = {
+    'WBC': 'WBC', 'NEU#': 'Neu#', 'LYM#': 'Lym#', 'MON#': 'Mon#', 'EOS#': 'Eos#', 'BAS#': 'Bas#',
+    'NEU%': 'Neu%', 'LYM%': 'Lym%', 'MON%': 'Mon%', 'EOS%': 'Eos%', 'BAS%': 'Bas%',
+    'MID#': 'Mid#', 'GRAN#': 'Gran#', 'MID%': 'Mid%', 'GRAN%': 'Gran%',
+    'RBC': 'RBC', 'HGB': 'HGB', 'HCT': 'HCT', 'MCV': 'MCV', 'MCH': 'MCH', 'MCHC': 'MCHC',
+    'RDW-CV': 'RDW-CV', 'RDW-SD': 'RDW-SD',
+    'PLT': 'PLT', 'MPV': 'MPV', 'PDW': 'PDW', 'PCT': 'PCT', 'P-LCR': 'P-LCR', 'P-LCC': 'P-LCC'
+  };
+
+  var SECTIONS = [
+    { t: '🩸 سلسلة الكريات البيض — WBC Series',
+      k: ['WBC', 'NEU#', 'LYM#', 'MON#', 'EOS#', 'BAS#', 'MID#', 'GRAN#',
+          'NEU%', 'LYM%', 'MON%', 'EOS%', 'BAS%', 'MID%', 'GRAN%'] },
+    { t: '🔴 سلسلة الكريات الحمر — RBC Series',
+      k: ['RBC', 'HGB', 'HCT', 'MCV', 'MCH', 'MCHC', 'RDW-CV', 'RDW-SD'] },
+    { t: '🟣 سلسلة الصفائح الدموية — PLT Series',
+      k: ['PLT', 'MPV', 'PDW', 'PCT', 'P-LCR', 'P-LCC'] }
+  ];
+
+  function _map(k) {
+    try { return (typeof CBC_PARAMS_MAP !== 'undefined' && CBC_PARAMS_MAP[k]) || {}; }
+    catch (e) { return {}; }
+  }
+  function _arOf(k) {
+    var a = _map(k).ar || '';
+    return a.replace(/^[A-Za-z0-9#%\-]+\s*/, '').trim();
+  }
+  function _esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* ───────────────────── الوصول إلى البيانات ───────────────────── */
+  function _req(id) {
+    if (typeof requests === 'undefined' || !requests) return null;
+    for (var i = 0; i < requests.length; i++) if (requests[i].id === id) return requests[i];
+    return null;
+  }
+  function _cur(req) {
+    if (!req) return null;
+    if (req.cbcData && typeof req.cbcData === 'object' && Object.keys(req.cbcData).length) return req.cbcData;
+    var rd = req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.cbcParams;
+    if (rd && typeof rd === 'object' && Object.keys(rd).length) return rd;
+    return null;
+  }
+  /* يضمن وجود مخزن قابل للكتابة، ويربط resultDetails بنفس الكائن */
+  function _store(req) {
+    var p = _cur(req);
+    if (!p) { p = {}; }
+    req.cbcData = p;
+    if (!req.resultDetails) req.resultDetails = {};
+    if (!req.resultDetails.CBC) req.resultDetails.CBC = { value: 'CBC كامل من الجهاز' };
+    req.resultDetails.CBC.cbcParams = p;
+    return p;
+  }
+  /* المخزن المستهدف حسب النتيجة المختارة من قائمة السجل */
+  function _target(req, sel) {
+    var h = req.cbcHistory || [];
+    if (sel !== '__current__' && sel !== '' && h.length) {
+      var i = parseInt(sel, 10);
+      if (h[i]) { if (!h[i].params || typeof h[i].params !== 'object') h[i].params = {}; return h[i].params; }
+    }
+    return _store(req);
+  }
+  /* قراءة فقط — لا يُنشئ مخزناً جديداً (حتى لا نلوّث الطلبات بلا CBC) */
+  function _targetRO(req, sel) {
+    var h = req.cbcHistory || [];
+    if (sel !== '__current__' && sel !== '' && h.length) {
+      var i = parseInt(sel, 10);
+      if (h[i] && h[i].params) return h[i].params;
+    }
+    return _cur(req) || {};
+  }
+  /* عكس التعديل على النسخة المقابلة (الأحدث ↔ cbcData) */
+  function _mirror(req, sel, key, obj) {
+    var h = req.cbcHistory || [];
+    try {
+      if (sel === '__current__' || sel === '') {
+        if (h[0] && h[0].params && h[0].params !== req.cbcData) h[0].params[key] = obj;
+      } else if (parseInt(sel, 10) === 0) {
+        var cd = _store(req);
+        if (h[0] && cd !== h[0].params) cd[key] = obj;
+      }
+    } catch (e) {}
+  }
+
+  /* ───────────────── حساب الراية H/L (مطابق لمنطق الطباعة) ───────────────── */
+  function _flag(val, ref, devFlag) {
+    var n = parseFloat(String(val == null ? '' : val).replace(/[<>]/g, ''));
+    if (ref && !isNaN(n)) {
+      var parts = String(ref).replace(/[^0-9. ]/g, ' ').trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        var lo = parseFloat(parts[0]), hi = parseFloat(parts[parts.length - 1]);
+        if (!isNaN(lo) && !isNaN(hi)) return n < lo ? 'L' : (n > hi ? 'H' : '');
+      }
+    }
+    var f = String(devFlag || '').toUpperCase().trim();
+    if (f === 'N' || f === 'N-N' || f === 'NORMAL') return '';
+    if (f.charAt(0) === 'L') return 'L';
+    if (f.charAt(0) === 'H') return 'H';
+    return '';
+  }
+  function _flCls(f, hasVal) { return !hasVal ? 'na' : (f === 'H' ? 'hi' : (f === 'L' ? 'lo' : 'ok')); }
+  function _flTxt(f, hasVal) { return !hasVal ? '—' : (f === 'H' ? 'H ↑' : (f === 'L' ? 'L ↓' : 'N')); }
+
+  function _fmtDt(dt) {
+    try {
+      if (typeof _formatCbcDt === 'function') return _formatCbcDt(dt);
+      var d = new Date(dt);
+      return d.toLocaleDateString('en-GB') + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return dt || '—'; }
+  }
+
+  /* ═══════════════════════════ البناء ═══════════════════════════ */
+  var _showAll = false;
+  var _saveT = null;
+  var _lastReq = '';
+
+  function render() {
+    var panel = document.getElementById('res-cbc-panel');
+    if (!panel) return;
+    var selEl = document.getElementById('res-req-sel');
+    var id = (selEl && selEl.value) || (typeof currentReqId !== 'undefined' ? currentReqId : '') || '';
+    var req = id ? _req(id) : null;
+
+    if (!req) { panel.style.display = 'none'; panel.innerHTML = ''; _lastReq = ''; return; }
+
+    var params = _cur(req);
+    var hasCbcTest = (req.tests || []).some(function (t) { return t === 'CBC' || t === 'h001'; });
+    if (!params && !hasCbcTest) { panel.style.display = 'none'; panel.innerHTML = ''; _lastReq = ''; return; }
+
+    /* لا تُعِد البناء أثناء الكتابة داخل اللوحة لنفس الطلب */
+    var ae = document.activeElement;
+    if (_lastReq === id && ae && panel.contains(ae)) return;
+
+    /* حافظ على اختيار السجل الحالي بين عمليات البناء */
+    var prevSel = null;
+    var oldSel = document.getElementById('cbc-history-sel');
+    if (oldSel && _lastReq === id) prevSel = oldSel.value;
+
+    var hist = req.cbcHistory || [];
+    var selVal = prevSel != null ? prevSel : (hist.length ? '0' : '__current__');
+    var data = _targetRO(req, selVal) || {};
+    var showAll = _showAll || !params;   // لا توجد نتيجة جهاز ⇒ اعرض كل المعاملات للإدخال اليدوي
+
+    /* ── مفاتيح ظاهرة ── */
+    var present = {}, k;
+    for (k in data) { if (k.indexOf('HIST_') === 0) continue; present[k] = 1; }
+
+    var rows = '', shown = 0, filled = 0;
+    SECTIONS.forEach(function (sec) {
+      var keys = sec.k.filter(function (kk) { return showAll || present[kk]; });
+      if (!keys.length) return;
+      rows += '<tr class="cbcE-sec"><td colspan="6">' + sec.t + '</td></tr>';
+      keys.forEach(function (kk) { rows += _row(kk, data[kk]); shown++; });
+    });
+    /* مفاتيح غير قياسية أرسلها الجهاز */
+    var extra = Object.keys(present).filter(function (kk) {
+      return !SECTIONS.some(function (s) { return s.k.indexOf(kk) > -1; });
+    });
+    if (extra.length) {
+      rows += '<tr class="cbcE-sec"><td colspan="6">📋 معاملات إضافية من الجهاز</td></tr>';
+      extra.forEach(function (kk) { rows += _row(kk, data[kk]); shown++; });
+    }
+    Object.keys(present).forEach(function (kk) {
+      var v = data[kk] && data[kk].value;
+      if (v !== undefined && v !== null && String(v).trim() !== '') filled++;
+    });
+
+    function _row(key, p) {
+      var info = _map(key);
+      var val = (p && p.value != null) ? String(p.value) : '';
+      var unit = (p && p.unit) || info.unit || '';
+      var ref = (p && p.refRange) || info.refM || '';
+      var f = _flag(val, ref, p && p.flag);
+      var hasV = String(val).trim() !== '';
+      var edited = !!(p && p._orig !== undefined && String(p._orig) !== String(val));
+      return '<tr class="cbcE-row" data-k="' + _esc(key) + '">'
+        + '<td><span class="cbcE-nm">' + (edited ? '<span class="cbcE-ed">✏️</span>' : '') + _esc(LBL[key] || key) + '</span>'
+        + '<span class="cbcE-ar">' + _esc(_arOf(key)) + '</span></td>'
+        + '<td><input class="cbcE-inp cbcE-v ' + _flCls(f, hasV) + '" data-k="' + _esc(key) + '" data-f="value" '
+        + 'lang="en" dir="ltr" inputmode="decimal" autocomplete="off" value="' + _esc(val) + '" placeholder="—" '
+        + 'oninput="CBCEdit.onEdit(this)" onchange="CBCEdit.onEdit(this)"></td>'
+        + '<td><input class="cbcE-inp cbcE-sm" data-k="' + _esc(key) + '" data-f="unit" lang="en" dir="ltr" '
+        + 'autocomplete="off" value="' + _esc(unit) + '" placeholder="—" oninput="CBCEdit.onEdit(this)"></td>'
+        + '<td><input class="cbcE-inp cbcE-sm" data-k="' + _esc(key) + '" data-f="ref" lang="en" dir="ltr" '
+        + 'autocomplete="off" value="' + _esc(ref) + '" placeholder="—" oninput="CBCEdit.onEdit(this)"></td>'
+        + '<td style="text-align:center"><span class="cbcE-fl ' + _flCls(f, hasV) + '" data-fl="' + _esc(key) + '">' + _flTxt(f, hasV) + '</span></td>'
+        + '<td style="text-align:center">' + (edited
+          ? '<button class="cbcE-rv" title="استرجاع قيمة الجهاز الأصلية (' + _esc(p._orig) + ')" onclick="CBCEdit.revert(\'' + _esc(key).replace(/'/g, '') + '\')">↺</button>'
+          : '') + '</td>'
+        + '</tr>';
+    }
+
+    /* ── قائمة السجل ── */
+    var histHtml = '';
+    if (hist.length > 1) {
+      histHtml = '<select id="cbc-history-sel" class="cbcE-sel" onchange="CBCEdit.onHist()" title="اختر نتيجة CBC — من الأحدث للأقدم">'
+        + hist.map(function (h, i) {
+            return '<option value="' + i + '"' + (String(i) === String(selVal) ? ' selected' : '') + '>'
+              + _fmtDt(h.datetime) + (i === 0 ? ' (الأحدث)' : '') + '</option>';
+          }).join('')
+        + '</select>';
+    } else {
+      histHtml = '<select id="cbc-history-sel" class="cbcE-sel" style="display:none"><option value="__current__" selected></option></select>';
+    }
+
+    var dt = '';
+    if (hist.length && hist[parseInt(selVal, 10)]) dt = hist[parseInt(selVal, 10)].datetime;
+    else if (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.datetime) dt = req.resultDetails.CBC.datetime;
+    var dev = (req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.fromDevice)
+      || (hist.length && hist[0] && hist[0].device) || '';
+
+    var cmts = (req.cbcComments && req.cbcComments.length)
+      ? '<div class="cbcE-cmt">💬 تعليقات الجهاز: ' + req.cbcComments.map(_esc).join(' • ') + '</div>' : '';
+
+    panel.innerHTML =
+      '<div class="cbcE-card">'
+      + '<div class="cbcE-hd">'
+      + '<span class="cbcE-ttl">🔬 نتيجة CBC</span>'
+      + (dev ? '<span class="cbcE-sub">' + _esc(dev) + '</span>' : '')
+      + (dt ? '<span class="cbcE-sub">🕒 ' + _esc(_fmtDt(dt)) + '</span>' : '')
+      + '<span class="cbcE-sub">' + filled + ' معامل</span>'
+      + '<span class="cbcE-sp"></span>'
+      + histHtml
+      + '<button class="cbcE-btn g" onclick="CBCEdit.toggleAll()">' + (showAll ? '👁️ المرسَلة فقط' : '➕ كل المعاملات') + '</button>'
+      + '<button class="cbcE-btn" onclick="CBCEdit.print()">🖨️ طباعة CBC</button>'
+      + '</div>'
+      + '<div class="cbcE-wrap"><table class="cbcE-tbl">'
+      + '<thead><tr><th>المعامل</th><th>النتيجة</th><th>الوحدة</th><th>المدى الطبيعي</th><th>الحالة</th><th></th></tr></thead>'
+      + '<tbody>' + (rows || '<tr><td colspan="6" style="text-align:center;padding:22px;color:var(--text2);font-weight:700">لا توجد بيانات CBC لهذا الطلب</td></tr>') + '</tbody>'
+      + '</table></div>'
+      + cmts
+      + '<div class="cbcE-ft"><span class="cbcE-dot"></span><span id="cbcE-status">الحفظ تلقائي — أي تعديل يُطبع في التقرير مباشرة</span></div>'
+      + '</div>';
+
+    panel.style.display = 'block';
+    _lastReq = id;
+    _attachNav(panel);
+  }
+
+  /* ── تنقّل بالأسهم بين حقول النتائج ── */
+  function _attachNav(panel) {
+    if (panel._navH) panel.removeEventListener('keydown', panel._navH, true);
+    panel._navH = function (e) {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') return;
+      var t = e.target;
+      if (!t || !t.classList || !t.classList.contains('cbcE-inp')) return;
+      var list = Array.prototype.slice.call(panel.querySelectorAll('.cbcE-inp[data-f="' + (t.getAttribute('data-f') || 'value') + '"]'));
+      var i = list.indexOf(t);
+      if (i === -1) return;
+      e.preventDefault();
+      var nx = (e.key === 'ArrowUp') ? list[i - 1] : list[i + 1];
+      if (nx) { nx.focus(); if (nx.select) nx.select(); }
+    };
+    panel.addEventListener('keydown', panel._navH, true);
+  }
+
+  /* ═══════════════════════ التعديل والحفظ ═══════════════════════ */
+  function onEdit(el) {
+    var key = el.getAttribute('data-k');
+    var fld = el.getAttribute('data-f');
+    var selEl = document.getElementById('res-req-sel');
+    var id = (selEl && selEl.value) || (typeof currentReqId !== 'undefined' ? currentReqId : '');
+    var req = _req(id);
+    if (!req || !key) return;
+
+    var histSel = document.getElementById('cbc-history-sel');
+    var sel = histSel ? histSel.value : '__current__';
+    var data = _target(req, sel);
+
+    var p = data[key];
+    if (!p || typeof p !== 'object') {
+      var info = _map(key);
+      p = { value: '', unit: info.unit || '', refRange: info.refM || '', flag: '' };
+      data[key] = p;
+    }
+    if (p._orig === undefined && fld === 'value') p._orig = (p.value == null ? '' : String(p.value));
+
+    var v = el.value;
+    if (fld === 'value') p.value = v;
+    else if (fld === 'unit') p.unit = v;
+    else if (fld === 'ref') p.refRange = v;
+
+    /* إعادة حساب الراية فوراً من المدى الطبيعي */
+    var info2 = _map(key);
+    var refNow = p.refRange || info2.refM || '';
+    var f = _flag(p.value, refNow, '');
+    p.flag = f;
+
+    /* تحديث التلوين والبادج بدون إعادة بناء اللوحة (حفاظاً على التركيز) */
+    try {
+      var row = el.closest('tr');
+      var vIn = row ? row.querySelector('.cbcE-v') : null;
+      var hasV = String(p.value == null ? '' : p.value).trim() !== '';
+      if (vIn) { vIn.className = 'cbcE-inp cbcE-v ' + _flCls(f, hasV); }
+      var fl = row ? row.querySelector('.cbcE-fl') : null;
+      if (fl) { fl.className = 'cbcE-fl ' + _flCls(f, hasV); fl.textContent = _flTxt(f, hasV); }
+    } catch (e) {}
+
+    _mirror(req, sel, key, p);
+    _schedule(req, sel);
+  }
+
+  function _schedule(req, sel) {
+    var st = document.getElementById('cbcE-status');
+    if (st) st.textContent = '⏳ جارٍ الحفظ...';
+    clearTimeout(_saveT);
+    _saveT = setTimeout(function () { _commit(req, sel); }, 400);
+  }
+
+  function _commit(req, sel) {
+    try {
+      var data = _target(req, sel);
+      var any = Object.keys(data).some(function (k) {
+        return k.indexOf('HIST_') !== 0 && data[k] && String(data[k].value || '').trim() !== '';
+      });
+      if (any) {
+        if (!req.results) req.results = {};
+        req.results['CBC'] = 'done';
+        if (!req.resultDetails) req.resultDetails = {};
+        if (!req.resultDetails.CBC) req.resultDetails.CBC = { value: 'CBC كامل من الجهاز' };
+        /* اربط تفاصيل النتيجة بالمخزن الحالي فقط (وليس بسجل قديم) */
+        if (sel === '__current__' || sel === '' || parseInt(sel, 10) === 0) {
+          req.resultDetails.CBC.cbcParams = _store(req);
+        }
+        req.resultDetails.CBC.editedAt = new Date().toISOString();
+      }
+      req._updatedAt = Date.now();
+      if (typeof save === 'function') save('requests', requests);
+      if (typeof updateBadges === 'function') { try { updateBadges(); } catch (e) {} }
+      var st = document.getElementById('cbcE-status');
+      if (st) st.textContent = '✅ تم الحفظ — الطباعة ستعتمد آخر تعديل';
+    } catch (e) {
+      var st2 = document.getElementById('cbcE-status');
+      if (st2) st2.textContent = '⚠️ تعذّر الحفظ';
+      console.warn('[CBCEdit] save', e);
+    }
+  }
+
+  /* ── استرجاع قيمة الجهاز الأصلية لحقل ── */
+  function revert(key) {
+    var selEl = document.getElementById('res-req-sel');
+    var id = (selEl && selEl.value) || (typeof currentReqId !== 'undefined' ? currentReqId : '');
+    var req = _req(id); if (!req) return;
+    var histSel = document.getElementById('cbc-history-sel');
+    var sel = histSel ? histSel.value : '__current__';
+    var data = _target(req, sel);
+    var p = data[key];
+    if (!p || p._orig === undefined) return;
+    p.value = p._orig;
+    delete p._orig;
+    var info = _map(key);
+    p.flag = _flag(p.value, p.refRange || info.refM || '', '');
+    _mirror(req, sel, key, p);
+    _commit(req, sel);
+    _lastReq = '';
+    render();
+  }
+
+  function toggleAll() { _showAll = !_showAll; _lastReq = ''; render(); }
+  function onHist() { _lastReq = ''; render(); }
+
+  /* ── طباعة النتيجة المختارة حالياً ── */
+  function print() {
+    try {
+      if (typeof printCBCFromDeviceSel === 'function') { printCBCFromDeviceSel(); return; }
+      var selEl = document.getElementById('res-req-sel');
+      if (typeof printCBCFromDevice === 'function') printCBCFromDevice(selEl ? selEl.value : '');
+    } catch (e) { console.warn('[CBCEdit] print', e); }
+  }
+
+  window.CBCEdit = { render: render, onEdit: onEdit, revert: revert, toggleAll: toggleAll, onHist: onHist, print: print };
+
+  /* ═════════════════ الربط بواجهة إدخال النتائج ═════════════════ */
+  function _hook() {
+    var prev = window.loadResultEntry;
+    if (typeof prev !== 'function') return false;
+    window.loadResultEntry = function () {
+      var r;
+      try { r = prev.apply(this, arguments); } catch (e) { console.warn('[CBCEdit] load', e); }
+      try { render(); } catch (e) { console.warn('[CBCEdit] render', e); }
+      return r;
+    };
+    return true;
+  }
+  if (!_hook()) {
+    var n = 0, iv = setInterval(function () { if (_hook() || ++n > 60) clearInterval(iv); }, 300);
+  }
+
+  /* عند وصول نتيجة جديدة من الجهاز لنفس الطلب المعروض — حدّث اللوحة */
+  var _prevUpd = window.updateCbcHistorySel;
+  window.updateCbcHistorySel = function (reqId) {
+    try { if (typeof _prevUpd === 'function') _prevUpd.apply(this, arguments); } catch (e) {}
+    try {
+      var selEl = document.getElementById('res-req-sel');
+      if (selEl && selEl.value === reqId) { _lastReq = ''; render(); }
+    } catch (e) {}
+  };
+
+  /* بناء أولي إن كانت الشاشة مفتوحة أصلاً */
+  setTimeout(function () { try { render(); } catch (e) {} }, 1200);
 })();
 
 </script>
