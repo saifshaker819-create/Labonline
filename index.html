@@ -4723,13 +4723,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                         <option value="7">📈 النموذج 7 — مرئي بأشرطة موضع القيمة ضمن المدى</option>
                         <option value="8">🎯 النموذج 8 — أنيق مينيمال بإبراز ذكي للقيم الشاذة</option>
                         <option value="9">🩸 النموذج 9 — نمط الجهاز (CBC 3-Diff مطابق للورقة + صناديق رسائل + رسوم مرقّمة)</option>
+                        <option value="10">🧪 النموذج 10 — ورقة المختبر الكلاسيكية (هيستوغرام ملوّن لكل مجموعة + سجل النتائج السابقة أسفل الورقة)</option>
                       </select>
                       <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,180,100,0.15);border-color:rgba(0,180,100,0.5);color:#00c46a" onclick="_previewCBCTemplate()">👁️ معاينة النموذج المختار</button>
 
                       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px;padding-top:11px;border-top:1px solid rgba(0,180,100,0.25)">
                         <div style="flex:1">
                           <div style="font-size:12px;font-weight:700">📊 عمود النتيجة السابقة</div>
-                          <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية الجدول يعرض قيمة آخر فحص CBC للمريض — بخط أصغر وخلفية شفافة خفيفة. يعمل مع النماذج الثمانية.</div>
+                          <div style="font-size:10px;color:var(--text2);margin-top:2px;line-height:1.6">يضيف عموداً في نهاية الجدول يعرض قيمة آخر فحص CBC للمريض — بخط أصغر وخلفية شفافة خفيفة. يعمل مع النماذج ١–٩. (النموذج ١٠ يعرض سجلاً كاملاً بالنتائج السابقة أسفل الورقة دائماً.)</div>
                         </div>
                         <div class="tog" id="tog-cbc-prev" onclick="this.classList.toggle('on');_saveCBCShowPrev(this.classList.contains('on'))"><div class="tog-t"></div></div>
                       </div>
@@ -29129,6 +29130,19 @@ function _previewCBCTemplate(){
     RBC:{value:'4.62'}, HGB:{value:'13.5'}, HCT:{value:'40.3'}, MCV:{value:'87.2'},
     MCH:{value:'29.2'}, MCHC:{value:'33.5'}, 'RDW-CV':{value:'13.6'}, 'RDW-SD':{value:'42.1'},
     PLT:{value:'265'}, MPV:{value:'10.2'}, PDW:{value:'12.7'}, PCT:{value:'0.27'} } };
+  /* سجل النتائج السابقة — للمعاينة في النموذج 10 (جدول أسفل الورقة) */
+  demoReq._cbcPrevListDemo=[
+    { when:'2024-12-02', t:new Date('2024-12-02').getTime(), params:{
+      WBC:{value:'6.4'}, 'NEU%':{value:'59.4'}, 'LYM%':{value:'32.8'}, 'MON%':{value:'7.8'},
+      'EOS%':{value:'4.7'}, 'BAS%':{value:'0.4'}, 'MID%':{value:'7.8'}, 'GRAN%':{value:'59.4'},
+      RBC:{value:'4.62'}, HGB:{value:'13.5'}, HCT:{value:'40.3'}, MCV:{value:'87.2'},
+      MCH:{value:'29.2'}, MCHC:{value:'33.5'}, PLT:{value:'265'} } },
+    { when:'2024-08-19', t:new Date('2024-08-19').getTime(), params:{
+      WBC:{value:'7.1'}, 'NEU%':{value:'61.2'}, 'LYM%':{value:'30.1'}, 'MON%':{value:'6.4'},
+      'EOS%':{value:'2.1'}, 'BAS%':{value:'0.2'}, 'MID%':{value:'6.4'}, 'GRAN%':{value:'61.2'},
+      RBC:{value:'4.71'}, HGB:{value:'13.9'}, HCT:{value:'41.0'}, MCV:{value:'87.0'},
+      MCH:{value:'29.5'}, MCHC:{value:'33.9'}, PLT:{value:'281'} } }
+  ];
   const tpl=(document.getElementById('st-cbc-template')||{}).value||settings.cbcTemplate||'1';
   const html=_buildCBCReportHTML(demoParams,demoPt,demoReq,tpl);
   // استخدم Blob URL داخل iframe بدلاً من window.open لتجنب مشكلة اختيار التطبيق
@@ -29202,6 +29216,150 @@ function _prevTh(o){
 
 /* أعمدة إضافية — لتصحيح colspan في صفوف الفواصل */
 function _prevSpan(){ return _CBC_PREV ? 1 : 0; }
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  🗂️ سجل النتائج السابقة (متعدّد) — يُستخدم في النموذج 10 فقط
+ *  ــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــــ
+ *  يعيد مصفوفة بآخر (max) فحوصات CBC للمريض الأقدم من الفحص الحالي،
+ *  مرتّبة من الأحدث إلى الأقدم: [{params, t, when}] — أو مصفوفة فارغة.
+ *  لا يعتمد على مفتاح settings.cbcShowPrev لأن جدول السجل جزء أصيل من
+ *  تصميم النموذج 10 (كما في ورقة الجهاز المرجعية).
+ * ══════════════════════════════════════════════════════════════════════ */
+function _cbcPrevList(cbcParams, pt, req, max){
+  max = max || 3;
+  try{
+    /* بيانات المعاينة التجريبية */
+    if(req && Array.isArray(req._cbcPrevListDemo)) return req._cbcPrevListDemo.slice(0, max);
+    if(!req || !cbcParams) return [];
+    var pid = req.patientId || (pt && pt.id);
+    if(!pid) return [];
+
+    var snaps = [];
+    function ts(v){ var t = new Date(v).getTime(); return isNaN(t) ? 0 : t; }
+
+    (typeof requests !== 'undefined' ? requests : []).forEach(function(r){
+      if(String(r.patientId) !== String(pid)) return;
+      if(Array.isArray(r.cbcHistory) && r.cbcHistory.length){
+        r.cbcHistory.forEach(function(h){
+          if(h && h.params) snaps.push({ params:h.params, t:ts(h.datetime || r.resultDate || r.date) });
+        });
+      } else {
+        var pr = r.cbcData || (r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.cbcParams);
+        if(pr) snaps.push({ params:pr,
+          t:ts((r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.datetime) || r.resultDate || r.date) });
+      }
+    });
+    if(!snaps.length) return [];
+
+    var curT = 0, found = false, i;
+    for(i = 0; i < snaps.length; i++){
+      if(snaps[i].params === cbcParams){ curT = snaps[i].t; found = true; break; }
+    }
+    if(!found){
+      curT = ts((req.resultDetails && req.resultDetails.CBC && req.resultDetails.CBC.datetime)
+                || req.resultDate || req.date) || Date.now();
+    }
+
+    var older = snaps.filter(function(s){ return s.params !== cbcParams && s.t <= curT; });
+    older.sort(function(a,b){ return b.t - a.t; });
+
+    var out = [], seen = {};
+    for(i = 0; i < older.length && out.length < max; i++){
+      var k = String(older[i].t || i);
+      if(seen[k]) continue;
+      seen[k] = 1;
+      var when = '';
+      try{
+        if(older[i].t) when = new Date(older[i].t).toLocaleDateString('en-CA',
+          { year:'numeric', month:'2-digit', day:'2-digit' });
+      }catch(e){}
+      out.push({ params:older[i].params, t:older[i].t, when:when });
+    }
+    return out;
+  }catch(e){ console.warn('[cbcPrevList]', e); return []; }
+}
+
+/* قراءة قيمة مُعامل من لقطة سابقة مع مرادفات التسمية الشائعة */
+function _cbcHxVal(params, key){
+  try{
+    if(!params) return '';
+    var ALT = {
+      'NEU%':['NEU%','NEUT%','NE%','GRAN%','GRA%'], 'LYM%':['LYM%','LYMPH%','LY%'],
+      'MON%':['MON%','MONO%','MO%'], 'EOS%':['EOS%','EO%'], 'BAS%':['BAS%','BASO%','BA%'],
+      'GRAN%':['GRAN%','GRA%','NEU%','NEUT%'], 'MID%':['MID%','MI%'],
+      'NEU#':['NEU#','NEUT#','GRAN#'], 'GRAN#':['GRAN#','GRA#','NEU#'],
+      'HGB':['HGB','HB','HEMOGLOBIN'], 'HCT':['HCT','PCV']
+    };
+    var ks = ALT[key] || [key], i, p, v;
+    for(i = 0; i < ks.length; i++){
+      p = params[ks[i]];
+      if(p == null) continue;
+      v = String((p && typeof p === 'object') ? (p.value == null ? '' : p.value) : p).trim();
+      if(v && v !== '---') return v;
+    }
+    return '';
+  }catch(e){ return ''; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+ *  📈 هيستوغرام ملوّن بنمط ورقة الجهاز — للنموذج 10
+ *  منحنى ممتلئ بلون القناة · خطوط فصل عمودية · محور سفلي مرقّم بوحدة fL
+ *  · شارة تعريف صغيرة أعلى اليمين. إن غابت البيانات يُرسم الإطار فقط
+ *  فيبقى التصميم متناسقاً.
+ * ══════════════════════════════════════════════════════════════════════ */
+function _cbcHistColorSVG(pts, color, label, ticks, axisMax, marks){
+  var W = 300, H = 126, padL = 10, padR = 12, padT = 20, axisH = 15;
+  var plotB = H - axisH, i;
+
+  /* المحور السفلي وعلاماته */
+  var axis = '<line x1="' + padL + '" y1="' + plotB + '" x2="' + (W - padR) + '" y2="' + plotB + '" stroke="#41505f" stroke-width="1"/>';
+  var _tk = ticks || [];
+  for(i = 0; i < _tk.length; i++){
+    var frac = (axisMax > 0) ? (_tk[i] / axisMax) : 0;
+    var tx = padL + frac * (W - padL - padR);
+    var anc = (i === 0) ? 'start' : (i === _tk.length - 1 ? 'middle' : 'middle');
+    axis += '<line x1="' + tx.toFixed(1) + '" y1="' + plotB + '" x2="' + tx.toFixed(1) + '" y2="' + (plotB + 3.5) + '" stroke="#41505f" stroke-width="0.9"/>';
+    axis += '<text x="' + tx.toFixed(1) + '" y="' + (plotB + 12) + '" font-family="Arial" font-size="9" fill="#5b6875" text-anchor="' + anc + '">' + _tk[i] + '</text>';
+  }
+  axis += '<text x="' + (W - padR + 2) + '" y="' + (plotB + 12) + '" font-family="Arial" font-size="9" fill="#95a0ab" text-anchor="start">fL</text>';
+
+  /* خطوط الفصل العمودية (Discriminators) */
+  var mk = '';
+  (marks || []).forEach(function(m){
+    var f = (axisMax > 0) ? (m / axisMax) : 0;
+    if(f < 0 || f > 1) return;
+    var x = (padL + f * (W - padL - padR)).toFixed(1);
+    mk += '<line x1="' + x + '" y1="' + (padT - 8) + '" x2="' + x + '" y2="' + plotB + '" stroke="#7f97d8" stroke-width="0.85"/>';
+  });
+
+  /* المنحنى الممتلئ */
+  var curve = '';
+  if(pts && pts.length > 1){
+    var n = pts.length, mx = 0;
+    for(i = 0; i < n; i++) if(pts[i] > mx) mx = pts[i];
+    if(mx > 0){
+      var X = function(k){ return padL + (k / (n - 1)) * (W - padL - padR); };
+      var Y = function(v){ return plotB - (v / mx) * (plotB - padT); };
+      var d = 'M ' + X(0).toFixed(1) + ' ' + Y(pts[0]).toFixed(1);
+      for(i = 1; i < n; i++){
+        var x0 = X(i-1), y0 = Y(pts[i-1]), x1 = X(i), y1 = Y(pts[i]), cx = (x0 + x1) / 2;
+        d += ' C ' + cx.toFixed(1) + ' ' + y0.toFixed(1) + ', ' + cx.toFixed(1) + ' ' + y1.toFixed(1) + ', ' + x1.toFixed(1) + ' ' + y1.toFixed(1);
+      }
+      var area = d + ' L ' + X(n-1).toFixed(1) + ' ' + plotB + ' L ' + X(0).toFixed(1) + ' ' + plotB + ' Z';
+      curve = '<path d="' + area + '" fill="' + color + '" fill-opacity="0.86"/>'
+            + '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.1" stroke-linejoin="round"/>';
+    }
+  }
+
+  /* شارة القناة */
+  var lgW = 8 + 6 + (String(label || '').length * 5.6);
+  var lgX = W - padR - lgW;
+  var lg = '<rect x="' + lgX.toFixed(1) + '" y="3.5" width="9" height="6.5" rx="1.5" fill="' + color + '"/>'
+         + '<text x="' + (lgX + 12).toFixed(1) + '" y="9.8" font-family="Arial" font-size="8.6" font-weight="700" fill="#5b6875">' + (label || '') + '</text>';
+
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block;background:#fff">'
+       + mk + curve + axis + lg + '</svg>';
+}
 
 /** يبحث عن آخر فحص CBC للمريض أقدم من الفحص الحالي */
 function _cbcPrevSnapshot(cbcParams, pt, req){
@@ -30044,6 +30202,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         +'<td class="c-flag" style="color:'+flagColor+'">'+fShow+'</td>'
         +'<td class="c-unit">'+unit+'</td>'
         +'<td class="c-ref">'+ref+'</td>'
+        +_prevCell(key,{fs:11,pad:'3px 6px',extra:'border:1px solid #ddd;'})
         +'</tr>';
       rowNum++;
     });
@@ -30084,7 +30243,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'.pt-val{font-weight:800;font-size:12px;color:#000;}'
       +'.pt-r{display:flex;gap:5px;font-size:10px;}.pt-rk{color:#555;font-weight:700;}.pt-rv{font-weight:800;color:#000;}'
       // ── تخطيط: الجدول يسار · صناديق الرسائل يمين ──
-      +'.main-grid{display:grid;grid-template-columns:1fr 250px;gap:8px;align-items:start;margin-top:5px;}'
+      +'.main-grid{display:grid;grid-template-columns:1fr '+(_CBC_PREV?'218px':'250px')+';gap:8px;align-items:start;margin-top:5px;}'
       +'table.cbc{width:100%;border-collapse:collapse;}'
       // رؤوس بخلفية بيضاء ونص ملوّن فقط
       +'table.cbc thead th{background:#fff;color:'+ac+';border:1px solid #bbb;border-bottom:2px solid '+ac+';padding:4px 6px;font-size:11px;font-weight:800;text-align:center;}'
@@ -30119,13 +30278,194 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'<div class="pt-r"><span class="pt-rk">Mode:</span><span class="pt-rv">'+_reportModeTitle+'</span></div>'
       +'</div></div>'
       +'<div class="main-grid">'
-      +'<table class="cbc"><thead><tr><th style="width:26px">#</th><th style="text-align:left">Modules</th><th>Result</th><th style="width:34px">Flag</th><th>Unit</th><th>Ref. Ranges</th></tr></thead><tbody>'+rows+'</tbody></table>'
+      +'<table class="cbc"><thead><tr><th style="width:26px">#</th><th style="text-align:left">Modules</th><th>Result</th><th style="width:34px">Flag</th><th>Unit</th><th>Ref. Ranges</th>'+_prevTh({fs:10,pad:'4px 5px',thExtra:'color:'+ac+';border:1px solid #bbb;border-bottom:2px solid '+ac+';font-weight:800;'})+'</tr></thead><tbody>'+rows+'</tbody></table>'
       +'<div class="msg-col">'+_msgCol+'</div>'
       +'</div>'
       +_histRow
       +'<div class="foot"><span>Operator: '+operator+'</span><span>'+_reportModeTitle+'</span><span>'+today+'</span></div>'
       +'</body></html>';
   }
+  // ══════════════════════════════════════════════════════════
+  // النموذج 10 — ورقة المختبر الكلاسيكية (Classic Lab Sheet)
+  //   • عنوان «Complete Blood Count» بشريط أنيق
+  //   • ثلاث مجموعات (WBC · RBC · PLT) بشريط لوني جانبي لكل مجموعة
+  //   • هيستوغرام ملوّن ممتلئ بجانب كل مجموعة (rowspan) + Hgb% فوق رسم RBC
+  //   • جدول «Patient History In Our Lab» أسفل الورقة بالنتائج السابقة
+  // ══════════════════════════════════════════════════════════
+  if(tpl==='10'){
+    const ac=tableColor;
+    const ttlColor=nameColor||'#c0182b';
+
+    // ── تسميات وصفية كاملة (كما في ورقة الجهاز) ──
+    const L10={
+      'WBC':'WBCs - Leucocytes','NEU#':'NEUT #','LYM#':'LYM #','MID#':'MID #','GRAN#':'GRA #',
+      'MON#':'MONO #','EOS#':'EOS #','BAS#':'BASO #',
+      'NEU%':'NEUT %','LYM%':'LYM %','MID%':'MID %','GRAN%':'GRA %',
+      'MON%':'MONO %','EOS%':'EOS %','BAS%':'BASO %',
+      'RBC':'RBC - Erythrocytes','HGB':'Hemoglobin','HCT':'HCT - Hematocrit',
+      'MCV':'MCV','MCH':'MCH','MCHC':'MCHC','RDW-CV':'RDW-CV','RDW-SD':'RDW-SD',
+      'PLT':'Platelets','PCT':'PCT - Plateletcrit','MPV':'MPV','PDW':'PDW-CV',
+      'P-LCR':'P-LCR','P-LCC':'P-LCC'
+    };
+
+    // ── تعريف المجموعات الثلاث ──
+    const G10=[
+      {id:'WBC',color:'#0f9d58',keys:['WBC','NEU#','LYM#','MID#','GRAN#','MON#','EOS#','BAS#','NEU%','LYM%','MID%','GRAN%','MON%','EOS%','BAS%'],
+       ticks:[0,100,200,300],axisMax:320,marks:[38,112]},
+      {id:'RBC',color:'#e01b24',keys:['RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD'],
+       ticks:[0,100,200],axisMax:250,marks:[32,168]},
+      {id:'PLT',color:'#f08000',keys:['PLT','PCT','MPV','PDW','P-LCR','P-LCC'],
+       ticks:[0,10,20,30,40],axisMax:42,marks:[2,30]}
+    ];
+
+    // ── Hgb% (نسبة الهيموغلوبين إلى 13.8 g/dl كما في ورقة الجهاز) ──
+    let _hgbPct='';
+    try{
+      const _hgbN=parseFloat(String((cbcParams['HGB']&&cbcParams['HGB'].value)||'').replace(/[<>]/g,''));
+      if(!isNaN(_hgbN)&&_hgbN>0) _hgbPct=(_hgbN/13.8*100).toFixed(1);
+    }catch(e){}
+
+    // ── بناء صفوف الجدول مجموعةً مجموعة ──
+    let body='';
+    G10.forEach(function(g,gi){
+      /* الترتيب داخل المجموعة يتبع ورقة الجهاز، ولا يُعرض إلا ما أرسله الجهاز */
+      const gKeys=g.keys.filter(function(k){ return ORDERED.indexOf(k)>=0; });
+      if(!gKeys.length) return;
+      // بيانات الهيستوغرام الخام من الجهاز (إن وُجدت)
+      let _pts=null;
+      try{
+        const raw=cbcParams['HIST_'+g.id];
+        if(raw){
+          const _v=(raw&&typeof raw==='object')?raw.value:raw;
+          const _m=(raw&&typeof raw==='object')?raw.meta:'';
+          if(typeof _cbcHistDecode==='function') _pts=_cbcHistDecode(_v,_m);
+        }
+      }catch(e){ _pts=null; }
+      const _svg=(typeof _cbcHistColorSVG==='function')
+        ? _cbcHistColorSVG(_pts,g.color,g.id,g.ticks,g.axisMax,g.marks) : '';
+      const bTop=gi?'border-top:2px solid #ccd6e0;':'';
+      gKeys.forEach(function(key,idx){
+        const {val,flag,flagColor,ref,unit}=getParam(key);
+        const isAbn=flag&&flag!=='N';
+        const tb=(idx===0)?bTop:'';
+        body+='<tr class="'+(idx%2?'zz':'')+'">'
+          +'<td class="t-name" style="'+tb+'box-shadow:inset 3px 0 0 '+g.color+'">'+(L10[key]||LABELS[key]||key)+'</td>'
+          +'<td class="t-res" style="'+tb+'color:'+flagColor+'">'+val+'</td>'
+          +'<td class="t-unit" style="'+tb+'">'+unit+'</td>'
+          +'<td class="t-flag" style="'+tb+'">'+(isAbn?'<span class="fl" style="color:'+flagColor+';border-color:'+flagColor+'66;background:'+flagColor+'14">'+flag+'</span>':'')+'</td>'
+          +'<td class="t-ref" style="'+tb+'">'+ref+'</td>'
+          +(idx===0
+             ? '<td class="t-hist" rowspan="'+gKeys.length+'" style="'+tb+'">'
+               +((g.id==='RBC'&&_hgbPct)?'<div class="hgbp">Hgb% = <b>'+_hgbPct+'</b> %</div>':'')
+               +'<div class="hcard" style="width:'+(gKeys.length>=6?'100%':(gKeys.length>=4?'92%':'72%'))+'">'+_svg+'</div></td>'
+             : '')
+          +'</tr>';
+      });
+    });
+
+    // ── جدول سجل النتائج السابقة أسفل الورقة ──
+    let _hxCols=[];
+    if(is3Diff){
+      _hxCols=[{k:'WBC',t:'WBCs'},{k:'LYM%',t:'Lymp'}];
+      if(_midShown) _hxCols.push({k:'MID%',t:'Mid'});
+      _hxCols.push({k:'GRAN%',t:'Gran'});
+    } else {
+      _hxCols=[{k:'WBC',t:'WBCs'},{k:'NEU%',t:'Neut'},{k:'LYM%',t:'Lymp'},
+               {k:'MON%',t:'Mono'},{k:'EOS%',t:'Eosin'},{k:'BAS%',t:'Baso'}];
+    }
+    _hxCols=_hxCols.concat([{k:'RBC',t:'RBCs'},{k:'HGB',t:'Hgb'},{k:'HCT',t:'Hct'},
+                            {k:'MCV',t:'MCV'},{k:'MCH',t:'MCH'},{k:'MCHC',t:'MCHC'},{k:'PLT',t:'PLT'}]);
+    let _hxPrev=[];
+    try{ if(typeof _cbcPrevList==='function') _hxPrev=_cbcPrevList(cbcParams,pt,req,3)||[]; }catch(e){ _hxPrev=[]; }
+    const _hxV=(typeof _cbcHxVal==='function')?_cbcHxVal:function(){ return ''; };
+    let _hxHTML='';
+    if(_hxPrev.length){
+      let _th='<th class="hx-lbl">Patient History In Our Lab</th>';
+      _hxCols.forEach(function(c){ _th+='<th>'+c.t+'</th>'; });
+      let _tr='<tr class="cur"><td class="dt">'+sampleDate+'<span class="nowtag">Current</span></td>';
+      _hxCols.forEach(function(c){ _tr+='<td>'+(_hxV(cbcParams,c.k)||'–')+'</td>'; });
+      _tr+='</tr>';
+      _hxPrev.forEach(function(sn){
+        _tr+='<tr><td class="dt">'+(sn.when||'—')+'</td>';
+        _hxCols.forEach(function(c){ _tr+='<td>'+(_hxV(sn.params,c.k)||'–')+'</td>'; });
+        _tr+='</tr>';
+      });
+      _hxHTML='<div class="hx-wrap"><table class="hx"><thead><tr>'+_th+'</tr></thead><tbody>'+_tr+'</tbody></table></div>';
+    }
+
+    const css='*{margin:0;padding:0;box-sizing:border-box}'
+      +'html,body{background:#fff;color:#12202e;font-family:"Segoe UI",Arial,sans-serif;}'
+      +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+      // ── العنوان ──
+      +'.ttl10{margin:6px 0 7px;padding:6px 12px 5px;border:1.4px solid '+ac+'55;border-radius:8px;'
+        +'background:linear-gradient(180deg,'+ac+'0f,#ffffff 70%);text-align:center;position:relative;}'
+      +'.ttl10 h1{font-size:19px;font-weight:900;letter-spacing:2.5px;color:'+ttlColor+';text-transform:uppercase;line-height:1.15;}'
+      +'.ttl10 .sub{font-size:8.5px;font-weight:800;letter-spacing:3.5px;color:'+ac+'99;margin-top:2px;}'
+      +'.ttl10 .rule{height:2px;width:120px;margin:4px auto 0;border-radius:2px;'
+        +'background:linear-gradient(90deg,transparent,'+ac+',transparent);}'
+      // ── شريط بيانات المريض ──
+      +'.pbar{display:flex;justify-content:space-between;align-items:stretch;border:1px solid '+ac+'40;'
+        +'border-radius:7px;overflow:hidden;margin:0 0 7px;background:#fff;}'
+      +'.pL{flex:1;padding:6px 12px;display:flex;flex-wrap:wrap;align-items:baseline;}'
+      +'.pF{display:flex;align-items:baseline;font-size:11px;margin:2px 24px 2px 0;}'
+      +'.pK{color:#7a8794;font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;margin-right:7px;}'
+      +'.pV{font-weight:800;color:#12202e;font-size:12px;}'
+      +'.pR{background:linear-gradient(160deg,'+ac+','+ac+'cc);color:#fff;padding:6px 11px;display:flex;'
+        +'flex-direction:column;justify-content:center;min-width:132px;}'
+      +'.chip{background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px;font-size:9.5px;font-weight:800;text-align:center;letter-spacing:.4px;margin:1.5px 0;}'
+      // ── الجدول الرئيسي ──
+      +'table.lab{width:100%;border-collapse:collapse;table-layout:auto;}'
+      +'table.lab thead th{background:linear-gradient(180deg,#ffffff,'+ac+'0c);color:'+ac+';font-size:10px;'
+        +'font-weight:900;letter-spacing:.9px;text-transform:uppercase;padding:6px 8px;text-align:center;'
+        +'border-bottom:2px solid '+ac+';border-top:1px solid '+ac+'33;}'
+      +'table.lab thead th.l{text-align:left;}'
+      +'table.lab td{padding:3.4px 8px;font-size:11.5px;border-bottom:1px solid #eef2f6;vertical-align:middle;}'
+      +'tr.zz td{background:#f8fbfd;}'
+      +'.t-name{text-align:left;font-weight:800;color:#16283d;white-space:nowrap;padding-left:11px!important;}'
+      +'.t-res{text-align:center;font-weight:900;font-size:13px;white-space:nowrap;}'
+      +'.t-unit{text-align:center;font-size:10px;color:#2f4055;font-weight:800;white-space:nowrap;}'
+      +'.t-flag{text-align:center;width:36px;}'
+      +'.fl{display:inline-block;min-width:17px;padding:0 5px;border-radius:9px;border:1px solid;font-size:10px;font-weight:900;line-height:14px;}'
+      +'.t-ref{text-align:center;font-size:10.5px;color:#33475b;font-weight:700;white-space:nowrap;}'
+      +'.t-hist{width:216px;padding:4px 5px!important;border-left:1px solid #e6ebf0;background:#fff;}'
+      +'.hcard{border:1px solid #dde4eb;border-radius:5px;padding:2px 3px 1px;background:#fff;margin:0 auto;}'
+      +'.hgbp{font-size:10.5px;font-weight:700;color:#33475b;text-align:center;padding:1px 0 4px;}'
+      +'.hgbp b{color:'+ttlColor+';font-size:11.5px;}'
+      // ── سجل النتائج السابقة ──
+      +'.hx-wrap{margin-top:9px;border:1.2px solid '+ac+'4d;border-radius:8px;overflow:hidden;'
+        +'break-inside:avoid;page-break-inside:avoid;}'
+      +'table.hx{width:100%;border-collapse:collapse;}'
+      +'table.hx th{background:linear-gradient(180deg,#ffffff,'+ac+'12);color:'+ac+';font-size:9.5px;font-weight:900;'
+        +'padding:5px 3px;text-align:center;border:1px solid '+ac+'26;letter-spacing:.3px;}'
+      +'table.hx th.hx-lbl{color:'+ttlColor+';font-size:10.5px;letter-spacing:.5px;white-space:nowrap;padding:5px 10px;min-width:130px;}'
+      +'table.hx td{font-size:10px;font-weight:700;color:#22303f;text-align:center;padding:4px 3px;border:1px solid #e7ecf1;white-space:nowrap;}'
+      +'table.hx td.dt{font-weight:900;color:#12855a;letter-spacing:.3px;padding:4px 10px;text-align:left;}'
+      +'table.hx tr.cur td{background:'+ac+'0d;}'
+      +'table.hx tr.cur td.dt{color:'+ac+';}'
+      +'.nowtag{display:inline-block;margin-left:7px;background:'+ac+';color:#fff;border-radius:8px;'
+        +'padding:0 6px;font-size:8px;font-weight:800;letter-spacing:.5px;line-height:12px;vertical-align:1px;}'
+      // ── التذييل ──
+      +'.foot{border-top:1.4px solid '+ac+'66;margin-top:8px;padding-top:4px;display:flex;'
+        +'justify-content:space-between;font-size:9.5px;color:#6b7885;font-weight:700;}';
+
+    return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
+      +'<div class="ttl10"><h1>Complete Blood Count</h1><div class="sub">'+_reportModeTitle+'</div><div class="rule"></div></div>'
+      +'<div class="pbar"><div class="pL">'
+      +'<div class="pF"><span class="pK">Patient</span><span class="pV" style="color:'+nameColor+';font-size:14px">'+ptFullName+'</span></div>'
+      +'<div class="pF"><span class="pK">Sex / Age</span><span class="pV">'+gender+' / '+age+'</span></div>'
+      +'<div class="pF"><span class="pK">Doctor</span><span class="pV">'+doctorName+'</span></div>'
+      +'<div class="pF"><span class="pK">Sample</span><span class="pV">'+sampleDate+'</span></div>'
+      +'</div><div class="pR"><div class="chip">ID: '+barcodeId+'</div><div class="chip">'+_reportModeTitle+'</div></div></div>'
+      +'<table class="lab"><thead><tr>'
+      +'<th class="l">Test details</th><th>Result</th><th>Units</th><th style="width:36px">Flag</th>'
+      +'<th>Normal range</th><th style="width:216px">Histograms</th>'
+      +'</tr></thead><tbody>'+body+'</tbody></table>'
+      +_hxHTML
+      +'<div class="foot"><span>Operator: '+operator+'</span><span>'+_reportModeTitle+'</span><span>'+today+'</span></div>'
+      +'</body></html>';
+  }
+
   // fallback → النموذج 1
   return _buildCBCReportHTML(cbcParams,pt,req,'1');
 }
