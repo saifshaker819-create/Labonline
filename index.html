@@ -5972,6 +5972,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <span id="storage-next-d-archive"></span>
                 </div>
               </div>
+
+              <!-- ⭐ فحص سلامة التخزين — بديل Console -->
+              <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:12px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                  <div style="font-size:11px;color:var(--text2)">
+                    🧪 <b style="color:var(--primary)">فحص سلامة التخزين</b> — يقارن عدد السجلات على القرص مع الذاكرة
+                  </div>
+                  <button class="btn btn-p btn-sm" onclick="runStorageHealthCheck()">🔍 افحص الآن</button>
+                </div>
+                <div id="storage-health-out" style="display:none;margin-top:10px;font-size:11px"></div>
+              </div>
             </div>
               </div></div>
             </div><!-- /db-acc-storage -->
@@ -8239,7 +8250,7 @@ const IDB=(()=>{
   // جداً مع النص العربي. القياس على ٢٠٬٠٠٠ طلب: ١٧.٧ ثانية تجميد عند كل حفظ.
   // IndexedDB يخزّن الكائنات أصلاً (structured clone) بتنفيذ C++ — أسرع ٣٠ ضعفاً.
   // التوافق الرجعي: الصفوف القديمة (تبدأ بـ \x01) تُقرأ كما كانت تماماً.
-  async function get(key){
+  async function _rawGet(key){
     try{
       const db=await open();
       return new Promise((res,rej)=>{
@@ -8259,7 +8270,7 @@ const IDB=(()=>{
     }catch{return null;}
   }
 
-  async function set(key,value){
+  async function _rawSet(key,value){
     try{
       // ألغِ أي كتابة مؤجّلة لنفس المفتاح — الكتابة المباشرة هنا أحدث
       try{ if(typeof _idbCancelPending==='function') _idbCancelPending(key); }catch(e){}
@@ -8278,7 +8289,7 @@ const IDB=(()=>{
     }catch{return false;}
   }
 
-  async function del(key){
+  async function _rawDel(key){
     try{
       const db=await open();
       return new Promise((res)=>{
@@ -8322,6 +8333,7 @@ const IDB=(()=>{
         return ((est.usage||0)/1024/1024).toFixed(2);
       }
       // fallback: حساب تقديري من البيانات المخزنة
+      // ⚠️ مع وضع السجلات المفردة قد تكون عشرات الآلاف — لا نقرأها كلها
       const all=await getAll();
       let total=all.reduce((s,r)=>{
         const v=r&&r.v;
@@ -8343,7 +8355,271 @@ const IDB=(()=>{
     return '500'; // fallback افتراضي
   }
 
-  return{get,set,del,getAllKeys,getAll,usedMB,quotaMB};
+  // ═════════════════════════════════════════════════════════════
+  // ⭐ وضع السجلات المفردة (Record Mode)
+  //
+  // المشكلة: كل save('requests',requests) كان يعيد كتابة المصفوفة
+  // كاملة — عند ٣٠ ألف طلب يعني نسخ ٣٠ـMB في كل ضغطة حفظ.
+  //
+  // الحل: كل سجل يُخزّن في صفّ مستقل بمفتاح "المفتاح + \u0001 + id"
+  // داخل نفس مخزن kv — بلا ترقية نسخة IndexedDB وبلا خطر onblocked.
+  //
+  // الأمان: إن لم تصل قائمة المُعدَّلين (dirtyIds) نكتب كل السجلات
+  // — أبطأ لكن صحيح ١٠٠٪. لذلك أي موقع لم يُحوّل يبقى يعمل تماماً كما اليوم.
+  // ═════════════════════════════════════════════════════════════
+  const REC_SEP='\u0001';
+  const REC_END='\uffff';
+  // الأطول أولاً حتى لا يطابق اسم قصير داخل اسم أطول
+  const RECORD_COLLS=['stoolExamRecords','cultureRecords','semenRecords','uaRecords',
+                      'patients','requests','invoices','billing'];
+  const _lastErr={};   // pk -> آخر سبب فشل (للتشخيص)
+  const _recMode={};   // pk -> true/false (كاش في الذاكرة)
+  const _migLock={};   // pk -> Promise (يمنع ترحيلين متزامنين)
+
+  function collOf(key){
+    if(typeof key!=='string') return null;
+    for(let i=0;i<RECORD_COLLS.length;i++){
+      const c=RECORD_COLLS[i];
+      if(key.length>c.length && key.slice(-c.length)===c && key[key.length-c.length-1]==='_') return c;
+    }
+    return null;
+  }
+  function _range(key){ return IDBKeyRange.bound(key+REC_SEP, key+REC_SEP+REC_END); }
+  function _metaK(key){ return key+'\u0002recmode'; }
+
+  async function _isRecMode(key){
+    if(_recMode[key]!==undefined) return _recMode[key];
+    const m=await _rawGet(_metaK(key));
+    _recMode[key]=(m===1||m===true);
+    return _recMode[key];
+  }
+
+  function _countRecs(key){
+    return open().then(function(db){
+      return new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).count(_range(key));
+          rq.onsuccess=function(){res(rq.result||0);};
+          rq.onerror=function(){ _lastErr[key]='count: '+((rq.error&&rq.error.message)||'error'); res(-1); };
+        }catch(e){ _lastErr[key]='count(throw): '+(e&&e.message||e); res(-1); }
+      });
+    }).catch(function(e){ _lastErr[key]='open: '+(e&&e.message||e); return -1; });
+  }
+
+  // عدّ احتياطي عبر المفاتيح — إن فشل count() لأي سبب
+  function _countKeysFallback(key){
+    return open().then(function(db){
+      return new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).getAllKeys(_range(key));
+          rq.onsuccess=function(){ res((rq.result||[]).length); };
+          rq.onerror=function(){ res(-1); };
+        }catch(e){ res(-1); }
+      });
+    }).catch(function(){ return -1; });
+  }
+
+  // كتابة دفعة واحدة داخل معاملة واحدة
+  function _txBatch(db, fn){
+    return new Promise(function(res){
+      let tx;
+      try{ tx=db.transaction(STORE,'readwrite'); }catch(e){ _lastErr['__tx']='transaction: '+(e&&e.message||e); res(false); return; }
+      const st=tx.objectStore(STORE);
+      try{ fn(st); }catch(e){ _lastErr['__tx']='put: '+(e&&e.message||e); try{tx.abort();}catch(_){} res(false); return; }
+      tx.oncomplete=function(){res(true);};
+      tx.onerror   =function(){ _lastErr['__tx']='tx: '+((tx.error&&tx.error.message)||'error'); res(false); };
+      tx.onabort   =function(){ _lastErr['__tx']='abort: '+((tx.error&&tx.error.message)||'aborted'); res(false); };
+    });
+  }
+
+  const CHUNK=1200;
+
+  // ① الترحيل: من blob واحد إلى سجلات مفردة — مرة واحدة فقط
+  //    الـ blob القديم يُترك سليماً كشبكة أمان
+  async function _migrate(key, arr){
+    if(_migLock[key]) return _migLock[key];
+    _migLock[key]=(async function(){
+      try{
+        if(!Array.isArray(arr)){ _lastErr[key]='لا توجد مصفوفة للترحيل'; return false; }
+        if(arr.length===0){ _lastErr[key]='المجموعة فارغة'; return false; }
+        const db=await open();
+        const valid=[];
+        for(let i=0;i<arr.length;i++){ const r=arr[i]; if(r&&typeof r==='object'&&r.id!=null) valid.push(r); }
+        if(valid.length===0){ _lastErr[key]='لا يوجد سجل بمعرّف id صالح'; return false; }
+        for(let i=0;i<valid.length;i+=CHUNK){
+          const part=valid.slice(i,i+CHUNK);
+          const ok=await _txBatch(db,function(st){
+            for(let j=0;j<part.length;j++) st.put({k:key+REC_SEP+String(part[j].id), v:part[j], raw:1});
+          });
+          if(!ok){ _lastErr[key]='فشلت الكتابة عند السجل '+i+(_lastErr['__tx']?(' — '+_lastErr['__tx']):''); return false; }
+        }
+        // التحقّق — مع عدّ احتياطي إن تعذّر count()
+        let got=await _countRecs(key);
+        if(got<0) got=await _countKeysFallback(key);
+        if(got>=0 && got<valid.length){
+          _lastErr[key]='تحقّق فاشل: على القرص '+got+' من '+valid.length;
+          console.warn('[IDB] migration verify failed',key,got,'<',valid.length);
+          return false;
+        }
+        await _rawSet(_metaK(key),1);
+        _recMode[key]=true;
+        delete _lastErr[key];
+        console.log('[IDB] ✓ record-mode enabled for',key,'('+valid.length+' سجل)');
+        return true;
+      }catch(e){ _lastErr[key]='استثناء: '+(e&&e.message||e); console.warn('[IDB] migrate error',key,e); return false; }
+      finally{ delete _migLock[key]; }
+    })();
+    return _migLock[key];
+  }
+
+  // ② قراءة كل سجلات مجموعة
+  async function _readColl(key){
+    try{
+      const db=await open();
+      return await new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).getAll(_range(key));
+          rq.onsuccess=function(){
+            const rows=rq.result||[];
+            const out=new Array(rows.length);
+            for(let i=0;i<rows.length;i++) out[i]=rows[i].v;
+            res(out);
+          };
+          rq.onerror=function(){res(null);};
+        }catch(e){res(null);}
+      });
+    }catch(e){ return null; }
+  }
+
+  // ③ كتابة جزئية — المسار السريع (تكلفة ثابتة)
+  async function _writeSome(key, arr, ids){
+    try{
+      const db=await open();
+      const byId=new Map();
+      for(let i=0;i<arr.length;i++){ const r=arr[i]; if(r&&r.id!=null) byId.set(String(r.id),r); }
+      const list=Array.from(ids);
+      for(let i=0;i<list.length;i+=CHUNK){
+        const part=list.slice(i,i+CHUNK);
+        const ok=await _txBatch(db,function(st){
+          for(let j=0;j<part.length;j++){
+            const id=String(part[j]);
+            const r=byId.get(id);
+            if(r) st.put({k:key+REC_SEP+id, v:r, raw:1});
+            else  st.delete(key+REC_SEP+id);
+          }
+        });
+        if(!ok) return false;
+      }
+      return true;
+    }catch(e){ console.warn('[IDB] writeSome error',key,e); return false; }
+  }
+
+  // ④ كتابة كاملة — مسار الأمان (يُستعمل حين لا نعرف ما تغيّر)
+  async function _writeAll(key, arr){
+    try{
+      const db=await open();
+      const existing=await new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).getAllKeys(_range(key));
+          rq.onsuccess=function(){res(rq.result||[]);};
+          rq.onerror=function(){res([]);};
+        }catch(e){res([]);}
+      });
+      const keep=new Set();
+      const valid=[];
+      for(let i=0;i<arr.length;i++){
+        const r=arr[i];
+        if(r&&typeof r==='object'&&r.id!=null){ valid.push(r); keep.add(key+REC_SEP+String(r.id)); }
+      }
+      const toDel=[];
+      for(let i=0;i<existing.length;i++) if(!keep.has(existing[i])) toDel.push(existing[i]);
+      for(let i=0;i<toDel.length;i+=CHUNK){
+        const part=toDel.slice(i,i+CHUNK);
+        const ok=await _txBatch(db,function(st){ for(let j=0;j<part.length;j++) st.delete(part[j]); });
+        if(!ok) return false;
+      }
+      for(let i=0;i<valid.length;i+=CHUNK){
+        const part=valid.slice(i,i+CHUNK);
+        const ok=await _txBatch(db,function(st){
+          for(let j=0;j<part.length;j++) st.put({k:key+REC_SEP+String(part[j].id), v:part[j], raw:1});
+        });
+        if(!ok) return false;
+      }
+      return true;
+    }catch(e){ console.warn('[IDB] writeAll error',key,e); return false; }
+  }
+
+  // ── الواجهة العامة — نفس توقيع الدوال القديمة تماماً ──
+  async function get(key){
+    const c=collOf(key);
+    if(!c) return _rawGet(key);
+    try{
+      if(await _isRecMode(key)){
+        const arr=await _readColl(key);
+        if(Array.isArray(arr)) return arr;
+        return _rawGet(key);                    // سقوط آمن
+      }
+      const blob=await _rawGet(key);
+      if(!Array.isArray(blob)) return blob;     // لا شيء لترحيله
+      await _migrate(key, blob);                // ترحيل لمرة واحدة
+      return blob;
+    }catch(e){ console.warn('[IDB] get fallback',key,e); return _rawGet(key); }
+  }
+
+  // dirtyIds: Set من المعرّفات المُعدَّلة — إن غابت تُكتب المجموعة كلها
+  async function set(key,value,dirtyIds){
+    const c=collOf(key);
+    if(!c || !Array.isArray(value)) return _rawSet(key,value);
+    try{
+      if(!(await _isRecMode(key))){
+        const ok=await _migrate(key, value);
+        if(!ok) return _rawSet(key,value);      // فشل الترحيل → السلوك القديم
+        return true;
+      }
+      if(dirtyIds && dirtyIds.size){
+        if(await _writeSome(key,value,dirtyIds)) return true;
+        console.warn('[IDB] delta write failed — falling back to full',key);
+      }
+      if(await _writeAll(key,value)) return true;
+      return _rawSet(key,value);                // آخر شبكة أمان
+    }catch(e){ console.warn('[IDB] set fallback',key,e); return _rawSet(key,value); }
+  }
+
+  async function del(key){
+    const c=collOf(key);
+    if(!c) return _rawDel(key);
+    try{
+      const db=await open();
+      await _txBatch(db,function(st){ st.delete(_range(key)); });
+      await _rawDel(_metaK(key));
+      _recMode[key]=false;
+      delete _recMode[key];
+    }catch(e){ console.warn('[IDB] del coll error',key,e); }
+    return _rawDel(key);
+  }
+
+  // لقطة احتياطية بالصيغة القديمة (blob) — تُبقي الرجوع لنسخة أقدم ممكناً
+  function snapshotLegacy(key,value){ return _rawSet(key,value); }
+  function isRecordMode(key){ return _isRecMode(key); }
+  async function countRecords(key){
+    let n=await _countRecs(key);
+    if(n<0) n=await _countKeysFallback(key);
+    return n;
+  }
+  function lastError(key){ return _lastErr[key]||''; }
+  // ترحيل يدوي من مصفوفة جاهزة (مثلاً من ذاكرة البرنامج)
+  async function forceMigrate(key,arr){
+    if(await _isRecMode(key)) return true;
+    return _migrate(key,arr);
+  }
+
+  return{get,set,del,getAllKeys,getAll,usedMB,quotaMB,
+         snapshotLegacy,isRecordMode,countRecords,collOf,
+         lastError,forceMigrate};
 })();
 
 // ══════════════════════════════════════════════════════════════
@@ -8367,21 +8643,35 @@ const _MC={};
 // ══════════════════════════════════════════════════════════════
 const _idbPending={}, _idbTimers={}, _idbDeadline={};
 
+// ⭐ قائمة معرّفات السجلات المُعدّلة لكل مفتاح:
+//    Set  = اكتب هذه السجلات فقط   (المسار السريع)
+//    null = لا نعرف ماذا تغيّر ⇒ اكتب الكل (مسار الأمان)
+//    عند الدمج، null يطغى دائماً — الأحوط يفوز.
+const _idbPendingIds={};
+
 function _idbCancelPending(pk){
   if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
-  delete _idbPending[pk]; delete _idbDeadline[pk];
+  delete _idbPending[pk]; delete _idbDeadline[pk]; delete _idbPendingIds[pk];
 }
 function _idbWriteNow(pk){
   if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
   delete _idbDeadline[pk];
   if(!(pk in _idbPending)) return;
   const v=_idbPending[pk];
-  delete _idbPending[pk];
-  try{ IDB.set(pk,v).catch(e=>console.warn('[DB] IDB set error',pk,e)); }
+  const ids=_idbPendingIds[pk];
+  delete _idbPending[pk]; delete _idbPendingIds[pk];
+  try{ IDB.set(pk,v,ids||undefined).catch(e=>console.warn('[DB] IDB set error',pk,e)); }
   catch(e){ console.warn('[DB] IDB set error',pk,e); }
 }
-function _idbWriteLater(pk,v){
+function _idbWriteLater(pk,v,ids){
   _idbPending[pk]=v;
+  if(!ids){
+    _idbPendingIds[pk]=null;                        // كتابة كاملة
+  } else if(_idbPendingIds[pk]!==null){
+    const cur=_idbPendingIds[pk]||new Set();
+    ids.forEach(function(x){ cur.add(x); });
+    _idbPendingIds[pk]=cur;
+  }
   const now=Date.now();
   if(!_idbDeadline[pk]) _idbDeadline[pk]=now+1500;
   if(_idbTimers[pk]) clearTimeout(_idbTimers[pk]);
@@ -8424,7 +8714,12 @@ const DB={
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
         localStorage.removeItem(pk);
-        _idbWriteLater(pk,v);   // ⚡ كتابة مُجمَّعة بدل كتابة كاملة عند كل save()
+        // ⭐ استهلك قائمة المُعدّلين وامسحها دائماً — حتى لا تتسرّب لحفظة لاحقة
+        let _ids;
+        if(!_touchedBad[k] && _touched[k] && _touched[k].size) _ids=_touched[k];
+        delete _touched[k]; delete _touchedBad[k];
+        if(_ids) _scheduleLegacySnapshot(pk);
+        _idbWriteLater(pk,v,_ids);   // ⚡ كتابة مُجمَّعة بدل كتابة كاملة عند كل save()
       } else if(k==='settings' && v && typeof v==='object'){
         // الإعدادات: استبعد الحقول الكبيرة من localStorage (تذهب لـ IDB عبر setBig)
         const slim={};
@@ -8469,6 +8764,53 @@ const DB={
 };
 
 // load/save — نفس الواجهة القديمة بالضبط (لا يتغير باقي الكود)
+// ═════════════════════════════════════════════════════════════
+// ⭐ saveOne — احفظ سجلاً واحداً بدل المجموعة كلها
+//
+//   قبل:  save('requests', requests);            ← يكتب كل الطلبات على القرص
+//   بعد:  saveOne('requests', requests, req);    ← يكتب هذا الطلب فقط
+//
+//   كل شيء آخر متطابق: نفس الكاش، نفس بثّ LAN، نفس المتغيرات.
+//   وأي موقع يبقى على save() يعمل تماماً كما كان — لا شيء ينكسر.
+// ═════════════════════════════════════════════════════════════
+const _DELTA_KEYS=new Set(['patients','requests','invoices','billing',
+  'cultureRecords','uaRecords','stoolExamRecords','semenRecords']);
+
+const _touched={};      // k -> Set(ids)
+const _touchedBad={};   // k -> true  =>  أجبِر كتابة كاملة (مسار الأمان)
+
+function _touchRec(k,rec){
+  if(!_DELTA_KEYS.has(k)){ _touchedBad[k]=true; return; }
+  if(!rec||typeof rec!=='object'||rec.id==null){ _touchedBad[k]=true; return; }
+  (_touched[k]||(_touched[k]=new Set())).add(String(rec.id));
+}
+
+// saveOne(key, wholeArray, rec1 [, rec2 ...])
+function saveOne(k,arr){
+  try{
+    if(arguments.length<3){ _touchedBad[k]=true; }
+    else for(var i=2;i<arguments.length;i++) _touchRec(k,arguments[i]);
+  }catch(e){ _touchedBad[k]=true; }
+  save(k,arr);
+}
+
+// ── لقطة احتياطية بالصيغة القديمة (blob) ────────────────
+// مع الكتابة الجزئية يصبح الـ blob القديم قديماً؛ نحدّثه كل ٣ دقائق في
+// الخلفية حتى يبقى الرجوع إلى نسخة أقدم من البرنامج ممكناً.
+const _LEGACY_SNAP_MS=180000;
+const _legacySnapTimers={};
+function _scheduleLegacySnapshot(pk){
+  if(_legacySnapTimers[pk]) return;
+  _legacySnapTimers[pk]=setTimeout(function(){
+    delete _legacySnapTimers[pk];
+    try{
+      const v=_MC[pk];
+      if(Array.isArray(v)&&IDB&&IDB.snapshotLegacy) IDB.snapshotLegacy(pk,v);
+    }catch(e){}
+  },_LEGACY_SNAP_MS);
+}
+
+// load/save
 function load(k,def){return DB.get(k)||def;}
 function save(k,v){
   DB.set(k,v);
@@ -8478,6 +8820,145 @@ function save(k,v){
   try{ if(typeof window._lanOnSave === 'function') window._lanOnSave(k,v); }catch(e){}
   try{ if(!window._tgApplying && typeof window._tgOnSave === 'function') window._tgOnSave(k); }catch(e){}
 }
+// متاحة لبقية كتل <script> (مزامنة LAN ومسارات الأجهزة)
+window.saveOne=saveOne;
+
+// ── تفعيل وضع السجلات من ذاكرة البرنامج ────────────────────────
+// لا نعتمد على وجود blob قديم في IDB: بعض النسخ تحمل البيانات من
+// localStorage. نأخذ المصفوفات من الذاكرة ونرحّلها مباشرة.
+window._ensureRecordModeFromMemory=async function(report){
+  const out=[];
+  try{
+    const pfx=DB._pfx();
+    for(const k of _DELTA_KEYS){
+      const pk=pfx+k;
+      let mode=false;
+      try{ mode=await IDB.isRecordMode(pk); }catch(e){}
+      if(mode){ out.push({k:k, ok:true, skipped:true}); continue; }
+      let arr=_MC[pk];
+      if(!Array.isArray(arr)){ try{ arr=DB.get(k); }catch(e){} }
+      if(!Array.isArray(arr)||arr.length===0){ out.push({k:k, ok:false, empty:true}); continue; }
+      let ok=false;
+      try{ ok=await IDB.forceMigrate(pk, arr); }catch(e){}
+      out.push({k:k, ok:ok, n:arr.length, err: ok?'':(IDB.lastError?IDB.lastError(pk):'')});
+      if(ok){ try{ await IDB.snapshotLegacy(pk, arr); }catch(e){} }
+    }
+  }catch(e){ console.warn('[IDB] ensureRecordMode',e); }
+  if(report) console.log('[IDB] ensureRecordModeFromMemory',out);
+  return out;
+};
+
+// ── تشخيص سريع من وحدة التحكم (Console) ──────────────────
+// اكتب medlabStorageInfo() لترى هل وضع السجلات المفردة مفعّل وكم سجلاً في كل مجموعة
+// ⭐ فحص سلامة التخزين — يعرض النتيجة داخل البرنامج (لا يحتاج Console)
+window.runStorageHealthCheck=async function(){
+  const out=document.getElementById('storage-health-out');
+  if(out){ out.style.display='block'; out.innerHTML='<span style="color:var(--text2)">\u23f3 \u062c\u0627\u0631\u064d \u0627\u0644\u0641\u062d\u0635...</span>'; }
+  const names={patients:'\u0627\u0644\u0645\u0631\u0636\u0649',requests:'\u0627\u0644\u0637\u0644\u0628\u0627\u062a',invoices:'\u0627\u0644\u0641\u0648\u0627\u062a\u064a\u0631',billing:'\u0627\u0644\u0645\u062d\u0627\u0633\u0628\u0629',
+    cultureRecords:'\u0627\u0644\u0632\u0631\u0639',uaRecords:'\u0627\u0644\u0625\u062f\u0631\u0627\u0631',stoolExamRecords:'\u0627\u0644\u062e\u0631\u0648\u062c',semenRecords:'\u0627\u0644\u0633\u0627\u0626\u0644 \u0627\u0644\u0645\u0646\u0648\u064a'};
+  let rows='', mismatch=0, notMigrated=0, migrated=0, total=0, firstErr='';
+  try{
+    const pfx=DB._pfx();
+    for(const k of Object.keys(names)){
+      const pk=pfx+k;
+      let mode=false,n=-1;
+      try{ mode=await IDB.isRecordMode(pk); }catch(e){}
+      try{ n=await IDB.countRecords(pk); }catch(e){}
+      const memArr=_MC[pk];
+      const mem=Array.isArray(memArr)?memArr.length:0;
+      if(!mode && mem===0) continue;
+      total++;
+      let state, color;
+      if(!mode){
+        notMigrated++;
+        state='\u0644\u0645 \u064a\u064f\u0631\u062d\u0651\u0644 \u0628\u0639\u062f'; color='#e0a800';
+        const e=(IDB.lastError?IDB.lastError(pk):'');
+        if(e&&!firstErr) firstErr=e;
+      } else {
+        migrated++;
+        if(n===mem){ state='\u0645\u062a\u0637\u0627\u0628\u0642'; color='#0bbf6a'; }
+        else { mismatch++; state='\u0627\u062e\u062a\u0644\u0627\u0641'; color='#ff4d4d'; }
+      }
+      rows+='<tr>'
+        +'<td style="padding:5px 8px">'+names[k]+'</td>'
+        +'<td style="padding:5px 8px;text-align:center">'+(mode?'\u2705':'\u2014')+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;font-weight:800">'+(n<0?'?':n)+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;font-weight:800">'+mem+'</td>'
+        +'<td style="padding:5px 8px;text-align:center"><span style="color:'+color+';font-weight:900">'+state+'</span></td>'
+        +'</tr>';
+    }
+  }catch(e){
+    if(out) out.innerHTML='<span style="color:#ff4d4d">\u274c \u062a\u0639\u0630\u0651\u0631 \u0627\u0644\u0641\u062d\u0635: '+(e&&e.message||e)+'</span>';
+    return;
+  }
+  let banner;
+  if(mismatch){
+    banner='<div style="background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.4);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-weight:800;color:#ff4d4d">\u26a0\ufe0f \u064a\u0648\u062c\u062f \u0627\u062e\u062a\u0644\u0627\u0641 \u0641\u064a '+mismatch+' \u0645\u062c\u0645\u0648\u0639\u0629 \u2014 \u062e\u0630 \u0646\u0633\u062e\u0629 \u0627\u062d\u062a\u064a\u0627\u0637\u064a\u0629 \u0648\u0631\u0627\u062c\u0650\u0639 \u0627\u0644\u0645\u0637\u0648\u0631</div>';
+  } else if(notMigrated){
+    banner='<div style="background:rgba(255,193,7,.12);border:1px solid rgba(255,193,7,.45);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-weight:800;color:#e0a800">'
+      +'\u26a0\ufe0f \u0644\u0645 \u064a\u064f\u0641\u0639\u0651\u0644 \u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639 \u0641\u064a '+notMigrated+' \u0645\u0646 '+total+' \u0645\u062c\u0645\u0648\u0639\u0629 \u2014 \u0628\u064a\u0627\u0646\u0627\u062a\u0643 \u0633\u0644\u064a\u0645\u0629 \u0648\u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062c \u064a\u0639\u0645\u0644\u060c \u0644\u0643\u0646 \u0628\u0627\u0644\u0633\u0631\u0639\u0629 \u0627\u0644\u0642\u062f\u064a\u0645\u0629.'
+      +'<div style="font-weight:600;margin-top:6px">\u0627\u0636\u063a\u0637 \u00ab\u0634\u063a\u0651\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644 \u0627\u0644\u0622\u0646\u00bb \u062b\u0645 \u0623\u0639\u062f \u0627\u0644\u0641\u062d\u0635.'+(firstErr?'<br><span style="font-size:10px;opacity:.85">\u0627\u0644\u0633\u0628\u0628: '+firstErr+'</span>':'')+'</div></div>'
+      +'<button class="btn btn-p btn-sm" style="margin-bottom:8px" onclick="runRecordMigrationNow()">\u26a1 \u0634\u063a\u0651\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644 \u0627\u0644\u0622\u0646</button>';
+  } else {
+    banner='<div style="background:rgba(0,245,147,.10);border:1px solid rgba(0,245,147,.35);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-weight:800;color:#0bbf6a">\u2705 \u0643\u0644 \u0627\u0644\u0623\u0639\u062f\u0627\u062f \u0645\u062a\u0637\u0627\u0628\u0642\u0629 \u2014 \u0627\u0644\u062a\u062e\u0632\u064a\u0646 \u0633\u0644\u064a\u0645 ('+migrated+' \u0645\u0646 '+total+' \u0645\u062c\u0645\u0648\u0639\u0629 \u0639\u0644\u0649 \u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639)</div>';
+  }
+  if(out){
+    out.innerHTML = banner
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+      + '<thead><tr style="color:var(--text2);font-size:10px">'
+      + '<th style="padding:4px 8px;text-align:right">\u0627\u0644\u0645\u062c\u0645\u0648\u0639\u0629</th>'
+      + '<th style="padding:4px 8px">\u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639</th>'
+      + '<th style="padding:4px 8px">\u0639\u0644\u0649 \u0627\u0644\u0642\u0631\u0635</th>'
+      + '<th style="padding:4px 8px">\u0641\u064a \u0627\u0644\u0630\u0627\u0643\u0631\u0629</th>'
+      + '<th style="padding:4px 8px">\u0627\u0644\u0646\u062a\u064a\u062c\u0629</th>'
+      + '</tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  try{
+    if(mismatch) showNotif('\u062a\u062d\u0630\u064a\u0631','\u064a\u0648\u062c\u062f \u0627\u062e\u062a\u0644\u0627\u0641 \u0641\u064a '+mismatch+' \u0645\u062c\u0645\u0648\u0639\u0629','error');
+    else if(notMigrated) showNotif('\u062a\u0646\u0628\u064a\u0647','\u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639 \u063a\u064a\u0631 \u0645\u0641\u0639\u0651\u0644 \u0628\u0639\u062f','warning');
+    else showNotif('\u062a\u0645 \u0627\u0644\u0641\u062d\u0635','\u0627\u0644\u062a\u062e\u0632\u064a\u0646 \u0633\u0644\u064a\u0645 \u2705','success');
+  }catch(e){}
+};
+
+// ⭐ ترحيل يدوي من داخل البرنامج — مع إظهار سبب الفشل إن وُجد
+window.runRecordMigrationNow=async function(){
+  const out=document.getElementById('storage-health-out');
+  if(out) out.innerHTML='<span style="color:var(--text2)">\u23f3 \u062c\u0627\u0631\u064d \u0627\u0644\u062a\u0631\u062d\u064a\u0644... \u0644\u0627 \u062a\u063a\u0644\u0642 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062c.</span>';
+  let res=[];
+  try{ res=await window._ensureRecordModeFromMemory(true); }
+  catch(e){ if(out) out.innerHTML='<span style="color:#ff4d4d">\u274c '+(e&&e.message||e)+'</span>'; return; }
+  const bad=res.filter(function(r){ return !r.ok && !r.empty; });
+  if(bad.length && out){
+    out.innerHTML='<div style="background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.4);border-radius:8px;padding:9px 12px;font-weight:800;color:#ff4d4d">\u274c \u0641\u0634\u0644 \u062a\u0631\u062d\u064a\u0644 '+bad.length+' \u0645\u062c\u0645\u0648\u0639\u0629</div>'
+      +'<div style="font-size:10px;color:var(--text2);margin-top:6px">'
+      +bad.map(function(r){ return r.k+': '+(r.err||'\u0633\u0628\u0628 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641'); }).join('<br>')+'</div>';
+    try{ showNotif('\u062e\u0637\u0623','\u0641\u0634\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644 \u2014 \u0631\u0627\u062c\u0650\u0639 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644','error'); }catch(e){}
+    return;
+  }
+  try{ showNotif('\u062a\u0645','\u2705 \u0627\u0643\u062a\u0645\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644','success'); }catch(e){}
+  await window.runStorageHealthCheck();
+};
+
+window.medlabStorageInfo=async function(){
+  const pfx=DB._pfx();
+  const keys=['patients','requests','invoices','billing',
+              'cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+  const rows=[];
+  for(const k of keys){
+    const pk=pfx+k;
+    let mode=false, n=0;
+    try{ mode=await IDB.isRecordMode(pk); }catch(e){}
+    try{ n=await IDB.countRecords(pk); }catch(e){}
+    const mem=Array.isArray(_MC[pk])?_MC[pk].length:'-';
+    rows.push({'المجموعة':k,
+               'وضع السجلات':mode?'✅ مفعّل':'— blob',
+               'على القرص':n<0?'?':n,
+               'في الذاكرة':mem});
+  }
+  try{ console.table(rows); }catch(e){ console.log(rows); }
+  try{ console.log('المساحة المستعملة: '+(await IDB.usedMB())+' MB من '+(await IDB.quotaMB())+' MB'); }catch(e){}
+  return rows;
+};
 window.save = save;
 window.load = load;
 
@@ -9354,6 +9835,9 @@ function initUserData(){
 
   // ④ تحميل البيانات الكبيرة من IDB
   _mergeIDBInBackground();
+  // ⭐ ضمان تفعيل وضع السجلات حتى لو كانت البيانات قادمة من localStorage
+  //    وليس من blob قديم في IDB — نرحّل من ذاكرة البرنامج مباشرة.
+  setTimeout(function(){ try{ _ensureRecordModeFromMemory(); }catch(e){} }, 6000);
 }
 
 // ── إصلاح لمرة واحدة: تصحيح باركود المرضى القدماء في قاعدة بيانات مستوردة سابقاً ──
@@ -11485,7 +11969,7 @@ async function selectExistingPatient(pid){
       if(p){
         // أضفه لـ localStorage ليكون متاحاً للطلب الجديد
         patients.push(p);
-        save('patients',patients);
+        saveOne('patients',patients,p);
         // اجلب طلباته من IDB أيضاً
         const idbReqs=await IDB.get(pfx+'requests');
         if(idbReqs){
@@ -11948,7 +12432,7 @@ function wizNext(){
       const oldName=pt.name;
       Object.assign(pt,{...wizPatient,id:pt.id,registered:pt.registered,visits:pt.visits,lastVisit:pt.lastVisit,status:pt.status,barcode:pt.barcode});
       if(!wizPatient.chronic||wizPatient.chronic.length===0) pt.chronic=oldChron;
-      save('patients',patients);
+      saveOne('patients',patients,pt);
       if(pt.phone) addToPhoneBook(pt.name, pt.phone);
       // ── تحديث اسم المريض في جميع طلباته ──────────────────────────
       if(pt.name && pt.name!==oldName){
@@ -11998,7 +12482,7 @@ function wizFinish(){
     if(!wizPatient.chronic||wizPatient.chronic.length===0)pt.chronic=oldChron;
   }
   pt.visits=(pt.visits||0)+1; pt.lastVisit=today;
-  save('patients',patients);
+  saveOne('patients',patients,pt);
   if(pt.phone) addToPhoneBook(pt.name, pt.phone);
 
   // ⭐ رقم طلب فريد بين كل الحاسبات: RQ<رقم الحاسبة>-<تسلسل>
@@ -12016,7 +12500,7 @@ function wizFinish(){
     sideLab: !!pt.sideLab
   };
   _stamp(req);
-  requests.push(req); save('requests',requests);
+  requests.push(req); saveOne('requests',requests,req);
 
   // الفاتورة مع الخصم وحالة الدفع
   const rawTotal = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
@@ -13528,7 +14012,7 @@ function vrRemoveTest(tid){
   r.tests=r.tests.filter(x=>x!==tid);
   r.testNames=(r.testNames||[]).filter(n=>{const t=tests.find(x=>x.id===tid);return n!==(t?t.nameEn:'');});
   if(r.results)delete r.results[tid];
-  save('requests',requests);
+  saveOne('requests',requests,r);
   openViewResultsModal(currentReqId);
   showNotif('تم','تم حذف التحليل','success');
 }
@@ -13550,7 +14034,7 @@ function vrSaveResults(){
   });
   const _commit=function(){
     Object.keys(_staged).forEach(function(tid){ r.results[tid]=_staged[tid]; });
-    save('requests',requests);
+    saveOne('requests',requests,r);
     showNotif('تم','تم حفظ النتائج ✅','success');
     // لا نغلق النافذة حتى يتمكن المستخدم من مواصلة التعديل
   };
@@ -13589,7 +14073,7 @@ function vrSelectAddTest(tid){
     r.tests.push(t.id);
     if(!r.testNames)r.testNames=[];
     if(!r.testNames.includes(t.nameEn))r.testNames.push(t.nameEn);
-    save('requests',requests);
+    saveOne('requests',requests,r);
   }
 
   // أعد رسم النافذة لتظهر الحقل فوراً
@@ -13611,7 +14095,7 @@ function vrSaveAddedTests(){
     const el=document.getElementById('vr-rv-'+tid);
     if(el&&el.value!==undefined&&el.value!=='')r.results[tid]=el.value;
   });
-  save('requests',requests);renderAll();
+  saveOne('requests',requests,r);renderAll();
   showNotif('تم','تم حفظ النتائج ✅','success');
   openViewResultsModal(currentReqId);
 }
@@ -13659,7 +14143,7 @@ function vrSavePatientEdit(pid, rid){
   pt.phone=newPhone;
   // نحدّث الطبيب دائماً حتى لو أصبح فارغاً (بدون طبيب)
   if(doctorChanged){ pt.doctorName=newDoctor; if(!newDoctor) pt.doctorId=''; }
-  save('patients',patients);
+  saveOne('patients',patients,pt);
   if(pt.phone) addToPhoneBook(pt.name, pt.phone);
 
   // Update request patientName and doctorName too
@@ -13674,7 +14158,7 @@ function vrSavePatientEdit(pid, rid){
       const doc=doctors.find(d=>d.name===newDoctor);
       if(doc){ r.doctorId=doc.id; if(pt) pt.doctorId=doc.id; }
     }
-    save('requests',requests);
+    saveOne('requests',requests,r);
   }
 
   renderAll();
@@ -14189,7 +14673,7 @@ function _autoSaveResults(){
     });
     if(allFilled) req.status='done';
     else if(req.status!=='done') req.status='inprogress';
-    save('requests',requests);
+    saveOne('requests',requests,req);
     // أثناء إدخال النتائج: تحديث الـ badges فقط بدون renderRequests
     // renderRequests تُسبِّب إعادة بناء DOM وتعطيل التركيز على الحقول
     updateDashboard(); updateBadges();
@@ -14306,7 +14790,7 @@ function _openSpecialExamInline(reqId, examType){
       if(v==='__manual__'){const m=document.getElementById('rv-manual-'+t.id);v=m?m.value:'';}
       if(v!==undefined&&v!=='') req.results[t.id]=v;
     });
-    save('requests',requests);
+    saveOne('requests',requests,req);
   }
   window._specialExamInlineMode=true;
   window._specialExamInlineReqId=reqId;
@@ -14427,7 +14911,7 @@ function _vrAutoSave(){
       if(v==='__manual__'){const m=document.getElementById('vr-rv-manual-'+tid);v=m?m.value:'';}
       if(v!==undefined&&v!=='') r.results[tid]=v;
     });
-    save('requests',requests);
+    saveOne('requests',requests,r);
   },400);
 }
 // تحديث اسم الطبيب مباشرة من شريط إدخال النتائج
@@ -14445,8 +14929,8 @@ function resUpdateDoctor(sel){
   if(doc){
     req.doctorId=doc.id; req.doctorName=doc.name;
     const pt=patients.find(p=>p.id===req.patientId);
-    if(pt){ pt.doctorId=doc.id; pt.doctorName=doc.name; save('patients',patients); }
-    save('requests',requests);
+    if(pt){ pt.doctorId=doc.id; pt.doctorName=doc.name; saveOne('patients',patients,pt); }
+    saveOne('requests',requests,req);
     showNotif('تم','تم تحديث الطبيب ✅','success');
   }
 }
@@ -14456,8 +14940,8 @@ function resUpdateDoctorManual(inp){
   const req=requests.find(r=>r.id===currentReqId); if(!req) return;
   req.doctorId=''; req.doctorName=inp.value.trim();
   const pt=patients.find(p=>p.id===req.patientId);
-  if(pt){ pt.doctorId=''; pt.doctorName=inp.value.trim(); save('patients',patients); }
-  save('requests',requests);
+  if(pt){ pt.doctorId=''; pt.doctorName=inp.value.trim(); saveOne('patients',patients,pt); }
+  saveOne('requests',requests,req);
   showNotif('تم','تم تحديث الطبيب ✅','success');
 }
 
@@ -14478,7 +14962,7 @@ function finalizeResult(){
   // 🔎 Delta Check — فحص التجاوزات قبل الاعتماد النهائي (إدخال يدوي)
   const _doFinalize=function(){
     req.status='done';
-    save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
+    saveOne('requests',requests,req);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
   };
   try{
     if(window.DeltaCheck && DeltaCheck.getConfig().enabled){
@@ -14493,7 +14977,7 @@ function finalizeResult(){
         onApprove:_doFinalize,
         onCancel:function(kind){
           // لا نعتمد — نُبقي القيم محفوظة كمسودة بدون تحويل الحالة إلى done
-          save('requests',requests);
+          saveOne('requests',requests,req);
           try{ if(kind!=='retest') showNotif('لم تُعتمد','تم إلغاء الاعتماد — القيم محفوظة كمسودة','warning'); }catch(e){}
         }
       });
@@ -15041,7 +15525,7 @@ function _saveGrouping(){
   if(cleanPages.length === 0) cleanPages.push(state.catOrder.slice());
 
   req.pageGroups = cleanPages;
-  save('requests', requests);
+  saveOne('requests', requests, req);
 
   showNotif('تم','✅ تم حفظ توزيع التجميع','success');
   _closeGroupingModal();
@@ -15065,7 +15549,7 @@ function finalizeAndPrint(){
     // حفظ النتائج فقط بدون طباعة
     const reqOnly = collectResults(); if(!reqOnly) return;
     reqOnly.status = 'done';
-    save('requests',requests); renderRequests(); updateDashboard(); updateBadges(); loadResultsDropdown(); loadPrintDropdown();
+    saveOne('requests',requests,reqOnly); renderRequests(); updateDashboard(); updateBadges(); loadResultsDropdown(); loadPrintDropdown();
     return;
   }
   // ────────────────────────────────────────────────────
@@ -15090,7 +15574,7 @@ function finalizeAndPrint(){
     }
   }
   req.status='done';
-  save('requests',requests);
+  saveOne('requests',requests,req);
   renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
   currentReqId=id;
   doPrint(id);
@@ -15363,7 +15847,7 @@ function saveNormallyOverride(localKey, testId, reqId){
   DB.set(localKey,data);
   const modal=document.getElementById('m-normally-temp');if(modal)modal.remove();
   // Save any entered results BEFORE reloading to prevent data loss
-  const req=collectResults(); if(req) save('requests',requests);
+  const req=collectResults(); if(req) saveOne('requests',requests,req);
   showNotif('تم','تم حفظ القيم المخصصة لهذا الطلب ✅','success');
   loadResultEntry();
 }
@@ -15372,7 +15856,7 @@ function clearNormallyOverride(localKey){
   DB.del(localKey);
   const modal=document.getElementById('m-normally-temp');if(modal)modal.remove();
   // Save any entered results BEFORE reloading to prevent data loss
-  const req=collectResults(); if(req) save('requests',requests);
+  const req=collectResults(); if(req) saveOne('requests',requests,req);
   showNotif('تم','تم إزالة التعديل المحلي','success');
   loadResultEntry();
 }
@@ -17628,7 +18112,7 @@ function doPrint(reqId){
       if(typeof _shouldPrintLocal==='function' && !_shouldPrintLocal()){
         try{
           var _rq=requests.find(function(r){return r.id===currentReqId;});
-          if(_rq){ _rq.printed=true; _rq._updatedAt=Date.now(); save('requests',requests); }
+          if(_rq){ _rq.printed=true; _rq._updatedAt=Date.now(); saveOne('requests',requests,_rq); }
           try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
           try{ if(typeof _wsCallPatient==='function') _wsCallPatient(currentReqId); }catch(_){}
         }catch(e){}
@@ -17764,7 +18248,7 @@ function doPrint(reqId){
   }
   req.printed=true;
   req._updatedAt=Date.now(); // وقت التعديل — يُستخدم في المزامنة الذكية
-  save('requests',requests);
+  saveOne('requests',requests,req);
   // ⭐ النداء يبدأ فور الطباعة (لا بعد 5 ثوانٍ من التحديث الدوري)
   try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
   try{ if(typeof _wsCallPatient==='function') _wsCallPatient(req.id); }catch(_){}
@@ -18106,7 +18590,7 @@ function shareWhatsApp(){
         if(typeof _spMarkAllPrinted === 'function') _spMarkAllPrinted(req);
         if(!req.resultDate) req.resultDate = new Date().toISOString().split('T')[0];
         req._updatedAt = Date.now();
-        save('requests', requests);
+        saveOne('requests', requests, req);
         try{ if(typeof _wsMarkPrinted === 'function') _wsMarkPrinted(req.id); }catch(_){}
         try{ if(typeof renderRequests === 'function') renderRequests(); }catch(_){}
         try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(_){}
@@ -19723,7 +20207,7 @@ function addTestToReq(tid){
   }
   req.tests.push(tid);
   if(!req.results) req.results={};
-  save('requests',requests);
+  saveOne('requests',requests,req);
   document.getElementById('res-add-test-srch').value='';
   document.getElementById('res-add-test-results').style.display='none';
   // إذا كان التحليل خاصاً (أدرار / خروج / سائل منوي) — افتح واجهة الإدخال الخاصة به فوراً
@@ -19744,7 +20228,7 @@ function removeTestFromReq(tid, id){
   if(!confirm('حذف هذا التحليل من الطلب؟')) return;
   req.tests = req.tests.filter(x=>x!==tid);
   if(req.results) delete req.results[tid];
-  save('requests',requests);
+  saveOne('requests',requests,req);
   loadResultEntry();
   showNotif('تم','تم حذف التحليل من الطلب','success');
 }
@@ -26757,7 +27241,7 @@ async function saveCultureEntry(){
       };
       _stamp(newPt);
       patients.push(newPt);
-      save('patients',patients);
+      saveOne('patients',patients,newPt);
       if(newPt.phone) addToPhoneBook(newPt.name, newPt.phone);
     }
     // حدّث الحقل المخفي
@@ -27613,7 +28097,7 @@ function saveUAEntry(){
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._uaReqId=null;
   }
   closeModal('m-ua');
@@ -27655,7 +28139,7 @@ function saveAndPrintUA(){
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._uaReqId=null;
   }
   closeModal('m-ua');
@@ -28343,7 +28827,7 @@ function saveStoolEntry(){
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
@@ -28389,7 +28873,7 @@ function saveAndPrintStool(){
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
@@ -28729,7 +29213,7 @@ function saveAndShareUAWhatsApp(){
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._uaReqId=null;
   }
   closeModal('m-ua');
@@ -28777,7 +29261,7 @@ function saveAndShareStoolWhatsApp(){
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
@@ -31654,7 +32138,7 @@ function saveSemenEntry(){
       };
       _stamp(newPt);
       patients.push(newPt);
-      save('patients',patients);
+      saveOne('patients',patients,newPt);
       if(newPt.phone) addToPhoneBook(newPt.name, newPt.phone);
     }
     const idEl=document.getElementById('semen-pt-id');
@@ -31684,7 +32168,7 @@ function saveSemenEntry(){
   const _spBackReqId = window._semenReqId || window._specialExamInlineReqId || null;
   if(window._semenReqId){
     const req=requests.find(r=>r.id===window._semenReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._semenReqId=null;
   }
   closeModal('m-semen-exam');
@@ -33177,7 +33661,7 @@ function wqAdvance(rid){
   if(!r || r.status==='done') return;
   const nextStatus = { pending:'inprogress', inprogress:'done' };
   r.status = nextStatus[r.status];
-  save('requests', requests);
+  saveOne('requests', requests, r);
   renderWaitQueue();
   renderAll();
   updateBadges();
@@ -33742,7 +34226,7 @@ function _spMarkPrinted(reqId, kind){
     }
 
     r._updatedAt = Date.now();
-    save('requests', requests);
+    saveOne('requests', requests, r);
 
     try{ if(typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
     try{ if(typeof renderRequests === 'function') renderRequests(); }catch(e){}
@@ -33759,7 +34243,7 @@ function _wsMarkPrinted(reqId){
     if(!r || r.wsPrinted) return;
     r.wsPrinted = true;
     r._updatedAt = Date.now();
-    save('requests', requests);
+    saveOne('requests', requests, r);
     if(typeof updateWaitScreen === 'function') updateWaitScreen();
     _wsCallPatient(reqId);
   }catch(e){}
@@ -36791,7 +37275,7 @@ function cbcFlush(sampleId){
     const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
     if(_otherDone) targetReq.status='done';
     // إذا كان هناك تحاليل أخرى لم تُكمَل — يبقى status pending
-    if(typeof save==='function') save('requests',requests);
+    if(typeof saveOne==='function') saveOne('requests',requests,targetReq); else if(typeof save==='function') save('requests',requests);
     // تحديث شارة "نتائج الأجهزة" فور وصول CBC دون تغيير التبويب المعروض (المتطلبان ٢ و ٣)
     if(typeof _updateDeviceReqBadge==='function'){ try{ _updateDeviceReqBadge(); }catch(_){} }
     // إن كان المستخدم يعرض تبويب "نتائج الأجهزة" الآن، حدّث القائمة بنفس الفلتر
@@ -36829,7 +37313,7 @@ function cbcFlush(sampleId){
           targetReq.printed=true;
           if(!targetReq.resultDate) targetReq.resultDate=new Date().toISOString().split('T')[0];
           targetReq._updatedAt=Date.now();
-          if(typeof save==='function') save('requests',requests);
+          if(typeof saveOne==='function') saveOne('requests',requests,targetReq); else if(typeof save==='function') save('requests',requests);
           if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(_){} }
           if(typeof renderRequests==='function'){ try{ renderRequests(); }catch(_){} }
           // ⭐ استعادة لطيفة: لا ترمش ولا تقاطع الكتابة إن كان التركيز سليماً
@@ -37955,8 +38439,8 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   //    الآن نمرّ عبر save(): كتابة IDB + كاش + بثّ LAN في خطوة واحدة.
   let _saved=false;
   try{
-    if(typeof save==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
-      save('requests', reqs);
+    if(typeof saveOne==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
+      saveOne('requests', reqs, req);
       _saved=true;
     }
   }catch(e){ console.warn('[LIS] save() path failed',e); }
@@ -43059,7 +43543,7 @@ setTimeout(function(){
         });
         if(allFilled) req.status='done';
         else if(req.status!=='done') req.status='inprogress';
-        if(typeof save==='function') save('requests',requests);
+        if(typeof saveOne==='function') saveOne('requests',requests,req); else if(typeof save==='function') save('requests',requests);
         // تحديث الـ badges فقط بتأخير إضافي لتجنب إعاقة الكتابة
         setTimeout(function(){
           if(typeof updateDashboard==='function') updateDashboard();
@@ -47384,7 +47868,7 @@ function _flush(){
   try{ _collectInto(req); }catch(e){ console.warn('[ResultSync] collect', e); }
   req._updatedAt = Date.now();          // ⭐ الختم الذي كان ناقصاً
   _lastSeen[req.id] = req._updatedAt;   // لا تُعِد رسم شاشتنا بسبب بثّنا
-  try{ save('requests', requests); }catch(e){ console.warn('[ResultSync] save', e); }
+  try{ saveOne('requests', requests, req); }catch(e){ console.warn('[ResultSync] save', e); }
 }
 window._flushResultSync = _flush;
 
@@ -48567,7 +49051,7 @@ window.MLCP = {
         req.resultDetails.CBC.editedAt = new Date().toISOString();
       }
       req._updatedAt = Date.now();
-      if (typeof save === 'function') save('requests', requests);
+      if (typeof saveOne === 'function') saveOne('requests', requests, req); else if (typeof save === 'function') save('requests', requests);
       if (typeof updateBadges === 'function') { try { updateBadges(); } catch (e) {} }
       var st = document.getElementById('cbcE-status');
       if (st) st.textContent = '✅ تم الحفظ — الطباعة ستعتمد آخر تعديل';
