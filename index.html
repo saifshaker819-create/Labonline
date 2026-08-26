@@ -5972,6 +5972,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <span id="storage-next-d-archive"></span>
                 </div>
               </div>
+
+              <!-- ⭐ فحص سلامة التخزين — بديل Console -->
+              <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:12px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                  <div style="font-size:11px;color:var(--text2)">
+                    🧪 <b style="color:var(--primary)">فحص سلامة التخزين</b> — يقارن عدد السجلات على القرص مع الذاكرة
+                  </div>
+                  <button class="btn btn-p btn-sm" onclick="runStorageHealthCheck()">🔍 افحص الآن</button>
+                </div>
+                <div id="storage-health-out" style="display:none;margin-top:10px;font-size:11px"></div>
+              </div>
             </div>
               </div></div>
             </div><!-- /db-acc-storage -->
@@ -8239,7 +8250,7 @@ const IDB=(()=>{
   // جداً مع النص العربي. القياس على ٢٠٬٠٠٠ طلب: ١٧.٧ ثانية تجميد عند كل حفظ.
   // IndexedDB يخزّن الكائنات أصلاً (structured clone) بتنفيذ C++ — أسرع ٣٠ ضعفاً.
   // التوافق الرجعي: الصفوف القديمة (تبدأ بـ \x01) تُقرأ كما كانت تماماً.
-  async function get(key){
+  async function _rawGet(key){
     try{
       const db=await open();
       return new Promise((res,rej)=>{
@@ -8259,7 +8270,7 @@ const IDB=(()=>{
     }catch{return null;}
   }
 
-  async function set(key,value){
+  async function _rawSet(key,value){
     try{
       // ألغِ أي كتابة مؤجّلة لنفس المفتاح — الكتابة المباشرة هنا أحدث
       try{ if(typeof _idbCancelPending==='function') _idbCancelPending(key); }catch(e){}
@@ -8278,7 +8289,7 @@ const IDB=(()=>{
     }catch{return false;}
   }
 
-  async function del(key){
+  async function _rawDel(key){
     try{
       const db=await open();
       return new Promise((res)=>{
@@ -8322,6 +8333,7 @@ const IDB=(()=>{
         return ((est.usage||0)/1024/1024).toFixed(2);
       }
       // fallback: حساب تقديري من البيانات المخزنة
+      // ⚠️ مع وضع السجلات المفردة قد تكون عشرات الآلاف — لا نقرأها كلها
       const all=await getAll();
       let total=all.reduce((s,r)=>{
         const v=r&&r.v;
@@ -8343,7 +8355,271 @@ const IDB=(()=>{
     return '500'; // fallback افتراضي
   }
 
-  return{get,set,del,getAllKeys,getAll,usedMB,quotaMB};
+  // ═════════════════════════════════════════════════════════════
+  // ⭐ وضع السجلات المفردة (Record Mode)
+  //
+  // المشكلة: كل save('requests',requests) كان يعيد كتابة المصفوفة
+  // كاملة — عند ٣٠ ألف طلب يعني نسخ ٣٠ـMB في كل ضغطة حفظ.
+  //
+  // الحل: كل سجل يُخزّن في صفّ مستقل بمفتاح "المفتاح + \u0001 + id"
+  // داخل نفس مخزن kv — بلا ترقية نسخة IndexedDB وبلا خطر onblocked.
+  //
+  // الأمان: إن لم تصل قائمة المُعدَّلين (dirtyIds) نكتب كل السجلات
+  // — أبطأ لكن صحيح ١٠٠٪. لذلك أي موقع لم يُحوّل يبقى يعمل تماماً كما اليوم.
+  // ═════════════════════════════════════════════════════════════
+  const REC_SEP='\u0001';
+  const REC_END='\uffff';
+  // الأطول أولاً حتى لا يطابق اسم قصير داخل اسم أطول
+  const RECORD_COLLS=['stoolExamRecords','cultureRecords','semenRecords','uaRecords',
+                      'patients','requests','invoices','billing'];
+  const _lastErr={};   // pk -> آخر سبب فشل (للتشخيص)
+  const _recMode={};   // pk -> true/false (كاش في الذاكرة)
+  const _migLock={};   // pk -> Promise (يمنع ترحيلين متزامنين)
+
+  function collOf(key){
+    if(typeof key!=='string') return null;
+    for(let i=0;i<RECORD_COLLS.length;i++){
+      const c=RECORD_COLLS[i];
+      if(key.length>c.length && key.slice(-c.length)===c && key[key.length-c.length-1]==='_') return c;
+    }
+    return null;
+  }
+  function _range(key){ return IDBKeyRange.bound(key+REC_SEP, key+REC_SEP+REC_END); }
+  function _metaK(key){ return key+'\u0002recmode'; }
+
+  async function _isRecMode(key){
+    if(_recMode[key]!==undefined) return _recMode[key];
+    const m=await _rawGet(_metaK(key));
+    _recMode[key]=(m===1||m===true);
+    return _recMode[key];
+  }
+
+  function _countRecs(key){
+    return open().then(function(db){
+      return new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).count(_range(key));
+          rq.onsuccess=function(){res(rq.result||0);};
+          rq.onerror=function(){ _lastErr[key]='count: '+((rq.error&&rq.error.message)||'error'); res(-1); };
+        }catch(e){ _lastErr[key]='count(throw): '+(e&&e.message||e); res(-1); }
+      });
+    }).catch(function(e){ _lastErr[key]='open: '+(e&&e.message||e); return -1; });
+  }
+
+  // عدّ احتياطي عبر المفاتيح — إن فشل count() لأي سبب
+  function _countKeysFallback(key){
+    return open().then(function(db){
+      return new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).getAllKeys(_range(key));
+          rq.onsuccess=function(){ res((rq.result||[]).length); };
+          rq.onerror=function(){ res(-1); };
+        }catch(e){ res(-1); }
+      });
+    }).catch(function(){ return -1; });
+  }
+
+  // كتابة دفعة واحدة داخل معاملة واحدة
+  function _txBatch(db, fn){
+    return new Promise(function(res){
+      let tx;
+      try{ tx=db.transaction(STORE,'readwrite'); }catch(e){ _lastErr['__tx']='transaction: '+(e&&e.message||e); res(false); return; }
+      const st=tx.objectStore(STORE);
+      try{ fn(st); }catch(e){ _lastErr['__tx']='put: '+(e&&e.message||e); try{tx.abort();}catch(_){} res(false); return; }
+      tx.oncomplete=function(){res(true);};
+      tx.onerror   =function(){ _lastErr['__tx']='tx: '+((tx.error&&tx.error.message)||'error'); res(false); };
+      tx.onabort   =function(){ _lastErr['__tx']='abort: '+((tx.error&&tx.error.message)||'aborted'); res(false); };
+    });
+  }
+
+  const CHUNK=1200;
+
+  // ① الترحيل: من blob واحد إلى سجلات مفردة — مرة واحدة فقط
+  //    الـ blob القديم يُترك سليماً كشبكة أمان
+  async function _migrate(key, arr){
+    if(_migLock[key]) return _migLock[key];
+    _migLock[key]=(async function(){
+      try{
+        if(!Array.isArray(arr)){ _lastErr[key]='لا توجد مصفوفة للترحيل'; return false; }
+        if(arr.length===0){ _lastErr[key]='المجموعة فارغة'; return false; }
+        const db=await open();
+        const valid=[];
+        for(let i=0;i<arr.length;i++){ const r=arr[i]; if(r&&typeof r==='object'&&r.id!=null) valid.push(r); }
+        if(valid.length===0){ _lastErr[key]='لا يوجد سجل بمعرّف id صالح'; return false; }
+        for(let i=0;i<valid.length;i+=CHUNK){
+          const part=valid.slice(i,i+CHUNK);
+          const ok=await _txBatch(db,function(st){
+            for(let j=0;j<part.length;j++) st.put({k:key+REC_SEP+String(part[j].id), v:part[j], raw:1});
+          });
+          if(!ok){ _lastErr[key]='فشلت الكتابة عند السجل '+i+(_lastErr['__tx']?(' — '+_lastErr['__tx']):''); return false; }
+        }
+        // التحقّق — مع عدّ احتياطي إن تعذّر count()
+        let got=await _countRecs(key);
+        if(got<0) got=await _countKeysFallback(key);
+        if(got>=0 && got<valid.length){
+          _lastErr[key]='تحقّق فاشل: على القرص '+got+' من '+valid.length;
+          console.warn('[IDB] migration verify failed',key,got,'<',valid.length);
+          return false;
+        }
+        await _rawSet(_metaK(key),1);
+        _recMode[key]=true;
+        delete _lastErr[key];
+        console.log('[IDB] ✓ record-mode enabled for',key,'('+valid.length+' سجل)');
+        return true;
+      }catch(e){ _lastErr[key]='استثناء: '+(e&&e.message||e); console.warn('[IDB] migrate error',key,e); return false; }
+      finally{ delete _migLock[key]; }
+    })();
+    return _migLock[key];
+  }
+
+  // ② قراءة كل سجلات مجموعة
+  async function _readColl(key){
+    try{
+      const db=await open();
+      return await new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).getAll(_range(key));
+          rq.onsuccess=function(){
+            const rows=rq.result||[];
+            const out=new Array(rows.length);
+            for(let i=0;i<rows.length;i++) out[i]=rows[i].v;
+            res(out);
+          };
+          rq.onerror=function(){res(null);};
+        }catch(e){res(null);}
+      });
+    }catch(e){ return null; }
+  }
+
+  // ③ كتابة جزئية — المسار السريع (تكلفة ثابتة)
+  async function _writeSome(key, arr, ids){
+    try{
+      const db=await open();
+      const byId=new Map();
+      for(let i=0;i<arr.length;i++){ const r=arr[i]; if(r&&r.id!=null) byId.set(String(r.id),r); }
+      const list=Array.from(ids);
+      for(let i=0;i<list.length;i+=CHUNK){
+        const part=list.slice(i,i+CHUNK);
+        const ok=await _txBatch(db,function(st){
+          for(let j=0;j<part.length;j++){
+            const id=String(part[j]);
+            const r=byId.get(id);
+            if(r) st.put({k:key+REC_SEP+id, v:r, raw:1});
+            else  st.delete(key+REC_SEP+id);
+          }
+        });
+        if(!ok) return false;
+      }
+      return true;
+    }catch(e){ console.warn('[IDB] writeSome error',key,e); return false; }
+  }
+
+  // ④ كتابة كاملة — مسار الأمان (يُستعمل حين لا نعرف ما تغيّر)
+  async function _writeAll(key, arr){
+    try{
+      const db=await open();
+      const existing=await new Promise(function(res){
+        try{
+          const tx=db.transaction(STORE,'readonly');
+          const rq=tx.objectStore(STORE).getAllKeys(_range(key));
+          rq.onsuccess=function(){res(rq.result||[]);};
+          rq.onerror=function(){res([]);};
+        }catch(e){res([]);}
+      });
+      const keep=new Set();
+      const valid=[];
+      for(let i=0;i<arr.length;i++){
+        const r=arr[i];
+        if(r&&typeof r==='object'&&r.id!=null){ valid.push(r); keep.add(key+REC_SEP+String(r.id)); }
+      }
+      const toDel=[];
+      for(let i=0;i<existing.length;i++) if(!keep.has(existing[i])) toDel.push(existing[i]);
+      for(let i=0;i<toDel.length;i+=CHUNK){
+        const part=toDel.slice(i,i+CHUNK);
+        const ok=await _txBatch(db,function(st){ for(let j=0;j<part.length;j++) st.delete(part[j]); });
+        if(!ok) return false;
+      }
+      for(let i=0;i<valid.length;i+=CHUNK){
+        const part=valid.slice(i,i+CHUNK);
+        const ok=await _txBatch(db,function(st){
+          for(let j=0;j<part.length;j++) st.put({k:key+REC_SEP+String(part[j].id), v:part[j], raw:1});
+        });
+        if(!ok) return false;
+      }
+      return true;
+    }catch(e){ console.warn('[IDB] writeAll error',key,e); return false; }
+  }
+
+  // ── الواجهة العامة — نفس توقيع الدوال القديمة تماماً ──
+  async function get(key){
+    const c=collOf(key);
+    if(!c) return _rawGet(key);
+    try{
+      if(await _isRecMode(key)){
+        const arr=await _readColl(key);
+        if(Array.isArray(arr)) return arr;
+        return _rawGet(key);                    // سقوط آمن
+      }
+      const blob=await _rawGet(key);
+      if(!Array.isArray(blob)) return blob;     // لا شيء لترحيله
+      await _migrate(key, blob);                // ترحيل لمرة واحدة
+      return blob;
+    }catch(e){ console.warn('[IDB] get fallback',key,e); return _rawGet(key); }
+  }
+
+  // dirtyIds: Set من المعرّفات المُعدَّلة — إن غابت تُكتب المجموعة كلها
+  async function set(key,value,dirtyIds){
+    const c=collOf(key);
+    if(!c || !Array.isArray(value)) return _rawSet(key,value);
+    try{
+      if(!(await _isRecMode(key))){
+        const ok=await _migrate(key, value);
+        if(!ok) return _rawSet(key,value);      // فشل الترحيل → السلوك القديم
+        return true;
+      }
+      if(dirtyIds && dirtyIds.size){
+        if(await _writeSome(key,value,dirtyIds)) return true;
+        console.warn('[IDB] delta write failed — falling back to full',key);
+      }
+      if(await _writeAll(key,value)) return true;
+      return _rawSet(key,value);                // آخر شبكة أمان
+    }catch(e){ console.warn('[IDB] set fallback',key,e); return _rawSet(key,value); }
+  }
+
+  async function del(key){
+    const c=collOf(key);
+    if(!c) return _rawDel(key);
+    try{
+      const db=await open();
+      await _txBatch(db,function(st){ st.delete(_range(key)); });
+      await _rawDel(_metaK(key));
+      _recMode[key]=false;
+      delete _recMode[key];
+    }catch(e){ console.warn('[IDB] del coll error',key,e); }
+    return _rawDel(key);
+  }
+
+  // لقطة احتياطية بالصيغة القديمة (blob) — تُبقي الرجوع لنسخة أقدم ممكناً
+  function snapshotLegacy(key,value){ return _rawSet(key,value); }
+  function isRecordMode(key){ return _isRecMode(key); }
+  async function countRecords(key){
+    let n=await _countRecs(key);
+    if(n<0) n=await _countKeysFallback(key);
+    return n;
+  }
+  function lastError(key){ return _lastErr[key]||''; }
+  // ترحيل يدوي من مصفوفة جاهزة (مثلاً من ذاكرة البرنامج)
+  async function forceMigrate(key,arr){
+    if(await _isRecMode(key)) return true;
+    return _migrate(key,arr);
+  }
+
+  return{get,set,del,getAllKeys,getAll,usedMB,quotaMB,
+         snapshotLegacy,isRecordMode,countRecords,collOf,
+         lastError,forceMigrate};
 })();
 
 // ══════════════════════════════════════════════════════════════
@@ -8367,21 +8643,35 @@ const _MC={};
 // ══════════════════════════════════════════════════════════════
 const _idbPending={}, _idbTimers={}, _idbDeadline={};
 
+// ⭐ قائمة معرّفات السجلات المُعدّلة لكل مفتاح:
+//    Set  = اكتب هذه السجلات فقط   (المسار السريع)
+//    null = لا نعرف ماذا تغيّر ⇒ اكتب الكل (مسار الأمان)
+//    عند الدمج، null يطغى دائماً — الأحوط يفوز.
+const _idbPendingIds={};
+
 function _idbCancelPending(pk){
   if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
-  delete _idbPending[pk]; delete _idbDeadline[pk];
+  delete _idbPending[pk]; delete _idbDeadline[pk]; delete _idbPendingIds[pk];
 }
 function _idbWriteNow(pk){
   if(_idbTimers[pk]){ clearTimeout(_idbTimers[pk]); delete _idbTimers[pk]; }
   delete _idbDeadline[pk];
   if(!(pk in _idbPending)) return;
   const v=_idbPending[pk];
-  delete _idbPending[pk];
-  try{ IDB.set(pk,v).catch(e=>console.warn('[DB] IDB set error',pk,e)); }
+  const ids=_idbPendingIds[pk];
+  delete _idbPending[pk]; delete _idbPendingIds[pk];
+  try{ IDB.set(pk,v,ids||undefined).catch(e=>console.warn('[DB] IDB set error',pk,e)); }
   catch(e){ console.warn('[DB] IDB set error',pk,e); }
 }
-function _idbWriteLater(pk,v){
+function _idbWriteLater(pk,v,ids){
   _idbPending[pk]=v;
+  if(!ids){
+    _idbPendingIds[pk]=null;                        // كتابة كاملة
+  } else if(_idbPendingIds[pk]!==null){
+    const cur=_idbPendingIds[pk]||new Set();
+    ids.forEach(function(x){ cur.add(x); });
+    _idbPendingIds[pk]=cur;
+  }
   const now=Date.now();
   if(!_idbDeadline[pk]) _idbDeadline[pk]=now+1500;
   if(_idbTimers[pk]) clearTimeout(_idbTimers[pk]);
@@ -8424,7 +8714,12 @@ const DB={
       if(_IDB_KEYS.has(k)){
         // بيانات كبيرة: IDB فقط — امسح من localStorage فوراً
         localStorage.removeItem(pk);
-        _idbWriteLater(pk,v);   // ⚡ كتابة مُجمَّعة بدل كتابة كاملة عند كل save()
+        // ⭐ استهلك قائمة المُعدّلين وامسحها دائماً — حتى لا تتسرّب لحفظة لاحقة
+        let _ids;
+        if(!_touchedBad[k] && _touched[k] && _touched[k].size) _ids=_touched[k];
+        delete _touched[k]; delete _touchedBad[k];
+        if(_ids) _scheduleLegacySnapshot(pk);
+        _idbWriteLater(pk,v,_ids);   // ⚡ كتابة مُجمَّعة بدل كتابة كاملة عند كل save()
       } else if(k==='settings' && v && typeof v==='object'){
         // الإعدادات: استبعد الحقول الكبيرة من localStorage (تذهب لـ IDB عبر setBig)
         const slim={};
@@ -8469,6 +8764,53 @@ const DB={
 };
 
 // load/save — نفس الواجهة القديمة بالضبط (لا يتغير باقي الكود)
+// ═════════════════════════════════════════════════════════════
+// ⭐ saveOne — احفظ سجلاً واحداً بدل المجموعة كلها
+//
+//   قبل:  save('requests', requests);            ← يكتب كل الطلبات على القرص
+//   بعد:  saveOne('requests', requests, req);    ← يكتب هذا الطلب فقط
+//
+//   كل شيء آخر متطابق: نفس الكاش، نفس بثّ LAN، نفس المتغيرات.
+//   وأي موقع يبقى على save() يعمل تماماً كما كان — لا شيء ينكسر.
+// ═════════════════════════════════════════════════════════════
+const _DELTA_KEYS=new Set(['patients','requests','invoices','billing',
+  'cultureRecords','uaRecords','stoolExamRecords','semenRecords']);
+
+const _touched={};      // k -> Set(ids)
+const _touchedBad={};   // k -> true  =>  أجبِر كتابة كاملة (مسار الأمان)
+
+function _touchRec(k,rec){
+  if(!_DELTA_KEYS.has(k)){ _touchedBad[k]=true; return; }
+  if(!rec||typeof rec!=='object'||rec.id==null){ _touchedBad[k]=true; return; }
+  (_touched[k]||(_touched[k]=new Set())).add(String(rec.id));
+}
+
+// saveOne(key, wholeArray, rec1 [, rec2 ...])
+function saveOne(k,arr){
+  try{
+    if(arguments.length<3){ _touchedBad[k]=true; }
+    else for(var i=2;i<arguments.length;i++) _touchRec(k,arguments[i]);
+  }catch(e){ _touchedBad[k]=true; }
+  save(k,arr);
+}
+
+// ── لقطة احتياطية بالصيغة القديمة (blob) ────────────────
+// مع الكتابة الجزئية يصبح الـ blob القديم قديماً؛ نحدّثه كل ٣ دقائق في
+// الخلفية حتى يبقى الرجوع إلى نسخة أقدم من البرنامج ممكناً.
+const _LEGACY_SNAP_MS=180000;
+const _legacySnapTimers={};
+function _scheduleLegacySnapshot(pk){
+  if(_legacySnapTimers[pk]) return;
+  _legacySnapTimers[pk]=setTimeout(function(){
+    delete _legacySnapTimers[pk];
+    try{
+      const v=_MC[pk];
+      if(Array.isArray(v)&&IDB&&IDB.snapshotLegacy) IDB.snapshotLegacy(pk,v);
+    }catch(e){}
+  },_LEGACY_SNAP_MS);
+}
+
+// load/save
 function load(k,def){return DB.get(k)||def;}
 function save(k,v){
   DB.set(k,v);
@@ -8478,6 +8820,145 @@ function save(k,v){
   try{ if(typeof window._lanOnSave === 'function') window._lanOnSave(k,v); }catch(e){}
   try{ if(!window._tgApplying && typeof window._tgOnSave === 'function') window._tgOnSave(k); }catch(e){}
 }
+// متاحة لبقية كتل <script> (مزامنة LAN ومسارات الأجهزة)
+window.saveOne=saveOne;
+
+// ── تفعيل وضع السجلات من ذاكرة البرنامج ────────────────────────
+// لا نعتمد على وجود blob قديم في IDB: بعض النسخ تحمل البيانات من
+// localStorage. نأخذ المصفوفات من الذاكرة ونرحّلها مباشرة.
+window._ensureRecordModeFromMemory=async function(report){
+  const out=[];
+  try{
+    const pfx=DB._pfx();
+    for(const k of _DELTA_KEYS){
+      const pk=pfx+k;
+      let mode=false;
+      try{ mode=await IDB.isRecordMode(pk); }catch(e){}
+      if(mode){ out.push({k:k, ok:true, skipped:true}); continue; }
+      let arr=_MC[pk];
+      if(!Array.isArray(arr)){ try{ arr=DB.get(k); }catch(e){} }
+      if(!Array.isArray(arr)||arr.length===0){ out.push({k:k, ok:false, empty:true}); continue; }
+      let ok=false;
+      try{ ok=await IDB.forceMigrate(pk, arr); }catch(e){}
+      out.push({k:k, ok:ok, n:arr.length, err: ok?'':(IDB.lastError?IDB.lastError(pk):'')});
+      if(ok){ try{ await IDB.snapshotLegacy(pk, arr); }catch(e){} }
+    }
+  }catch(e){ console.warn('[IDB] ensureRecordMode',e); }
+  if(report) console.log('[IDB] ensureRecordModeFromMemory',out);
+  return out;
+};
+
+// ── تشخيص سريع من وحدة التحكم (Console) ──────────────────
+// اكتب medlabStorageInfo() لترى هل وضع السجلات المفردة مفعّل وكم سجلاً في كل مجموعة
+// ⭐ فحص سلامة التخزين — يعرض النتيجة داخل البرنامج (لا يحتاج Console)
+window.runStorageHealthCheck=async function(){
+  const out=document.getElementById('storage-health-out');
+  if(out){ out.style.display='block'; out.innerHTML='<span style="color:var(--text2)">\u23f3 \u062c\u0627\u0631\u064d \u0627\u0644\u0641\u062d\u0635...</span>'; }
+  const names={patients:'\u0627\u0644\u0645\u0631\u0636\u0649',requests:'\u0627\u0644\u0637\u0644\u0628\u0627\u062a',invoices:'\u0627\u0644\u0641\u0648\u0627\u062a\u064a\u0631',billing:'\u0627\u0644\u0645\u062d\u0627\u0633\u0628\u0629',
+    cultureRecords:'\u0627\u0644\u0632\u0631\u0639',uaRecords:'\u0627\u0644\u0625\u062f\u0631\u0627\u0631',stoolExamRecords:'\u0627\u0644\u062e\u0631\u0648\u062c',semenRecords:'\u0627\u0644\u0633\u0627\u0626\u0644 \u0627\u0644\u0645\u0646\u0648\u064a'};
+  let rows='', mismatch=0, notMigrated=0, migrated=0, total=0, firstErr='';
+  try{
+    const pfx=DB._pfx();
+    for(const k of Object.keys(names)){
+      const pk=pfx+k;
+      let mode=false,n=-1;
+      try{ mode=await IDB.isRecordMode(pk); }catch(e){}
+      try{ n=await IDB.countRecords(pk); }catch(e){}
+      const memArr=_MC[pk];
+      const mem=Array.isArray(memArr)?memArr.length:0;
+      if(!mode && mem===0) continue;
+      total++;
+      let state, color;
+      if(!mode){
+        notMigrated++;
+        state='\u0644\u0645 \u064a\u064f\u0631\u062d\u0651\u0644 \u0628\u0639\u062f'; color='#e0a800';
+        const e=(IDB.lastError?IDB.lastError(pk):'');
+        if(e&&!firstErr) firstErr=e;
+      } else {
+        migrated++;
+        if(n===mem){ state='\u0645\u062a\u0637\u0627\u0628\u0642'; color='#0bbf6a'; }
+        else { mismatch++; state='\u0627\u062e\u062a\u0644\u0627\u0641'; color='#ff4d4d'; }
+      }
+      rows+='<tr>'
+        +'<td style="padding:5px 8px">'+names[k]+'</td>'
+        +'<td style="padding:5px 8px;text-align:center">'+(mode?'\u2705':'\u2014')+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;font-weight:800">'+(n<0?'?':n)+'</td>'
+        +'<td style="padding:5px 8px;text-align:center;font-weight:800">'+mem+'</td>'
+        +'<td style="padding:5px 8px;text-align:center"><span style="color:'+color+';font-weight:900">'+state+'</span></td>'
+        +'</tr>';
+    }
+  }catch(e){
+    if(out) out.innerHTML='<span style="color:#ff4d4d">\u274c \u062a\u0639\u0630\u0651\u0631 \u0627\u0644\u0641\u062d\u0635: '+(e&&e.message||e)+'</span>';
+    return;
+  }
+  let banner;
+  if(mismatch){
+    banner='<div style="background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.4);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-weight:800;color:#ff4d4d">\u26a0\ufe0f \u064a\u0648\u062c\u062f \u0627\u062e\u062a\u0644\u0627\u0641 \u0641\u064a '+mismatch+' \u0645\u062c\u0645\u0648\u0639\u0629 \u2014 \u062e\u0630 \u0646\u0633\u062e\u0629 \u0627\u062d\u062a\u064a\u0627\u0637\u064a\u0629 \u0648\u0631\u0627\u062c\u0650\u0639 \u0627\u0644\u0645\u0637\u0648\u0631</div>';
+  } else if(notMigrated){
+    banner='<div style="background:rgba(255,193,7,.12);border:1px solid rgba(255,193,7,.45);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-weight:800;color:#e0a800">'
+      +'\u26a0\ufe0f \u0644\u0645 \u064a\u064f\u0641\u0639\u0651\u0644 \u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639 \u0641\u064a '+notMigrated+' \u0645\u0646 '+total+' \u0645\u062c\u0645\u0648\u0639\u0629 \u2014 \u0628\u064a\u0627\u0646\u0627\u062a\u0643 \u0633\u0644\u064a\u0645\u0629 \u0648\u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062c \u064a\u0639\u0645\u0644\u060c \u0644\u0643\u0646 \u0628\u0627\u0644\u0633\u0631\u0639\u0629 \u0627\u0644\u0642\u062f\u064a\u0645\u0629.'
+      +'<div style="font-weight:600;margin-top:6px">\u0627\u0636\u063a\u0637 \u00ab\u0634\u063a\u0651\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644 \u0627\u0644\u0622\u0646\u00bb \u062b\u0645 \u0623\u0639\u062f \u0627\u0644\u0641\u062d\u0635.'+(firstErr?'<br><span style="font-size:10px;opacity:.85">\u0627\u0644\u0633\u0628\u0628: '+firstErr+'</span>':'')+'</div></div>'
+      +'<button class="btn btn-p btn-sm" style="margin-bottom:8px" onclick="runRecordMigrationNow()">\u26a1 \u0634\u063a\u0651\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644 \u0627\u0644\u0622\u0646</button>';
+  } else {
+    banner='<div style="background:rgba(0,245,147,.10);border:1px solid rgba(0,245,147,.35);border-radius:8px;padding:9px 12px;margin-bottom:8px;font-weight:800;color:#0bbf6a">\u2705 \u0643\u0644 \u0627\u0644\u0623\u0639\u062f\u0627\u062f \u0645\u062a\u0637\u0627\u0628\u0642\u0629 \u2014 \u0627\u0644\u062a\u062e\u0632\u064a\u0646 \u0633\u0644\u064a\u0645 ('+migrated+' \u0645\u0646 '+total+' \u0645\u062c\u0645\u0648\u0639\u0629 \u0639\u0644\u0649 \u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639)</div>';
+  }
+  if(out){
+    out.innerHTML = banner
+      + '<table style="width:100%;border-collapse:collapse;font-size:11px">'
+      + '<thead><tr style="color:var(--text2);font-size:10px">'
+      + '<th style="padding:4px 8px;text-align:right">\u0627\u0644\u0645\u062c\u0645\u0648\u0639\u0629</th>'
+      + '<th style="padding:4px 8px">\u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639</th>'
+      + '<th style="padding:4px 8px">\u0639\u0644\u0649 \u0627\u0644\u0642\u0631\u0635</th>'
+      + '<th style="padding:4px 8px">\u0641\u064a \u0627\u0644\u0630\u0627\u0643\u0631\u0629</th>'
+      + '<th style="padding:4px 8px">\u0627\u0644\u0646\u062a\u064a\u062c\u0629</th>'
+      + '</tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  try{
+    if(mismatch) showNotif('\u062a\u062d\u0630\u064a\u0631','\u064a\u0648\u062c\u062f \u0627\u062e\u062a\u0644\u0627\u0641 \u0641\u064a '+mismatch+' \u0645\u062c\u0645\u0648\u0639\u0629','error');
+    else if(notMigrated) showNotif('\u062a\u0646\u0628\u064a\u0647','\u0627\u0644\u0648\u0636\u0639 \u0627\u0644\u0633\u0631\u064a\u0639 \u063a\u064a\u0631 \u0645\u0641\u0639\u0651\u0644 \u0628\u0639\u062f','warning');
+    else showNotif('\u062a\u0645 \u0627\u0644\u0641\u062d\u0635','\u0627\u0644\u062a\u062e\u0632\u064a\u0646 \u0633\u0644\u064a\u0645 \u2705','success');
+  }catch(e){}
+};
+
+// ⭐ ترحيل يدوي من داخل البرنامج — مع إظهار سبب الفشل إن وُجد
+window.runRecordMigrationNow=async function(){
+  const out=document.getElementById('storage-health-out');
+  if(out) out.innerHTML='<span style="color:var(--text2)">\u23f3 \u062c\u0627\u0631\u064d \u0627\u0644\u062a\u0631\u062d\u064a\u0644... \u0644\u0627 \u062a\u063a\u0644\u0642 \u0627\u0644\u0628\u0631\u0646\u0627\u0645\u062c.</span>';
+  let res=[];
+  try{ res=await window._ensureRecordModeFromMemory(true); }
+  catch(e){ if(out) out.innerHTML='<span style="color:#ff4d4d">\u274c '+(e&&e.message||e)+'</span>'; return; }
+  const bad=res.filter(function(r){ return !r.ok && !r.empty; });
+  if(bad.length && out){
+    out.innerHTML='<div style="background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.4);border-radius:8px;padding:9px 12px;font-weight:800;color:#ff4d4d">\u274c \u0641\u0634\u0644 \u062a\u0631\u062d\u064a\u0644 '+bad.length+' \u0645\u062c\u0645\u0648\u0639\u0629</div>'
+      +'<div style="font-size:10px;color:var(--text2);margin-top:6px">'
+      +bad.map(function(r){ return r.k+': '+(r.err||'\u0633\u0628\u0628 \u063a\u064a\u0631 \u0645\u0639\u0631\u0648\u0641'); }).join('<br>')+'</div>';
+    try{ showNotif('\u062e\u0637\u0623','\u0641\u0634\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644 \u2014 \u0631\u0627\u062c\u0650\u0639 \u0627\u0644\u062a\u0641\u0627\u0635\u064a\u0644','error'); }catch(e){}
+    return;
+  }
+  try{ showNotif('\u062a\u0645','\u2705 \u0627\u0643\u062a\u0645\u0644 \u0627\u0644\u062a\u0631\u062d\u064a\u0644','success'); }catch(e){}
+  await window.runStorageHealthCheck();
+};
+
+window.medlabStorageInfo=async function(){
+  const pfx=DB._pfx();
+  const keys=['patients','requests','invoices','billing',
+              'cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+  const rows=[];
+  for(const k of keys){
+    const pk=pfx+k;
+    let mode=false, n=0;
+    try{ mode=await IDB.isRecordMode(pk); }catch(e){}
+    try{ n=await IDB.countRecords(pk); }catch(e){}
+    const mem=Array.isArray(_MC[pk])?_MC[pk].length:'-';
+    rows.push({'المجموعة':k,
+               'وضع السجلات':mode?'✅ مفعّل':'— blob',
+               'على القرص':n<0?'?':n,
+               'في الذاكرة':mem});
+  }
+  try{ console.table(rows); }catch(e){ console.log(rows); }
+  try{ console.log('المساحة المستعملة: '+(await IDB.usedMB())+' MB من '+(await IDB.quotaMB())+' MB'); }catch(e){}
+  return rows;
+};
 window.save = save;
 window.load = load;
 
@@ -9354,6 +9835,9 @@ function initUserData(){
 
   // ④ تحميل البيانات الكبيرة من IDB
   _mergeIDBInBackground();
+  // ⭐ ضمان تفعيل وضع السجلات حتى لو كانت البيانات قادمة من localStorage
+  //    وليس من blob قديم في IDB — نرحّل من ذاكرة البرنامج مباشرة.
+  setTimeout(function(){ try{ _ensureRecordModeFromMemory(); }catch(e){} }, 6000);
 }
 
 // ── إصلاح لمرة واحدة: تصحيح باركود المرضى القدماء في قاعدة بيانات مستوردة سابقاً ──
@@ -11485,7 +11969,7 @@ async function selectExistingPatient(pid){
       if(p){
         // أضفه لـ localStorage ليكون متاحاً للطلب الجديد
         patients.push(p);
-        save('patients',patients);
+        saveOne('patients',patients,p);
         // اجلب طلباته من IDB أيضاً
         const idbReqs=await IDB.get(pfx+'requests');
         if(idbReqs){
@@ -11948,7 +12432,7 @@ function wizNext(){
       const oldName=pt.name;
       Object.assign(pt,{...wizPatient,id:pt.id,registered:pt.registered,visits:pt.visits,lastVisit:pt.lastVisit,status:pt.status,barcode:pt.barcode});
       if(!wizPatient.chronic||wizPatient.chronic.length===0) pt.chronic=oldChron;
-      save('patients',patients);
+      saveOne('patients',patients,pt);
       if(pt.phone) addToPhoneBook(pt.name, pt.phone);
       // ── تحديث اسم المريض في جميع طلباته ──────────────────────────
       if(pt.name && pt.name!==oldName){
@@ -11998,7 +12482,7 @@ function wizFinish(){
     if(!wizPatient.chronic||wizPatient.chronic.length===0)pt.chronic=oldChron;
   }
   pt.visits=(pt.visits||0)+1; pt.lastVisit=today;
-  save('patients',patients);
+  saveOne('patients',patients,pt);
   if(pt.phone) addToPhoneBook(pt.name, pt.phone);
 
   // ⭐ رقم طلب فريد بين كل الحاسبات: RQ<رقم الحاسبة>-<تسلسل>
@@ -12016,7 +12500,7 @@ function wizFinish(){
     sideLab: !!pt.sideLab
   };
   _stamp(req);
-  requests.push(req); save('requests',requests);
+  requests.push(req); saveOne('requests',requests,req);
 
   // الفاتورة مع الخصم وحالة الدفع
   const rawTotal = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
@@ -13528,7 +14012,7 @@ function vrRemoveTest(tid){
   r.tests=r.tests.filter(x=>x!==tid);
   r.testNames=(r.testNames||[]).filter(n=>{const t=tests.find(x=>x.id===tid);return n!==(t?t.nameEn:'');});
   if(r.results)delete r.results[tid];
-  save('requests',requests);
+  saveOne('requests',requests,r);
   openViewResultsModal(currentReqId);
   showNotif('تم','تم حذف التحليل','success');
 }
@@ -13550,7 +14034,7 @@ function vrSaveResults(){
   });
   const _commit=function(){
     Object.keys(_staged).forEach(function(tid){ r.results[tid]=_staged[tid]; });
-    save('requests',requests);
+    saveOne('requests',requests,r);
     showNotif('تم','تم حفظ النتائج ✅','success');
     // لا نغلق النافذة حتى يتمكن المستخدم من مواصلة التعديل
   };
@@ -13589,7 +14073,7 @@ function vrSelectAddTest(tid){
     r.tests.push(t.id);
     if(!r.testNames)r.testNames=[];
     if(!r.testNames.includes(t.nameEn))r.testNames.push(t.nameEn);
-    save('requests',requests);
+    saveOne('requests',requests,r);
   }
 
   // أعد رسم النافذة لتظهر الحقل فوراً
@@ -13611,7 +14095,7 @@ function vrSaveAddedTests(){
     const el=document.getElementById('vr-rv-'+tid);
     if(el&&el.value!==undefined&&el.value!=='')r.results[tid]=el.value;
   });
-  save('requests',requests);renderAll();
+  saveOne('requests',requests,r);renderAll();
   showNotif('تم','تم حفظ النتائج ✅','success');
   openViewResultsModal(currentReqId);
 }
@@ -13659,7 +14143,7 @@ function vrSavePatientEdit(pid, rid){
   pt.phone=newPhone;
   // نحدّث الطبيب دائماً حتى لو أصبح فارغاً (بدون طبيب)
   if(doctorChanged){ pt.doctorName=newDoctor; if(!newDoctor) pt.doctorId=''; }
-  save('patients',patients);
+  saveOne('patients',patients,pt);
   if(pt.phone) addToPhoneBook(pt.name, pt.phone);
 
   // Update request patientName and doctorName too
@@ -13674,7 +14158,7 @@ function vrSavePatientEdit(pid, rid){
       const doc=doctors.find(d=>d.name===newDoctor);
       if(doc){ r.doctorId=doc.id; if(pt) pt.doctorId=doc.id; }
     }
-    save('requests',requests);
+    saveOne('requests',requests,r);
   }
 
   renderAll();
@@ -14189,7 +14673,7 @@ function _autoSaveResults(){
     });
     if(allFilled) req.status='done';
     else if(req.status!=='done') req.status='inprogress';
-    save('requests',requests);
+    saveOne('requests',requests,req);
     // أثناء إدخال النتائج: تحديث الـ badges فقط بدون renderRequests
     // renderRequests تُسبِّب إعادة بناء DOM وتعطيل التركيز على الحقول
     updateDashboard(); updateBadges();
@@ -14306,7 +14790,7 @@ function _openSpecialExamInline(reqId, examType){
       if(v==='__manual__'){const m=document.getElementById('rv-manual-'+t.id);v=m?m.value:'';}
       if(v!==undefined&&v!=='') req.results[t.id]=v;
     });
-    save('requests',requests);
+    saveOne('requests',requests,req);
   }
   window._specialExamInlineMode=true;
   window._specialExamInlineReqId=reqId;
@@ -14427,7 +14911,7 @@ function _vrAutoSave(){
       if(v==='__manual__'){const m=document.getElementById('vr-rv-manual-'+tid);v=m?m.value:'';}
       if(v!==undefined&&v!=='') r.results[tid]=v;
     });
-    save('requests',requests);
+    saveOne('requests',requests,r);
   },400);
 }
 // تحديث اسم الطبيب مباشرة من شريط إدخال النتائج
@@ -14445,8 +14929,8 @@ function resUpdateDoctor(sel){
   if(doc){
     req.doctorId=doc.id; req.doctorName=doc.name;
     const pt=patients.find(p=>p.id===req.patientId);
-    if(pt){ pt.doctorId=doc.id; pt.doctorName=doc.name; save('patients',patients); }
-    save('requests',requests);
+    if(pt){ pt.doctorId=doc.id; pt.doctorName=doc.name; saveOne('patients',patients,pt); }
+    saveOne('requests',requests,req);
     showNotif('تم','تم تحديث الطبيب ✅','success');
   }
 }
@@ -14456,8 +14940,8 @@ function resUpdateDoctorManual(inp){
   const req=requests.find(r=>r.id===currentReqId); if(!req) return;
   req.doctorId=''; req.doctorName=inp.value.trim();
   const pt=patients.find(p=>p.id===req.patientId);
-  if(pt){ pt.doctorId=''; pt.doctorName=inp.value.trim(); save('patients',patients); }
-  save('requests',requests);
+  if(pt){ pt.doctorId=''; pt.doctorName=inp.value.trim(); saveOne('patients',patients,pt); }
+  saveOne('requests',requests,req);
   showNotif('تم','تم تحديث الطبيب ✅','success');
 }
 
@@ -14478,7 +14962,7 @@ function finalizeResult(){
   // 🔎 Delta Check — فحص التجاوزات قبل الاعتماد النهائي (إدخال يدوي)
   const _doFinalize=function(){
     req.status='done';
-    save('requests',requests);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
+    saveOne('requests',requests,req);renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
   };
   try{
     if(window.DeltaCheck && DeltaCheck.getConfig().enabled){
@@ -14493,7 +14977,7 @@ function finalizeResult(){
         onApprove:_doFinalize,
         onCancel:function(kind){
           // لا نعتمد — نُبقي القيم محفوظة كمسودة بدون تحويل الحالة إلى done
-          save('requests',requests);
+          saveOne('requests',requests,req);
           try{ if(kind!=='retest') showNotif('لم تُعتمد','تم إلغاء الاعتماد — القيم محفوظة كمسودة','warning'); }catch(e){}
         }
       });
@@ -15041,7 +15525,7 @@ function _saveGrouping(){
   if(cleanPages.length === 0) cleanPages.push(state.catOrder.slice());
 
   req.pageGroups = cleanPages;
-  save('requests', requests);
+  saveOne('requests', requests, req);
 
   showNotif('تم','✅ تم حفظ توزيع التجميع','success');
   _closeGroupingModal();
@@ -15065,7 +15549,7 @@ function finalizeAndPrint(){
     // حفظ النتائج فقط بدون طباعة
     const reqOnly = collectResults(); if(!reqOnly) return;
     reqOnly.status = 'done';
-    save('requests',requests); renderRequests(); updateDashboard(); updateBadges(); loadResultsDropdown(); loadPrintDropdown();
+    saveOne('requests',requests,reqOnly); renderRequests(); updateDashboard(); updateBadges(); loadResultsDropdown(); loadPrintDropdown();
     return;
   }
   // ────────────────────────────────────────────────────
@@ -15090,7 +15574,7 @@ function finalizeAndPrint(){
     }
   }
   req.status='done';
-  save('requests',requests);
+  saveOne('requests',requests,req);
   renderRequests();updateDashboard();updateBadges();loadResultsDropdown();loadPrintDropdown();
   currentReqId=id;
   doPrint(id);
@@ -15363,7 +15847,7 @@ function saveNormallyOverride(localKey, testId, reqId){
   DB.set(localKey,data);
   const modal=document.getElementById('m-normally-temp');if(modal)modal.remove();
   // Save any entered results BEFORE reloading to prevent data loss
-  const req=collectResults(); if(req) save('requests',requests);
+  const req=collectResults(); if(req) saveOne('requests',requests,req);
   showNotif('تم','تم حفظ القيم المخصصة لهذا الطلب ✅','success');
   loadResultEntry();
 }
@@ -15372,7 +15856,7 @@ function clearNormallyOverride(localKey){
   DB.del(localKey);
   const modal=document.getElementById('m-normally-temp');if(modal)modal.remove();
   // Save any entered results BEFORE reloading to prevent data loss
-  const req=collectResults(); if(req) save('requests',requests);
+  const req=collectResults(); if(req) saveOne('requests',requests,req);
   showNotif('تم','تم إزالة التعديل المحلي','success');
   loadResultEntry();
 }
@@ -17628,7 +18112,7 @@ function doPrint(reqId){
       if(typeof _shouldPrintLocal==='function' && !_shouldPrintLocal()){
         try{
           var _rq=requests.find(function(r){return r.id===currentReqId;});
-          if(_rq){ _rq.printed=true; _rq._updatedAt=Date.now(); save('requests',requests); }
+          if(_rq){ _rq.printed=true; _rq._updatedAt=Date.now(); saveOne('requests',requests,_rq); }
           try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
           try{ if(typeof _wsCallPatient==='function') _wsCallPatient(currentReqId); }catch(_){}
         }catch(e){}
@@ -17764,7 +18248,7 @@ function doPrint(reqId){
   }
   req.printed=true;
   req._updatedAt=Date.now(); // وقت التعديل — يُستخدم في المزامنة الذكية
-  save('requests',requests);
+  saveOne('requests',requests,req);
   // ⭐ النداء يبدأ فور الطباعة (لا بعد 5 ثوانٍ من التحديث الدوري)
   try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
   try{ if(typeof _wsCallPatient==='function') _wsCallPatient(req.id); }catch(_){}
@@ -18106,7 +18590,7 @@ function shareWhatsApp(){
         if(typeof _spMarkAllPrinted === 'function') _spMarkAllPrinted(req);
         if(!req.resultDate) req.resultDate = new Date().toISOString().split('T')[0];
         req._updatedAt = Date.now();
-        save('requests', requests);
+        saveOne('requests', requests, req);
         try{ if(typeof _wsMarkPrinted === 'function') _wsMarkPrinted(req.id); }catch(_){}
         try{ if(typeof renderRequests === 'function') renderRequests(); }catch(_){}
         try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(_){}
@@ -19723,7 +20207,7 @@ function addTestToReq(tid){
   }
   req.tests.push(tid);
   if(!req.results) req.results={};
-  save('requests',requests);
+  saveOne('requests',requests,req);
   document.getElementById('res-add-test-srch').value='';
   document.getElementById('res-add-test-results').style.display='none';
   // إذا كان التحليل خاصاً (أدرار / خروج / سائل منوي) — افتح واجهة الإدخال الخاصة به فوراً
@@ -19744,7 +20228,7 @@ function removeTestFromReq(tid, id){
   if(!confirm('حذف هذا التحليل من الطلب؟')) return;
   req.tests = req.tests.filter(x=>x!==tid);
   if(req.results) delete req.results[tid];
-  save('requests',requests);
+  saveOne('requests',requests,req);
   loadResultEntry();
   showNotif('تم','تم حذف التحليل من الطلب','success');
 }
@@ -26757,7 +27241,7 @@ async function saveCultureEntry(){
       };
       _stamp(newPt);
       patients.push(newPt);
-      save('patients',patients);
+      saveOne('patients',patients,newPt);
       if(newPt.phone) addToPhoneBook(newPt.name, newPt.phone);
     }
     // حدّث الحقل المخفي
@@ -27613,7 +28097,7 @@ function saveUAEntry(){
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._uaReqId=null;
   }
   closeModal('m-ua');
@@ -27655,7 +28139,7 @@ function saveAndPrintUA(){
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._uaReqId=null;
   }
   closeModal('m-ua');
@@ -28343,7 +28827,7 @@ function saveStoolEntry(){
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
@@ -28389,7 +28873,7 @@ function saveAndPrintStool(){
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
@@ -28729,7 +29213,7 @@ function saveAndShareUAWhatsApp(){
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._uaReqId=null;
   }
   closeModal('m-ua');
@@ -28777,7 +29261,7 @@ function saveAndShareStoolWhatsApp(){
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
@@ -31654,7 +32138,7 @@ function saveSemenEntry(){
       };
       _stamp(newPt);
       patients.push(newPt);
-      save('patients',patients);
+      saveOne('patients',patients,newPt);
       if(newPt.phone) addToPhoneBook(newPt.name, newPt.phone);
     }
     const idEl=document.getElementById('semen-pt-id');
@@ -31684,7 +32168,7 @@ function saveSemenEntry(){
   const _spBackReqId = window._semenReqId || window._specialExamInlineReqId || null;
   if(window._semenReqId){
     const req=requests.find(r=>r.id===window._semenReqId);
-    if(req){ _spFinalizeReqStatus(req, rec.date); save('requests',requests); updateBadges(); }
+    if(req){ _spFinalizeReqStatus(req, rec.date); saveOne('requests',requests,req); updateBadges(); }
     window._semenReqId=null;
   }
   closeModal('m-semen-exam');
@@ -33177,7 +33661,7 @@ function wqAdvance(rid){
   if(!r || r.status==='done') return;
   const nextStatus = { pending:'inprogress', inprogress:'done' };
   r.status = nextStatus[r.status];
-  save('requests', requests);
+  saveOne('requests', requests, r);
   renderWaitQueue();
   renderAll();
   updateBadges();
@@ -33742,7 +34226,7 @@ function _spMarkPrinted(reqId, kind){
     }
 
     r._updatedAt = Date.now();
-    save('requests', requests);
+    saveOne('requests', requests, r);
 
     try{ if(typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
     try{ if(typeof renderRequests === 'function') renderRequests(); }catch(e){}
@@ -33759,7 +34243,7 @@ function _wsMarkPrinted(reqId){
     if(!r || r.wsPrinted) return;
     r.wsPrinted = true;
     r._updatedAt = Date.now();
-    save('requests', requests);
+    saveOne('requests', requests, r);
     if(typeof updateWaitScreen === 'function') updateWaitScreen();
     _wsCallPatient(reqId);
   }catch(e){}
@@ -36791,7 +37275,7 @@ function cbcFlush(sampleId){
     const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
     if(_otherDone) targetReq.status='done';
     // إذا كان هناك تحاليل أخرى لم تُكمَل — يبقى status pending
-    if(typeof save==='function') save('requests',requests);
+    if(typeof saveOne==='function') saveOne('requests',requests,targetReq); else if(typeof save==='function') save('requests',requests);
     // تحديث شارة "نتائج الأجهزة" فور وصول CBC دون تغيير التبويب المعروض (المتطلبان ٢ و ٣)
     if(typeof _updateDeviceReqBadge==='function'){ try{ _updateDeviceReqBadge(); }catch(_){} }
     // إن كان المستخدم يعرض تبويب "نتائج الأجهزة" الآن، حدّث القائمة بنفس الفلتر
@@ -36829,7 +37313,7 @@ function cbcFlush(sampleId){
           targetReq.printed=true;
           if(!targetReq.resultDate) targetReq.resultDate=new Date().toISOString().split('T')[0];
           targetReq._updatedAt=Date.now();
-          if(typeof save==='function') save('requests',requests);
+          if(typeof saveOne==='function') saveOne('requests',requests,targetReq); else if(typeof save==='function') save('requests',requests);
           if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(_){} }
           if(typeof renderRequests==='function'){ try{ renderRequests(); }catch(_){} }
           // ⭐ استعادة لطيفة: لا ترمش ولا تقاطع الكتابة إن كان التركيز سليماً
@@ -37955,8 +38439,8 @@ function _lisApplyResultToReq(req, res, reqs, idbKey){
   //    الآن نمرّ عبر save(): كتابة IDB + كاش + بثّ LAN في خطوة واحدة.
   let _saved=false;
   try{
-    if(typeof save==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
-      save('requests', reqs);
+    if(typeof saveOne==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
+      saveOne('requests', reqs, req);
       _saved=true;
     }
   }catch(e){ console.warn('[LIS] save() path failed',e); }
@@ -41782,12 +42266,12 @@ body.light-mode .pm-note{color:rgba(10,42,37,.38)}
         <div class="pm-btn-icon">📲</div>
         <div class="pm-btn-text">
           <div class="pm-btn-title">إرسال نتائج التحاليل</div>
-          <div class="pm-btn-sub">يحمّل ملف HTML ويفتح واتساب تلقائياً</div>
+          <div class="pm-btn-sub">كل التحاليل (عامة · CBC · إدرار · خروج) في ملف واحد</div>
         </div>
         <div class="pm-spinner"></div>
       </button>
       <div class="pm-note">
-        الملف يعمل على أي جهاز · لا يحتاج إنترنت · يشمل جميع الزيارات وزر تحميل PDF
+        يشمل التحاليل العامة و CBC والإدرار والخروج · جميع الزيارات · مع زر تحميل PDF
       </div>
     </div>
   </div>
@@ -41808,15 +42292,19 @@ function openPatientPortal(reqId) {
   if (!req) { showNotif('تنبيه','اختر طلباً أولاً','error'); return; }
 
   const pt = patients.find(p => p.id === req.patientId) || {};
-  if (!pt.phone) { showNotif('تنبيه','لا يوجد رقم هاتف — أضف رقم المريض أولاً','error'); return; }
+  const _rawPh = pt.phone || req.patientPhone || '';
+  if (!_rawPh) { showNotif('تنبيه','لا يوجد رقم هاتف — أضف رقم المريض أولاً','error'); return; }
 
   _pmReqId = rid;
 
   // تحديث بيانات المريض في المودال
   const ini = (pt.name||'؟').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  // ⭐ الرقم الذي ستُفتح دردشته فعلياً — يُعرض قبل الإرسال للتأكد منه
+  let _shownPh = '';
+  try { _shownPh = String(_formatPhoneForWhatsApp(_rawPh, (pt && pt.phoneCC) || null) || '').replace(/\D/g,''); } catch(e){}
   document.getElementById('pm-avatar').textContent  = ini;
   document.getElementById('pm-pt-name').textContent = pt.name || '—';
-  document.getElementById('pm-pt-id').textContent   = pt.id || '—';
+  document.getElementById('pm-pt-id').textContent   = (pt.id || '—') + (_shownPh ? '  ·  📱 +' + _shownPh : '');
 
   // إعادة تهيئة الزر
   const btn = document.getElementById('pm-btn-send');
@@ -41837,38 +42325,222 @@ function _pmBuildData(patientId) {
   const pt = patients.find(p => p.id === patientId);
   if (!pt) return null;
 
-  // كل طلبات هذا المريض — الأحدث أولاً
-  const ptReqs = [...requests]
-    .filter(r => r.patientId === patientId)
-    .reverse()
-    .map(r => ({
-      id:         r.id,
-      date:       r.date || '',
+  // ⭐ تحميل سجلات الإدرار والخروج (قد لا تكون محمّلة في الذاكرة بعد)
+  try { if (typeof loadUARecords === 'function') loadUARecords(); } catch(e){}
+  try { if (typeof loadStoolExamRecords === 'function') loadStoolExamRecords(); } catch(e){}
+  const _uaAll = (typeof uaRecords !== 'undefined' && Array.isArray(uaRecords))
+      ? uaRecords.filter(x => x && x.patientId === patientId) : [];
+  const _stAll = (typeof stoolExamRecords !== 'undefined' && Array.isArray(stoolExamRecords))
+      ? stoolExamRecords.filter(x => x && x.patientId === patientId) : [];
+
+  const ptGender = pt.gender || 'male';
+  const ptAge    = parseFloat(pt.ageVal) ||
+                   Math.floor((Date.now() - new Date(pt.dob || 0).getTime()) / 31557600000) || 0;
+
+  // ── مجمّع الصور: يمنع تكرار صور الترويسة/التذييل (base64) في كل تقرير ──
+  //    يُخزَّن كل مصدر صورة مرة واحدة ويُستبدل داخل التقارير برمز قصير،
+  //    ثم يُستعاد داخل الملف نفسه لحظة إنشاء الـ PDF. (تقليل حجم الملف)
+  const _imgPool = [], _imgIdx = {};
+  function _packImgs(html) {
+    if (!html) return '';
+    return String(html).replace(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+\/=]{200,}/g, function(m){
+      if (_imgIdx[m] === undefined) { _imgIdx[m] = _imgPool.length; _imgPool.push(m); }
+      return '@@MLIMG' + _imgIdx[m] + '@@';
+    });
+  }
+  function _safeDoc(label, fn) {
+    try { const h = fn(); if (h && String(h).trim()) return { t: label, h: _packImgs(h) }; }
+    catch(e) { console.warn('[Portal] تعذّر بناء تقرير:', label, e); }
+    return null;
+  }
+
+  // ── أدوات التقييم ──────────────────────────────────────
+  const _HIDE_UNITS = { 'qualitative':1, 'blood-group':1, 'multiple':1, 'titer':1 };
+  function _flagOf(val, min, max) {
+    const s = (val === null || val === undefined) ? '' : String(val).trim();
+    if (!s) return '';
+    const num = parseFloat(s.replace(/[<>≤≥]/g, ''));
+    if (!isNaN(num) && (min !== null && min !== undefined || max !== null && max !== undefined)) {
+      if (max !== null && max !== undefined && num > max) return 'H';
+      if (min !== null && min !== undefined && num < min) return 'L';
+      return 'N';
+    }
+    const lv = s.toLowerCase();
+    if (/neg|non[\s-]?reactive|سلبي|سالب/.test(lv)) return 'N';
+    if (/pos|reactive|إيجابي|ايجابي|موجب/.test(lv)) return 'H';
+    return '';
+  }
+
+  // ── التحاليل العامة مجمّعة حسب المجموعة الفرعية ──────────
+  function _generalGroups(r) {
+    const groups = [], gmap = {};
+    (r.tests || []).forEach(tid => {
+      const t = tests.find(x => x.id === tid);
+      if (!t) return;
+      if (t.isSpecialExam) return;                 // الإدرار/الخروج/السائل المنوي لها أقسامها الخاصة
+      const raw = (r.results || {})[tid];
+      let localRef = null;
+      try { localRef = DB.get('localRef_' + r.id + '_' + t.id); } catch(e){}
+      let rng = { min:null, max:null };
+      try {
+        const base = (typeof getPatientRef === 'function') ? getPatientRef(t, ptGender, ptAge) : rng;
+        rng = (typeof _mergeLocalRef === 'function') ? _mergeLocalRef(base, localRef) : base;
+      } catch(e){}
+      let refTxt = '';
+      try { refTxt = getRefText(t, ptGender, ptAge, localRef || null); } catch(e){ refTxt = t.ref || ''; }
+      if (refTxt === '—') refTxt = '';
+      let unit = (localRef && localRef.unit) ? localRef.unit : (t.unit || '');
+      if (_HIDE_UNITS[unit]) unit = '';
+      const val   = (raw === undefined || raw === null) ? '' : String(raw);
+      const short = t.nameShort || t.nameEn || t.id;
+      const key   = t.subCat || t.cat || 'Other';
+      if (!gmap[key]) { gmap[key] = { s:key, rows:[] }; groups.push(gmap[key]); }
+      gmap[key].rows.push({
+        n: short,
+        a: (t.nameAr && t.nameAr !== short) ? t.nameAr : '',
+        v: val, u: unit, r: refTxt, f: _flagOf(val, rng.min, rng.max)
+      });
+    });
+    return groups.filter(g => g.rows.length);
+  }
+
+  // ── معاملات تعداد الدم CBC القادمة من الجهاز ────────────
+  const _CBC_ORDER = ['WBC','NEU#','LYM#','MON#','EOS#','BAS#','MID#','GRAN#',
+                      'NEU%','LYM%','MON%','EOS%','BAS%','MID%','GRAN%',
+                      'RBC','HGB','HCT','MCV','MCH','MCHC','RDW-CV','RDW-SD','RDW',
+                      'PLT','MPV','PDW','PCT','P-LCR','P-LCC'];
+  function _cbcParamsOf(r) {
+    try { return r.cbcData || (r.resultDetails && r.resultDetails.CBC && r.resultDetails.CBC.cbcParams) || null; }
+    catch(e) { return null; }
+  }
+  function _cbcRows(cp) {
+    if (!cp) return null;
+    const keys = Object.keys(cp).filter(k => k && k.indexOf('HIST_') !== 0 && !/^\d+$/.test(k));
+    if (!keys.length) return null;
+    const ordered = _CBC_ORDER.filter(k => keys.indexOf(k) >= 0)
+                    .concat(keys.filter(k => _CBC_ORDER.indexOf(k) < 0).sort());
+    const rows = [];
+    ordered.forEach(k => {
+      const p = cp[k]; if (!p) return;
+      const val = (p.value === null || p.value === undefined) ? '' : String(p.value).trim();
+      if (!val) return;
+      const info = (typeof CBC_PARAMS_MAP !== 'undefined' && CBC_PARAMS_MAP[k]) || {};
+      const ref  = String((p.refRange || info.refM || '')).trim();
+      let lo = null, hi = null;
+      if (ref) {
+        const parts = ref.replace(/[^0-9.]+/g, ' ').trim().split(/\s+/);
+        if (parts.length >= 2) {
+          const a = parseFloat(parts[0]), b = parseFloat(parts[parts.length-1]);
+          if (!isNaN(a) && !isNaN(b)) { lo = a; hi = b; }
+        }
+      }
+      let f = '';
+      const rawF = String(p.flag || '').toUpperCase().trim();
+      if (rawF === 'N' || rawF === 'N-N' || rawF === 'NORMAL') f = 'N';
+      else if (rawF.charAt(0) === 'L') f = 'L';
+      else if (rawF.charAt(0) === 'H') f = 'H';
+      if (!f) f = _flagOf(val, lo, hi);
+      rows.push({ n:k, a:'', v:val, u:(p.unit || info.unit || ''), r:ref, f:f });
+    });
+    return rows.length ? rows : null;
+  }
+
+  // ── أقسام فحص الإدرار / الخروج ─────────────────────────
+  function _examSecs(rec, FIELDS) {
+    const out = [];
+    try {
+      Object.keys(FIELDS).forEach(k => {
+        const sec = FIELDS[k];
+        if (!sec || !sec.fields) return;
+        const rows = [];
+        sec.fields.forEach(fld => {
+          const v = rec[fld.id];
+          if (v === undefined || v === null || v === '') return;
+          if (fld.hideIfNormal && v === fld.normal) return;
+          const isEmpty = (typeof EMPTY_VAL !== 'undefined' && v === EMPTY_VAL);
+          const sv = isEmpty ? '' : String(v);
+          rows.push({
+            n: fld.label, a: '', v: sv, u: '', r: fld.normal || '',
+            f: (!sv || !fld.normal) ? '' : (sv === fld.normal ? 'N' : 'A')
+          });
+        });
+        if (rows.length) out.push({ s: sec.label || k, rows: rows });
+      });
+    } catch(e){}
+    return out.length ? out : null;
+  }
+
+  // ── ربط سجل الفحص الخاص بالطلب (reqId، وإلا نفس التاريخ) ──
+  const _usedUA = {}, _usedST = {};
+  function _pick(list, used, r) {
+    let rec = list.find(x => x.reqId && x.reqId === r.id && !used[x.id]);
+    if (!rec) {
+      const day = ((r.resultDate || r.date || '') + '').slice(0,10);
+      if (day) rec = list.find(x => !x.reqId && ((x.date || '') + '').slice(0,10) === day && !used[x.id]);
+    }
+    if (rec) used[rec.id] = 1;
+    return rec || null;
+  }
+
+  // ── بناء كل زيارة ──────────────────────────────────────
+  const ptReqs = requests.filter(r => r.patientId === patientId).map(r => {
+    const groups = _generalGroups(r);
+    const cp     = _cbcParamsOf(r);
+    const cbc    = _cbcRows(cp);
+    const uaRec  = _pick(_uaAll, _usedUA, r);
+    const stRec  = _pick(_stAll, _usedST, r);
+    const ua     = uaRec ? _examSecs(uaRec, UA_FIELDS)    : null;
+    const stool  = stRec ? _examSecs(stRec, STOOL_FIELDS) : null;
+
+    const docs = [];
+    if (r.status === 'done') {
+      const hasGen = (r.tests || []).some(tid => {
+        const t = tests.find(x => x.id === tid);
+        return t && !t.isSpecialExam && !t.isCalc;
+      });
+      if (hasGen) { const d = _safeDoc('التقرير العام', () => buildPrintHTML(r)); if (d) docs.push(d); }
+      if (cbc)    { const d = _safeDoc('تقرير CBC', () => _buildCBCReportHTML(cp, pt, r, (settings && settings.cbcTemplate) || '1')); if (d) docs.push(d); }
+      if (uaRec)  { const d = _safeDoc('تقرير الإدرار', () => _buildUAPrintHTML(uaRec)); if (d) docs.push(d); }
+      if (stRec)  { const d = _safeDoc('تقرير الخروج', () => _buildStoolPrintHTML(stRec)); if (d) docs.push(d); }
+    }
+
+    return {
+      id: r.id,
+      date: r.date || '',
       resultDate: r.resultDate || r.date || '',
-      status:     r.status || 'pending',
-      tests:      r.tests  || [],
-      results:    r.results || {},
+      status: r.status || 'pending',
       doctorName: r.doctorName || '',
-      // تضمين HTML التقرير الرسمي لكل طلب مكتمل (للاستخدام في تحميل PDF)
-      printHTML:  r.status === 'done' ? buildPrintHTML(r) : ''
-    }));
+      groups: groups, cbc: cbc, ua: ua, stool: stool, docs: docs
+    };
+  });
 
-  // التحاليل المستخدمة فقط (تقليل الحجم)
-  const usedIds = [...new Set(ptReqs.flatMap(r => r.tests))];
-  const usedTests = tests
-    .filter(t => usedIds.includes(t.id))
-    .map(t => ({
-      id:        t.id,
-      nameEn:    t.nameEn    || t.id,
-      nameAr:    t.nameAr    || '',
-      nameShort: t.nameShort || t.nameEn || t.id,
-      unit:      t.unit      || '',
-      ref:       t.ref       || '',
-      minVal:    t.minVal    ?? null,
-      maxVal:    t.maxVal    ?? null
-    }));
+  // ── سجلات إدرار/خروج غير مرتبطة بأي طلب → بطاقة مستقلة ──
+  const extras = [];
+  _uaAll.forEach(rec => {
+    if (_usedUA[rec.id]) return; _usedUA[rec.id] = 1;
+    const secs = _examSecs(rec, UA_FIELDS); if (!secs) return;
+    const d = _safeDoc('تقرير الإدرار', () => _buildUAPrintHTML(rec));
+    extras.push({ id: rec.reqId || rec.id, date: rec.date || '', resultDate: rec.date || '',
+                  status: 'done', doctorName: rec.doctorName || '',
+                  groups: [], cbc: null, ua: secs, stool: null, docs: d ? [d] : [] });
+  });
+  _stAll.forEach(rec => {
+    if (_usedST[rec.id]) return; _usedST[rec.id] = 1;
+    const secs = _examSecs(rec, STOOL_FIELDS); if (!secs) return;
+    const d = _safeDoc('تقرير الخروج', () => _buildStoolPrintHTML(rec));
+    extras.push({ id: rec.reqId || rec.id, date: rec.date || '', resultDate: rec.date || '',
+                  status: 'done', doctorName: rec.doctorName || '',
+                  groups: [], cbc: null, ua: null, stool: secs, docs: d ? [d] : [] });
+  });
 
-  // حساب العمر
+  // الأحدث أولاً
+  const allReqs = ptReqs.concat(extras).sort((a,b) => {
+    const da = new Date(a.resultDate || a.date || 0).getTime() || 0;
+    const db = new Date(b.resultDate || b.date || 0).getTime() || 0;
+    return db - da;
+  });
+
+  // حساب العمر للعرض
   let ageDisplay = pt.ageDisplay || '';
   if (!ageDisplay) {
     if (pt.dob) {
@@ -41881,14 +42553,14 @@ function _pmBuildData(patientId) {
 
   return {
     patient: {
-      id:          pt.id || '',
-      name:        pt.name || '',
-      gender:      pt.gender || '',
-      registered:  pt.registered || '',
+      id:         pt.id || '',
+      name:       pt.name || '',
+      gender:     pt.gender || '',
+      registered: pt.registered || '',
       ageDisplay
     },
-    requests: ptReqs,
-    tests:    usedTests,
+    requests: allReqs,
+    imgs: _imgPool,
     lab: {
       name:  (settings && settings.name)  || 'MedLab Pro',
       phone: (settings && settings.phone) || '',
@@ -41902,94 +42574,134 @@ function _pmBuildHTML(data) {
   const labName = data.lab.name || 'MedLab Pro';
   const ptName  = data.patient.name;
 
-  // ─ بناء جدول كل طلب ─
   function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  function buildTable(req) {
-    const ids = req.tests || [], res = req.results || {};
-    if (!ids.length) return '<p style="text-align:center;padding:20px;color:#94a3b8">لا توجد تحاليل</p>';
-    let rows = '';
-    ids.forEach(tid => {
-      const t = data.tests.find(x => x.id === tid) || { id:tid, nameEn:tid, nameShort:tid, unit:'' };
-      const val  = res[tid] || '—';
-      const unit = t.unit || '';
-      const ref  = t.ref || (t.minVal != null && t.maxVal != null ? t.minVal + ' – ' + t.maxVal : '—');
-      // تقييم النتيجة
-      let cls = 'nd', ind = '';
-      const v = parseFloat(val);
-      if (!isNaN(v)) {
-        const lo = parseFloat(t.minVal), hi = parseFloat(t.maxVal);
-        if (!isNaN(hi) && v > hi) { cls='hi'; ind='<span class="ri hi">↑ مرتفع</span>'; }
-        else if (!isNaN(lo) && v < lo) { cls='lo'; ind='<span class="ri lo">↓ منخفض</span>'; }
-        else if (!isNaN(lo) || !isNaN(hi)) { cls='ok'; ind='<span class="ri ok">طبيعي</span>'; }
-      } else if (val && val !== '—') {
-        const lv = (val+'').toLowerCase();
-        if (/neg|سلبي/.test(lv)) { cls='ok'; ind='<span class="ri ok">طبيعي</span>'; }
-        else if (/pos|إيجابي/.test(lv)) { cls='hi'; ind='<span class="ri hi">إيجابي</span>'; }
-      }
-      const nm  = esc(t.nameShort || t.nameEn || tid);
-      const ar  = esc(t.nameAr || '');
-      rows += `<tr>
-        <td><b>${nm}</b>${ar && ar !== nm ? '<br><span style="font-size:10px;color:#94a3b8">' + ar + '</span>' : ''}</td>
-        <td><span class="rv ${cls}">${esc(val)}</span>${unit ? ' <span style="font-size:10px;color:#94a3b8">' + esc(unit) + '</span>' : ''}</td>
-        <td style="font-size:11px;color:#94a3b8;font-family:monospace">${esc(ref)}</td>
-        <td>${ind}</td>
-      </tr>`;
-    });
-    return `<div style="overflow-x:auto">
-      <table style="width:100%;border-collapse:collapse;min-width:380px">
-        <thead><tr>
-          <th>التحليل</th><th>النتيجة</th>
-          <th>القيم الطبيعية</th><th>التقييم</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>`;
+  // ─ صفوف جدول ─
+  function rowsHTML(rows) {
+    return rows.map(rw => {
+      const cls = (rw.f === 'H' || rw.f === 'A') ? 'hi' : rw.f === 'L' ? 'lo' : rw.f === 'N' ? 'ok' : 'nd';
+      const ind = rw.f === 'H' ? '<span class="ri hi">↑ مرتفع</span>'
+                : rw.f === 'L' ? '<span class="ri lo">↓ منخفض</span>'
+                : rw.f === 'N' ? '<span class="ri ok">طبيعي</span>'
+                : rw.f === 'A' ? '<span class="ri hi">غير طبيعي</span>' : '';
+      return '<tr>'
+        + '<td class="tn"><b>' + esc(rw.n) + '</b>'
+        + (rw.a ? '<span class="tna">' + esc(rw.a) + '</span>' : '') + '</td>'
+        + '<td><span class="rv ' + cls + '">' + esc(rw.v || '—') + '</span>'
+        + (rw.u ? '<span class="ru">' + esc(rw.u) + '</span>' : '') + '</td>'
+        + '<td class="trf">' + esc(rw.r || '—') + '</td>'
+        + '<td class="tin">' + ind + '</td>'
+        + '</tr>';
+    }).join('');
   }
 
-  // ─ بناء بطاقات الطلبات ─
+  // ─ جدول كامل (مع رؤوس المجاميع) ─
+  function tableHTML(groups, showGroupNames) {
+    let body = '';
+    groups.forEach(g => {
+      if (showGroupNames && g.s) body += '<tr class="gh"><td colspan="4">' + esc(g.s) + '</td></tr>';
+      body += rowsHTML(g.rows);
+    });
+    return '<div class="tw"><table>'
+      + '<thead><tr><th>التحليل</th><th>النتيجة</th><th>القيم الطبيعية</th><th>التقييم</th></tr></thead>'
+      + '<tbody>' + body + '</tbody></table></div>';
+  }
+
+  function secHTML(icon, title, inner) {
+    return '<div class="rs"><div class="rsh"><span class="rsi">' + icon + '</span>'
+      + '<span class="rst">' + title + '</span></div>' + inner + '</div>';
+  }
+
+  // ─ بطاقات الزيارات ─
   let visitCards = '';
   data.requests.forEach((req, i) => {
-    const done = req.status === 'done';
-    const names = req.tests.map(tid => {
-      const t = data.tests.find(x => x.id === tid);
-      return t ? (t.nameShort || t.nameEn) : tid;
-    });
-    const preview = names.slice(0,3).join(' · ') + (names.length > 3 ? ` +${names.length-3}` : '');
+    const done  = req.status === 'done';
+    const nGen  = (req.groups || []).reduce((s,g) => s + g.rows.length, 0);
+    const nCbc  = req.cbc ? req.cbc.length : 0;
+    const nUa   = (req.ua    || []).reduce((s,g) => s + g.rows.length, 0);
+    const nSt   = (req.stool || []).reduce((s,g) => s + g.rows.length, 0);
+    const nAll  = nGen + nCbc + nUa + nSt;
 
-    visitCards += `
-    <div class="vc" id="vc${i}">
-      <div class="vh" onclick="tog(${i})">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">
-            <span style="font-family:monospace;font-size:11px;color:#2dd4bf;font-weight:700">${esc(req.id)}</span>
-            <span style="font-size:11px;color:#64748b">📅 ${esc(req.resultDate || req.date)}</span>
-          </div>
-          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0">${esc(preview || 'طلب تحاليل')}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
-          ${done
-            ? '<span class="bdg bdg-ok">✅ مكتملة</span>'
-            : '<span class="bdg bdg-pnd">⏳ انتظار</span>'}
-          <div class="vtog" id="tog${i}">⌄</div>
-        </div>
-      </div>
-      <div class="vb" id="vb${i}">
-        ${done ? buildTable(req) : '<p style="text-align:center;padding:24px;color:#64748b">⏳ النتائج قيد الإعداد</p>'}
-        ${done ? `<div class="vft">
-          <div style="font-size:11px;color:#64748b">${req.doctorName ? '<b style="color:#cbd5e1">الطبيب:</b> د. ' + esc(req.doctorName) : '<b style="color:#cbd5e1">التاريخ:</b> ' + esc(req.resultDate || req.date)}</div>
-          <button class="pb" id="pb${i}" onclick="dlPDF(${i})">
-            <span class="pbs"></span><span class="pbt">⬇ PDF</span>
-          </button>
-        </div>` : ''}
-      </div>
-    </div>`;
+    // شرائح الأقسام في رأس البطاقة
+    let chips = '';
+    if (nGen) chips += '<span class="chp">🧪 عامة</span>';
+    if (nCbc) chips += '<span class="chp c-cbc">🩸 CBC</span>';
+    if (nUa)  chips += '<span class="chp c-ua">💧 إدرار</span>';
+    if (nSt)  chips += '<span class="chp c-st">🧫 خروج</span>';
+
+    // معاينة الأسماء
+    const names = [];
+    (req.groups || []).forEach(g => g.rows.forEach(rw => names.push(rw.n)));
+    if (nCbc) names.unshift('CBC');
+    if (nUa)  names.push('Urine');
+    if (nSt)  names.push('Stool');
+    const preview = names.slice(0,3).join(' · ') + (names.length > 3 ? ' +' + (names.length-3) : '');
+
+    // شريط تحميل الـ PDF — واضح وبارز
+    let dl = '';
+    if (req.docs && req.docs.length) {
+      const all = req.docs.length > 1
+        ? '<button class="pb pbA" onclick="dlPDF(' + i + ',-1,this)">'
+          + '<span class="pbs"></span><span class="pbt">⬇ تحميل كل النتائج PDF (' + req.docs.length + ')</span></button>'
+        : '';
+      const btns = req.docs.map((d,di) =>
+        '<button class="pb' + (req.docs.length === 1 ? ' pbA' : '') + '" onclick="dlPDF(' + i + ',' + di + ',this)">'
+        + '<span class="pbs"></span><span class="pbt">⬇ ' + esc(d.t) + '</span></button>').join('');
+      dl = '<div class="dlb">'
+        + '<div class="dlh"><span class="dli">📄</span><div><div class="dlt">تحميل النتيجة PDF</div>'
+        + '<div class="dls">احفظ التقرير الرسمي بختم المختبر على جهازك</div></div></div>'
+        + '<div class="dlg">' + all + btns + '</div></div>';
+    } else if (done) {
+      dl = '<div class="dlb dlb-off"><div class="dlh"><span class="dli">📄</span><div>'
+        + '<div class="dlt">تحميل PDF غير متاح لهذه الزيارة</div>'
+        + '<div class="dls">راجع المختبر للحصول على نسخة مطبوعة</div></div></div></div>';
+    }
+
+    // جسم البطاقة
+    let bodyHTML = '';
+    if (!done) {
+      bodyHTML = '<p class="empt">⏳ النتائج قيد الإعداد</p>';
+    } else if (!nAll) {
+      bodyHTML = '<p class="empt">لا توجد نتائج مسجّلة لهذه الزيارة</p>';
+    } else {
+      bodyHTML += dl;
+      if (nGen) bodyHTML += secHTML('🧪', 'التحاليل العامة', tableHTML(req.groups, true));
+      if (nCbc) bodyHTML += secHTML('🩸', 'تعداد الدم الكامل CBC', tableHTML([{s:'',rows:req.cbc}], false));
+      if (nUa)  bodyHTML += secHTML('💧', 'فحص الإدرار — Urine Examination', tableHTML(req.ua, true));
+      if (nSt)  bodyHTML += secHTML('🧫', 'فحص الخروج — Stool Examination', tableHTML(req.stool, true));
+      bodyHTML += '<div class="vft"><span>' +
+        (req.doctorName ? '<b>الطبيب:</b> د. ' + esc(req.doctorName) : '<b>التاريخ:</b> ' + esc(req.resultDate || req.date)) +
+        '</span><span>' + nAll + ' نتيجة</span></div>';
+    }
+
+    visitCards += '<div class="vc" id="vc' + i + '">'
+      + '<div class="vh" onclick="tog(' + i + ')">'
+      +   '<div class="vhl">'
+      +     '<div class="vhr1"><span class="rid">' + esc(req.id) + '</span>'
+      +       '<span class="rdt">📅 ' + esc(req.resultDate || req.date) + '</span></div>'
+      +     (chips ? '<div class="chps">' + chips + '</div>' : '')
+      +     '<div class="vpr">' + esc(preview || 'طلب تحاليل') + '</div>'
+      +   '</div>'
+      +   '<div class="vhr">'
+      +     (done ? '<span class="bdg bdg-ok">✅ مكتملة</span>' : '<span class="bdg bdg-pnd">⏳ انتظار</span>')
+      +     '<div class="vtog">⌄</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="vb">' + bodyHTML + '</div>'
+      + '</div>';
   });
 
-  const doneCount = data.requests.filter(r => r.status === 'done').length;
-  const totalTests = data.requests.reduce((s,r) => s + r.tests.length, 0);
-  const ini = ptName.split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const doneCount  = data.requests.filter(r => r.status === 'done').length;
+  const totalTests = data.requests.reduce((s,r) => {
+    let n = 0;
+    (r.groups || []).forEach(g => n += g.rows.length);
+    if (r.cbc) n += r.cbc.length;
+    (r.ua    || []).forEach(g => n += g.rows.length);
+    (r.stool || []).forEach(g => n += g.rows.length);
+    return s + n;
+  }, 0);
+  const ini = (ptName || '؟').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
 
-  // ─ JSON البيانات لتضمينها ─
   const dataJson = JSON.stringify(data).replace(/<\/script>/gi, '<\\/script>');
 
   return `<!DOCTYPE html>
@@ -42007,7 +42719,7 @@ html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{font-family:var(--fn);background:var(--bg);color:var(--tx);min-height:100vh;overflow-x:hidden;direction:rtl;-webkit-font-smoothing:antialiased}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse 90% 50% at 15% 0%,rgba(0,184,156,.1),transparent 55%),radial-gradient(ellipse 70% 60% at 85% 100%,rgba(56,189,248,.07),transparent 55%)}
 body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.018;background-image:linear-gradient(rgba(0,184,156,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(0,184,156,.5) 1px,transparent 1px);background-size:44px 44px}
-.w{position:relative;z-index:1;max-width:800px;margin:0 auto;padding:0 14px 64px}
+.w{position:relative;z-index:1;max-width:820px;margin:0 auto;padding:0 14px 64px}
 /* HERO */
 .hero{text-align:center;padding:40px 16px 28px}
 .hbdg{display:inline-flex;align-items:center;gap:7px;background:rgba(0,184,156,.1);border:1px solid rgba(0,184,156,.28);border-radius:100px;padding:5px 16px;font-size:13px;font-weight:700;color:var(--tl2);margin-bottom:16px}
@@ -42034,7 +42746,7 @@ h1{font-size:clamp(24px,7vw,38px);font-weight:900;background:linear-gradient(135
 .sn{font-size:24px;font-weight:900;line-height:1;margin-bottom:3px;font-family:monospace}
 .sn.t{color:var(--tl2)}.sn.s{color:#38bdf8}.sn.a{color:var(--am)}
 .sl{font-size:10px;color:var(--tx2);font-weight:600}
-/* SECTION */
+/* SECTION HEAD */
 .sh{display:flex;align-items:center;gap:9px;margin-bottom:12px}
 .sic{width:30px;height:30px;background:var(--tg);border:1px solid rgba(0,184,156,.28);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
 .stl{font-size:15px;font-weight:800}
@@ -42043,40 +42755,75 @@ h1{font-size:clamp(24px,7vw,38px);font-weight:900;background:linear-gradient(135
 .vc{background:var(--c1);border:1px solid var(--bd2);border-radius:12px;overflow:hidden;transition:border-color .2s,box-shadow .2s;animation:up .18s ease both;}
 .vc:hover{border-color:rgba(0,184,156,.32);box-shadow:0 4px 16px rgba(0,184,156,.07)}
 .vc.op{border-color:rgba(0,184,156,.35)}
-.vc:nth-child(1){animation-delay:.0s}.vc:nth-child(2){animation-delay:.03s}.vc:nth-child(3){animation-delay:.06s}.vc:nth-child(4){animation-delay:.09s}.vc:nth-child(5){animation-delay:.12s}
 .vh{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;cursor:pointer;user-select:none;gap:9px}
 .vh:hover{background:rgba(255,255,255,.02)}
-.vb{display:none;border-top:1px solid var(--bd2)}.vc.op .vb{display:block}
+.vhl{flex:1;min-width:0}
+.vhr{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.vhr1{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+.rid{font-family:monospace;font-size:11px;color:var(--tl2);font-weight:700}
+.rdt{font-size:11px;color:#64748b}
+.chps{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:5px}
+.chp{font-size:10px;font-weight:800;padding:2px 8px;border-radius:100px;background:rgba(0,184,156,.1);border:1px solid rgba(0,184,156,.3);color:var(--tl2);white-space:nowrap}
+.chp.c-cbc{background:rgba(251,113,133,.1);border-color:rgba(251,113,133,.3);color:var(--ro)}
+.chp.c-ua{background:rgba(251,191,36,.1);border-color:rgba(251,191,36,.3);color:var(--am)}
+.chp.c-st{background:rgba(167,139,250,.12);border-color:rgba(167,139,250,.3);color:#a78bfa}
+.vpr{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0}
+.vb{display:none;border-top:1px solid var(--bd2);padding:12px}.vc.op .vb{display:block}
 .vtog{width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,.04);border:1px solid var(--bd2);color:var(--tx2);display:flex;align-items:center;justify-content:center;font-size:12px;transition:all .2s;flex-shrink:0}
 .vc.op .vtog{background:var(--tg);border-color:rgba(0,184,156,.4);color:var(--tl2);transform:rotate(180deg)}
+.empt{text-align:center;padding:24px;color:#64748b;font-size:13px}
 /* BADGES */
 .bdg{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;flex-shrink:0}
 .bdg-ok{background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.28);color:var(--gr)}
 .bdg-pnd{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.28);color:var(--am)}
-/* RESULTS TABLE */
-table th{background:rgba(0,184,156,.07);font-size:11px;font-weight:700;color:var(--tl2);text-transform:uppercase;letter-spacing:.4px;padding:9px 12px;text-align:right;border-bottom:1px solid var(--bd2);white-space:nowrap}
-table td{padding:10px 12px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.025);vertical-align:middle}
+/* RESULT SECTION */
+.rs{background:rgba(255,255,255,.022);border:1px solid var(--bd2);border-radius:11px;overflow:hidden;margin-bottom:10px}
+.rsh{display:flex;align-items:center;gap:8px;padding:10px 13px;background:rgba(0,184,156,.07);border-bottom:1px solid var(--bd2)}
+.rsi{font-size:14px}
+.rst{font-size:13px;font-weight:800;color:var(--tl2)}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:360px}
+table th{background:rgba(0,0,0,.22);font-size:10.5px;font-weight:700;color:var(--tx2);letter-spacing:.4px;padding:8px 11px;text-align:right;border-bottom:1px solid var(--bd2);white-space:nowrap}
+table td{padding:9px 11px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:middle}
 table tr:last-child td{border-bottom:none}
 table tr:hover td{background:rgba(255,255,255,.015)}
+tr.gh td{background:rgba(0,184,156,.08);color:var(--tl2);font-size:11px;font-weight:800;padding:6px 11px;letter-spacing:.3px}
+tr.gh:hover td{background:rgba(0,184,156,.08)}
+.tn b{font-weight:700}
+.tna{display:block;font-size:10px;color:#94a3b8;margin-top:2px}
+.trf{font-size:11px;color:#94a3b8;font-family:monospace;white-space:nowrap}
+.tin{white-space:nowrap}
 .rv{font-family:monospace;font-weight:700;font-size:13px}
 .rv.ok{color:var(--gr)}.rv.hi{color:var(--ro)}.rv.lo{color:var(--am)}.rv.nd{color:var(--tx2)}
+.ru{font-size:10px;color:#94a3b8;margin-right:4px}
 .ri{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;white-space:nowrap}
 .ri.ok{background:rgba(52,211,153,.1);color:var(--gr)}.ri.hi{background:rgba(251,113,133,.1);color:var(--ro)}.ri.lo{background:rgba(251,191,36,.1);color:var(--am)}
-/* RESULT FOOTER */
-.vft{display:flex;align-items:center;justify-content:space-between;padding:11px 16px;background:rgba(0,0,0,.2);border-top:1px solid var(--bd2);gap:9px;flex-wrap:wrap}
-/* PDF BUTTON */
-.pb{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#008070,#005580);color:#fff;border:none;border-radius:8px;padding:8px 15px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--fn);transition:opacity .18s,transform .12s;white-space:nowrap;flex-shrink:0}
-.pb:hover{opacity:.85;transform:translateY(-1px)}.pb:active{transform:translateY(0)}
-.pbs{width:12px;height:12px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none}
-.pb.ld .pbs{display:block}.pb.ld .pbt{display:none}
+/* DOWNLOAD BAR */
+.dlb{background:linear-gradient(135deg,rgba(0,184,156,.1),rgba(56,189,248,.06));border:1.5px solid rgba(0,184,156,.34);border-radius:12px;padding:13px;margin-bottom:12px}
+.dlb-off{background:rgba(255,255,255,.02);border-color:var(--bd2);opacity:.75}
+.dlh{display:flex;align-items:center;gap:11px;margin-bottom:11px}
+.dlb-off .dlh{margin-bottom:0}
+.dli{font-size:24px;flex-shrink:0}
+.dlt{font-size:13.5px;font-weight:800;color:#e2faf7}
+.dls{font-size:11px;color:var(--tx2);margin-top:2px}
+.dlg{display:flex;flex-wrap:wrap;gap:8px}
+.pb{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:rgba(0,184,156,.14);color:#c7f5ee;border:1px solid rgba(0,184,156,.4);border-radius:9px;padding:9px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--fn);transition:filter .18s,transform .12s;white-space:nowrap}
+.pb.pbA{background:linear-gradient(135deg,#00a58f,#0378a8);color:#fff;border-color:transparent;box-shadow:0 3px 12px rgba(0,184,156,.28);flex:1 1 100%;padding:12px 16px;font-size:13.5px}
+.pb:hover{filter:brightness(1.14);transform:translateY(-1px)}.pb:active{transform:translateY(0)}
+.pb:disabled{opacity:.6;cursor:default;transform:none}
+.pbs{width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;display:none}
+.pb.ld .pbs{display:block}.pb.ld .pbt{opacity:.6}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* VISIT FOOTER */
+.vft{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:rgba(0,0,0,.2);border:1px solid var(--bd2);border-radius:9px;gap:9px;flex-wrap:wrap;font-size:11px;color:#94a3b8}
+.vft b{color:#cbd5e1}
 /* PAGE FOOTER */
 .pf{text-align:center;padding:24px 16px 12px;font-size:11px;color:var(--tx2);position:relative;z-index:1}
 .pf .br{font-weight:800;color:var(--tl2);font-size:12px;margin-bottom:2px}
 /* TOAST */
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:#0f2421;border:1px solid rgba(0,184,156,.4);color:var(--tx);padding:10px 18px;border-radius:9px;font-size:12px;font-weight:600;font-family:var(--fn);z-index:9999;transition:transform .3s cubic-bezier(.17,.84,.44,1),opacity .3s;opacity:0;pointer-events:none;white-space:nowrap}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:#0f2421;border:1px solid rgba(0,184,156,.4);color:var(--tx);padding:10px 18px;border-radius:9px;font-size:12px;font-weight:600;font-family:var(--fn);z-index:9999;transition:transform .3s cubic-bezier(.17,.84,.44,1),opacity .3s;opacity:0;pointer-events:none;max-width:90vw;text-align:center}
 .toast.sh{transform:translateX(-50%) translateY(0);opacity:1}
-@media(max-width:420px){.pm{grid-template-columns:1fr 1fr}.st{gap:6px}.sc{padding:12px 6px}.sn{font-size:20px}.sl{font-size:9px}.vh,.vft{padding:11px 12px}table th,table td{padding:8px 9px}}
+@media(max-width:420px){.pm{grid-template-columns:1fr 1fr}.st{gap:6px}.sc{padding:12px 6px}.sn{font-size:20px}.sl{font-size:9px}.vh{padding:11px 12px}.vb{padding:10px}table th,table td{padding:8px 8px}.pb{flex:1 1 100%}}
 </style>
 </head>
 <body>
@@ -42106,7 +42853,7 @@ table tr:hover td{background:rgba(255,255,255,.015)}
   <div class="st">
     <div class="sc"><div class="si">🏥</div><div class="sn t">${data.requests.length}</div><div class="sl">الزيارات</div></div>
     <div class="sc"><div class="si">✅</div><div class="sn s">${doneCount}</div><div class="sl">مكتملة</div></div>
-    <div class="sc"><div class="si">🧬</div><div class="sn a">${totalTests}</div><div class="sl">تحليل</div></div>
+    <div class="sc"><div class="si">🧬</div><div class="sn a">${totalTests}</div><div class="sl">نتيجة</div></div>
   </div>
 
   <div class="sh"><div class="sic">🧪</div><div class="stl">طلبات التحاليل</div></div>
@@ -42125,141 +42872,243 @@ table tr:hover td{background:rgba(255,255,255,.015)}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"><\/script>
 <script>
-const _D=${dataJson};
-function toast(m,ms=2500){const t=document.getElementById('TT');t.textContent=m;t.classList.add('sh');setTimeout(()=>t.classList.remove('sh'),ms)}
-function tog(i){const c=document.getElementById('vc'+i);if(c)c.classList.toggle('op')}
-function dlPDF(i){
-  var btn=document.getElementById('pb'+i);
-  if(btn){btn.classList.add('ld');btn.disabled=true;}
-  var req=_D.requests[i],pt=_D.patient;
-  if(!req||!req.printHTML||!req.printHTML.trim()){
-    toast('⚠️ هذا الطلب لا يحتوي نتائج مكتملة');
-    if(btn){btn.classList.remove('ld');btn.disabled=false;}
-    return;
-  }
-  if(!window.html2canvas||!window.jspdf){
-    toast('⚠️ افتح الملف بإنترنت لتحميل PDF');
-    if(btn){btn.classList.remove('ld');btn.disabled=false;}
-    return;
-  }
-  var printCSS='.print-prev,.pp-tbl,.pp-section{background:#fff!important;color:#111!important;}'
-    +'.pp-hdr-default{background:linear-gradient(135deg,#003d7a,#0055aa)!important;color:#fff!important;}'
-    +'.pp-tbl th{background:#003366!important;color:#fff!important;}'
-    +'.pp-tbl td{color:#111!important;background:#fff!important;}'
-    +'.pp-tbl tr:nth-child(even) td{background:#f5f8ff!important;}'
-    +'.pp-section-title{background:transparent!important;color:#003366!important;border:none!important;}'
-    +'.ab{color:#cc0000!important;font-weight:800!important;}.nm{color:#006600!important;}'
-    +'*{font-family:Cairo,sans-serif!important;}';
-  var fontLink='<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">';
-  var htmlStr=req.printHTML;
-  var fullHTML;
-  var hasHtmlTag=htmlStr.indexOf('<html')!==-1||htmlStr.indexOf('<HTML')!==-1;
-  if(hasHtmlTag){
-    fullHTML=htmlStr.replace('<head>','<head>'+fontLink).replace('<HEAD>','<HEAD>'+fontLink);
-    var hIdx=fullHTML.toLowerCase().indexOf('</head>');
-    if(hIdx!==-1){fullHTML=fullHTML.slice(0,hIdx)+'<style>'+printCSS+'</style>'+fullHTML.slice(hIdx);}
-  } else {
-    fullHTML='<!DOCTYPE html><html><head><meta charset="utf-8">'+fontLink+'<style>html,body{margin:0;padding:0;background:#fff;font-family:Cairo,sans-serif;}'+printCSS+'</style></head><body>'+htmlStr+'</body></html>';
-  }
-  var iframe=document.createElement('iframe');
-  iframe.style.cssText='position:fixed;top:0;left:-9999px;width:794px;height:1123px;border:none;background:#fff;';
-  document.body.appendChild(iframe);
-  var iDoc=iframe.contentDocument||iframe.contentWindow.document;
-  iDoc.open();iDoc.write(fullHTML);iDoc.close();
-  function _done(){try{document.body.removeChild(iframe);}catch(e){}if(btn){btn.classList.remove('ld');btn.disabled=false;}}
-  function _err(m){_done();toast('❌ خطأ: '+m);}
-  function _doCapture(){
-    var waitFonts=(iDoc.fonts&&iDoc.fonts.ready)?iDoc.fonts.ready:Promise.resolve();
-    waitFonts.then(function(){
-      setTimeout(function(){
-        var body=iDoc.body;
-        if(!body){_err('تعذر الوصول للمحتوى');return;}
-        var reportPages=iDoc.querySelectorAll('.report-page');
-        var printFooter=iDoc.getElementById('print-footer');
-        var usePageBoundaries=false;
-        var pageBoundaries=[];
-        if(reportPages.length>0&&printFooter){
-          var footerHTML=printFooter.outerHTML;
-          printFooter.style.display='none';
-          reportPages.forEach(function(pg){
-            var spacer=pg.querySelector('.page-footer-spacer');
-            if(spacer)spacer.remove();
-            var ftrDiv=iDoc.createElement('div');
-            ftrDiv.innerHTML=footerHTML;
-            var ftrEl=ftrDiv.firstElementChild;
-            if(ftrEl){ftrEl.style.position='absolute';ftrEl.style.bottom='0';ftrEl.style.left='0';ftrEl.style.right='0';ftrEl.style.zIndex='auto';ftrEl.style.display='block';ftrEl.id='';pg.appendChild(ftrEl);}
-            pg.style.position='relative';pg.style.height='1123px';pg.style.minHeight='1123px';pg.style.maxHeight='1123px';pg.style.boxSizing='border-box';pg.style.overflow='hidden';pg.style.margin='0';pg.style.padding=pg.style.padding||'1mm 3mm 0 3mm';
-          });
-          body.style.margin='0';body.style.padding='0';
-          usePageBoundaries=true;
-        }
-        if(usePageBoundaries){
-          void body.offsetHeight;
-          iDoc.querySelectorAll('.report-page').forEach(function(pg){pageBoundaries.push({top:pg.offsetTop,bottom:pg.offsetTop+pg.offsetHeight});});
-        }
-        var realH=Math.max(body.scrollHeight,body.offsetHeight,100);
-        iframe.style.height=realH+'px';
-        html2canvas(body,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,allowTaint:true,letterRendering:true,width:794,height:realH,windowWidth:794,windowHeight:realH}).then(function(canvas){
-          if(!canvas||!canvas.width||!canvas.height){_err('canvas فارغ');return;}
-          var J=window.jspdf.jsPDF;
-          var doc=new J({orientation:'portrait',unit:'mm',format:'a4'});
-          var pageW=210,pageH=297;
-          if(usePageBoundaries&&pageBoundaries.length>0){
-            var cScale=canvas.width/794;
-            for(var p=0;p<pageBoundaries.length;p++){
-              var pb=pageBoundaries[p];
-              var sY=Math.round(pb.top*cScale);
-              var sEnd=Math.round(pb.bottom*cScale);
-              var sH=Math.max(1,sEnd-sY);
-              if(p>0)doc.addPage();
-              var pc=document.createElement('canvas');var ctx=pc.getContext('2d');
-              pc.width=canvas.width;pc.height=sH;
-              ctx.fillStyle='#ffffff';ctx.fillRect(0,0,pc.width,pc.height);
-              ctx.drawImage(canvas,0,sY,canvas.width,sH,0,0,canvas.width,sH);
-              doc.addImage(pc.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,pageH);
-            }
-          } else {
-            var imgH=(canvas.height*pageW)/canvas.width;
-            if(!isFinite(imgH)||imgH<=0){_err('ابعاد غير صالحة');return;}
-            if(imgH<=pageH){
-              doc.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,imgH);
-            } else {
-              var sFactor=canvas.width/pageW;
-              var phPx=Math.round(pageH*sFactor);
-              var pc2=document.createElement('canvas');var ctx2=pc2.getContext('2d');
-              var sY2=0,isFirst=true;
-              while(sY2<canvas.height){
-                if(!isFirst)doc.addPage();
-                var slH=Math.min(phPx,canvas.height-sY2);
-                pc2.width=canvas.width;pc2.height=phPx;
-                ctx2.fillStyle='#ffffff';ctx2.fillRect(0,0,pc2.width,pc2.height);
-                ctx2.drawImage(canvas,0,sY2,canvas.width,slH,0,0,canvas.width,slH);
-                doc.addImage(pc2.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,pageH);
-                sY2+=phPx;isFirst=false;
-              }
-            }
-          }
-          doc.save((pt.name+'_'+req.id).replace(/\s+/g,'_')+'.pdf');
-          toast('✅ تم تحميل PDF');
-          _done();
-        }).catch(function(err){_err(err.message);});
-      },800);
-    }).catch(function(){setTimeout(function(){if(iframe.parentNode)_doCapture();},800);});
-  }
-  if(iDoc.readyState==='complete'){_doCapture();}
-  else{iframe.onload=_doCapture;setTimeout(function(){if(iframe.parentNode)_doCapture();},3000);}
+var _D=${dataJson};
+
+function toast(m,ms){
+  var t=document.getElementById('TT');
+  t.textContent=m;t.classList.add('sh');
+  setTimeout(function(){t.classList.remove('sh');}, ms||2800);
 }
-// فتح أول طلب مكتمل تلقائياً
+function tog(i){var c=document.getElementById('vc'+i);if(c)c.classList.toggle('op');}
+
+/* استعادة صور الترويسة المضغوطة داخل تقارير الطباعة */
+function _rimg(h){
+  if(!h) return '';
+  if(!_D.imgs||!_D.imgs.length) return h;
+  return String(h).replace(/@@MLIMG(\\d+)@@/g, function(m,n){ return _D.imgs[+n]||''; });
+}
+
+/* التقاط تقرير واحد داخل iframe معزول وإرجاع canvas + حدود الصفحات */
+function _cap(htmlStr){
+  return new Promise(function(resolve,reject){
+    var printCSS='.print-prev,.pp-tbl,.pp-section{background:#fff!important;color:#111!important;}'
+      +'.pp-hdr-default{background:linear-gradient(135deg,#003d7a,#0055aa)!important;color:#fff!important;}'
+      +'.pp-tbl th{background:#003366!important;color:#fff!important;}'
+      +'.pp-tbl td{color:#111!important;background:#fff!important;}'
+      +'.pp-tbl tr:nth-child(even) td{background:#f5f8ff!important;}'
+      +'.pp-section-title{background:transparent!important;color:#003366!important;border:none!important;}'
+      +'.ab{color:#cc0000!important;font-weight:800!important;}.nm{color:#006600!important;}';
+    var fontLink='<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&display=swap" rel="stylesheet">';
+    var fullHTML;
+    var hasHtmlTag=htmlStr.indexOf('<html')!==-1||htmlStr.indexOf('<HTML')!==-1;
+    if(hasHtmlTag){
+      fullHTML=htmlStr.replace('<head>','<head>'+fontLink).replace('<HEAD>','<HEAD>'+fontLink);
+      var hIdx=fullHTML.toLowerCase().indexOf('</head>');
+      if(hIdx!==-1){fullHTML=fullHTML.slice(0,hIdx)+'<style>'+printCSS+'</style>'+fullHTML.slice(hIdx);}
+    } else {
+      fullHTML='<!DOCTYPE html><html><head><meta charset="utf-8">'+fontLink
+        +'<style>html,body{margin:0;padding:0;background:#fff;}'+printCSS+'</style></head><body>'+htmlStr+'</body></html>';
+    }
+    var iframe=document.createElement('iframe');
+    iframe.style.cssText='position:fixed;top:0;left:-9999px;width:794px;height:1123px;border:none;background:#fff;';
+    document.body.appendChild(iframe);
+    var iDoc=iframe.contentDocument||iframe.contentWindow.document;
+    iDoc.open();iDoc.write(fullHTML);iDoc.close();
+    var fired=false;
+    function cleanup(){try{document.body.removeChild(iframe);}catch(e){}}
+    function run(){
+      if(fired) return; fired=true;
+      var waitFonts=(iDoc.fonts&&iDoc.fonts.ready)?iDoc.fonts.ready:Promise.resolve();
+      Promise.resolve(waitFonts).catch(function(){}).then(function(){
+        setTimeout(function(){
+          try{
+            var body=iDoc.body;
+            if(!body){cleanup();reject(new Error('تعذر الوصول للمحتوى'));return;}
+            var reportPages=iDoc.querySelectorAll('.report-page');
+            var printFooter=iDoc.getElementById('print-footer');
+            var pageBoundaries=[];
+            if(reportPages.length>0&&printFooter){
+              var footerHTML=printFooter.outerHTML;
+              printFooter.style.display='none';
+              Array.prototype.forEach.call(reportPages,function(pg){
+                var spacer=pg.querySelector('.page-footer-spacer');
+                if(spacer)spacer.remove();
+                var ftrDiv=iDoc.createElement('div');
+                ftrDiv.innerHTML=footerHTML;
+                var ftrEl=ftrDiv.firstElementChild;
+                if(ftrEl){ftrEl.style.position='absolute';ftrEl.style.bottom='0';ftrEl.style.left='0';ftrEl.style.right='0';ftrEl.style.zIndex='auto';ftrEl.style.display='block';ftrEl.id='';pg.appendChild(ftrEl);}
+                pg.style.position='relative';pg.style.height='1123px';pg.style.minHeight='1123px';pg.style.maxHeight='1123px';pg.style.boxSizing='border-box';pg.style.overflow='hidden';pg.style.margin='0';pg.style.padding=pg.style.padding||'1mm 3mm 0 3mm';
+              });
+              body.style.margin='0';body.style.padding='0';
+              void body.offsetHeight;
+              Array.prototype.forEach.call(iDoc.querySelectorAll('.report-page'),function(pg){
+                pageBoundaries.push({top:pg.offsetTop,bottom:pg.offsetTop+pg.offsetHeight});
+              });
+            }
+            var realH=Math.max(body.scrollHeight,body.offsetHeight,100);
+            iframe.style.height=realH+'px';
+            html2canvas(body,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,allowTaint:true,letterRendering:true,width:794,height:realH,windowWidth:794,windowHeight:realH})
+              .then(function(canvas){cleanup();resolve({canvas:canvas,bounds:pageBoundaries});})
+              .catch(function(err){cleanup();reject(err);});
+          }catch(e){cleanup();reject(e);}
+        },750);
+      });
+    }
+    if(iDoc.readyState==='complete') run();
+    else { iframe.onload=run; setTimeout(run,3000); }
+  });
+}
+
+/* إضافة صفحات التقرير إلى ملف PDF مشترك */
+function _addPages(doc,canvas,bounds,state){
+  if(!canvas||!canvas.width||!canvas.height) return;
+  var pageW=210,pageH=297;
+  function slice(sy,sh,fullPage){
+    var pc=document.createElement('canvas');
+    var ctx=pc.getContext('2d');
+    pc.width=canvas.width;pc.height=fullPage||sh;
+    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,pc.width,pc.height);
+    ctx.drawImage(canvas,0,sy,canvas.width,sh,0,0,canvas.width,sh);
+    if(state.started) doc.addPage();
+    doc.addImage(pc.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,pageH);
+    state.started=true;
+  }
+  if(bounds&&bounds.length){
+    var cScale=canvas.width/794;
+    for(var p=0;p<bounds.length;p++){
+      var sY=Math.round(bounds[p].top*cScale);
+      var sEnd=Math.round(bounds[p].bottom*cScale);
+      slice(sY,Math.max(1,sEnd-sY),0);
+    }
+    return;
+  }
+  var imgH=(canvas.height*pageW)/canvas.width;
+  if(!isFinite(imgH)||imgH<=0) return;
+  if(imgH<=pageH){
+    if(state.started) doc.addPage();
+    doc.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',0,0,pageW,imgH);
+    state.started=true;
+    return;
+  }
+  var phPx=Math.round(pageH*(canvas.width/pageW));
+  var sY2=0;
+  while(sY2<canvas.height){
+    slice(sY2,Math.min(phPx,canvas.height-sY2),phPx);
+    sY2+=phPx;
+  }
+}
+
+var _pdfBusy=false;
+function dlPDF(i,di,btn){
+  if(_pdfBusy){toast('⏳ جاري تحضير ملف سابق — انتظر قليلاً');return;}
+  var req=_D.requests[i];
+  var docs=(req&&req.docs)||[];
+  var list=(di>=0)?[docs[di]]:docs.slice();
+  list=list.filter(function(d){return d&&d.h;});
+  if(!list.length){toast('⚠️ لا يوجد تقرير جاهز لهذه الزيارة');return;}
+  if(!window.html2canvas||!window.jspdf){toast('⚠️ افتح الملف والإنترنت متصل لتحميل PDF');return;}
+  _pdfBusy=true;
+  if(btn){btn.classList.add('ld');btn.disabled=true;}
+  function reset(){_pdfBusy=false;if(btn){btn.classList.remove('ld');btn.disabled=false;}}
+  toast('⏳ جاري تحضير ملف PDF...',6000);
+  var doc=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  var state={started:false};
+  var chain=Promise.resolve();
+  list.forEach(function(d){
+    chain=chain.then(function(){
+      return _cap(_rimg(d.h)).then(function(res){_addPages(doc,res.canvas,res.bounds,state);});
+    });
+  });
+  chain.then(function(){
+    if(!state.started) throw new Error('لا يوجد محتوى');
+    var nm=((_D.patient.name||'result')+'_'+(req.id||'')).replace(/[\\\\/:*?"<>|\\s]+/g,'_');
+    doc.save(nm+'.pdf');
+    toast('✅ تم تحميل ملف PDF');
+    reset();
+  }).catch(function(err){
+    toast('❌ تعذر إنشاء PDF: '+((err&&err.message)||err));
+    reset();
+  });
+}
+
+/* فتح أول زيارة مكتملة تلقائياً */
 (function(){
-  const fd=_D.requests.findIndex(r=>r.status==='done');
-  if(fd>=0) setTimeout(()=>tog(fd),300);
+  var fd=-1;
+  for(var i=0;i<_D.requests.length;i++){ if(_D.requests[i].status==='done'){fd=i;break;} }
+  if(fd>=0) setTimeout(function(){tog(fd);},300);
 })();
 <\/script>
 </body>
 </html>`;
 }
 
-// ── إرسال الملف عبر واتساب ──────────────────────
+// ── حفظ ملف البوابة تلقائياً في مجلد MedLab ──────────────
+//    نفس مسار حفظ الـ PDF المعتمد في البرنامج:
+//    Electron → C:\MedLabPro\{اسم المريض}\
+//    متصفح   → مجلد PDFs داخل مجلد MedLabPro (File System Access)
+//    وإن تعذّر الاثنان → تنزيل عادي (السلوك القديم) حتى لا تضيع النتيجة.
+async function _pmSaveHTMLFile(html, fileName, patientName, patientId){
+  let bytes = null;
+  try { bytes = new TextEncoder().encode(html); } catch(e){}
+
+  // ① Electron — حفظ مباشر بلا أي نافذة حفظ
+  try {
+    if (window.IS_ELECTRON && window.electronAPI && window.electronAPI.savePDF && bytes) {
+      const res = await window.electronAPI.savePDF({
+        pdfBuffer:   Array.from(bytes),
+        fileName:    fileName,
+        patientName: patientName || 'Unknown',
+        patientId:   patientId   || ''
+      });
+      if (res && res.ok) {
+        let path = res.filePath || '';
+        // إن لم ينتهِ المسار باسم الملف (تغيّر الامتداد مثلاً) نُعيد الكتابة بالاسم الصحيح
+        if (path && path.slice(-fileName.length) !== fileName && window.electronAPI.writeFile) {
+          try {
+            const dir = path.replace(/[^\\/]*$/, '');
+            await window.electronAPI.writeFile(dir + fileName, html);
+            path = dir + fileName;
+          } catch(e){ console.warn('[Portal] rewrite html', e); }
+        }
+        return { ok:true, where: path || ('C:\\MedLabPro\\' + (patientName||'')) };
+      }
+      console.warn('[Portal] Electron save failed:', res && res.error);
+    }
+  } catch(e){ console.warn('[Portal] Electron save error', e); }
+
+  // ② متصفح — File System Access داخل مجلد MedLabPro
+  try {
+    if (!_fsaDirHandle && typeof fsaLoadHandle === 'function') {
+      try {
+        const saved = await fsaLoadHandle();
+        if (saved && await fsaVerifyHandle(saved)) _fsaDirHandle = saved;
+      } catch(e){}
+    }
+    if (_fsaDirHandle && bytes) {
+      const folder   = await _fsaDirHandle.getDirectoryHandle('PDFs', {create:true});
+      const fh       = await folder.getFileHandle(fileName, {create:true});
+      const writable = await fh.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      return { ok:true, where:'PDFs\\' + fileName };
+    }
+  } catch(e){ console.warn('[Portal] FSA save error', e); }
+
+  // ③ احتياطي — تنزيل عادي (السلوك السابق)
+  try {
+    const blob = new Blob([html], { type:'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return { ok:true, where:'مجلد التنزيلات', fallback:true };
+  } catch(e){ console.warn('[Portal] blob save error', e); }
+
+  return { ok:false, where:'' };
+}
+
+// ── حفظ الملف ثم فتح دردشة المريض في واتساب مباشرةً ──────
 async function _pmSendFile() {
   const btn = document.getElementById('pm-btn-send');
   if (btn) btn.classList.add('loading');
@@ -42269,49 +43118,37 @@ async function _pmSendFile() {
     if (!req) throw new Error('الطلب غير موجود');
 
     const pt = patients.find(p => p.id === req.patientId) || {};
-    if (!pt.phone) throw new Error('لا يوجد رقم هاتف');
+    // نفس مصدر الرقم المعتمد في shareWhatsApp / shareUAWhatsApp
+    const rawPhone = pt.phone || req.patientPhone || '';
+    if (!rawPhone) throw new Error('لا يوجد رقم هاتف — أضف رقم المريض أولاً');
 
-    // بناء البيانات والـ HTML
+    // أرقام فقط — لا مسافات ولا + ولا رموز (وإلا يرفض واتساب فتح الدردشة)
+    const intPhone = String(_formatPhoneForWhatsApp(rawPhone, (pt && pt.phoneCC) || null) || '').replace(/\D/g,'');
+    if (intPhone.length < 8) throw new Error('رقم هاتف غير صالح: ' + rawPhone);
+
     const data = _pmBuildData(req.patientId);
     if (!data) throw new Error('فشل بناء البيانات');
 
-    const html = _pmBuildHTML(data);
-    const ptName = data.patient.name;
-    const labName = data.lab.name;
+    const html     = _pmBuildHTML(data);
+    const ptName   = data.patient.name || pt.name || 'Patient';
+    const safeNm   = (ptName.replace(/[\\/:*?"<>|]/g,'_').trim()) || 'Patient';
+    const fileName = ('نتائج_' + safeNm + '.html').replace(/\s+/g,'_');
 
-    // تحميل الملف
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `نتائج_${ptName}.html`.replace(/\s+/g,'_');
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-
-    // رسالة واتساب
-    const doneReqs = data.requests.filter(r => r.status === 'done').length;
-    const msg =
-      `🏥 *${labName}*\n` +
-      `━━━━━━━━━━━━━━━━━━\n` +
-      `السلام عليكم *${ptName}* 👋\n\n` +
-      `✅ نتائج تحاليلك جاهزة! (${doneReqs} طلب مكتمل)\n\n` +
-      `📎 *الخطوات:*\n` +
-      `1️⃣ احفظ الملف المرفق\n` +
-      `2️⃣ افتحه بـ Chrome أو Safari\n` +
-      `3️⃣ ستظهر نتائجك فوراً 🎉\n\n` +
-      `_يمكنك تحميل PDF لكل تحليل من داخل الملف_\n\n` +
-      `📞 للاستفسار: ${data.lab.phone || 'تواصل مع المختبر'}`;
-
-    const intPhone = _formatPhoneForWhatsApp(pt.phone, pt.phoneCC);
-
-    // فتح واتساب بعد لحظة لضمان بدء تحميل الملف
-    setTimeout(() => {
-      _openWhatsAppDirect(intPhone + '?text=' + encodeURIComponent(msg).replace(/\?text=/, ''));
-      window.open('https://wa.me/' + intPhone + '?text=' + encodeURIComponent(msg), '_blank');
-    }, 600);
+    showNotif('جاري التحضير','⏳ جاري حفظ ملف النتائج...','info');
+    const saved = await _pmSaveHTMLFile(html, fileName, safeNm, pt.id || '');
 
     _pmClose();
-    showNotif('✅ جاهز','تم تحميل الملف وفتح واتساب — أرسل الملف للمريض 📎','success');
+
+    if (saved && saved.ok) {
+      showNotif('✅ تم الحفظ',
+        (saved.fallback ? 'الملف في مجلد التنزيلات' : 'الملف محفوظ في: ' + saved.where)
+        + ' — فتح دردشة 📱 +' + intPhone + ' · أرفق الملف 📎', 'success');
+    } else {
+      showNotif('تنبيه','تعذّر حفظ الملف تلقائياً — احفظه يدوياً','warning');
+    }
+
+    // فتح دردشة المريض مباشرةً في تطبيق واتساب — بلا صفحة ويب
+    setTimeout(() => { _openWhatsAppDirect(intPhone); }, 400);
 
   } catch(err) {
     showNotif('خطأ', err.message || 'حدث خطأ', 'error');
@@ -42320,6 +43157,7 @@ async function _pmSendFile() {
     if (btn) btn.classList.remove('loading');
   }
 }
+
 
 /* ══════════════════════════════════════════════════════
    NEON BANNER SYSTEM — بانر الترحيب النيون
@@ -42705,7 +43543,7 @@ setTimeout(function(){
         });
         if(allFilled) req.status='done';
         else if(req.status!=='done') req.status='inprogress';
-        if(typeof save==='function') save('requests',requests);
+        if(typeof saveOne==='function') saveOne('requests',requests,req); else if(typeof save==='function') save('requests',requests);
         // تحديث الـ badges فقط بتأخير إضافي لتجنب إعاقة الكتابة
         setTimeout(function(){
           if(typeof updateDashboard==='function') updateDashboard();
@@ -47030,7 +47868,7 @@ function _flush(){
   try{ _collectInto(req); }catch(e){ console.warn('[ResultSync] collect', e); }
   req._updatedAt = Date.now();          // ⭐ الختم الذي كان ناقصاً
   _lastSeen[req.id] = req._updatedAt;   // لا تُعِد رسم شاشتنا بسبب بثّنا
-  try{ save('requests', requests); }catch(e){ console.warn('[ResultSync] save', e); }
+  try{ saveOne('requests', requests, req); }catch(e){ console.warn('[ResultSync] save', e); }
 }
 window._flushResultSync = _flush;
 
@@ -48213,7 +49051,7 @@ window.MLCP = {
         req.resultDetails.CBC.editedAt = new Date().toISOString();
       }
       req._updatedAt = Date.now();
-      if (typeof save === 'function') save('requests', requests);
+      if (typeof saveOne === 'function') saveOne('requests', requests, req); else if (typeof save === 'function') save('requests', requests);
       if (typeof updateBadges === 'function') { try { updateBadges(); } catch (e) {} }
       var st = document.getElementById('cbcE-status');
       if (st) st.textContent = '✅ تم الحفظ — الطباعة ستعتمد آخر تعديل';
