@@ -26757,10 +26757,24 @@ function _buildCultureModalBody(c){
   const today = new Date().toISOString().split('T')[0];
   const body = document.getElementById('culture-modal-body'); if(!body) return;
 
+  // ⭐ اللقب: من السجل، وإلا من ملف المريض، وإلا فارغ
+  const _cultPt = c ? patients.find(p=>p.id===c.patientId) : null;
+  window._cultTitle = (c && c.patientTitle) || (_cultPt && _cultPt.title) || '';
+  window._cultTitleGender = (_cultPt && _cultPt.gender) || '';
+  // ⭐ حالة الجرثوم الابتدائية — تمنع إعادة بناء جدول AST بلا داعٍ
+  window._cultOrgState = (c && c.organism) ? (/no\s*growth/i.test(c.organism) ? 'nogrowth' : 'org') : 'none';
+
   body.innerHTML = `
   <!-- الخطوة 1: معلومات الزرع -->
   <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
     <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:10px">① معلومات الطلب</div>
+
+    <!-- اللقب — كما في واجهة إضافة مريض -->
+    <div class="fg" style="margin-bottom:12px">
+      <label class="fl" style="font-family:'Cairo',sans-serif;font-weight:900">اللقب</label>
+      <div id="cult-title-row" style="display:flex;flex-wrap:nowrap;gap:6px;margin-top:4px;overflow-x:auto;padding:5px 3px">${_cultTitleBtnsHTML()}</div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="fg" style="margin-bottom:0">
         <label class="fl">المريض</label>
@@ -26796,7 +26810,7 @@ function _buildCultureModalBody(c){
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">تفاصيل العينة</label>
-        <input class="fc" id="cult-specimen" placeholder="مثال: MSU · Catheter · BAL · Biopsy..." value="${c?c.specimenDetail||'':''}">
+        ${exselHTML('cult-specimen', CULT_SPECIMENS, (c?c.specimenDetail||'':''), {placeholder:'اكتب أو اختر...'})}
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">الطبيب المحول</label>
@@ -26823,48 +26837,18 @@ function _buildCultureModalBody(c){
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
       <div class="fg" style="margin-bottom:0">
         <label class="fl">صبغة غرام (Gram Stain)</label>
-        <select class="fc" id="cult-gram" lang="en" dir="ltr">
-          <option value="">Not done</option>
-          <option ${c&&c.gramStain==='GPC'?'selected':''} value="GPC">GPC — Gram Pos. Cocci</option>
-          <option ${c&&c.gramStain==='GPC-clusters'?'selected':''} value="GPC-clusters">GPC in clusters (Staph-like)</option>
-          <option ${c&&c.gramStain==='GPC-chains'?'selected':''} value="GPC-chains">GPC in chains (Strep-like)</option>
-          <option ${c&&c.gramStain==='GNB'?'selected':''} value="GNB">GNB — Gram Neg. Bacilli</option>
-          <option ${c&&c.gramStain==='GNC'?'selected':''} value="GNC">GNC — Gram Neg. Cocci</option>
-          <option ${c&&c.gramStain==='GPB'?'selected':''} value="GPB">GPB — Gram Pos. Bacilli</option>
-          <option ${c&&c.gramStain==='AFB'?'selected':''} value="AFB">AFB — Acid Fast Bacilli</option>
-          <option ${c&&c.gramStain==='Yeast'?'selected':''} value="Yeast">Yeast cells / Pseudohyphae</option>
-          <option ${c&&c.gramStain==='Mixed'?'selected':''} value="Mixed">Mixed flora</option>
-          <option ${c&&c.gramStain==='None'?'selected':''} value="None">No organisms seen</option>
-        </select>
+        ${exselHTML('cult-gram', CULT_GRAM_OPTS, (c?c.gramStain||'':''), {placeholder:'Not done'})}
       </div>
     </div>
     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;margin-top:4px">🔬 الفحص المجهري (Microscopy)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div class="fg" style="margin-bottom:0">
         <label class="fl">Epithelial Cells / الخلايا الظهارية</label>
-        <select class="fc" id="cult-epithelial" lang="en" dir="ltr">
-          <option value="">--</option>
-          <option ${(!c||c.epithelial==='Few')?'selected':''} value="Few">Few</option>
-          <option ${c&&c.epithelial==='+'?'selected':''} value="+">+</option>
-          <option ${c&&c.epithelial==='++'?'selected':''} value="++">++</option>
-          <option ${c&&c.epithelial==='+++'?'selected':''} value="+++">+++</option>
-          <option ${c&&c.epithelial==='++++' ?'selected':''} value="++++">++++</option>
-        </select>
+        ${exselHTML('cult-epithelial', CULT_EPI_OPTS, (c?c.epithelial||'':''), {placeholder:'Empty'})}
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">Pus Cells / خلايا القيح</label>
-        <select class="fc" id="cult-pus" lang="en" dir="ltr">
-          <option value="">--</option>
-          <option ${c&&c.pusCells==='1-2'?'selected':''} value="1-2">1 - 2</option>
-          <option ${c&&c.pusCells==='2-3'?'selected':''} value="2-3">2 - 3</option>
-          <option ${c&&c.pusCells==='3-4'?'selected':''} value="3-4">3 - 4</option>
-          <option ${c&&c.pusCells==='4-6'?'selected':''} value="4-6">4 - 6</option>
-          <option ${c&&c.pusCells==='6-8'?'selected':''} value="6-8">6 - 8</option>
-          <option ${c&&c.pusCells==='+'?'selected':''} value="+">+</option>
-          <option ${c&&c.pusCells==='++'?'selected':''} value="++">++</option>
-          <option ${c&&c.pusCells==='+++'?'selected':''} value="+++">+++</option>
-          <option ${c&&c.pusCells==='++++' ?'selected':''} value="++++">++++</option>
-        </select>
+        ${exselHTML('cult-pus', CULT_PUS_OPTS, (c?c.pusCells||'':''), {placeholder:'Empty'})}
       </div>
     </div>
   </div>
@@ -26882,26 +26866,11 @@ function _buildCultureModalBody(c){
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">الجرثوم المعزول (Organism)</label>
-        <select class="fc" id="cult-organism-sel" onchange="cultOrganismChanged()" lang="en" dir="ltr">
-          <option value="">-- Select --</option>
-        </select>
-        <input class="fc" id="cult-organism-custom" lang="en" dir="ltr" spellcheck="false" placeholder="Type organism name..." style="display:none;margin-top:6px" value="${c&&c.organism&&!_isKnownOrganism(c.organism)?c.organism:''}">
+        ${exselHTML('cult-organism', _cultOrgOptions(c?c.orgGroup:''), (c?c.organism||'':''), {placeholder:'اكتب أو اختر الجرثوم...', onChange:function(){ cultOrganismChanged(); }})}
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">الكمية / Colony Count</label>
-        <select class="fc" id="cult-colony" lang="en" dir="ltr">
-          <option value="">--</option>
-          <option ${c&&c.colony==='No Growth'?'selected':''}>No Growth</option>
-          <option ${c&&c.colony==='< 10³ CFU/mL (insignificant)'?'selected':''}>< 10³ CFU/mL (insignificant)</option>
-          <option ${c&&c.colony==='10³–10⁴ CFU/mL (equivocal)'?'selected':''}>10³–10⁴ CFU/mL (equivocal)</option>
-          <option ${c&&c.colony==='10⁴–10⁵ CFU/mL'?'selected':''}>10⁴–10⁵ CFU/mL</option>
-          <option ${c&&c.colony==='>10⁵ CFU/mL (significant)'?'selected':''}>>10⁵ CFU/mL (significant)</option>
-          <option ${c&&c.colony==='Scanty growth'?'selected':''}>Scanty growth</option>
-          <option ${c&&c.colony==='Moderate growth'?'selected':''}>Moderate growth</option>
-          <option ${c&&c.colony==='Heavy / Confluent growth'?'selected':''}>Heavy / Confluent growth</option>
-          <option ${c&&c.colony==='Pure growth'?'selected':''}>Pure growth</option>
-          <option ${c&&c.colony==='Mixed growth (polymicrobial)'?'selected':''}>Mixed growth (polymicrobial)</option>
-        </select>
+        ${exselHTML('cult-colony', CULT_COLONY_OPTS, (c?c.colony||'':''), {placeholder:'Empty'})}
       </div>
       <div class="fg" style="margin-bottom:0">
         <label class="fl">ملاحظات المزرعة</label>
@@ -26946,20 +26915,12 @@ function _buildCultureModalBody(c){
       if(c.orgGroup){
         const grpSel=document.getElementById('cult-org-group');
         if(grpSel) grpSel.value=c.orgGroup;
-        _populateOrganismList(c.orgGroup);
-        setTimeout(()=>{
-          const orgSel=document.getElementById('cult-organism-sel');
-          if(orgSel&&c.organism){
-            const opt=Array.from(orgSel.options).find(o=>o.value===c.organism);
-            if(opt){ orgSel.value=c.organism; }
-            else { orgSel.value='__custom__'; document.getElementById('cult-organism-custom').style.display='block'; }
-          }
-          cultOrganismChanged();
-        },50);
+        const _oNote=document.getElementById('cult-org-note');
+        const _oData=ORGANISMS_DB[c.orgGroup];
+        if(_oNote&&_oData&&_oData.notes){ _oNote.textContent='📋 '+_oData.notes; _oNote.style.display='block'; }
       }
       if(c.wbc)(document.getElementById('cult-wbc')||{}).value=c.wbc;
       if(c.sqEpi)(document.getElementById('cult-sqepi')||{}).value=c.sqEpi;
-      if(c.colony)(document.getElementById('cult-colony')||{}).value=c.colony;
       // restore doctor
       const drSel=document.getElementById('cult-doctor-sel');
       if(drSel&&c.doctorId){ drSel.value=c.doctorId; }
@@ -26985,6 +26946,46 @@ function _buildCultureModalBody(c){
 
 function _isKnownOrganism(org){
   return Object.values(ORGANISMS_DB).some(g=>g.organisms.includes(org));
+}
+
+// ═══ ألقاب المريض — نفس قائمة واجهة إضافة مريض ═══
+const CULT_TITLES=[{v:'السيد',g:'male'},{v:'السيدة',g:'female'},{v:'الآنسة',g:'female'},{v:'الحاج',g:'male'},{v:'الحاجة',g:'female'},{v:'الاستاذ',g:'male'},{v:'الاستاذة',g:'female'},{v:'الطفل',g:'male'},{v:'الطفلة',g:'female'},{v:'الدكتور',g:'male'},{v:'الدكتورة',g:'female'}];
+function _cultTitleBtnsHTML(){
+  const cur=window._cultTitle||'';
+  return CULT_TITLES.map(t=>{
+    const sel=cur===t.v;
+    return `<button type="button" class="btn btn-sm ${sel?'btn-p':'btn-s'}" onclick="cultSelectTitle('${t.v}','${t.g}')" style="font-size:13px;font-family:'Cairo',sans-serif;font-weight:900;padding:7px 11px;white-space:nowrap;flex-shrink:0;${sel?'box-shadow:0 0 0 3px rgba(0,212,255,0.55);transform:scale(1.06);':''}transition:all 0.15s">${sel?'✓ ':''}${t.v}</button>`;
+  }).join('');
+}
+function cultSelectTitle(v,g){
+  window._cultTitle = (window._cultTitle===v) ? '' : v;   // ضغطة ثانية تلغي الاختيار
+  window._cultTitleGender = window._cultTitle ? (g||'') : '';
+  const row=document.getElementById('cult-title-row');
+  if(row) row.innerHTML=_cultTitleBtnsHTML();
+}
+
+// ═══ قوائم الحقول القابلة للاختيار أو الكتابة (EXSEL) ═══
+const CULT_SPECIMENS=['MSU — Mid-stream urine','Catheter urine','Suprapubic aspirate','First-void urine','Wound swab','Pus / Abscess aspirate','Throat swab','Nasal swab','Ear swab','Eye swab','High vaginal swab','Endocervical swab','Urethral swab','Sputum','BAL — Bronchoalveolar lavage','Blood','CSF','Stool','Pleural fluid','Ascitic fluid','Synovial fluid','Tissue biopsy','Catheter tip','Semen'];
+const CULT_GRAM_OPTS=['GPC — Gram Positive Cocci','GPC in clusters (Staph-like)','GPC in chains (Strep-like)','GNB — Gram Negative Bacilli','GNC — Gram Negative Cocci','GPB — Gram Positive Bacilli','AFB — Acid Fast Bacilli','Yeast cells / Pseudohyphae','Mixed flora','No organisms seen'];
+const CULT_EPI_OPTS=['Few','+','++','+++','++++'];
+const CULT_PUS_OPTS=['1 - 2','2 - 3','3 - 4','4 - 6','6 - 8','8 - 10','10 - 15','15 - 20','20 - 25','+','++','+++','++++','TNTC'];
+const CULT_COLONY_OPTS=['No Growth','< 10³ CFU/mL (insignificant)','10³–10⁴ CFU/mL (equivocal)','10⁴–10⁵ CFU/mL','>10⁵ CFU/mL (significant)','Scanty growth','Moderate growth','Heavy / Confluent growth','Pure growth','Mixed growth (polymicrobial)'];
+
+// كل الجراثيم — أو جراثيم المجموعة المختارة فقط
+function _cultOrgOptions(grp){
+  try{
+    if(grp && ORGANISMS_DB[grp] && Array.isArray(ORGANISMS_DB[grp].organisms)) return ORGANISMS_DB[grp].organisms.slice();
+    const all=[];
+    Object.keys(ORGANISMS_DB).forEach(k=>{
+      (ORGANISMS_DB[k].organisms||[]).forEach(o=>{ if(all.indexOf(o)===-1) all.push(o); });
+    });
+    return all;
+  }catch(e){ return []; }
+}
+// القيمة الحالية للجرثوم (حقل EXSEL — كتابة حرة أو اختيار)
+function _cultOrganismValue(){
+  const el=document.getElementById('cult-organism');
+  return el ? String(el.value||'').trim() : '';
 }
 
 function cultUpdateAgeDisplay(){
@@ -27051,6 +27052,13 @@ function cultSelectPatient(pid){
   // auto-fill phone if available
   const phoneEl=document.getElementById('cult-pt-phone');
   if(phoneEl && pt.phone) phoneEl.value=pt.phone;
+  // اللقب من ملف المريض
+  if(pt.title){
+    window._cultTitle=pt.title;
+    window._cultTitleGender=pt.gender||'';
+    const trow=document.getElementById('cult-title-row');
+    if(trow) trow.innerHTML=_cultTitleBtnsHTML();
+  }
   document.getElementById('cult-pt-suggest').style.display='none';
 }
 
@@ -27064,9 +27072,8 @@ function cultTypeChanged(silent){
   _syncAbxDataFromUI();
   // ────────────────────────────────────────────────
   // تحديث قائمة المضادات إذا تغير نوع الزرع
-  const orgSel=document.getElementById('cult-organism-sel');
-  const org=orgSel?orgSel.value:'';
-  const isNoGrowth=org.includes('No Growth');
+  const org=_cultOrganismValue();
+  const isNoGrowth=/no\s*growth/i.test(org);
   if(!isNoGrowth) _loadAbxForType(type);
 }
 
@@ -27076,34 +27083,31 @@ function cultOrgGroupChanged(){
 }
 
 function _populateOrganismList(grp){
-  const sel=document.getElementById('cult-organism-sel'); if(!sel)return;
+  // حقل الجرثوم صار EXSEL: نُعيد تسجيل خياراته فقط ولا نلمس ما كتبه المستخدم
+  try{ EXSEL.reg('cult-organism', _cultOrgOptions(grp), function(){ cultOrganismChanged(); }); }catch(e){}
   const data=ORGANISMS_DB[grp];
-  if(!data){sel.innerHTML='<option value="">-- Select --</option>';return;}
-  sel.innerHTML=`<option value="">-- Select --</option>
-    ${data.organisms.map(o=>`<option value="${o}">${o}</option>`).join('')}
-    <option value="__custom__">✏️ Manual entry / Not listed</option>`;
   const noteEl=document.getElementById('cult-org-note');
-  if(noteEl&&data.notes){noteEl.textContent='📋 '+data.notes; noteEl.style.display='block';}
+  if(noteEl){
+    if(data&&data.notes){ noteEl.textContent='📋 '+data.notes; noteEl.style.display='block'; }
+    else { noteEl.style.display='none'; }
+  }
 }
 
 function cultOrganismChanged(){
-  const sel=document.getElementById('cult-organism-sel');
-  const custom=document.getElementById('cult-organism-custom');
   const abxSec=document.getElementById('cult-abx-section');
-  const org=sel?sel.value:'';
+  const org=_cultOrganismValue();
+  // ثلاث حالات فقط: فارغ / لا نمو / جرثوم — لا نُعيد بناء الجدول أثناء كتابة الاسم
+  const state = !org ? 'none' : (/no\s*growth/i.test(org) ? 'nogrowth' : 'org');
+  if(state === window._cultOrgState) return;
+  window._cultOrgState = state;
 
-  if(org==='__custom__'){ custom.style.display='block'; custom.focus(); }
-  else { custom.style.display='none'; }
-
-  const isNoGrowth=org.includes('No Growth');
-  if(isNoGrowth){ if(abxSec) abxSec.style.display='none'; return; }
-  if(!org){ if(abxSec) abxSec.style.display='none'; return; }
+  if(state !== 'org'){ if(abxSec) abxSec.style.display='none'; return; }
 
   // ── مزامنة الحالة الحالية قبل إعادة بناء الجدول ──
   _syncAbxDataFromUI();
   // ────────────────────────────────────────────────
   if(abxSec) abxSec.style.display='block';
-  const type=document.getElementById('cult-type').value;
+  const type=(document.getElementById('cult-type')||{}).value||'';
   if(type) _loadAbxForType(type);
 }
 
@@ -27407,8 +27411,9 @@ async function saveCultureEntry(){
     } else {
       const newPt={
         id:ptId, name:ptName,
+        title: window._cultTitle||'',
         phone:(document.getElementById('cult-pt-phone')||{}).value||'',
-        gender:'male', ageDisplay:'', ageVal:0,
+        gender: window._cultTitleGender||'male', ageDisplay:'', ageVal:0,
         registered:new Date().toISOString().split('T')[0],
         visits:1, status:'active', barcode:ptId
       };
@@ -27423,15 +27428,14 @@ async function saveCultureEntry(){
   }
 
   const orgGroup=(document.getElementById('cult-org-group')||{}).value||'';
-  const orgSel=document.getElementById('cult-organism-sel');
-  const orgCustom=(document.getElementById('cult-organism-custom')||{}).value.trim();
-  const organism=(orgSel&&orgSel.value==='__custom__')?orgCustom:(orgSel?orgSel.value:'');
-  const isNoGrowth=organism.includes('No Growth');
+  const organism=_cultOrganismValue();
+  const isNoGrowth=/no\s*growth/i.test(organism);
 
   const rec={
     id: window._editCultureId || _uid('cult-'),
     patientId: ptId,
     patientName: ptName,
+    patientTitle: window._cultTitle||'',
     patientPhone: (document.getElementById('cult-pt-phone')||{}).value||'',
     cultureType: type,
     specimenDetail: (document.getElementById('cult-specimen')||{}).value||'',
@@ -27496,6 +27500,9 @@ function _buildCultureHTML(cid){
     : (c.ageOverride ? c.ageOverride+' '+_cultAgeUnitEn : '—');
   const nameColor = s.colorName||'#cc0011';
   const doctorColor = s.colorDoctor||'#cc0011';
+  // ⭐ اللقب (السيد / الآنسة / الطفل ...) — من سجل الزرع أو من ملف المريض
+  const cultTitle  = c.patientTitle || pt.title || '';
+  const cultFullNm = (cultTitle ? cultTitle+' / ' : '') + (pt.name || c.patientName || '—');
 
   let hdrHTML='';
   if(s.blankHdr) hdrHTML=blankHdrHTML(s);
@@ -27542,7 +27549,7 @@ function _buildCultureHTML(cid){
   <div style="margin:4px 6px 2px;direction:ltr">
     <div style="display:flex;align-items:flex-start;gap:10px">
       <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-        ${_cuRL('Name', pt.name, nameColor, true)}
+        ${_cuRL('Name', cultFullNm, nameColor, true)}
         ${_cuRL_SA('Sex/Age', (pt.gender==='female'?'Female':'Male')+' / '+(ageDisplay||'—'), '#000', false)}
         ${_cuRL('Doctor', drName||'—', doctorColor, true)}
       </div>
@@ -27612,9 +27619,9 @@ function _buildCultureHTML(cid){
     const grpS = abxList.filter(a=>_norm(a)==='S');
     const grpI = abxList.filter(a=>_norm(a)==='I');
     const grpR = abxList.filter(a=>_norm(a)==='R');
-    const grpN = abxList.filter(a=>['S','I','R'].indexOf(_norm(a))===-1);
     const maxN = Math.max(grpS.length, grpI.length, grpR.length);
-    if(!maxN && !grpN.length) return '';
+    // لا يُطبع قسم AST إطلاقاً ما لم تُسجَّل نتيجة S/I/R واحدة على الأقل
+    if(!maxN) return '';
 
     // مقاسات متكيّفة — تضمن بقاء التقرير في ورقة واحدة عند كثرة المضادات
     const tight  = maxN > 14;
@@ -27657,7 +27664,7 @@ function _buildCultureHTML(cid){
     // صفوف الجدول — كل عمود مستقل عن الآخر
     let bodyRows = '';
     for(let rI=0; rI<maxN; rI++){
-      const isLast = (rI === maxN-1) && !grpN.length;
+      const isLast = (rI === maxN-1);
       bodyRows += '<tr>' + COLS.map((col,ci)=>{
         const a = col.list[rI] || null;
         const rowBg = (rI % 2 === 1) ? col.zebra : '#ffffff';
@@ -27665,22 +27672,12 @@ function _buildCultureHTML(cid){
       }).join('') + '</tr>';
     }
 
-    // إن لم تُسجَّل أي نتيجة S/I/R نضع صفاً واحداً بشرطة في الأعمدة الثلاثة
-    if(maxN === 0){
-      bodyRows = '<tr>' + COLS.map((col,ci)=>`<td style="width:33.33%;${ci>0?'border-left:1.5px solid #b8b8b8;':''}padding:${RPAD};background:#fff;text-align:center;font-size:12px;color:#999;font-family:Arial,sans-serif">—</td>`).join('') + '</tr>';
-    }
-
-    // شريط "غير مُختبَر / قيد الإنجاز"
-    const pendingBar = grpN.length ? `
-      <div style="border-top:1.5px solid #b8b8b8;background:#f7f7f7;padding:${tight?'2px 9px':'3px 10px'};font-family:Arial,sans-serif">
-        <span style="font-size:${tight?'11px':'12px'};font-weight:900;color:#666;letter-spacing:0.3px">NOT REPORTED:</span>
-        <span style="font-size:${tight?'11px':'12.5px'};font-weight:700;color:#444;margin-left:5px">${grpN.map(a=>{const q=_abxInfo(a);return q.code+' — '+_clean(q.name);}).join('  ·  ')}</span>
-      </div>` : '';
-
-    // سطر الـ MIC كما هو
-    const micLine = abxList.some(a=>a.mic) ? `
+    // سطر الـ MIC — يُطبع فقط لِما أُدخلت له قيمة رقمية حقيقية
+    const _micOk = a => /\d/.test(String(a.mic||''));
+    const micList = abxList.filter(_micOk);
+    const micLine = micList.length ? `
       <div style="margin-top:5px;font-size:${tight?'12px':'13.5px'};color:#555;font-weight:600;font-family:Arial,sans-serif">
-        <b style="color:#333">MIC:</b> ${abxList.filter(a=>a.mic).map(a=>`${a.code}: ${a.mic} µg/mL`).join(' · ')}
+        <b style="color:#333">MIC:</b> ${micList.map(a=>`${a.code}: ${String(a.mic).trim()} µg/mL`).join(' · ')}
       </div>` : '';
 
     return `
@@ -27694,7 +27691,6 @@ function _buildCultureHTML(cid){
         <thead><tr>${headCells}</tr></thead>
         <tbody>${bodyRows}</tbody>
       </table>
-      ${pendingBar}
     </div>
     ${micLine}
   </div>`;
