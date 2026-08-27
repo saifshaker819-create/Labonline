@@ -20039,7 +20039,15 @@ function viewPatientResults(rid){
   setTimeout(()=>showPatientResults(),200);
 }
 
-function updateBadges(){document.getElementById('nb-patients').textContent=patients.length;document.getElementById('nb-requests').textContent=requests.filter(r=>r.status==='pending').length;}
+function updateBadges(){
+  var _p=document.getElementById('nb-patients'); if(_p) _p.textContent=patients.length;
+  /* ⭐ شارة «الطلبات» تتبع القسم نفسه: طلبات اليوم المعلقة فقط — لا عدّ لأي يوم آخر */
+  var _t=new Date().toISOString().split('T')[0];
+  var _n=requests.filter(function(r){
+    return r.status==='pending' && (typeof _isTodayReq==='function' ? _isTodayReq(r,_t) : String(r.date||'').slice(0,10)===_t);
+  }).length;
+  var _b=document.getElementById('nb-requests'); if(_b) _b.textContent=_n;
+}
 
 // ============================================================
 // BILLING / ACCOUNTING
