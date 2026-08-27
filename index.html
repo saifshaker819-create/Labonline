@@ -1427,6 +1427,35 @@ textarea.fc{resize:vertical;}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 .modal{background:#070d1c;border:1px solid var(--border);border-radius:18px;width:100%;max-width:680px;max-height:92vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.7);animation:su 0.15s ease;display:flex;flex-direction:column;}
 .modal.wide{max-width:1060px;}
+
+/* ══ LIS: شاشة "النتائج الواردة" المنبثقة ══ */
+#m-lis-results .modal{max-width:1400px;width:100%;height:92vh;max-height:92vh;}
+#m-lis-results .mbody{padding:0!important;display:flex;flex-direction:column;min-height:0;overflow:hidden!important;}
+#m-lis-results .mhdr{gap:10px;}
+#lis-rm-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  padding:11px 16px;border-bottom:1px solid var(--border);background:#070d1c;flex-shrink:0;}
+#lis-rm-toolbar .lis-rm-btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+#lis-rm-scroll{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;}
+#m-lis-results table.lis-rm-tbl{width:100%;border-collapse:separate;border-spacing:0;min-width:1080px;}
+#m-lis-results table.lis-rm-tbl thead th{position:sticky;top:0;z-index:4;background:#0b1526;
+  padding:11px 10px;text-align:right;font-size:11px;color:var(--primary);
+  border-bottom:1.5px solid var(--border);white-space:nowrap;}
+#m-lis-results table.lis-rm-tbl tbody tr:hover{background:rgba(0,212,255,0.045);}
+#lis-rm-count{background:rgba(0,212,255,0.12);color:var(--primary);border:1px solid rgba(0,212,255,0.3);
+  border-radius:20px;padding:3px 11px;font-size:11px;font-weight:700;white-space:nowrap;}
+#lis-rm-summary{font-size:11px;color:var(--text2);margin-inline-end:auto;white-space:nowrap;}
+body.light-mode #lis-rm-toolbar{background:#f8f9fb;border-bottom-color:#dde4ec;}
+body.light-mode #m-lis-results table.lis-rm-tbl thead th{background:#eaf3fb;color:#0b63a8;border-bottom-color:#cfdcea;}
+body.light-mode #m-lis-results table.lis-rm-tbl tbody tr:hover{background:#f2f8ff;}
+@media(max-width:820px){
+  #m-lis-results .modal{width:100%!important;height:94vh!important;max-height:94vh!important;}
+  #lis-rm-toolbar{padding:9px 10px;}
+  #lis-rm-toolbar .btn{font-size:10px!important;padding:7px 9px!important;}
+  #m-lis-results table.lis-rm-tbl{min-width:max-content;}
+  #m-lis-results table.lis-rm-tbl thead th,
+  #m-lis-results table.lis-rm-tbl tbody td{font-size:10px!important;padding:7px 8px!important;white-space:nowrap;}
+  #lis-rm-summary{display:none;}
+}
 /* ── Resizable Modal ── */
 .resizable-modal{position:relative;resize:none;overflow:hidden;}
 .resizable-modal .mbody{overflow-y:auto;}
@@ -4070,37 +4099,43 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div class="tab" id="lis-tab-settings" onclick="lisNavTab('settings',this)">⚙️ إعدادات</div>
           </div>
 
-          <!-- Tab: Results -->
+          <!-- Tab: Results — لوحة تشغيل (الجدول انتقل إلى الشاشة المنبثقة #m-lis-results) -->
           <div id="lis-sec-results">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-              <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-p btn-sm" onclick="lisSimulateASTM()">🧪 محاكاة ASTM</button>
-                <button class="btn btn-s btn-sm" style="color:var(--success);border-color:rgba(0,232,122,0.4)" onclick="lisTransferAll()">📤 نقل الكل → MedLab Pro</button>
-                <button class="btn btn-s btn-sm" onclick="lisCheckMedlabConn()">🔍 اختبار الاتصال</button>
-                <button class="btn btn-s btn-sm" style="color:var(--danger);border-color:rgba(255,34,68,0.3)" onclick="lisClearResults()">🗑️ مسح</button>
-              </div>
-              <input style="width:190px;background:rgba(255,255,255,0.05);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-family:'Cairo',sans-serif;font-size:12px;outline:none" placeholder="بحث بـ SID أو اسم..." id="lis-res-search" oninput="lisRenderResults()">
-            </div>
             <div class="gc">
-              <div class="gc-body" style="overflow-x:auto;padding:0">
-                <table class="tbl" style="width:100%;border-collapse:collapse">
-                  <thead><tr style="background:rgba(0,212,255,0.08)">
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)"><input type="checkbox" id="lis-chk-all" onchange="lisToggleAllCheck(this)"></th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">Sample ID</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">المريض</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">التحليل</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">النتيجة</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">المدى</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">الوحدة</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">الجهاز</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">الوقت</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">الحالة</th>
-                    <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)">إجراء</th>
-                  </tr></thead>
-                  <tbody id="lis-results-body">
-                    <tr><td colspan="11" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا توجد نتائج — وصّل جهازاً أو استخدم المحاكاة</td></tr>
-                  </tbody>
-                </table>
+              <div class="gc-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                <div class="gc-title">📥 النتائج الواردة</div>
+                <button class="btn btn-p btn-sm" onclick="lisOpenResultsModal()">🖥️ فتح الشاشة</button>
+              </div>
+              <div class="gc-body" style="padding:16px">
+
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px">
+                  <div class="scard" style="text-align:center;padding:14px 8px">
+                    <div style="font-size:23px;font-weight:900;color:var(--primary)" id="lis-rl-total">0</div>
+                    <div style="font-size:10.5px;color:var(--text2);margin-top:3px;font-weight:600">إجمالي النتائج</div>
+                  </div>
+                  <div class="scard" style="text-align:center;padding:14px 8px">
+                    <div style="font-size:23px;font-weight:900;color:var(--warning)" id="lis-rl-pending">0</div>
+                    <div style="font-size:10.5px;color:var(--text2);margin-top:3px;font-weight:600">معلقة (لم تُنقل)</div>
+                  </div>
+                  <div class="scard" style="text-align:center;padding:14px 8px">
+                    <div style="font-size:23px;font-weight:900;color:var(--success)" id="lis-rl-done">0</div>
+                    <div style="font-size:10.5px;color:var(--text2);margin-top:3px;font-weight:600">منقولة</div>
+                  </div>
+                </div>
+
+                <button class="btn btn-p" style="width:100%;justify-content:center;padding:15px;font-size:14px;font-weight:800"
+                  onclick="lisOpenResultsModal()">📥 فتح شاشة النتائج الواردة</button>
+
+                <div style="font-size:11px;color:var(--text2);margin-top:11px;text-align:center;line-height:1.9">
+                  تُعرض النتائج في شاشة منبثقة واسعة — جدول كامل مع بحث وأزرار ثابتة أعلى الشاشة بدون تداخل.
+                </div>
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+                  <button class="btn btn-s btn-sm" onclick="lisSimulateASTM()">🧪 محاكاة ASTM</button>
+                  <button class="btn btn-s btn-sm" style="color:var(--success);border-color:rgba(0,232,122,0.4)" onclick="lisTransferAll()">📤 نقل الكل → MedLab Pro</button>
+                  <button class="btn btn-s btn-sm" onclick="lisCheckMedlabConn()">🔍 اختبار الاتصال</button>
+                </div>
+
               </div>
             </div>
           </div>
@@ -6781,6 +6816,67 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     <div class="mftr">
       <button class="btn btn-s" onclick="closeModal('lis-m-add-mapping')">إلغاء</button>
       <button class="btn btn-p" onclick="lisSaveMappingItem()">💾 حفظ</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LIS: Modal النتائج الواردة (شاشة كاملة) ═══ -->
+<div class="moverlay" id="m-lis-results">
+  <div class="modal wide">
+    <div class="mhdr">
+      <div class="mtitle">📥 النتائج الواردة من الأجهزة</div>
+      <div style="display:flex;align-items:center;gap:9px">
+        <span id="lis-rm-count">0</span>
+        <button class="mclose" onclick="closeModal('m-lis-results')" title="إغلاق">✕</button>
+      </div>
+    </div>
+
+    <div class="mbody">
+
+      <!-- شريط الأدوات الثابت -->
+      <div id="lis-rm-toolbar">
+        <div class="lis-rm-btns">
+          <button class="btn btn-p btn-sm" onclick="lisSimulateASTM()">🧪 محاكاة ASTM</button>
+          <button class="btn btn-s btn-sm" style="color:var(--success);border-color:rgba(0,232,122,0.4)" onclick="lisTransferAll()">📤 نقل الكل → MedLab Pro</button>
+          <button class="btn btn-s btn-sm" onclick="lisCheckMedlabConn()">🔍 اختبار الاتصال</button>
+          <button class="btn btn-s btn-sm" onclick="lisRenderResults()">🔄 تحديث</button>
+          <button class="btn btn-s btn-sm" style="color:var(--danger);border-color:rgba(255,34,68,0.3)" onclick="lisClearResults()">🗑️ مسح الكل</button>
+        </div>
+        <input id="lis-res-search" placeholder="🔍 بحث بـ SID أو اسم المريض أو رمز التحليل..." autocomplete="off"
+          oninput="lisRenderResults()"
+          style="width:260px;background:rgba(255,255,255,0.05);border:1.5px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-family:'Cairo',sans-serif;font-size:12px;outline:none">
+      </div>
+
+      <!-- منطقة الجدول القابلة للتمرير -->
+      <div id="lis-rm-scroll">
+        <table class="tbl lis-rm-tbl">
+          <thead>
+            <tr>
+              <th style="width:34px"><input type="checkbox" id="lis-chk-all" onchange="lisToggleAllCheck(this)"></th>
+              <th>Sample ID</th>
+              <th>المريض</th>
+              <th>التحليل</th>
+              <th>النتيجة</th>
+              <th>المدى</th>
+              <th>الوحدة</th>
+              <th>الجهاز</th>
+              <th>الوقت</th>
+              <th>الحالة</th>
+              <th>إجراء</th>
+            </tr>
+          </thead>
+          <tbody id="lis-results-body">
+            <tr><td colspan="11" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا توجد نتائج — وصّل جهازاً أو استخدم المحاكاة</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <div class="mftr">
+      <div id="lis-rm-summary"></div>
+      <button class="btn btn-s" onclick="closeModal('m-lis-results')">إغلاق</button>
+      <button class="btn btn-p" onclick="lisTransferAll()">📤 نقل الكل → MedLab Pro</button>
     </div>
   </div>
 </div>
@@ -27504,52 +27600,105 @@ function _buildCultureHTML(cid){
   </div>`;
 
   // ─── Antibiotic table ───────────────────────────────────────────
-  const astBlock = (!isNoGrowth&&(c.antibiotics||[]).length>0)?`
+  // ─── AST — ثلاثة أعمدة متوازية: Sensitive / Intermediate / Resistant ───
+  const astBlock = (()=>{
+    const abxList = (!isNoGrowth && Array.isArray(c.antibiotics)) ? c.antibiotics : [];
+    if(!abxList.length) return '';
+
+    // تجميع المضادات حسب النتيجة
+    const _abxInfo = a => ALL_ABX.find(x=>x.code===a.code) || {name:a.code, cls:'MISC', code:a.code};
+    const _clean   = n => String(n||'').split('(')[0].trim();
+    const _norm    = a => String(a.result||'').trim().toUpperCase();
+    const grpS = abxList.filter(a=>_norm(a)==='S');
+    const grpI = abxList.filter(a=>_norm(a)==='I');
+    const grpR = abxList.filter(a=>_norm(a)==='R');
+    const grpN = abxList.filter(a=>['S','I','R'].indexOf(_norm(a))===-1);
+    const maxN = Math.max(grpS.length, grpI.length, grpR.length);
+    if(!maxN && !grpN.length) return '';
+
+    // مقاسات متكيّفة — تضمن بقاء التقرير في ورقة واحدة عند كثرة المضادات
+    const tight  = maxN > 14;
+    const tight2 = maxN > 20;
+    const NFS  = tight2 ? '11.5px' : (tight ? '13px' : '14px');   // حجم اسم المضاد
+    const CFS  = tight2 ? '9.5px'  : (tight ? '10.5px' : '11px'); // حجم كود المضاد
+    const RPAD = tight2 ? '1px 7px' : (tight ? '2px 8px' : '3px 9px');
+
+    // ألوان كل عمود
+    const COLS = [
+      {key:'S', list:grpS, word:'SENSITIVE',    ink:'#1b5e20', line:'#28a745', head:'#e8f5e9', zebra:'#f4fbf6'},
+      {key:'I', list:grpI, word:'INTERMEDIATE', ink:'#7a5b00', line:'#e0a800', head:'#fff8e1', zebra:'#fffbef'},
+      {key:'R', list:grpR, word:'RESISTANT',    ink:'#8e1b26', line:'#dc3545', head:'#fdecec', zebra:'#fdf5f5'}
+    ];
+
+    // رأس الأعمدة الثلاثة
+    const headCells = COLS.map((col,ci)=>`
+      <th style="width:33.33%;background:${col.head};padding:${tight?'3px 8px':'5px 8px'};text-align:center;vertical-align:middle;border:none;border-bottom:1.5px solid #b8b8b8;${ci>0?'border-left:1.5px solid #b8b8b8;':''}">
+        <span style="display:inline-block;white-space:nowrap;font-family:Arial,sans-serif">
+          <span style="display:inline-block;width:${tight?'19px':'22px'};height:${tight?'19px':'22px'};line-height:${tight?'15px':'18px'};border:2px solid ${col.line};border-radius:4px;background:#fff;color:${col.line};font-size:${tight?'12px':'14px'};font-weight:900;text-align:center;vertical-align:middle">${col.key}</span>
+          <span style="font-size:${tight?'12.5px':'14px'};font-weight:900;color:${col.ink};letter-spacing:0.4px;vertical-align:middle;margin-left:5px">${col.word}</span>
+          <span style="font-size:${tight?'10px':'11px'};font-weight:800;color:#666;vertical-align:middle;margin-left:4px">(${col.list.length})</span>
+        </span>
+      </th>`).join('');
+
+    // خلية مضاد واحد
+    const cell = (a, ci, rowBg, isLast)=>{
+      const leftB = ci>0 ? 'border-left:1.5px solid #b8b8b8;' : '';
+      const botB  = isLast ? '' : 'border-bottom:1px solid #e2e2e2;';
+      if(!a) return `<td style="width:33.33%;${leftB}${botB}padding:${RPAD};background:${rowBg};border-top:none;border-right:none"></td>`;
+      const info = _abxInfo(a);
+      return `<td style="width:33.33%;${leftB}${botB}padding:${RPAD};background:${rowBg};border-top:none;border-right:none;vertical-align:middle">
+        <div style="display:flex;align-items:center;gap:5px;min-width:0;font-family:Arial,sans-serif">
+          <span style="font-size:${CFS};font-weight:800;color:#555;background:#f1f1f1;border:1px solid #dcdcdc;border-radius:3px;padding:0 4px;flex-shrink:0;font-family:Arial,sans-serif">${info.code}</span>
+          <span style="font-size:${NFS};font-weight:700;color:#111;line-height:1.25;white-space:normal;overflow-wrap:break-word;word-break:break-word">${_clean(info.name)}</span>
+        </div>
+      </td>`;
+    };
+
+    // صفوف الجدول — كل عمود مستقل عن الآخر
+    let bodyRows = '';
+    for(let rI=0; rI<maxN; rI++){
+      const isLast = (rI === maxN-1) && !grpN.length;
+      bodyRows += '<tr>' + COLS.map((col,ci)=>{
+        const a = col.list[rI] || null;
+        const rowBg = (rI % 2 === 1) ? col.zebra : '#ffffff';
+        return cell(a, ci, rowBg, isLast);
+      }).join('') + '</tr>';
+    }
+
+    // إن لم تُسجَّل أي نتيجة S/I/R نضع صفاً واحداً بشرطة في الأعمدة الثلاثة
+    if(maxN === 0){
+      bodyRows = '<tr>' + COLS.map((col,ci)=>`<td style="width:33.33%;${ci>0?'border-left:1.5px solid #b8b8b8;':''}padding:${RPAD};background:#fff;text-align:center;font-size:12px;color:#999;font-family:Arial,sans-serif">—</td>`).join('') + '</tr>';
+    }
+
+    // شريط "غير مُختبَر / قيد الإنجاز"
+    const pendingBar = grpN.length ? `
+      <div style="border-top:1.5px solid #b8b8b8;background:#f7f7f7;padding:${tight?'2px 9px':'3px 10px'};font-family:Arial,sans-serif">
+        <span style="font-size:${tight?'11px':'12px'};font-weight:900;color:#666;letter-spacing:0.3px">NOT REPORTED:</span>
+        <span style="font-size:${tight?'11px':'12.5px'};font-weight:700;color:#444;margin-left:5px">${grpN.map(a=>{const q=_abxInfo(a);return q.code+' — '+_clean(q.name);}).join('  ·  ')}</span>
+      </div>` : '';
+
+    // سطر الـ MIC كما هو
+    const micLine = abxList.some(a=>a.mic) ? `
+      <div style="margin-top:5px;font-size:${tight?'12px':'13.5px'};color:#555;font-weight:600;font-family:Arial,sans-serif">
+        <b style="color:#333">MIC:</b> ${abxList.filter(a=>a.mic).map(a=>`${a.code}: ${a.mic} µg/mL`).join(' · ')}
+      </div>` : '';
+
+    return `
   <div style="margin:5px 6px 0;font-family:Arial,sans-serif">
-    <div style="background:#c8cdd4;color:#000;padding:5px 14px;font-weight:900;font-size:16px;letter-spacing:0.5px;text-transform:uppercase;font-family:Arial,sans-serif;border:1.5px solid #000;border-bottom:none;">
-      ANTIBIOTIC SUSCEPTIBILITY TESTING (AST) — CLSI M100-Ed34 2024
-    </div>
-    <div style="padding:0">
-      <table style="width:100%;border-collapse:collapse;table-layout:fixed;border:1.5px solid #000;">
-        <tbody>
-        ${(()=>{
-          const abxList=c.antibiotics||[];
-          const rows=[];
-          for(let i=0;i<abxList.length;i+=3){
-            const cells=abxList.slice(i,i+3);
-            // pad to 3 cells
-            while(cells.length<3) cells.push(null);
-            const isLastRow=i+3>=abxList.length;
-            rows.push(`<tr>${cells.map((a,ci)=>{
-              if(!a) return `<td style="width:33.33%;border-left:1.5px solid #000;background:#fafafa;${isLastRow?'':'border-bottom:1.5px solid #000;'}padding:5px 8px"></td>`;
-              const aInfo=ALL_ABX.find(x=>x.code===a.code)||{name:a.code,cls:'MISC',code:a.code};
-              const res=a.result||'';
-              const hasResult=res==='S'||res==='R'||res==='I';
-              const resColor=res==='S'?'#28a745':res==='R'?'#dc3545':res==='I'?'#856404':'#999';
-              const resBorder=res==='S'?'#28a745':res==='R'?'#dc3545':res==='I'?'#ffc107':'#555';
-              const leftBorder=ci>0?'border-left:1.5px solid #000;':'';
-              const bottomBorder=isLastRow?'':'border-bottom:1.5px solid #000;';
-              return `<td style="width:33.33%;${leftBorder}${bottomBorder}padding:5px 8px;background:#fff;vertical-align:middle;">
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <div style="display:flex;align-items:center;gap:4px;min-width:0;flex:1">
-                    <span style="font-size:12px;font-weight:800;color:#555;background:#f0f0f0;padding:1px 4px;border-radius:3px;font-family:Arial,monospace;flex-shrink:0">${aInfo.code}</span>
-                    <span style="font-size:14px;font-weight:700;color:#222;font-family:Arial,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${aInfo.name.split('(')[0].trim()}</span>
-                  </div>
-                  ${hasResult?`<div style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:2px solid ${resBorder};border-radius:3px;font-size:16px;font-weight:900;color:${resColor};flex-shrink:0;font-family:Arial,sans-serif;margin-right:2px">${res}</div>`:'<div style="width:26px;flex-shrink:0"></div>'}
-                </div>
-              </td>`;
-            }).join('')}</tr>`);
-          }
-          return rows.join('');
-        })()}
-        </tbody>
+    <div style="border:1.5px solid #b8b8b8;overflow:hidden">
+      <div style="background:#ffffff;padding:${tight?'1px 9px':'3px 9px'};border-bottom:1.5px solid #b8b8b8;display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+        <span style="font-size:${tight?'13px':'14px'};font-weight:900;color:#1a4fa0;letter-spacing:0.3px">Antibiotic Susceptibility Testing (AST)</span>
+        <span style="font-size:${tight?'9.5px':'10.5px'};font-weight:700;color:#777;letter-spacing:0.2px;white-space:nowrap">CLSI M100-Ed34 2024</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <thead><tr>${headCells}</tr></thead>
+        <tbody>${bodyRows}</tbody>
       </table>
-      ${(c.antibiotics||[]).some(a=>a.mic)?`
-      <div style="margin-top:6px;font-size:14px;color:#666;font-weight:600;font-family:Arial,sans-serif">
-        <b>MIC:</b> ${(c.antibiotics||[]).filter(a=>a.mic).map(a=>`${a.code}: ${a.mic} µg/mL`).join(' · ')}
-      </div>`:''}
+      ${pendingBar}
     </div>
-  </div>`:'';
+    ${micLine}
+  </div>`;
+  })();
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
   <style>
@@ -35509,6 +35658,7 @@ function lisUpdateStats(){
   if(el('lis-st-today'))  el('lis-st-today').textContent=todayN;
   if(el('lis-st-pending'))el('lis-st-pending').textContent=pending;
   if(el('lis-st-devices'))el('lis-st-devices').textContent=activeD;
+  if(typeof _lisResultsBadges==='function') _lisResultsBadges();
 }
 function lisUpdateNbBadge(){
   const pending=lisResults.filter(r=>!r.transferred).length;
@@ -35529,6 +35679,7 @@ function lisNavTab(name,btn){
   if(name==='mapping') lisRenderMappings();
   if(name==='push') lisRenderPushTargets();
   if(name==='log') lisRenderFullLog();
+  if(name==='results' && btn) lisOpenResultsModal();
 }
 
 // ═══════════════════════════════════════════════
@@ -38371,6 +38522,15 @@ function _lisAutoFlush(){
 //   ٥) إن لم يوجد أي طلب اليوم يحتوي التحليل ⟵ لا يُكتب شيء إطلاقاً.
 // معزول تماماً: لا يمسّ مسار الاستقبال التلقائي ولا دالة المطابقة الآلية.
 // ═══════════════════════════════════════════════════════════════════════════
+// 📤 زر النقل الموحّد: حقل الرقم فارغ ⟵ إعادة المحاولة التلقائية،
+//    وفيه رقم مريض ⟵ ربط يدوي بذلك المريض (طلبات اليوم فقط).
+function lisSendResult(resId){
+  const inp=document.getElementById('lis-mlid-'+resId);
+  const v=String((inp&&inp.value)||'').trim();
+  if(v) return lisManualLink(resId);
+  return lisTransferResult(resId);
+}
+
 async function lisManualLink(resId){
   const res=lisResults.find(function(x){return x.id===resId;});
   if(!res){ showNotif('خطأ','النتيجة غير موجودة','error'); return; }
@@ -39073,15 +39233,41 @@ function lisCheckMedlabConn(){
 // ═══════════════════════════════════════════════
 // RESULTS RENDER
 // ═══════════════════════════════════════════════
+// ═══ فتح شاشة "النتائج الواردة" المنبثقة ═══
+function lisOpenResultsModal(){
+  try{
+    openModal('m-lis-results');
+    lisRenderResults();
+    lisUpdateStats();
+    if(window.innerWidth>820){
+      setTimeout(()=>{ const s=document.getElementById('lis-res-search'); if(s) s.focus(); },90);
+    }
+  }catch(e){ console&&console.warn&&console.warn('lisOpenResultsModal',e); }
+}
+// تحديث عدادات الشاشة المنبثقة وبطاقة التبويب
+function _lisResultsBadges(shown){
+  try{
+    const total=lisResults.length;
+    const done=lisResults.filter(r=>r.transferred).length;
+    const pend=total-done;
+    const el=id=>document.getElementById(id);
+    if(el('lis-rm-count'))  el('lis-rm-count').textContent=(shown==null?total:shown)+' / '+total;
+    if(el('lis-rm-summary'))el('lis-rm-summary').textContent='الإجمالي: '+total+'  ·  معلقة: '+pend+'  ·  منقولة: '+done;
+    if(el('lis-rl-total'))  el('lis-rl-total').textContent=total;
+    if(el('lis-rl-pending'))el('lis-rl-pending').textContent=pend;
+    if(el('lis-rl-done'))   el('lis-rl-done').textContent=done;
+  }catch(e){}
+}
 function lisRenderResults(){
   const tbody=document.getElementById('lis-results-body');
-  if(!tbody) return;
+  if(!tbody){ _lisResultsBadges(); return; }
   const q=(document.getElementById('lis-res-search')?.value||'').toLowerCase();
   const filtered=lisResults.filter(r=>!q||
     (r.sampleId+'').toLowerCase().includes(q)||
     (r.patName+'').toLowerCase().includes(q)||
     (r.deviceCode+'').toLowerCase().includes(q)||
     (r.medlabCode+'').toLowerCase().includes(q));
+  _lisResultsBadges(filtered.length);
   if(!filtered.length){
     tbody.innerHTML='<tr><td colspan="11" style="text-align:center;color:var(--text2);padding:30px;font-size:12px">لا توجد نتائج</td></tr>';
     return;
@@ -39100,19 +39286,20 @@ function lisRenderResults(){
       <td style="padding:7px 10px;font-size:10px;color:var(--text2)">${r.unit||'—'}</td>
       <td style="padding:7px 10px"><span style="background:rgba(0,212,255,0.1);color:var(--primary);border-radius:10px;padding:2px 7px;font-size:10px">${r.device}</span></td>
       <td style="padding:7px 10px;font-size:10px;color:var(--text2)">${lisFmtTime(r.datetime)}</td>
-      <td style="padding:7px 10px">${r.transferred?
-        '<span style="background:rgba(0,232,122,0.12);color:var(--success);border:1px solid rgba(0,232,122,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">✓ منقول</span>':
+      <td style="padding:7px 10px;white-space:nowrap">${r.transferred?
+        '<span style="display:inline-block;white-space:nowrap;background:rgba(0,232,122,0.12);color:var(--success);border:1px solid rgba(0,232,122,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">✓ منقول</span>':
         (r.unmatched?
-        '<span style="background:rgba(255,34,68,0.10);color:var(--danger);border:1px solid rgba(255,34,68,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">⛔ بلا مريض مطابق</span>':
-        '<span style="background:rgba(255,204,0,0.1);color:var(--warning);border:1px solid rgba(255,204,0,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">معلق</span>')}</td>
-      <td style="padding:7px 10px;display:flex;gap:4px;align-items:center;flex-wrap:wrap">
-        ${!r.transferred?`<button class="btn btn-p" style="padding:3px 8px;font-size:10px" title="إعادة محاولة النقل التلقائي" onclick="lisTransferResult('${r.id}')">📤</button>
-        <input id="lis-mlid-${r.id}" type="text" inputmode="numeric" autocomplete="off" placeholder="رقم المريض"
-          title="أدخل رقم المريض الصحيح ثم اضغط 🔗 — يبحث في طلبات اليوم فقط"
-          style="width:86px;padding:3px 6px;font-size:10px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.05);color:var(--text)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();lisManualLink('${r.id}')}">
-        <button class="btn btn-s" style="padding:3px 8px;font-size:10px;color:var(--success);border-color:rgba(0,232,122,0.35)" title="ربط النتيجة بهذا المريض (طلبات اليوم فقط)" onclick="lisManualLink('${r.id}')">🔗</button>`:''}
-        <button class="btn btn-s" style="padding:3px 8px;font-size:10px;color:var(--danger);border-color:rgba(255,34,68,0.3)" onclick="lisDeleteResult('${r.id}')">🗑️</button>
+        '<span title="رقم العينة لا يطابق أي طلب — أدخل رقم المريض الصحيح ثم اضغط زر النقل" style="display:inline-block;white-space:nowrap;background:rgba(255,34,68,0.10);color:var(--danger);border:1px solid rgba(255,34,68,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">⛔ بلا مريض</span>':
+        '<span style="display:inline-block;white-space:nowrap;background:rgba(255,204,0,0.1);color:var(--warning);border:1px solid rgba(255,204,0,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">معلق</span>')}</td>
+      <td style="padding:7px 6px;white-space:nowrap">
+        <div style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap">
+        ${!r.transferred?`<input id="lis-mlid-${r.id}" type="text" inputmode="numeric" autocomplete="off" placeholder="رقم المريض"
+          title="اتركه فارغاً لإعادة المحاولة التلقائية، أو أدخل رقم المريض الصحيح ثم اضغط زر النقل (طلبات اليوم فقط)"
+          style="width:80px;padding:3px 6px;font-size:10px;border-radius:6px;border:1px solid rgba(255,255,255,0.18);background:rgba(255,255,255,0.05);color:var(--text)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();lisSendResult('${r.id}')}">
+        <button class="btn btn-p" style="padding:3px 9px;font-size:11px" title="نقل النتيجة — إن أدخلت رقم مريض تُنقل إليه (طلبات اليوم فقط)" onclick="lisSendResult('${r.id}')">📤</button>`:''}
+        <button class="btn btn-s" style="padding:3px 8px;font-size:10px;color:var(--danger);border-color:rgba(255,34,68,0.3)" title="حذف النتيجة" onclick="lisDeleteResult('${r.id}')">🗑️</button>
+        </div>
       </td>
     </tr>`).join('');
 }
