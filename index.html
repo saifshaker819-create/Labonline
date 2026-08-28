@@ -7333,25 +7333,6 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
           <div id="et-calc-inputs-rows"></div>
         </div>
       </div>
-
-      <!-- 🧪 تحليل متعدّد الحقول (لوحة) — مثل GTT / OGTT -->
-      <div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.30);border-radius:9px;padding:13px;margin-top:10px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:800;color:#00d4ff">
-          <input type="checkbox" id="et-panel-on" onchange="togglePanelBlock()" style="width:16px;height:16px;cursor:pointer">
-          🧪 تحليل متعدّد الحقول (لوحة)
-        </label>
-        <div style="font-size:10px;color:var(--text2);margin-top:6px;line-height:1.7">
-          يُدخَل بعدّة نتائج (اسم + نتيجة + قيمة طبيعية + وحدة) ويُطبع في ورقة مستقلة بنفس ترتيب تحليل الهوما — بدون أي معادلة.
-        </div>
-        <div id="et-panel-block" style="display:none;margin-top:12px">
-          <div class="fg" style="margin-bottom:10px">
-            <label class="fl" style="font-size:11px">عنوان اللوحة في التقرير (اختياري)</label>
-            <input class="fc" id="et-panel-title" placeholder="Glucose Tolerance Test" style="font-size:12px;padding:6px 9px;direction:ltr">
-          </div>
-          <div id="et-panel-rows"></div>
-          <button class="btn btn-s btn-sm" onclick="addPanelFieldRow()" style="font-size:11px;padding:6px 14px">➕ إضافة حقل</button>
-        </div>
-      </div>
     </div>
     <div class="mftr"><button class="btn btn-s" onclick="closeModal('m-edit-test')">Cancel</button><button class="btn btn-p" onclick="saveTest()">💾 Save</button></div>
   </div>
@@ -8857,7 +8838,7 @@ const ALL_TESTS=[
 {id:'c004',code:'PPBS',nameEn:'PPBG',nameShort:'PPBG',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'mg/dL',minVal:70,maxVal:140,minF:70,maxF:140,ref:'< 140',time:'1 hour',price:35,notes:'2h after meal'},
 {id:'c003',code:'HBA1C',nameEn:'HbA1c',nameShort:'HbA1c',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'%',minVal:4.0,maxVal:5.7,minF:4.0,maxF:5.7,ref:'< 5.7 Normal | 5.7-6.4 Prediabetes | ≥6.5 Diabetes',time:'3 hours',price:120,notes:''},
 {id:'c005',code:'INS',nameEn:'Insulin Fasting',nameShort:'Insulin',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'μIU/mL',minVal:2.6,maxVal:24.9,minF:2.6,maxF:24.9,ref:'2.6 - 24.9',time:'4 hours',price:110,notes:'Fasting 8-12h'},
-{id:'add004',code:'OGTT',nameEn:'GTT',nameShort:'GTT',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'mg/dl',minVal:70,maxVal:140,minF:70,maxF:140,ref:'Fasting 70 - 110 | 1h 120 - 170 | 2h 70 - 130',refM:'',refF:'',time:'2 hours',price:80,notes:'75g glucose load — Oral Glucose Tolerance Test',isCalc:true,calcFormula:'',isPanel:true,panelTitle:'Glucose Tolerance Test',panelFields:[{key:'fbs',name:'Fasting Blood Sugar',unit:'mg /dl',ref:'70 - 110',minVal:70,maxVal:110},{key:'g60',name:'60 min after 75mg glucose',unit:'mg /dl',ref:'120 - 170',minVal:120,maxVal:170},{key:'g120',name:'120 min after 75mg glucose',unit:'mg /dl',ref:'70 - 130',minVal:70,maxVal:130}]},
+{id:'add004',code:'OGTT',nameEn:'GTT',nameShort:'GTT',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'mg/dL',minVal:70,maxVal:140,minF:70,maxF:140,ref:'Fasting < 100 | 2h < 140',refM:'Fasting < 100',refF:'2h < 140',time:'2 hours',price:80,notes:'75g glucose load'},
 // Lipids
 {id:'c006',code:'CHOL',nameEn:'Total Cholesterol',nameShort:'Cholesterol',cat:'Biochemistry',subCat:'Lipid Profile',unit:'mg/dL',minVal:0,maxVal:200,minF:0,maxF:200,ref:'< 200',time:'2 hours',price:50,notes:'Fasting 12h'},
 {id:'c007',code:'TG',nameEn:'Triglycerides',nameShort:'TG',cat:'Biochemistry',subCat:'Lipid Profile',unit:'mg/dL',minVal:0,maxVal:150,minF:0,maxF:150,ref:'< 150',time:'2 hours',price:50,notes:'Fasting 12h'},
@@ -9872,17 +9853,10 @@ async function _mergeIDBInBackground(){
         if(orig){
           if(orig.isCalc){
             merged.isCalc=true;
-            merged.calcFormula=(orig.calcFormula||t.calcFormula||'');
+            merged.calcFormula=orig.calcFormula||t.calcFormula||'';
             if(!merged.calcInputSettings && orig.calcInputSettings) merged.calcInputSettings=orig.calcInputSettings;
           }
-          else if(!merged.isPanel){delete merged.isCalc;delete merged.calcFormula;delete merged.calcInputSettings;}
-          // ⭐ تحاليل اللوحة (Panel) مثل GTT — أبقِ على خاصية اللوحة وحقولها المُعدَّلة من المستخدم
-          if(orig.isPanel){
-            merged.isPanel=true;
-            merged.isCalc=true;
-            if(!Array.isArray(merged.panelFields)||!merged.panelFields.length) merged.panelFields=(orig.panelFields||[]).map(function(f){return Object.assign({},f);});
-            if(!merged.panelTitle) merged.panelTitle=orig.panelTitle||'';
-          }
+          else{delete merged.isCalc;delete merged.calcFormula;delete merged.calcInputSettings;}
           // ⭐ تحاليل الأدرار والخروج والسائل المنوي: دائماً استعادة isSpecialExam من القاعدة الأصلية
           // هذا يمنع تأثير أي تعديل سابق عليها في localStorage/IDB
           if(orig.isSpecialExam){
@@ -13463,41 +13437,6 @@ function openViewResultsModal(rid){
       return;
     }
 
-    // ── 🧪 تحليل لوحة متعدّد الحقول (GTT وما شابهه) ──
-    if(t.isPanel){
-      const _vpf=_panelFieldsOf(t);
-      if(_vpf.length){
-        const _vpv=_panelValues(r,t);
-        if(!r.panelResults) r.panelResults={};
-        if(!r.panelResults[t.id]) r.panelResults[t.id]=_vpv;
-        const _ve=function(x){ return (x===undefined||x===null)?'':String(x).replace(/"/g,'&quot;'); };
-        const _vcomb=_vpf.map(function(f){return _vpv[f.key]||'';}).filter(function(v){return v!=='';}).join(' / ');
-        const _vrows=_vpf.map(function(f){
-          const v=_vpv[f.key]!==undefined?_vpv[f.key]:'';
-          const st=_panelFieldState(v,f);
-          return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px dashed rgba(255,255,255,0.07)">
-            <div style="flex:2;min-width:0;font-size:12px;font-weight:700;color:var(--text)">${f.name}
-              <div style="font-size:10px;color:var(--text2);font-weight:600">${_panelFieldRef(f)} ${f.unit||''}</div>
-            </div>
-            <input type="text" class="res-input${st.inp}" id="vr-pv-${t.id}-${f.key}" lang="en" inputmode="text" value="${_ve(v)}" placeholder="..." style="width:120px;flex-shrink:0" oninput="_vrPanelInput('${rid}','${t.id}')">
-            <div id="vr-pst-${t.id}-${f.key}" style="flex:1;font-size:11px;font-weight:700;${st.cls==='high'?'color:var(--danger)':st.cls==='low'?'color:var(--warning)':st.cls==='normal'?'color:var(--success)':''}">${st.txt}</div>
-          </div>`;
-        }).join('');
-        rows+=`<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-            <div>
-              <span style="font-weight:800;font-size:13px;color:var(--text)">🧪 ${t.nameEn}</span>
-              <span style="font-size:10px;color:var(--text2);margin-right:6px">${t.code}</span>
-            </div>
-            <button class="btn btn-sm btn-d" style="padding:3px 8px" onclick="vrRemoveTest('${t.id}')">🗑️</button>
-          </div>
-          <input type="hidden" id="vr-rv-${t.id}" value="${_ve(_vcomb)}">
-          ${_vrows}
-        </div>`;
-        return;
-      }
-    }
-
     const val=r.results[t.id]||'';
     const isQual=(t.unit==='qualitative'||t.refType==='pos-neg');
     let interp='',cls='';
@@ -13692,42 +13631,12 @@ function vrCheckResult(tid,val){
   _vrAutoSave();
 }
 
-// 🧪 إدخال قيم اللوحة من مودال عرض/تعديل النتائج
-function _vrPanelInput(reqId, testId){
-  var r=requests.find(function(x){return x.id===reqId;}); if(!r) return;
-  var t=tests.find(function(x){return x.id===testId;});   if(!t) return;
-  if(!r.panelResults) r.panelResults={};
-  var flds=_panelFieldsOf(t), obj={};
-  flds.forEach(function(f){
-    var el=document.getElementById('vr-pv-'+testId+'-'+f.key);
-    if(!el) return;
-    var v=(el.value||'').trim();
-    if(v!=='') obj[f.key]=v;
-    var st=_panelFieldState(v,f);
-    el.className='res-input'+st.inp;
-    var stEl=document.getElementById('vr-pst-'+testId+'-'+f.key);
-    if(stEl){
-      stEl.textContent=st.txt;
-      stEl.style.color = st.cls==='high'?'var(--danger)':st.cls==='low'?'var(--warning)':st.cls==='normal'?'var(--success)':'';
-    }
-  });
-  r.panelResults[testId]=obj;
-  var comb=_panelCombine(r,t);
-  var hid=document.getElementById('vr-rv-'+testId);
-  if(hid) hid.value=comb;
-  if(comb==='') delete r.results[testId];
-  else         r.results[testId]=comb;
-  r._updatedAt=Date.now();
-  _vrAutoSave();
-}
-
 function vrRemoveTest(tid){
   if(!confirm('حذف هذا التحليل من الطلب؟'))return;
   const r=requests.find(x=>x.id===currentReqId);if(!r)return;
   r.tests=r.tests.filter(x=>x!==tid);
   r.testNames=(r.testNames||[]).filter(n=>{const t=tests.find(x=>x.id===tid);return n!==(t?t.nameEn:'');});
   if(r.results)delete r.results[tid];
-  if(r.panelResults)delete r.panelResults[tid];
   save('requests',requests);
   openViewResultsModal(currentReqId);
   showNotif('تم','تم حذف التحليل','success');
@@ -13738,8 +13647,6 @@ function vrSaveResults(){
   // اجمع القيم من الحقول أولاً دون كتابتها فوراً (لفحص دلتا)
   const _staged={};
   r.tests.forEach(tid=>{
-    const _pT=tests.find(x=>x.id===tid);
-    if(_pT&&_pT.isPanel) return; // لوحة — تُحفظ لحظياً ولا تدخل فحص دلتا
     const el=document.getElementById('vr-rv-'+tid);
     if(!el) return;
     let v = el.value;
@@ -14025,51 +13932,6 @@ function loadResultEntry(){
           </button>
         </td>
       </tr>`;
-    }
-
-    // ── 🧪 تحليل لوحة متعدّد الحقول (GTT وما شابهه) ──────────────
-    //    ثلاثة (أو أكثر) حقول إدخال: الاسم + النتيجة + القيمة الطبيعية + الوحدة
-    if(t.isPanel){
-      const _pf = _panelFieldsOf(t);
-      if(_pf.length){
-        const _pv = _panelValues(req, t);
-        if(!req.panelResults) req.panelResults={};
-        if(!req.panelResults[t.id]) req.panelResults[t.id]=_pv;
-        const _escv = function(x){ return (x===undefined||x===null)?'':String(x).replace(/"/g,'&quot;'); };
-        const _combined = Object.keys(_pv).length ? _pf.map(function(f){return _pv[f.key]||'';}).filter(function(v){return v!=='';}).join(' / ') : '';
-        const _prows = _pf.map(function(f){
-          const v  = _pv[f.key]!==undefined ? _pv[f.key] : '';
-          const st = _panelFieldState(v, f);
-          return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px dashed rgba(255,255,255,0.08)">
-            <div style="flex:2.4;font-size:11.5px;font-weight:700;color:var(--text);line-height:1.4">${f.name}</div>
-            <input type="text" class="res-input${st.inp}" id="pv-${t.id}-${f.key}" lang="en" inputmode="text" value="${_escv(v)}" placeholder="..." style="width:105px;flex-shrink:0" oninput="_panelResInput('${id}','${t.id}')">
-            <div style="flex:1.8;font-size:10.5px;color:var(--text2);white-space:nowrap">
-              <span style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:6px;padding:2px 7px;font-weight:700;color:var(--text)">${_panelFieldRef(f)}</span>
-              <span style="font-weight:700;margin-right:3px">${f.unit||''}</span>
-            </div>
-            <div id="pst-${t.id}-${f.key}" class="${st.cls}" style="flex:0.9;font-size:11px;font-weight:700;white-space:nowrap">${st.txt}</div>
-          </div>`;
-        }).join('');
-        return `<tr style="background:rgba(0,212,255,0.04)">
-          <td style="font-weight:700;font-size:12px;color:#000000 !important;vertical-align:top">
-            <div>${t.nameEn}</div>
-            <span style="font-size:9px;color:var(--text2)">${t.code}</span>
-            <br><span class="bdg bdg-s" style="font-size:8px">🧪 لوحة</span>
-          </td>
-          <td colspan="4">
-            <input type="hidden" id="rv-${t.id}" value="${_escv(_combined)}">
-            <div style="padding:2px 0">${_prows}</div>
-          </td>
-          <td>
-            <div style="display:flex;gap:4px;align-items:center">
-              <input class="fc" style="width:110px;padding:5px 9px;font-size:11px" id="rnote-${t.id}" placeholder="..." value="${req.resultNotesPer&&req.resultNotesPer[t.id]||''}">
-            </div>
-          </td>
-          <td style="${isPrinted?'display:none':''}">
-            <button class="btn btn-d btn-sm" style="padding:4px 8px;font-size:11px" onclick="removeTestFromReq('${t.id}','${id}')" title="حذف هذا التحليل">🗑️</button>
-          </td>
-        </tr>`;
-      }
     }
 
     const savedVal=req.results[t.id];
@@ -17261,116 +17123,7 @@ function buildPrintHTML(req, opts){
 // ============================================================
 // CALC TEST PRINT PAGE — صفحة منفردة للتحليل المحسوب
 // ============================================================
-// ════════════════════════════════════════════════════════════
-// 🧪 طباعة تحليل اللوحة (Panel) في ورقة مستقلة
-//    نفس هيكل صفحة تحليل الهوما بالضبط — لكن بلا معادلة:
-//    عنوان المجموعة ← رأس الأعمدة (Test / Result / Reference) ← صفوف الحقول
-// ════════════════════════════════════════════════════════════
-function buildPanelTestPrintHTML(req, panelTest){
-  const pt = patients.find(p=>p.id===req.patientId)||{};
-  const showHL = document.getElementById('tog-highlight')?.classList.contains('on');
-
-  const fakeReq = Object.assign({}, req, { tests: [panelTest.id] });
-
-  const pfs  = settings.printFontSize||'11px';
-  const pfsN = parseInt(pfs);
-  const _fsNameN = parseInt(settings.testNameFontSize) || pfsN;
-  const _fsResN  = parseInt(settings.resultFontSize)   || pfsN;
-  const _fsRefN  = parseInt(settings.refFontSize)      || pfsN;
-  const _fsName  = _fsNameN+'px';
-  const _fsRes   = _fsResN+'px';
-  const _fsRef   = _fsRefN+'px';
-  const stripColor   = settings.colorResults||'#003366';
-  const sectionColor = settings.colorSection||'#003366';
-  const subcatFsN = parseInt(settings.subcatFontSize||'12');
-  const subcatFs  = subcatFsN+'px';
-
-  // صف واحد بنفس تنسيق صفحة الهوما
-  function _makeRow(name, val, unit, refTxt, minV, maxV){
-    if(!val && val!==0) return '';
-    const _vR = (typeof val==='string' && (val.charAt(0)==='<'||val.charAt(0)==='>')) ? parseFloat(val.substring(1).trim()) : parseFloat(val);
-    const v = _vR;
-    let isHigh=false, isLow=false;
-    if(!isNaN(v) && minV!==null && minV!==undefined && maxV!==null && maxV!==undefined){
-      if(v>maxV) isHigh=true;
-      else if(v<minV) isLow=true;
-    }
-    const valColor = showHL&&isHigh?'#cc0000':showHL&&isLow?'#0055cc':'#000000';
-    const boxBorder = showHL&&(isHigh||isLow)?valColor:'#000000';
-    const flag = showHL&&isHigh
-      ?`<span style="font-size:10px;font-weight:600;color:#cc0000;margin-right:2px;flex-shrink:0">H</span>`
-      :showHL&&isLow
-      ?`<span style="font-size:10px;font-weight:600;color:#0055cc;margin-right:2px;flex-shrink:0">L</span>`
-      :`<span style="width:12px;flex-shrink:0;display:inline-block"></span>`;
-    const resultBox=`<div style="border:1.5px solid ${boxBorder};border-radius:5px;background:#fff;padding:3px 6px;font-size:${_fsRes};font-weight:900;color:${valColor};min-width:80px;max-width:160px;text-align:center;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center"><span>${val}</span></div>`;
-    const showUnit = unit && unit!=='qualitative';
-    const refHtml = refTxt&&refTxt!=='\u2014'
-      ? `<span style="font-size:${_fsRef};font-weight:600;color:#000">${refTxt}</span>${showUnit?`&nbsp;&nbsp;<span style="font-size:${_fsRef};font-weight:600;color:#444">${unit}</span>`:''}`
-      : `<span style="font-size:${_fsRef}">\u2014</span>`;
-    return `
-    <div style="margin:0 6px;display:flex;align-items:flex-start;direction:ltr;padding:2px 0">
-      <div style="flex:4;font-size:${_fsName};font-weight:600;color:#000000;padding-top:3px">\u25cf ${name}</div>
-      <div style="flex:2;display:flex;align-items:flex-start;justify-content:flex-start;gap:2px;padding-left:4px;padding-top:2px">
-        <span style="font-size:${_fsRes};font-weight:900;color:#000;flex-shrink:0;line-height:1.4">:</span>
-        <div style="display:flex;align-items:center;gap:2px">${resultBox}${flag}</div>
-      </div>
-      <div style="flex:3;padding:2px 4px 0 6px"><div style="display:block;font-size:${_fsRef}">${refHtml}</div></div>
-      <div style="flex:2"></div>
-    </div>`;
-  }
-
-  // عنوان المجموعة
-  const _title = (panelTest.panelTitle&&panelTest.panelTitle.trim()) ? panelTest.panelTitle.trim() : (panelTest.nameEn||panelTest.code||'');
-  let body = `<div style="margin:4px 6px 0;direction:ltr">
-    <div style="padding:3px 10px 2px">
-      <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px">${_title}</div>
-    </div>
-  </div>`;
-
-  const _td = settings.div_test_dotted;
-  const _ts = settings.div_test_solid;
-  const sep = _ts?`<div style="margin:1px 6px;border-top:1px solid #cccccc"></div>`:_td?`<div style="margin:1px 6px;border-top:1px dotted #cccccc"></div>`:'';
-
-  // صفوف الحقول — بنفس ترتيب تعريفها في قاعدة التحاليل
-  const flds = _panelFieldsOf(panelTest);
-  const vals = _panelValues(req, panelTest);
-  const rowsToPrint = [];
-  flds.forEach(function(f){
-    const v = vals[f.key];
-    if(v===undefined || v===null || String(v).trim()==='') return;
-    rowsToPrint.push({
-      name : f.name,
-      val  : String(v).trim(),
-      unit : (f.unit!==undefined&&f.unit!=='') ? f.unit : (panelTest.unit||''),
-      ref  : _panelFieldRef(f),
-      min  : f.minVal,
-      max  : f.maxVal
-    });
-  });
-  rowsToPrint.forEach(function(r,i){
-    body += _makeRow(r.name, r.val, r.unit, r.ref, r.min, r.max);
-    if(i < rowsToPrint.length-1) body += sep;
-  });
-
-  const blankPage = buildPrintHTML(fakeReq, {blankBody:true});
-  const colHdr=`
-  <div style="margin:0 6px 2px;display:flex;direction:ltr;padding:4px 0;border-bottom:2px solid ${stripColor};border-top:1px solid #aab8c8;align-items:center;background:${stripColor}18">
-    <div style="flex:4;font-size:${pfsN}px;font-weight:900;color:${settings.colorStripText||stripColor};font-family:'Times New Roman',Times,serif;letter-spacing:0.5px;padding-right:4px;padding-left:18px;text-decoration:underline;text-underline-offset:3px">Test</div>
-    <div style="flex:2;font-size:${pfsN}px;font-weight:900;color:${settings.colorStripText||stripColor};font-family:'Times New Roman',Times,serif;text-align:left;letter-spacing:0.5px;padding-left:4px;text-decoration:underline;text-underline-offset:3px">Result</div>
-    <div style="flex:3;font-size:${pfsN}px;font-weight:900;color:${settings.colorStripText||stripColor};font-family:'Times New Roman',Times,serif;text-align:left;letter-spacing:0.5px;padding-left:6px;text-decoration:underline;text-underline-offset:3px">Reference</div>
-    <div style="flex:2;font-size:${pfsN}px;font-weight:900;color:${settings.colorStripText||stripColor};font-family:'Times New Roman',Times,serif;text-align:center;letter-spacing:0.5px;text-decoration:underline;text-underline-offset:3px">Last Result</div>
-  </div>`;
-  const separator=`<div style="margin:3px 6px;height:2px;background:${stripColor}"></div>`;
-  const injection = separator + colHdr + body;
-
-  return blankPage.replace('<!--BLANK_BODY_PLACEHOLDER-->', injection)
-    || blankPage.replace(/<\/div>\s*<div id="print-spacer"/, injection+'</div><div id="print-spacer"')
-    || blankPage.replace(/<div id="print-spacer"/, injection+'<div id="print-spacer"');
-}
-
 function buildCalcTestPrintHTML(req, calcTest){
-  // 🧪 تحاليل اللوحة (GTT وما شابهه) — صفحة مستقلة بنفس ترتيب الهوما بلا معادلة
-  if(calcTest && calcTest.isPanel) return buildPanelTestPrintHTML(req, calcTest);
   // نستخدم buildPrintHTML مع تحليل وهمي يحتوي على المدخلات + النتيجة النهائية فقط
   // ننشئ req مؤقت يحتوي فقط هذا التحليل المحسوب
   const pt = patients.find(p=>p.id===req.patientId)||{};
@@ -17839,8 +17592,6 @@ function doPrint(reqId){
       if(_dcReq){
         var _dcVals={};
         (_dcReq.tests||[]).forEach(function(tid){
-          var _dcT=(typeof tests!=='undefined')?tests.find(function(x){return x.id===tid;}):null;
-          if(_dcT&&_dcT.isPanel) return; // لوحة متعدّدة القيم — لا تخضع لفحص دلتا
           var v=_dcReq.results?_dcReq.results[tid]:undefined;
           if(v!==undefined&&v!==null&&v!==''&&v!=='done') _dcVals[tid]=v;
         });
@@ -18729,13 +18480,6 @@ function openEditTest(id){
       if(calcBlock)calcBlock.style.display='none';
       if(cfEl)cfEl.value='';
     }
-    // 🧪 تعبئة حقول اللوحة (Panel)
-    var _pOn=document.getElementById('et-panel-on');
-    if(_pOn) _pOn.checked=!!t.isPanel;
-    var _pTtl=document.getElementById('et-panel-title');
-    if(_pTtl) _pTtl.value=t.panelTitle||'';
-    renderPanelFields(t.isPanel?(t.panelFields||[]):[]);
-    togglePanelBlock();
   } else {
     ['et-id','et-name-en','et-name-short','et-unit','et-min','et-max','et-min-f','et-max-f','et-ref','et-ref-m','et-ref-f','et-price','et-code','et-notes'].forEach(eid=>{const el=document.getElementById(eid);if(el)el.value='';});
     document.getElementById('rt-simple').checked=true;
@@ -18746,12 +18490,6 @@ function openEditTest(id){
     const cfElNew=document.getElementById('et-calc-formula');
     if(calcBlockNew)calcBlockNew.style.display='none';
     if(cfElNew)cfElNew.value='';
-    var _pOnN=document.getElementById('et-panel-on');
-    if(_pOnN) _pOnN.checked=false;
-    var _pTtlN=document.getElementById('et-panel-title');
-    if(_pTtlN) _pTtlN.value='';
-    renderPanelFields([]);
-    togglePanelBlock();
   }
   openModal('m-edit-test');
 }
@@ -18841,21 +18579,6 @@ function saveTest(){
       t.isCalc=true;
       t.calcFormula=cfEl.value.trim();
       t.calcInputSettings=collectCalcInputSettings();
-    }
-  }
-  // 🧪 حفظ إعدادات التحليل متعدّد الحقول (لوحة)
-  var _pOnEl=document.getElementById('et-panel-on');
-  if(_pOnEl && _pOnEl.checked){
-    var _pFlds=collectPanelFields();
-    if(_pFlds.length){
-      t.isPanel=true;
-      t.panelFields=_pFlds;
-      t.panelTitle=((document.getElementById('et-panel-title')||{}).value||'').trim();
-      t.isCalc=true;                       // ليُطبع في ورقة مستقلة مثل الهوما
-      if(!t.calcFormula) t.calcFormula='';  // ليست معادلة
-    } else {
-      showNotif('تنبيه','أضف حقلاً واحداً على الأقل للوحة أو ألغِ خيار اللوحة','warning');
-      return;
     }
   }
   if(editTestId){const idx=tests.findIndex(x=>x.id===editTestId);if(idx>-1)tests[idx]=t;}
@@ -18955,175 +18678,6 @@ function collectCalcInputSettings(){
     };
   });
   return result;
-}
-
-// ════════════════════════════════════════════════════════════
-// 🧪 تحاليل اللوحة متعدّدة الحقول (Panel Tests) — مثل GTT / OGTT
-//   • تُدخَل بعدّة نتائج (اسم + نتيجة + قيمة طبيعية + وحدة)
-//   • كل شيء قابل للتعديل من قاعدة التحاليل
-//   • تُطبع في ورقة مستقلة بنفس ترتيب تحليل الهوما — بلا معادلة
-// ════════════════════════════════════════════════════════════
-function _panelFieldsOf(t){
-  if(!t || !t.isPanel) return [];
-  var arr = Array.isArray(t.panelFields) ? t.panelFields : [];
-  var out = [];
-  arr.forEach(function(x,i){
-    if(!x) return;
-    var nm = (x.name||'').toString().trim();
-    if(!nm) return;
-    var _n = function(v){ return (v===''||v===undefined||v===null||isNaN(parseFloat(v))) ? null : parseFloat(v); };
-    out.push({
-      key   : (x.key||('f'+(i+1))).toString(),
-      name  : nm,
-      unit  : (x.unit!==undefined&&x.unit!==null) ? String(x.unit) : (t.unit||''),
-      ref   : (x.ref!==undefined&&x.ref!==null) ? String(x.ref).trim() : '',
-      minVal: _n(x.minVal),
-      maxVal: _n(x.maxVal)
-    });
-  });
-  return out;
-}
-// نص المدى المرجعي لحقل واحد
-function _panelFieldRef(f){
-  if(f.ref) return f.ref;
-  if(f.minVal!==null && f.maxVal!==null) return String(f.minVal)+' - '+String(f.maxVal);
-  return '\u2014';
-}
-// قيم اللوحة المحفوظة لطلب معيّن (مع تراجع إلى القيمة المجمّعة القديمة)
-function _panelValues(req, t){
-  var out={}, flds=_panelFieldsOf(t);
-  var saved=(req && req.panelResults && req.panelResults[t.id]) || null;
-  if(saved && typeof saved==='object'){
-    flds.forEach(function(f){
-      if(saved[f.key]!==undefined && saved[f.key]!==null && String(saved[f.key]).trim()!=='') out[f.key]=String(saved[f.key]).trim();
-    });
-    return out;
-  }
-  var comb = (req && req.results) ? (req.results[t.id]||'') : '';
-  comb = String(comb).trim();
-  if(!comb) return out;
-  if(comb.indexOf('/')>-1){
-    var parts=comb.split('/');
-    flds.forEach(function(f,i){ if(parts[i]!==undefined && parts[i].trim()!=='') out[f.key]=parts[i].trim(); });
-  } else if(flds.length){ out[flds[0].key]=comb; }
-  return out;
-}
-// دمج قيم اللوحة في نص واحد يُحفظ في req.results (للتوافق مع بقية النظام)
-function _panelCombine(req, t){
-  var flds=_panelFieldsOf(t);
-  var vals=(req.panelResults && req.panelResults[t.id]) || {};
-  var arr=[];
-  flds.forEach(function(f){
-    var v=vals[f.key];
-    if(v!==undefined && v!==null && String(v).trim()!=='') arr.push(String(v).trim());
-  });
-  return arr.join(' / ');
-}
-// حالة الحقل (High / Low / Normal)
-function _panelFieldState(v, f){
-  var nv=_parseRes(v);
-  if(v===''||v===undefined||v===null||isNaN(nv)||f.minVal===null||f.maxVal===null) return {cls:'',txt:'',inp:''};
-  if(nv>f.maxVal) return {cls:'high', txt:'\u2b06\ufe0f High', inp:' res-high'};
-  if(nv<f.minVal) return {cls:'low',  txt:'\u2b07\ufe0f Low',  inp:' res-low'};
-  return {cls:'normal', txt:'\u2705 Normal', inp:' res-ok'};
-}
-// عند الكتابة في أي حقل من حقول اللوحة
-function _panelResInput(reqId, testId){
-  var req=requests.find(function(r){return r.id===reqId;}); if(!req) return;
-  var t=tests.find(function(x){return x.id===testId;});    if(!t)   return;
-  if(!req.panelResults) req.panelResults={};
-  var flds=_panelFieldsOf(t), obj={};
-  flds.forEach(function(f){
-    var el=document.getElementById('pv-'+testId+'-'+f.key);
-    if(!el) return;
-    var v=(el.value||'').trim();
-    if(v!=='') obj[f.key]=v;
-    var st=_panelFieldState(v,f);
-    el.className='res-input'+st.inp;
-    var stEl=document.getElementById('pst-'+testId+'-'+f.key);
-    if(stEl){ stEl.textContent=st.txt; stEl.className=st.cls; }
-  });
-  req.panelResults[testId]=obj;
-  var comb=_panelCombine(req,t);
-  var hid=document.getElementById('rv-'+testId);
-  if(hid) hid.value=comb;
-  if(comb==='') { delete req.results[testId]; }
-  else          { req.results[testId]=comb; }
-  req._updatedAt=Date.now();
-  _autoSaveResults();
-}
-// ── محرّر حقول اللوحة داخل قاعدة التحاليل ──────────────────
-var _panelRowSeq=0;
-function togglePanelBlock(){
-  var on=document.getElementById('et-panel-on');
-  var blk=document.getElementById('et-panel-block');
-  if(!blk) return;
-  blk.style.display=(on&&on.checked)?'block':'none';
-  if(on&&on.checked){
-    var rows=document.getElementById('et-panel-rows');
-    if(rows && !rows.children.length) addPanelFieldRow();
-  }
-}
-function renderPanelFields(fields){
-  var rows=document.getElementById('et-panel-rows');
-  if(!rows) return;
-  rows.innerHTML=''; _panelRowSeq=0;
-  (fields||[]).forEach(function(f){ addPanelFieldRow(f); });
-}
-function addPanelFieldRow(f){
-  var rows=document.getElementById('et-panel-rows');
-  if(!rows) return;
-  f=f||{};
-  var n=(++_panelRowSeq);
-  var _v=function(x){ return (x===undefined||x===null)?'':String(x).replace(/"/g,'&quot;'); };
-  var div=document.createElement('div');
-  div.id='pfrow-'+n;
-  div.setAttribute('data-panel-row','1');
-  div.style.cssText='background:rgba(255,255,255,0.04);border:1px solid rgba(0,212,255,0.22);border-radius:8px;padding:10px 12px;margin-bottom:8px';
-  div.innerHTML=''
-   +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">'
-   +  '<div style="font-size:10px;font-weight:800;color:#00d4ff">\u{1F4CC} \u062d\u0642\u0644 '+n+'</div>'
-   +  '<button class="btn btn-d btn-sm" style="padding:3px 8px" onclick="document.getElementById(\'pfrow-'+n+'\').remove()">\u{1F5D1}\ufe0f</button>'
-   +'</div>'
-   +'<input type="hidden" id="pf-'+n+'-key" value="'+_v(f.key||'')+'">'
-   +'<div class="fg" style="margin-bottom:6px"><label class="fl" style="font-size:10px">\u0627\u0633\u0645 \u0627\u0644\u062d\u0642\u0644 (\u0643\u0645\u0627 \u064a\u064f\u0637\u0628\u0639)</label>'
-   +  '<input class="fc" id="pf-'+n+'-name" value="'+_v(f.name)+'" placeholder="Fasting Blood Sugar" style="font-size:11px;padding:5px 8px;direction:ltr"></div>'
-   +'<div class="fr2" style="gap:8px">'
-   +  '<div class="fg" style="margin-bottom:6px"><label class="fl" style="font-size:10px">\u0627\u0644\u0642\u064a\u0645\u0629 \u0627\u0644\u0637\u0628\u064a\u0639\u064a\u0629 (\u0646\u0635 \u0644\u0644\u0637\u0628\u0627\u0639\u0629)</label>'
-   +    '<input class="fc" id="pf-'+n+'-ref" value="'+_v(f.ref)+'" placeholder="70 - 110" style="font-size:11px;padding:5px 8px;direction:ltr"></div>'
-   +  '<div class="fg" style="margin-bottom:6px"><label class="fl" style="font-size:10px">\u0627\u0644\u0648\u062d\u062f\u0629</label>'
-   +    '<input class="fc" id="pf-'+n+'-unit" value="'+_v(f.unit)+'" placeholder="mg /dl" style="font-size:11px;padding:5px 8px;direction:ltr"></div>'
-   +'</div>'
-   +'<div class="fr2" style="gap:8px">'
-   +  '<div class="fg" style="margin-bottom:0"><label class="fl" style="font-size:10px">Min (\u0644\u0644\u062a\u0641\u0633\u064a\u0631 H/L)</label>'
-   +    '<input class="fc" id="pf-'+n+'-min" type="number" step="any" value="'+_v(f.minVal)+'" style="font-size:11px;padding:5px 8px"></div>'
-   +  '<div class="fg" style="margin-bottom:0"><label class="fl" style="font-size:10px">Max (\u0644\u0644\u062a\u0641\u0633\u064a\u0631 H/L)</label>'
-   +    '<input class="fc" id="pf-'+n+'-max" type="number" step="any" value="'+_v(f.maxVal)+'" style="font-size:11px;padding:5px 8px"></div>'
-   +'</div>';
-  rows.appendChild(div);
-}
-function collectPanelFields(){
-  var rows=document.getElementById('et-panel-rows');
-  if(!rows) return [];
-  var out=[], used={};
-  Array.prototype.forEach.call(rows.querySelectorAll('[data-panel-row]'), function(div, idx){
-    var n=div.id.replace('pfrow-','');
-    var g=function(sfx){ var el=document.getElementById('pf-'+n+'-'+sfx); return el?el.value.trim():''; };
-    var nm=g('name'); if(!nm) return;
-    var key=g('key');
-    if(!key){
-      key=nm.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,24) || ('f'+(idx+1));
-    }
-    while(used[key]) key=key+'_'+(idx+1);
-    used[key]=1;
-    var mn=g('min'), mx=g('max');
-    out.push({
-      key:key, name:nm, unit:g('unit'), ref:g('ref'),
-      minVal:(mn===''?null:parseFloat(mn)),
-      maxVal:(mx===''?null:parseFloat(mx))
-    });
-  });
-  return out;
 }
 
 // ============================================================
@@ -20206,7 +19760,6 @@ function removeTestFromReq(tid, id){
   if(!confirm('حذف هذا التحليل من الطلب؟')) return;
   req.tests = req.tests.filter(x=>x!==tid);
   if(req.results) delete req.results[tid];
-  if(req.panelResults) delete req.panelResults[tid];
   save('requests',requests);
   loadResultEntry();
   showNotif('تم','تم حذف التحليل من الطلب','success');
