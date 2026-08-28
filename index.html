@@ -1451,11 +1451,13 @@ body.light-mode #lis-results-wrap{--lis-sticky-bg:#ffffff;}
   #lis-res-toolbar #lis-res-search{width:100%!important;}
 }
 
-.moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;}
+.moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}
 .moverlay.open{display:flex;animation:fi 0.12s ease;}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 .modal{background:#070d1c;border:1px solid var(--border);border-radius:18px;width:100%;max-width:680px;max-height:92vh;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.7);animation:su 0.15s ease;display:flex;flex-direction:column;}
 .modal.wide{max-width:1060px;}
+/* يمنع قصّ أعلى النافذة إذا تجاوز ارتفاعها الشاشة */
+.moverlay>.modal{margin:auto;}
 /* ── Resizable Modal ── */
 .resizable-modal{position:relative;resize:none;overflow:hidden;}
 .resizable-modal .mbody{overflow-y:auto;}
@@ -1498,7 +1500,32 @@ body.light-mode #lis-results-wrap{--lis-sticky-bg:#ffffff;}
 .mtitle{font-size:11px;font-weight:700;display:flex;align-items:center;gap:8px;}
 .mclose{width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:var(--bg-glass);color:var(--text2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:all 0.2s;}
 .mclose:hover{background:rgba(255,77,109,0.18);color:var(--danger);border-color:var(--danger);}
-.mbody{padding:22px;flex:1;overflow-y:auto;min-height:0;}
+.mbody{padding:22px;flex:1;overflow-y:auto;min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;}
+
+/* ════════════════════════════════════════════════
+   ⭐ إصلاح النوافذ المنبثقة
+   ١) شريط تمرير واضح وسميك داخل النافذة بدل 5px شبه مخفي
+   ٢) منع تحرّك/تمرير الصفحة التي خلف النافذة
+   ════════════════════════════════════════════════ */
+.mbody::-webkit-scrollbar,
+#lis-rm-scroll::-webkit-scrollbar,
+.moverlay ::-webkit-scrollbar{width:12px;height:12px;}
+.mbody::-webkit-scrollbar-track,
+#lis-rm-scroll::-webkit-scrollbar-track,
+.moverlay ::-webkit-scrollbar-track{background:rgba(255,255,255,0.05);border-radius:7px;}
+.mbody::-webkit-scrollbar-thumb,
+#lis-rm-scroll::-webkit-scrollbar-thumb,
+.moverlay ::-webkit-scrollbar-thumb{background:rgba(0,212,255,0.55);border-radius:7px;border:2px solid transparent;background-clip:padding-box;}
+.mbody::-webkit-scrollbar-thumb:hover,
+#lis-rm-scroll::-webkit-scrollbar-thumb:hover,
+.moverlay ::-webkit-scrollbar-thumb:hover{background:rgba(0,212,255,0.9);background-clip:padding-box;}
+.mbody,#lis-rm-scroll{scrollbar-width:auto;scrollbar-color:rgba(0,212,255,0.55) rgba(255,255,255,0.05);}
+body.light-mode .mbody::-webkit-scrollbar-thumb,
+body.light-mode #lis-rm-scroll::-webkit-scrollbar-thumb{background:#8fb6cf;background-clip:padding-box;}
+
+/* قفل تمرير الصفحة خلف النافذة المنبثقة */
+html.modal-open,body.modal-open{overflow:hidden!important;}
+body.modal-open .main{overflow:hidden!important;}
 .mftr{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:9px;flex-shrink:0;}
 .tabs{display:flex;gap:3px;background:rgba(255,255,255,0.03);border-radius:10px;padding:3px;flex-wrap:wrap;}
 .tab{padding:8px 16px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600;color:var(--text2);transition:all 0.2s;border:none;background:none;font-family:'Cairo',sans-serif;}
@@ -1546,7 +1573,7 @@ body.light-mode .lang-toggle-btn.lang-en{background:rgba(85,0,187,0.1);border-co
 .high{color:var(--danger)!important;font-weight:700!important;}
 .low{color:var(--warning)!important;font-weight:700!important;}
 .normal{color:var(--success)!important;}
-.notif-wrap{position:fixed;bottom:18px;left:18px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;}
+.notif-wrap{position:fixed;bottom:18px;left:18px;z-index:2147483000;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;}
 .notif{background:#080f20;border:1px solid var(--border);border-radius:11px;padding:12px 16px;display:flex;align-items:center;gap:10px;min-width:260px;box-shadow:0 4px 16px rgba(0,0,0,0.4);animation:nsl 0.15s ease;pointer-events:all;}
 @keyframes nsl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
 .notif h4{font-size:11px;font-weight:700;}
@@ -10647,8 +10674,76 @@ function nav(p){
 // ============================================================
 // MODALS
 // ============================================================
-function openModal(id){document.getElementById(id).classList.add('open');if(window._applyAutoLang)requestAnimationFrame(window._applyAutoLang);}
-function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='m-wizard'){try{if(window.SmartRec)SmartRec.reset();}catch(e){}}}
+// ══════════════════════════════════════════════════════════════
+// ⭐ النوافذ المنبثقة: قفل تمرير الصفحة خلفها
+//    كانت الصفحة خلف النافذة تتحرك مع عجلة الماوس/اللمس لأن
+//    .moverlay لم يكن يمنع تسرّب التمرير إلى <body>.
+// ══════════════════════════════════════════════════════════════
+function _anyModalOpen(){
+  try{ return !!document.querySelector('.moverlay.open'); }catch(e){ return false; }
+}
+function _lockBodyScroll(){
+  try{
+    document.documentElement.classList.add('modal-open');
+    document.body.classList.add('modal-open');
+  }catch(e){}
+}
+function _unlockBodyScroll(){
+  try{
+    document.documentElement.classList.remove('modal-open');
+    document.body.classList.remove('modal-open');
+  }catch(e){}
+}
+
+function openModal(id){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.classList.add('open');
+  _lockBodyScroll();
+  // ضع تركيز التمرير داخل النافذة مباشرةً
+  try{
+    const sc = el.querySelector('#lis-rm-scroll') || el.querySelector('.mbody');
+    if(sc){ sc.scrollTop = 0; sc.setAttribute('tabindex','-1'); }
+  }catch(e){}
+  if(window._applyAutoLang) requestAnimationFrame(window._applyAutoLang);
+}
+
+function closeModal(id){
+  const el=document.getElementById(id);
+  if(el) el.classList.remove('open');
+  // فُكّ القفل فقط إذا لم تبقَ أي نافذة أخرى مفتوحة
+  if(!_anyModalOpen()) _unlockBodyScroll();
+  if(id==='m-wizard'){try{if(window.SmartRec)SmartRec.reset();}catch(e){}}
+}
+
+// شبكة أمان: أي نافذة تُفتح/تُغلق بتعديل الكلاس مباشرةً (بلا openModal).
+// نراقب عناصر .moverlay فقط (عددها ثابت) — لا نراقب الصفحة كلها حفاظاً
+// على الأداء.
+function _watchOverlays(){
+  try{
+    const cb = function(){
+      if(_anyModalOpen()) _lockBodyScroll(); else _unlockBodyScroll();
+    };
+    const mo = new MutationObserver(cb);
+    document.querySelectorAll('.moverlay').forEach(function(el){
+      mo.observe(el, {attributes:true, attributeFilter:['class']});
+    });
+  }catch(e){}
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', _watchOverlays, {once:true});
+}else{
+  _watchOverlays();
+}
+
+// مفتاح Escape يغلق أحدث نافذة مفتوحة ويفكّ قفل التمرير
+document.addEventListener('keydown', function(e){
+  if(e.key!=='Escape') return;
+  const open = document.querySelectorAll('.moverlay.open');
+  if(!open.length) return;
+  const last = open[open.length-1];
+  if(last.id) closeModal(last.id);
+}, true);
 
 // ⭐⭐⭐ الإصلاح الجذري لفقدان التركيز بعد الحذف/استلام النتيجة (Electron + Chromium) ⭐⭐⭐
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18192,37 +18287,72 @@ function downloadPDF(){
   });
 }
 
-// ── فتح المجلد الذي فيه ملف PDF الخاص بنتيجة المريض الحالي ──
-function _openFolderForPath(fullPath){
-  if(!fullPath) return false;
-  if(!(window.IS_ELECTRON && window.electronAPI)) return false;
+// ══════════════════════════════════════════════════════════════
+// 📂 فتح المجلد الذي فيه ملفات PDF الخاصة بهذا المريض
+// ──────────────────────────────────────────────────────────────
+// ⭐ السبب الجذري للمشكلة القديمة: كنّا نفتح المجلد عبر
+//    electronAPI.openExternal('file:///C:/MedLabPro/...') وويندوز
+//    يتجاهل روابط file:// القادمة من shell.openExternal بصمت
+//    (و openInExplorer غير موجود في preload)، فلا يُفتح أي مجلد.
+//    الحل: نمرّ عبر العملية الرئيسية التي تستخدم
+//    shell.showItemInFolder — تفتح المجلد وتُحدِّد ملف الـ PDF
+//    مباشرةً — عبر نفس قناة savePDF فلا حاجة لتعديل preload.js.
+// ══════════════════════════════════════════════════════════════
+async function _openFolderForPath(fullPath, patientName){
+  if(!(window.IS_ELECTRON && window.electronAPI && window.electronAPI.savePDF)){
+    return {ok:false, error:'not-electron'};
+  }
   try{
-    const sep = fullPath.includes('\\') ? '\\' : '/';
-    const folderPath = fullPath.slice(0, fullPath.lastIndexOf(sep));
-    if(typeof window.electronAPI.openInExplorer === 'function'){
-      window.electronAPI.openInExplorer(folderPath);
-      return true;
-    }
-    if(typeof window.electronAPI.openExternal === 'function'){
-      const fileUrl = 'file:///' + folderPath.replace(/\\/g,'/').split('/').map(encodeURIComponent).join('/');
-      window.electronAPI.openExternal(fileUrl);
-      return true;
-    }
-    return false;
-  }catch(e){ console.warn('[openFolder]', e); return false; }
+    const res = await window.electronAPI.savePDF({
+      openFolderOnly: true,
+      revealPath:     fullPath    || '',
+      patientName:    patientName || 'Unknown',
+      fileName:       '',
+      pdfBuffer:      []
+    });
+    return res || {ok:false, error:'no-response'};
+  }catch(e){
+    console.warn('[openFolder]', e);
+    return {ok:false, error:(e && e.message) || 'error'};
+  }
 }
 
-function openResultsFolder(){
-  const req=requests.find(r=>r.id===currentReqId);
-  if(!req){showNotif('خطأ','لا يوجد طلب محدد','error');return;}
-  if(req.pdfSavedPath){
-    if(!_openFolderForPath(req.pdfSavedPath)){
+// اسم المريض المستخدم في مسار المجلد MedLabPro\{الاسم}
+// (نفس المنطق المستخدم عند حفظ الـ PDF في _fsaSavePDFToD)
+function _folderPatientName(req){
+  if(!req) return 'Unknown';
+  const pt = patients.find(p=>p.id===req.patientId) || {};
+  return pt.name || req.patientName || 'Unknown';
+}
+
+async function openResultsFolder(){
+  const req = requests.find(r=>r.id===currentReqId);
+  if(!req){ showNotif('خطأ','لا يوجد طلب محدد','error'); return; }
+
+  const ptName = _folderPatientName(req);
+  showNotif('جاري الفتح','📂 جاري فتح مجلد نتائج «'+ptName+'»...','info');
+
+  // نمرّر المسار المحفوظ إن وُجد، وإلا تتكفّل العملية الرئيسية
+  // بإيجاد مجلد المريض وأحدث ملف PDF داخله.
+  const res = await _openFolderForPath(req.pdfSavedPath || '', ptName);
+
+  if(res && res.ok){
+    if(!res.pdfCount){
+      showNotif('المجلد فارغ','📂 فُتح مجلد «'+ptName+'» لكن لا يوجد PDF محفوظ بعد — اضغط «تحميل PDF» أولاً','warning');
+    }else{
+      showNotif('تم','📂 فُتح مجلد نتائج «'+ptName+'» ('+res.pdfCount+' ملف PDF)','success');
+    }
+    return;
+  }
+
+  if(res && res.error === 'not-electron'){
+    if(req.pdfSavedInBrowser){
+      showNotif('تنبيه','⚠️ تم حفظ PDF داخل المتصفح — افتحه يدوياً من مجلد PDFs المحدد','warning');
+    }else{
       showNotif('تنبيه','⚠️ فتح المجلد متاح فقط في نسخة سطح المكتب','warning');
     }
-  } else if(req.pdfSavedInBrowser){
-    showNotif('تنبيه','⚠️ تم حفظ PDF داخل المتصفح — افتحه يدوياً من مجلد PDFs المحدد','warning');
-  } else {
-    showNotif('تنبيه','⚠️ لم يتم تحميل نتائج هذا المريض بصيغة PDF بعد','warning');
+  }else{
+    showNotif('خطأ','تعذّر فتح المجلد: '+((res && res.error) || 'سبب غير معروف'),'error');
   }
 }
 
@@ -18284,9 +18414,22 @@ function shareWhatsApp(){
         showNotif('تم','📤 أُرسلت النتيجة — الطلب الآن «مطبوع»','success');
       }catch(e){ console.warn('[wa printed]', e); }
 
-      setTimeout(()=>{ _openWhatsAppDirect(intPhone); }, 400);
-      // 📂 فتح المجلد الذي فيه ملف PDF بعد فتح واتساب — لسحبه وإفلاته في المحادثة
-      if(savedPath) setTimeout(()=>{ _openFolderForPath(savedPath); }, 900);
+      // 1️⃣ افتح تطبيق واتساب أولاً
+      setTimeout(()=>{ _openWhatsAppDirect(intPhone); }, 300);
+
+      // 2️⃣ ثم افتح مجلد النتائج فوقه مع تحديد ملف الـ PDF جاهزاً للسحب.
+      //    ⭐ لا نشترط وجود savedPath: إن لم يصلنا مسار (حفظ عبر المتصفح
+      //    أو فشل الحفظ) نفتح مجلد المريض ونحدّد أحدث PDF بداخله.
+      setTimeout(async ()=>{
+        const _nm = ptName || _folderPatientName(req);
+        const r   = await _openFolderForPath(savedPath || '', _nm);
+        if(r && r.ok && r.pdfCount){
+          showNotif('جاهز','📎 اسحب ملف PDF المحدَّد وأفلته داخل محادثة واتساب','info');
+        }else if(r && r.error && r.error!=='not-electron'){
+          console.warn('[wa folder]', r.error);
+          showNotif('تنبيه','⚠️ تعذّر فتح مجلد النتائج تلقائياً','warning');
+        }
+      }, 1400);
     }, ptName, ptId);
   });
 }
@@ -42288,7 +42431,7 @@ async function _fsaSavePDFToD(doc, fileName, afterSave, patientName, patientId){
         showNotif('✅ تم الحفظ','PDF محفوظ في C:\\MedLabPro\\'+patientName+'\\'+fileName,'success');
         try{
           const _r=requests.find(x=>x.id===currentReqId);
-          if(_r){ _r.pdfSavedPath=res.filePath||null; _r.pdfSavedAt=Date.now(); save('requests',requests); }
+          if(_r){ _r.pdfSavedPath=res.filePath||null; _r.pdfSavedInBrowser=false; _r.pdfSavedAt=Date.now(); save('requests',requests); }
         }catch(e){}
         if(afterSave) afterSave(res.filePath);
         return;
