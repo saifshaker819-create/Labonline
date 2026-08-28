@@ -1422,6 +1422,23 @@ textarea.fc{resize:vertical;}
 .bdg-d{background:rgba(255,77,109,0.13);color:var(--danger);border:1px solid rgba(255,77,109,0.28);}
 .bdg-p{background:rgba(0,212,255,0.13);color:var(--primary);border:1px solid rgba(0,212,255,0.28);}
 .bdg-s{background:rgba(123,47,255,0.13);color:#a78bfa;border:1px solid rgba(123,47,255,0.28);}
+/* ═══ نتائج الأجهزة: عمود «إجراء» مثبّت دائماً + الشاشة الموسّعة ═══ */
+#lis-results-wrap{--lis-sticky-bg:#0a1322;}
+body.light-mode #lis-results-wrap{--lis-sticky-bg:#ffffff;}
+#lis-results-wrap table td:last-child,
+#lis-results-wrap table th:last-child{
+  position:sticky;left:0;z-index:4;background:var(--lis-sticky-bg);
+  box-shadow:8px 0 10px -8px rgba(0,0,0,0.45);
+}
+#lis-results-wrap table th:last-child{
+  z-index:5;
+  background-image:linear-gradient(rgba(0,212,255,0.08),rgba(0,212,255,0.08));
+}
+#lis-results-wrap .gc-body{overflow:auto;max-height:62vh;}
+#lis-results-wrap.lis-res-expanded{height:100%;margin:0;}
+#lis-results-wrap.lis-res-expanded .gc-body{max-height:calc(92vh - 130px);}
+#lis-m-results .mbody{padding:8px;}
+
 .moverlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999999;display:none;align-items:center;justify-content:center;padding:16px;}
 .moverlay.open{display:flex;animation:fi 0.12s ease;}
 @keyframes fi{from{opacity:0}to{opacity:1}}
@@ -3419,7 +3436,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;align-items:center">
               <button class="btn btn-s" onclick="editPatientFromResults()">✏️ تعديل بيانات المريض</button>
               <button class="btn btn-s" style="white-space:nowrap;font-weight:800;background:rgba(139,63,255,0.14);border-color:rgba(139,63,255,0.5);color:#b98bff" onclick="printLabelFromResults()" title="طباعة ملصق الباركود">🏷️ طباعة ملصق</button>
-              <button class="btn btn-ok btn-lg" onclick="finalizeResult()">✅ تأكيد النتائج</button>
+              <button class="btn btn-ok btn-lg" onclick="openResultsFolder()">📁 النتائج</button>
               <button class="btn btn-lg" id="res-tg-send-btn" style="display:none;white-space:nowrap;font-weight:800;background:linear-gradient(135deg,#0088cc,#005f8f);border:none;color:#fff" onclick="tgSendCurrentResult()" title="إرسال هذا المريض ونتائجه إلى الحاسبة الأخرى">📤 إرسال للبوت</button>
               <button class="btn btn-lg" id="res-mlc-send-btn" style="display:none;white-space:nowrap;font-weight:800;background:linear-gradient(135deg,#00d4ff,#7b2cff);border:none;color:#fff" onclick="mlcOpenSendPicker()" title="إرسال نتيجة هذا المريض بصيغة PDF عبر MedLabChat">💬 إرسال عبر MedLabChat</button>
               <button class="btn btn-p btn-lg" style="background:linear-gradient(135deg,#00b4ff,#0066ff);border:none" onclick="pushResultsToDevice()" title="إرسال التحاليل المحددة إلى الجهاز">📤 إرسال للجهاز</button>
@@ -4131,11 +4148,13 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 <button class="btn btn-s btn-sm" style="color:var(--success);border-color:rgba(0,232,122,0.4)" onclick="lisTransferAll()">📤 نقل الكل → MedLab Pro</button>
                 <button class="btn btn-s btn-sm" onclick="lisCheckMedlabConn()">🔍 اختبار الاتصال</button>
                 <button class="btn btn-s btn-sm" style="color:var(--danger);border-color:rgba(255,34,68,0.3)" onclick="lisClearResults()">🗑️ مسح</button>
+                <button class="btn btn-s btn-sm" style="color:var(--primary);border-color:rgba(0,212,255,0.4)" title="فتح جدول النتائج في شاشة موسّعة" onclick="lisPopoutResults()">⛶ توسيع</button>
               </div>
               <input style="width:190px;background:rgba(255,255,255,0.05);border:1.5px solid var(--border);border-radius:8px;padding:7px 12px;color:var(--text);font-family:'Cairo',sans-serif;font-size:12px;outline:none" placeholder="بحث بـ SID أو اسم..." id="lis-res-search" oninput="lisRenderResults()">
             </div>
-            <div class="gc">
-              <div class="gc-body" style="overflow-x:auto;padding:0">
+            <div id="lis-results-host">
+            <div class="gc" id="lis-results-wrap">
+              <div class="gc-body" style="overflow:auto;padding:0">
                 <table class="tbl" style="width:100%;border-collapse:collapse">
                   <thead><tr style="background:rgba(0,212,255,0.08)">
                     <th style="padding:9px 10px;text-align:right;font-size:11px;color:var(--primary);border-bottom:1.5px solid var(--border)"><input type="checkbox" id="lis-chk-all" onchange="lisToggleAllCheck(this)"></th>
@@ -4156,6 +4175,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 </table>
               </div>
             </div>
+            </div><!-- /lis-results-host -->
           </div>
 
           <!-- Tab: Mapping -->
@@ -4316,6 +4336,13 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                       <div style="font-size:10px;color:var(--text2)">صوت عند وصول نتيجة جديدة</div>
                     </div>
                     <div class="tog on" id="lis-tog-sound" onclick="this.classList.toggle('on');lisSaveSettings()"><div class="tog-t"></div></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                    <div style="max-width:78%">
+                      <div style="font-size:12px;font-weight:700">🔒 مطابقة صارمة لرقم العينة</div>
+                      <div style="font-size:10px;color:var(--text2)">إن لم يطابق رقم العينة أي طلب تماماً ⟵ تُهمَل النتيجة ولا تُكتب لأي مريض (يُنصح بإبقائه مفعّلاً)</div>
+                    </div>
+                    <div class="tog on" id="lis-tog-strict-sid" onclick="this.classList.toggle('on');lisSaveSettings()"><div class="tog-t"></div></div>
                   </div>
                   <div class="fg">
                     <label class="fl">تأخير النقل (ثانية)</label>
@@ -6261,6 +6288,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
 
 <!-- CULTURE ENTRY MODAL -->
 <!-- UA ENTRY MODAL -->
+<!-- ═══ LIS: شاشة نتائج الأجهزة الموسّعة ═══ -->
+<div class="moverlay" id="lis-m-results">
+  <div class="modal" style="max-width:1500px;width:97vw;height:92vh">
+    <div class="mhdr">
+      <div class="mtitle">📥 نتائج الأجهزة</div>
+      <button class="mclose" onclick="lisPopinResults()">✕</button>
+    </div>
+    <div class="mbody" id="lis-results-modal-body" style="overflow:auto;padding:10px"></div>
+  </div>
+</div>
+
 <!-- ═══ LIS: Modal إضافة جهاز ═══ -->
 <div class="moverlay" id="lis-m-add-device">
   <div class="modal" style="max-width:520px">
@@ -18141,6 +18179,40 @@ function downloadPDF(){
   });
 }
 
+// ── فتح المجلد الذي فيه ملف PDF الخاص بنتيجة المريض الحالي ──
+function _openFolderForPath(fullPath){
+  if(!fullPath) return false;
+  if(!(window.IS_ELECTRON && window.electronAPI)) return false;
+  try{
+    const sep = fullPath.includes('\\') ? '\\' : '/';
+    const folderPath = fullPath.slice(0, fullPath.lastIndexOf(sep));
+    if(typeof window.electronAPI.openInExplorer === 'function'){
+      window.electronAPI.openInExplorer(folderPath);
+      return true;
+    }
+    if(typeof window.electronAPI.openExternal === 'function'){
+      const fileUrl = 'file:///' + folderPath.replace(/\\/g,'/').split('/').map(encodeURIComponent).join('/');
+      window.electronAPI.openExternal(fileUrl);
+      return true;
+    }
+    return false;
+  }catch(e){ console.warn('[openFolder]', e); return false; }
+}
+
+function openResultsFolder(){
+  const req=requests.find(r=>r.id===currentReqId);
+  if(!req){showNotif('خطأ','لا يوجد طلب محدد','error');return;}
+  if(req.pdfSavedPath){
+    if(!_openFolderForPath(req.pdfSavedPath)){
+      showNotif('تنبيه','⚠️ فتح المجلد متاح فقط في نسخة سطح المكتب','warning');
+    }
+  } else if(req.pdfSavedInBrowser){
+    showNotif('تنبيه','⚠️ تم حفظ PDF داخل المتصفح — افتحه يدوياً من مجلد PDFs المحدد','warning');
+  } else {
+    showNotif('تنبيه','⚠️ لم يتم تحميل نتائج هذا المريض بصيغة PDF بعد','warning');
+  }
+}
+
 // ============================================================
 // فتح واتساب مباشرة في التطبيق — تجاوز الموقع في المتصفح
 // ============================================================
@@ -18200,6 +18272,8 @@ function shareWhatsApp(){
       }catch(e){ console.warn('[wa printed]', e); }
 
       setTimeout(()=>{ _openWhatsAppDirect(intPhone); }, 400);
+      // 📂 فتح المجلد الذي فيه ملف PDF بعد فتح واتساب — لسحبه وإفلاته في المحادثة
+      if(savedPath) setTimeout(()=>{ _openFolderForPath(savedPath); }, 900);
     }, ptName, ptId);
   });
 }
@@ -36212,6 +36286,8 @@ let _lisFileHandle=null;
 let _lisWS        = null;
 let _lisWsReconnTimer=null;
 let _lisSettings  = {autoTransfer:true,sound:true,delay:2,linkMode:'localstorage',
+  // 🔒 مطابقة صارمة لرقم العينة: نتيجة بلا طلب مطابق تماماً ⟵ تُهمَل
+  strictSidMatch:true,
   // 🔢 c111 — قوائم استثناء التقريب (تُخزَّن كأكواد تحاليل)
   //   c111NoChange : بلا أي تعديل — تدخل النتيجة خام كما أرسلها الجهاز
   //   c111TruncOnly: حذف الكسور فقط بلا تقريب (107.12 → 107 ، 98 → 98)
@@ -36826,6 +36902,7 @@ function lisLoadState(){
     lisResults  =JSON.parse(localStorage.getItem('lis_v3_results') ||'[]');
     lisMappings =JSON.parse(localStorage.getItem('lis_v3_mappings')||'[]');
     _lisSettings=Object.assign({autoTransfer:true,sound:true,delay:2,linkMode:'localstorage',
+      strictSidMatch:true,
       c111NoChange:[],c111TruncOnly:[]},
       JSON.parse(localStorage.getItem('lis_v3_settings')||'{}'));
     // ضمان أن القوائم مصفوفات دائماً (حماية من ملف إعدادات قديم/تالف)
@@ -36834,7 +36911,7 @@ function lisLoadState(){
     // 🧫 BS-230 — قوائم مستقلة تماماً عن c111 (لا تتشارك أي بيانات)
     if(!Array.isArray(_lisSettings.bs230NoChange))  _lisSettings.bs230NoChange=[];
     if(!Array.isArray(_lisSettings.bs230TruncOnly)) _lisSettings.bs230TruncOnly=[];
-  }catch(e){lisDevices=[];lisResults=[];lisMappings=[];_lisSettings={autoTransfer:true,sound:true,delay:2,linkMode:'localstorage',c111NoChange:[],c111TruncOnly:[],bs230NoChange:[],bs230TruncOnly:[]};}
+  }catch(e){lisDevices=[];lisResults=[];lisMappings=[];_lisSettings={autoTransfer:true,sound:true,delay:2,linkMode:'localstorage',strictSidMatch:true,c111NoChange:[],c111TruncOnly:[],bs230NoChange:[],bs230TruncOnly:[]};}
   // ── إعادة ضبط حالة الاتصال عند كل تشغيل ──────────────────
   // الاتصالات الفعلية (TCP/Serial) لا تبقى بعد إغلاق البرنامج.
   // لو حفظنا connected:true وأعدنا تحميله، تظهر الـ UI خضراء بدون
@@ -39175,9 +39252,15 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
     var _sidRaw=String(parsed.patientId).trim();
     if(/^9\d+$/.test(_sidRaw)){
       var _sidBase=_c111BaseSidFromWb(_sidRaw);
-      if(_sidBase&&_sidBase!==_sidRaw){
+      // ⚠️ حماية: لا نحذف البادئة ٩ إذا كان الرقم المُرسَل نفسه رقم مريض
+      //    حقيقي (حاسبة رقمها ٩ ⟵ أرقام مرضاها تبدأ بـ ٩) وإلا ذهبت النتيجة
+      //    لمريض آخر أو ضاعت.
+      var _rawKnown=(typeof _lisSidKnown==='function')?_lisSidKnown(_sidRaw):false;
+      if(_sidBase&&_sidBase!==_sidRaw&&!_rawKnown){
         lisAddLog('info','🩸 '+deviceName+' — تيوب هول بلود: '+_sidRaw+' → '+_sidBase+' (تراكمي)');
         parsed.patientId=_sidBase;
+      } else if(_sidBase&&_sidBase!==_sidRaw&&_rawKnown){
+        lisAddLog('info','ℹ️ '+deviceName+' — الرقم '+_sidRaw+' رقم مريض حقيقي (لا يُعامل كتيوب تراكمي)');
       }
     }
   }
@@ -39713,6 +39796,192 @@ function _lisAutoFlush(){
     ids.forEach(function(id){ try{ lisTransferResult(id); }catch(_){} });
   }
 }
+// 📤 زر النقل الموحّد: حقل الرقم فارغ ⟵ إعادة المحاولة التلقائية،
+//    وفيه رقم مريض ⟵ ربط يدوي بذلك المريض (طلبات اليوم فقط).
+function lisSendResult(resId){
+  const inp=document.getElementById('lis-mlid-'+resId);
+  const v=String((inp&&inp.value)||'').trim();
+  if(v) return lisManualLink(resId);
+  return lisTransferResult(resId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔗 الربط اليدوي: إدخال رقم المريض الصحيح بجانب النتيجة
+// ───────────────────────────────────────────────────────────────────────────
+//   ١) الرقم المُدخَل يجب أن يكون رقم مريض/باركود **موجوداً فعلاً** — وإلا رفض.
+//   ٢) نأخذ طلبات هذا المريض **لهذا اليوم فقط** (لا نلمس طلبات الأيام السابقة).
+//   ٣) نرتّبها من الأحدث للأقدم، ونأخذ أول طلب يحتوي هذا التحليل:
+//        · خانته فارغة ⟵ تُكتب النتيجة.   · مملوءة ⟵ تُستبدل بالجديدة.
+//   ٤) إن لم يحتوِ الأحدث التحليل ⟵ ننتقل للذي يليه… وهكذا.
+//   ٥) إن لم يوجد أي طلب اليوم يحتوي التحليل ⟵ لا يُكتب شيء إطلاقاً.
+// معزول تماماً: لا يمسّ مسار الاستقبال التلقائي ولا دالة المطابقة الآلية.
+// ═══════════════════════════════════════════════════════════════════════════
+async function lisManualLink(resId){
+  const res=lisResults.find(function(x){return x.id===resId;});
+  if(!res){ showNotif('خطأ','النتيجة غير موجودة','error'); return; }
+  const inp=document.getElementById('lis-mlid-'+resId);
+  const idIn=String((inp&&inp.value)||'').trim();
+  if(!idIn){ showNotif('تنبيه','أدخل رقم المريض الصحيح أولاً','warning'); if(inp) inp.focus(); return; }
+
+  // ── تحميل المرضى/الطلبات (ذاكرة + IDB) بنفس أسلوب النقل التلقائي ──
+  const _pfx=(typeof DB!=='undefined'&&typeof DB._pfx==='function')?DB._pfx():'mlab2_';
+  const _idbReqKey=_pfx+'requests';
+  const _idbPtKey =_pfx+'patients';
+  let idbReqs=null, idbPts=null;
+  try{
+    if(typeof IDB!=='undefined'){
+      idbReqs=await IDB.get(_idbReqKey);
+      idbPts =await IDB.get(_idbPtKey);
+    }
+  }catch(e){ console.warn('[LIS] manual link IDB read',e); }
+  let reqsAll=(typeof requests!=='undefined'&&Array.isArray(requests)&&requests.length)?requests:
+              (Array.isArray(idbReqs)?idbReqs:[]);
+  if(Array.isArray(idbReqs)&&reqsAll!==idbReqs){
+    const _seen=new Set(reqsAll.map(function(r){return r.id;}));
+    idbReqs.forEach(function(r){ if(r&&r.id&&!_seen.has(r.id)) reqsAll.push(r); });
+  }
+  const ptsAll=(typeof patients!=='undefined'&&Array.isArray(patients)&&patients.length)?patients:
+               (Array.isArray(idbPts)?idbPts:[]);
+
+  // ── ١) المريض يجب أن يكون موجوداً (رقم الملف أو الباركود — تطابق تام) ──
+  const pt=ptsAll.find(function(p){ return _lisIdSame(p.id,idIn)||_lisIdSame(p.barcode,idIn); });
+  if(!pt){
+    lisAddLog('warn','⛔ ربط يدوي: لا يوجد مريض بالرقم '+idIn+' — لم يتغيّر شيء');
+    showNotif('غير موجود','لا يوجد مريض بالرقم '+idIn,'error');
+    return;
+  }
+
+  // ── ٢) طلبات هذا المريض **اليوم فقط** ─────────────────────────────
+  const _today=new Date().toISOString().split('T')[0];
+  const mine=reqsAll.filter(function(r){
+    if(!r||String(r.patientId)!==String(pt.id)) return false;
+    return (typeof _isTodayReq==='function')?_isTodayReq(r,_today):(String(r.date||'')===_today);
+  });
+  if(!mine.length){
+    lisAddLog('warn','⛔ ربط يدوي: لا يوجد طلب اليوم للمريض '+(pt.name||pt.id)+' — لم يتغيّر شيء');
+    showNotif('لا يوجد طلب','لا توجد طلبات اليوم للمريض '+(pt.name||pt.id),'warning');
+    return;
+  }
+
+  // ── ٣) الأحدث أولاً ثم أول طلب يحتوي هذا التحليل ──────────────────
+  mine.sort(_lisNewerFirst);
+  const code=res.medlabCode||res.deviceCode||'';
+  let target=null;
+  for(let i=0;i<mine.length;i++){
+    if(_lisReqTestKey(mine[i], code)){ target=mine[i]; break; }
+  }
+  if(!target){
+    lisAddLog('warn','⛔ ربط يدوي: لا يوجد طلب اليوم للمريض '+(pt.name||pt.id)+
+      ' يحتوي التحليل '+code+' ('+mine.length+' طلب) — لم يتغيّر شيء');
+    showNotif('التحليل غير مطلوب','لا يوجد طلب اليوم لهذا المريض يحتوي '+code,'warning');
+    return;
+  }
+
+  // ── ٤) الكتابة (استبدال أي نتيجة قديمة لنفس التحليل) ─────────────
+  const _had=(function(){
+    try{ return _lisReqKeyFilled(target, code, _lisReqTestKey(target, code)); }catch(_){ return false; }
+  })();
+  let _ok=true;
+  try{
+    if(res.cbcParams&&Object.keys(res.cbcParams).length){
+      _lisApplyCbcToReq(target, res, reqsAll, _idbReqKey);
+    } else {
+      _ok=!!_lisApplyResultToReq(target, res, reqsAll, _idbReqKey);
+    }
+  }catch(e){
+    console.warn('[LIS] manual link apply',e);
+    lisAddLog('err','❌ ربط يدوي: فشل الحفظ — '+(e&&e.message||e));
+    showNotif('خطأ','تعذّر حفظ النتيجة','error');
+    return;
+  }
+  if(!_ok){
+    // كود الجهاز غير مربوط بأي تحليل داخل الطلب — لم تُكتب النتيجة
+    res.transferred=false; res.unmatched=false; res.unmatchedCode=true;
+    lisSaveState(); lisRenderResults();
+    showNotif('كود غير مربوط','كود الجهاز '+code+' غير مربوط بتحليل داخل الطلب '+target.id,'warning');
+    return;
+  }
+  res.transferred=true;
+  res.unmatched=false;
+  res.unmatchedCode=false;
+  res.manualLinkedTo=target.id;
+  lisAddLog('ok','🔗 ربط يدوي: '+code+'='+res.value+' → '+target.id+' ('+(target.patientName||pt.name)+')'+
+    (_had?' [استُبدلت نتيجة سابقة]':''));
+  lisSaveState(); lisRenderResults(); lisUpdateStats();
+  if(typeof lisUpdateNbBadge==='function'){ try{ lisUpdateNbBadge(); }catch(_){} }
+  if(typeof _lisRefreshMedlabUiLight==='function'){ try{ _lisRefreshMedlabUiLight(); }catch(_){} }
+  showNotif('تم الربط ✅', code+' → '+target.id+' · '+(target.patientName||pt.name)+
+    (_had?' (استُبدلت النتيجة السابقة)':''), 'success');
+}
+
+// كتابة CBC كامل في طلب — نفس ما يفعله cbcFlush تماماً (للربط اليدوي فقط)
+function _lisApplyCbcToReq(req, res, reqs, idbKey){
+  const params=res.cbcParams||{};
+  const _dev=res.device||'Device';
+  if(!req.results) req.results={};
+  if(!req.resultDetails) req.resultDetails={};
+  req.cbcData=params;
+  req.results['CBC']='done';
+  if(!req.cbcHistory) req.cbcHistory=[];
+  req.cbcHistory.unshift({params:params,datetime:new Date().toISOString(),device:_dev});
+  req.resultDetails['CBC']={value:'CBC كامل من الجهاز',cbcParams:params,fromDevice:_dev,datetime:new Date().toISOString()};
+  const _other=(req.tests||[]).filter(function(t){return t!=='CBC'&&t!=='h001';});
+  const _otherDone=_other.every(function(t){return req.results&&req.results[t];});
+  if(_otherDone) req.status='done'; else if(req.status==='pending') req.status='inprogress';
+  req._updatedAt=Date.now();
+  if(typeof requests!=='undefined'&&Array.isArray(requests)){
+    const idx=requests.findIndex(function(x){return x.id===req.id;});
+    if(idx>=0) requests[idx]=req; else requests.push(req);
+  }
+  let _saved=false;
+  try{
+    if(typeof saveOne==='function'&&typeof DB!=='undefined'&&idbKey===DB._pfx()+'requests'){
+      saveOne('requests', reqs, req); _saved=true;
+    }
+  }catch(e){ console.warn('[LIS] cbc manual save',e); }
+  if(!_saved){
+    if(typeof IDB!=='undefined'&&idbKey) IDB.set(idbKey, reqs).catch(function(e){console.warn(e);});
+    if(typeof _MC!=='undefined') _MC[idbKey]=reqs;
+    try{ if(typeof window._lanOnSave==='function') window._lanOnSave('requests', reqs); }catch(e){}
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ⛶ شاشة نتائج الأجهزة الموسّعة — نُحرّك الجدول نفسه إلى النافذة المنبثقة
+//    (لا تكرار للكود: نفس العنصر ونفس دالة العرض تماماً)
+// ═══════════════════════════════════════════════════════════════════════════
+function lisPopoutResults(){
+  const wrap=document.getElementById('lis-results-wrap');
+  const body=document.getElementById('lis-results-modal-body');
+  if(!wrap||!body) return;
+  if(wrap.parentNode!==body) body.appendChild(wrap);
+  wrap.classList.add('lis-res-expanded');
+  openModal('lis-m-results');
+  try{ lisRenderResults(); }catch(_){}
+}
+function lisPopinResults(){
+  const wrap=document.getElementById('lis-results-wrap');
+  const host=document.getElementById('lis-results-host');
+  try{ closeModal('lis-m-results'); }catch(_){}
+  if(wrap&&host&&wrap.parentNode!==host){
+    wrap.classList.remove('lis-res-expanded');
+    host.appendChild(wrap);
+  }
+  try{ lisRenderResults(); }catch(_){}
+}
+// إغلاق بالنقر خارج النافذة يُعيد الجدول لمكانه الأصلي
+(function _lisBindResPop(){
+  function bind(){
+    const ov=document.getElementById('lis-m-results');
+    if(ov&&!ov._lisBound){
+      ov._lisBound=1;
+      ov.addEventListener('click',function(e){ if(e.target===ov) lisPopinResults(); });
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',bind);
+  else bind();
+})();
+
 function lisTransferAll(){
   const pending=lisResults.filter(r=>!r.transferred);
   if(!pending.length){showNotif('تنبيه','لا توجد نتائج معلقة للنقل','warning');return;}
@@ -39845,6 +40114,63 @@ function _lisNewerFirst(a, b){
   return 0;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 صرامة رقم العينة (SID) — «لا تطابق تام ⟵ لا إدخال»
+// ───────────────────────────────────────────────────────────────────────────
+// العلّة التي عالجها هذا الجزء (نتيجة تدخل لمريض آخر برقم RQ):
+//   كانت المطابقة تقبل التطابق *الجزئي* من الطرف:
+//        rId.endsWith(sid) || sid.endsWith(rId)
+//   فإذا أرسل الجهاز رقماً قصيراً مثل «10» (تراكمي بتيوب رقمه ١٠) فإن أي
+//   طلب ينتهي رقمه بـ 10 (RQ1-1010 / RQ2-210 …) يُعتبر مطابقاً بدرجة ١٠٠،
+//   فتُكتب النتيجة في مريض لا علاقة له بالعينة.
+//
+// القاعدة الآن (لكل الأجهزة والبروتوكولات — HL7 / ASTM / CSV / c111):
+//   • التطابق **تام فقط**: نص كامل أو رقم كامل. لا endsWith ولا startsWith.
+//   • رقم الطلب (RQ) يُقبل بتطابق نصّي كامل فقط (مثل 'RQ1-1010').
+//   • المطابقة بالاسم وحده أُلغيت في الوضع الصارم (الاسم ليس معرّفاً).
+//   • إن لم يوجد أي طلب بنفس الرقم ⟵ **تُهمَل النتيجة** ولا تُكتب في أي مكان.
+//
+// كِلّ أمان (رجوع كامل للسلوك القديم): _lisSettings.strictSidMatch = false
+// ═══════════════════════════════════════════════════════════════════════════
+function _lisStrictSid(){
+  try{ return (typeof _lisSettings==='undefined')||(_lisSettings.strictSidMatch!==false); }
+  catch(_){ return true; }
+}
+// تطبيع معرّف للمقارنة: أرقام عربية-هندية → لاتينية + حذف الفواصل + حروف كبيرة
+function _lisIdKey(v){
+  var s=String(v==null?'':v).trim();
+  if(!s) return '';
+  try{ if(typeof _bcCleanCode==='function'){ var c=_bcCleanCode(s); if(c) s=c; } }catch(_){}
+  return s.toUpperCase().replace(/[\s\-_.]+/g,'');
+}
+function _lisIdDigits(v){ return _lisIdKey(v).replace(/[^0-9]/g,''); }
+// تطابق تام: نفس النص بالكامل، أو نفس الأرقام بالكامل
+function _lisIdSame(a,b){
+  var ka=_lisIdKey(a), kb=_lisIdKey(b);
+  if(!ka||!kb) return false;
+  if(ka===kb) return true;
+  var da=_lisIdDigits(a), db=_lisIdDigits(b);
+  return !!(da&&db&&da===db);
+}
+// هل هذا الرقم معروف فعلاً في البرنامج (مريض أو طلب أو رقم عينة)؟
+// يُستخدم قبل أي تحويل لرقم العينة (مثل حذف بادئة ٩ لتيوب التراكمي).
+function _lisSidKnown(sid){
+  try{
+    var k=_lisIdKey(sid);
+    if(!k) return false;
+    var _p=(typeof patients!=='undefined'&&Array.isArray(patients))?patients:[];
+    for(var i=0;i<_p.length;i++){
+      if(_lisIdSame(_p[i].id,sid)||_lisIdSame(_p[i].barcode,sid)) return true;
+    }
+    var _r=(typeof requests!=='undefined'&&Array.isArray(requests))?requests:[];
+    for(var j=0;j<_r.length;j++){
+      if(_lisIdSame(_r[j].patientId,sid)||_lisIdSame(_r[j].sampleId,sid)||
+         _lisIdSame(_r[j].sampleNum,sid)||_lisIdKey(_r[j].id)===k) return true;
+    }
+  }catch(_){}
+  return false;
+}
+
 // ── مساعد: مطابقة نتيجة جهاز مع طلب من القائمة ───────────────────────────
 // القاعدة الأساسية: MAGLUMI يرسل رقم المريض كـ SID
 // نبحث عن طلب غير منتهٍ للمريض صاحب هذا الرقم
@@ -39852,13 +40178,32 @@ function _lisMatchReqInList(reqs, res, ptsList){
   const sid=String(res.sampleId||'').trim();
   if(!sid) return undefined;
   const sidNum=sid.replace(/[^0-9]/g,'');
+  const _strictSid=_lisStrictSid();
+  const _sidKey=_lisIdKey(sid);
 
   // جمع المرشحين أولاً ثم اختيار الأفضل
   const candidates=[];
 
   reqs.forEach(function(r){
     const rId=String(r.id||'').trim();
+    const _pts=ptsList||(typeof patients!=='undefined'?patients:[]);
+    const pt2=_pts.find(function(p){return p.id===r.patientId;});
 
+    if(_strictSid){
+      // ── الوضع الصارم: تطابق تام فقط ──────────────────────────────────
+      // 1. رقم الطلب (RQ) — تطابق نصّي كامل فقط (لا تطابق بالأرقام وحدها)
+      if(_sidKey && _lisIdKey(rId)===_sidKey){candidates.push({r,score:100});return;}
+      // 2. رقم المريض المخزون في الطلب
+      if(_lisIdSame(r.patientId, sid)){candidates.push({r,score:90});return;}
+      // 3. رقم العينة المخزون في الطلب
+      if(_lisIdSame(r.sampleId, sid)||_lisIdSame(r.sampleNum, sid)){candidates.push({r,score:80});return;}
+      // 4/5. باركود المريض أو رقم ملفه من سجل المرضى
+      if(pt2&&(_lisIdSame(pt2.barcode, sid)||_lisIdSame(pt2.id, sid))){candidates.push({r,score:70});return;}
+      // (لا مطابقة بالاسم ولا تطابق جزئي في الوضع الصارم)
+      return;
+    }
+
+    // ── الوضع القديم (عند إيقاف الصرامة) — كما كان حرفياً ───────────────
     // 1. مطابقة رقم الطلب مباشرة مع SID (BC-5000 يرسل رقم الطلب كـ SID)
     if(rId===sid||rId.endsWith(sid)||sid.endsWith(rId)){candidates.push({r,score:100});return;}
     const rIdNum=rId.replace(/[^0-9]/g,'');
@@ -39877,8 +40222,6 @@ function _lisMatchReqInList(reqs, res, ptsList){
     }
 
     // 4. مطابقة barcode المريض مع SID
-    const _pts=ptsList||(typeof patients!=='undefined'?patients:[]);
-    const pt2=_pts.find(function(p){return p.id===r.patientId;});
     if(pt2&&pt2.barcode){
       const bc=String(pt2.barcode).trim().replace(/[^0-9]/g,'');
       if(bc&&sidNum&&bc===sidNum){candidates.push({r,score:70});return;}
@@ -39897,7 +40240,14 @@ function _lisMatchReqInList(reqs, res, ptsList){
     }
   });
 
-  if(!candidates.length) return undefined;
+  if(!candidates.length){
+    // ⛔ لا يوجد أي طلب يحمل هذا الرقم — تُهمَل النتيجة ولا تُكتب في أي مريض
+    try{
+      if(_strictSid) lisAddLog('warn','⛔ رقم العينة '+sid+' لا يطابق أي طلب — أُهملت النتيجة ('+
+        ((res&&(res.medlabCode||res.deviceCode))||'?')+') ولم تُكتب لأي مريض');
+    }catch(_){}
+    return undefined;
+  }
 
   const _code=(res.medlabCode||res.deviceCode||'');
 
@@ -40198,6 +40548,7 @@ async function lisTransferToMedlabPro(list){
       const _k=_lisApplyResultToReq(req, res, mergedReqs, _idbReqKey);
       if(_k){
         res.transferred=true;
+        res.unmatched=false;
         transferred++;
       } else {
         // ⛔ الطلب صحيح لكن كود التحليل لم يُطابق أي تحليل فيه.
@@ -40214,11 +40565,14 @@ async function lisTransferToMedlabPro(list){
         q.push(res);
         localStorage.setItem(qKey,JSON.stringify(q));
       }catch(e){}
-      res.transferred=true;
+      // ⛔ لا تُعلَّم كـ«منقولة» — النتيجة لم تدخل لأي مريض. تبقى ظاهرة
+      //    في جدول نتائج الأجهزة بحالة «بلا مريض» مع حقل رقم المريض وزر النقل.
+      res.transferred=false;
+      res.unmatched=true;
       notFound++;
       // سجل تفصيلي لتسهيل debugging
       const _availIds=_allPts.slice(0,5).map(function(p){return p.id;}).join(', ');
-      lisAddLog('warn','SID '+res.sampleId+' غير موجود في MedLab Pro — تم الحفظ في الانتظار');
+      lisAddLog('warn','⛔ SID '+res.sampleId+' لا يطابق أي طلب — لم تُدخَل النتيجة لأي مريض (محفوظة بانتظار الربط اليدوي)');
       lisAddLog('warn','  ↳ أمثلة IDs المرضى المتاحة: ['+_availIds+'] (إجمالي: '+_allPts.length+')');
     }
   }
@@ -40295,6 +40649,15 @@ function lisCheckMedlabConn(){
 // RESULTS RENDER
 // ═══════════════════════════════════════════════
 function lisRenderResults(){
+  // 🛟 أمان: إن كان الجدول ما زال داخل النافذة الموسّعة وهي مغلقة — أعده لمكانه
+  try{
+    const _w=document.getElementById('lis-results-wrap');
+    const _h=document.getElementById('lis-results-host');
+    const _mo=document.getElementById('lis-m-results');
+    if(_w&&_h&&_mo&&!_mo.classList.contains('open')&&_w.parentNode!==_h){
+      _w.classList.remove('lis-res-expanded'); _h.appendChild(_w);
+    }
+  }catch(_){}
   const tbody=document.getElementById('lis-results-body');
   if(!tbody) return;
   const q=(document.getElementById('lis-res-search')?.value||'').toLowerCase();
@@ -40321,12 +40684,22 @@ function lisRenderResults(){
       <td style="padding:7px 10px;font-size:10px;color:var(--text2)">${r.unit||'—'}</td>
       <td style="padding:7px 10px"><span style="background:rgba(0,212,255,0.1);color:var(--primary);border-radius:10px;padding:2px 7px;font-size:10px">${r.device}</span></td>
       <td style="padding:7px 10px;font-size:10px;color:var(--text2)">${lisFmtTime(r.datetime)}</td>
-      <td style="padding:7px 10px">${r.transferred?
-        '<span style="background:rgba(0,232,122,0.12);color:var(--success);border:1px solid rgba(0,232,122,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">✓ منقول</span>':
-        '<span style="background:rgba(255,204,0,0.1);color:var(--warning);border:1px solid rgba(255,204,0,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">معلق</span>'}</td>
-      <td style="padding:7px 10px;display:flex;gap:4px">
-        ${!r.transferred?`<button class="btn btn-p" style="padding:3px 8px;font-size:10px" onclick="lisTransferResult('${r.id}')">📤</button>`:''}
-        <button class="btn btn-s" style="padding:3px 8px;font-size:10px;color:var(--danger);border-color:rgba(255,34,68,0.3)" onclick="lisDeleteResult('${r.id}')">🗑️</button>
+      <td style="padding:7px 10px;white-space:nowrap">${r.transferred?
+        '<span style="display:inline-block;white-space:nowrap;background:rgba(0,232,122,0.12);color:var(--success);border:1px solid rgba(0,232,122,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">✓ منقول</span>':
+        (r.unmatched?
+        '<span title="رقم العينة لا يطابق أي طلب — أدخل رقم المريض الصحيح ثم اضغط زر النقل" style="display:inline-block;white-space:nowrap;background:rgba(255,34,68,0.10);color:var(--danger);border:1px solid rgba(255,34,68,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">⛔ بلا مريض</span>':
+        (r.unmatchedCode?
+        '<span title="الطلب صحيح لكن كود الجهاز غير مربوط بأي تحليل فيه — أضف الربط من «ربط التحاليل»" style="display:inline-block;white-space:nowrap;background:rgba(255,34,68,0.10);color:var(--danger);border:1px solid rgba(255,34,68,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">⛔ كود غير مربوط</span>':
+        '<span style="display:inline-block;white-space:nowrap;background:rgba(255,204,0,0.1);color:var(--warning);border:1px solid rgba(255,204,0,0.3);border-radius:10px;padding:2px 8px;font-size:10px;font-weight:700">معلق</span>'))}</td>
+      <td style="padding:7px 6px;white-space:nowrap">
+        <div style="display:inline-flex;gap:4px;align-items:center;flex-wrap:nowrap">
+        ${!r.transferred?`<input id="lis-mlid-${r.id}" type="text" inputmode="numeric" autocomplete="off" placeholder="رقم المريض"
+          title="اتركه فارغاً لإعادة المحاولة التلقائية، أو أدخل رقم المريض الصحيح ثم اضغط زر النقل (طلبات اليوم فقط)"
+          style="width:80px;padding:3px 6px;font-size:10px;border-radius:6px;border:1px solid var(--border);background:var(--bg-input,rgba(255,255,255,0.05));color:var(--text)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();lisSendResult('${r.id}')}">
+        <button class="btn btn-p" style="padding:3px 9px;font-size:11px" title="نقل النتيجة — إن أدخلت رقم مريض تُنقل إليه (طلبات اليوم فقط)" onclick="lisSendResult('${r.id}')">📤</button>`:''}
+        <button class="btn btn-s" style="padding:3px 8px;font-size:10px;color:var(--danger);border-color:rgba(255,34,68,0.3)" title="حذف النتيجة" onclick="lisDeleteResult('${r.id}')">🗑️</button>
+        </div>
       </td>
     </tr>`).join('');
 }
@@ -40449,6 +40822,8 @@ function lisLoadSettingsUI(){
   if(autoTog) autoTog.classList.toggle('on',_lisSettings.autoTransfer!==false);
   const soundTog=document.getElementById('lis-tog-sound');
   if(soundTog) soundTog.classList.toggle('on',_lisSettings.sound!==false);
+  const strictTog=document.getElementById('lis-tog-strict-sid');
+  if(strictTog) strictTog.classList.toggle('on',_lisSettings.strictSidMatch!==false);
   const delay=document.getElementById('lis-delay');
   if(delay) delay.value=String(_lisSettings.delay||2);
   // روابط الحاسبات المحفوظة (LAN)
@@ -40731,6 +41106,9 @@ function lisSaveSettings(){
   _lisSettings.autoTransfer=document.getElementById('lis-tog-auto')?.classList.contains('on');
   _lisSettings.sound=document.getElementById('lis-tog-sound')?.classList.contains('on');
   _lisSettings.delay=parseInt(document.getElementById('lis-delay')?.value||'2');
+  // 🔒 لا نغيّر الإعداد إلا إذا كان الزر موجوداً فعلاً في الصفحة
+  const _strictEl=document.getElementById('lis-tog-strict-sid');
+  if(_strictEl) _lisSettings.strictSidMatch=_strictEl.classList.contains('on');
   lisSaveState();
 }
 async function lisSelectSyncFolder(){
@@ -41823,6 +42201,10 @@ async function _fsaSavePDFToD(doc, fileName, afterSave, patientName, patientId){
       });
       if(res && res.ok){
         showNotif('✅ تم الحفظ','PDF محفوظ في C:\\MedLabPro\\'+patientName+'\\'+fileName,'success');
+        try{
+          const _r=requests.find(x=>x.id===currentReqId);
+          if(_r){ _r.pdfSavedPath=res.filePath||null; _r.pdfSavedAt=Date.now(); save('requests',requests); }
+        }catch(e){}
         if(afterSave) afterSave(res.filePath);
         return;
       }
@@ -41846,6 +42228,10 @@ async function _fsaSavePDFToD(doc, fileName, afterSave, patientName, patientId){
       await writable.write(pdfBytes);
       await writable.close();
       showNotif('✅ تم الحفظ','PDF محفوظ في PDFs\\'+fileName,'success');
+      try{
+        const _r=requests.find(x=>x.id===currentReqId);
+        if(_r){ _r.pdfSavedPath=null; _r.pdfSavedInBrowser=true; _r.pdfSavedAt=Date.now(); save('requests',requests); }
+      }catch(e){}
       if(afterSave) afterSave();
       return;
     }catch(e){ console.warn('[FSA] PDF save error',e); }
