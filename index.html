@@ -3145,6 +3145,18 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         if(typeof lisRenderRaw==='function') lisRenderRaw();
         return;
       }
+      // ── 🟩 NX600: رسائل صادرة (رد الفهرس / رد بيانات العيّنة) ──
+      if(d.fujiOut){
+        lisAddLog('astm','📤 FUJI NX600 — رد صادر:\n'+String(d.data||''));
+        if(typeof lisRenderRaw==='function') lisRenderRaw();
+        return;
+      }
+      // ── 🟩 NX600: تشخيص وارد (بايتات خام / بدء فحص / أخطاء) ──
+      if(d.fujiIn){
+        lisAddLog('astm','🟩 NX600: '+String(d.data||''));
+        if(typeof lisRenderRaw==='function') lisRenderRaw();
+        return;
+      }
       // إذا أرسل main.js بيانات محللة مسبقاً استخدمها مباشرةً
       // isCBC: يُوجّه للمسار الصحيح حتى لو كان patientId فارغاً
       if(d.parsed && (d.parsed.patientId || d.parsed.isCBC)){
@@ -6326,6 +6338,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <option value="mindray_bc30s">Mindray BC-30s (CBC)</option>
             <option value="mindray_bc6000">Mindray BC-6000 Series (CBC)</option>
             <option value="zybio">Zybio (Z60 / Z3)</option>
+            <option value="nano">Nano 3001 (Nanomax CBC)</option>
+            <option value="fuji_nx600">FUJIFILM DRI-CHEM NX600</option>
             <option value="biobase">Biobase</option>
             <option value="rayto">Rayto</option>
             <option value="other">أخرى</option>
@@ -6405,6 +6419,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <option value="hl7">HL7 v2.x</option>
             <option value="csv">CSV</option>
             <option value="chorus">Chorus TRIO (ثنائي — DIESSE)</option>
+            <option value="fuji">FUJI NX600 (نصّي STX/ETX/BCC)</option>
           </select>
         </div>
         <div class="fg" id="lis-baud-row">
@@ -6515,6 +6530,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div class="wiz-card" onclick="lisWizSelectVendor('diesse_chorus','DIESSE Chorus TRIO','chorus')" data-v="diesse_chorus">
               <div style="font-size:22px">🧿</div><div style="font-weight:800;font-size:12px">DIESSE Chorus TRIO</div>
               <div style="font-size:10px;color:var(--text2)">مناعة/أمصال — Serial (RS-232)</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('fuji_nx600','FUJIFILM DRI-CHEM NX600','fuji')" data-v="fuji_nx600">
+              <div style="font-size:22px">🟩</div><div style="font-weight:800;font-size:12px">FUJI DRI-CHEM NX600</div>
+              <div style="font-size:10px;color:var(--text2)">كيمياء — Serial (RS-232) أو LAN</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('nano','Nano 3001','hl7')" data-v="nano">
+              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Nano 3001</div>
+              <div style="font-size:10px;color:var(--text2)">دم (CBC) — HL7 عبر الشبكة</div>
             </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('zybio','Zybio Z60','hl7')" data-v="zybio">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z60 / Z3</div>
@@ -6679,6 +6702,29 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               • <b style="color:var(--text)">لإرسال النتائج:</b> بنافذة النتائج أو من <span style="color:var(--primary)">Archive</span> اضغط <b style="color:var(--text)">Host</b>.<br>
               • ضع <b style="color:var(--text)">رقم التحليل (Test ID)</b> في عمود «القناة» بجدول الربط — الجهاز يتعامل بالأرقام لا بالأسماء.
             </div>
+            <div id="wiz-fuji-serial-hint" style="display:none;margin-top:10px;background:rgba(0,232,122,0.07);border:1px solid rgba(0,232,122,0.3);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🟩 <b style="color:var(--success)">FUJIFILM DRI-CHEM NX600</b> (دليل الشركة 027-004-01E — §2.1.2):<br>
+              • وصّل كابل <b style="color:var(--text)">RS-232C</b> — الرسم في §5.3.1 يوضّح <b style="color:var(--text)">D-SUB 9 مع تقاطع 2↔3 و 7↔8</b> (Null-Modem كامل الإشارات).<br>
+              • ⚠️ <b style="color:#ffb020">التحكم بالتدفّق RTS/CTS إلزامي</b> — لا تستخدم كابلاً ثلاثي الأسلاك وإلا لن يُرسل الجهاز شيئاً (§2.2.1).<br>
+              • الإعدادات: <b style="color:var(--text)">8 bit · 1 stop · بلا parity</b> · السرعة <b style="color:var(--text)">19200</b> لـ Type 1 و 2، و<b style="color:var(--text)">9600</b> لـ Type 3.<br>
+              • اختر نوع البروتوكول المضبوط على الجهاز:
+              <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span style="color:var(--text)">نوع البروتوكول:</span>
+                <select id="wiz-fuji-type" class="fc" style="max-width:330px;display:inline-block" onchange="lisWizFujiTypeChanged()">
+                  <option value="1">Type 1 — ثنائي الاتجاه (قائمة عمل + نتائج) · 19200</option>
+                  <option value="A">Type A — مثل Type 1 + حقول POCT · 19200</option>
+                  <option value="2">Type 2 — نتائج فقط · 19200</option>
+                  <option value="B">Type B — مثل Type 2 + حقول POCT · 19200</option>
+                  <option value="3">Type 3 — نتائج فقط بلا BCC (FDC4000) · 9600</option>
+                  <option value="auto">تلقائي (يستنتج من الرسائل)</option>
+                </select>
+              </div>
+              • <b style="color:var(--text)">Type 1 و Type A فقط</b> يدعمان قائمة العمل (اتصال ثنائي — §2.1.1): الجهاز يرسل <b>I</b> (فهرس) و<b>W</b> (بيانات عيّنة) والبرنامج يرد خلال أقل من ٥ ثوانٍ (§2.2.2). أمّا <b>Type 2</b> و<b>Type B</b> و<b>Type 3</b> فأحادية الاتجاه (نتائج فقط).<br>
+              • <b style="color:var(--text)">Type A و Type B</b> (بروتوكول POCT الأوروبي) تُضيف للنتيجة: معرّف الفنّي · معلومة فحص الطوارئ · لوط الشريحة · صلاحية الشريحة · معرّف الجهاز.<br>
+              • ⚠️ <b style="color:#ffb020">Type 4 و Type C لا يعملان عبر Serial</b> — يستعملان LAN فقط (§2.1.1). للـ HL7 اختر اتصال LAN.<br>
+              • ℹ️ البروتوكول النصّي يقبل المحارف <b style="color:var(--text)">20H–7EH</b> فقط (§3.1.1) — <b>الأسماء العربية لا تُرسل للجهاز</b>، ولا يؤثر ذلك على حفظ النتائج عندنا.<br>
+              • ضع <b style="color:var(--text)">رمز الجهاز</b> (GLU · BUN · TCHO · CRE …) في عمود «رمز الجهاز» بجدول الربط — NX600 يتعامل بالأسماء لا بالأرقام.
+            </div>
           </div>
 
           <!-- File settings -->
@@ -6780,6 +6826,26 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               • الاستعلام: الجهاز يرسل <b style="color:var(--text)">QRY^Q02</b> والبرنامج يرد <b style="color:var(--text)">QCK^Q02 + DSR^Q03</b>.<br>
               • <b style="color:var(--warn,#ffb020)">الكنترول والمعايرة</b> (MSH-16 = 2 أو 1) تُتجاهل تلقائياً ولا تُحفظ كنتائج مرضى.<br>
               • 🩸 <b style="color:var(--text)">التراكمي HbA1c</b>: يعمل على تيوب <b style="color:var(--text)">EDTA</b> بباركود يبدأ بـ <b style="color:var(--text)">9</b> (نفس تيوب الـ c111).<br>
+              • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
+            </div>
+            <div id="wiz-fuji-lan-hint" style="display:none;margin-top:12px;background:rgba(0,232,122,0.07);border:1px solid rgba(0,232,122,0.3);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🟩 <b style="color:var(--success)">FUJIFILM DRI-CHEM NX600 — LAN</b> (§2.1.3 والملحق §3.1):<br>
+              • <b style="color:var(--text)">الجهاز هو الـ Client والبرنامج هو الـ Server</b> — أدخل في الجهاز <b style="color:var(--text)">IP الحاسوب</b> و<b style="color:var(--text)">المنفذ</b> أدناه.<br>
+              • مكان الإعداد على الجهاز: <span style="color:var(--primary)">Host Connection Setting → PC Setting</span> · الافتراضي المصنعي <b style="color:var(--text)">192.168.100.2 : 65535</b> (والجهاز 192.168.100.1).<br>
+              • IPv4 فقط — <b style="color:var(--text)">IPv6 غير مدعوم</b>.<br>
+              • اختر صيغة الرسائل المضبوطة على الجهاز:
+              <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <span style="color:var(--text)">الصيغة:</span>
+                <select id="wiz-fuji-lan-mode" class="fc" style="max-width:300px;display:inline-block" onchange="lisWizFujiModeChanged()">
+                  <option value="text">نصّي — Type 1 / 2 / A / B (STX-ETX-BCC)</option>
+                  <option value="hl7">HL7 — Type 4 / Type C (OUL^R22 · MLLP)</option>
+                </select>
+              </div>
+              • <b style="color:var(--text)">الصيغة النصّية:</b> Type 1 و A ثنائيا الاتجاه (قائمة عمل + نتائج) · Type 2 و B نتائج فقط.<br>
+              • <b style="color:var(--text)">صيغة HL7 (Type 4 / Type C):</b> <b style="color:#ffb020">أحادية الاتجاه — نتائج فقط</b> (§2.1.1 والملحق §3.1)، وفق ملف <b style="color:var(--text)">LAB-29</b> من IHE LAW. الرسالة <b style="color:var(--text)">OUL^R22</b> · HL7 <b>v2.5.1</b> · <b>UTF-8</b> · البرنامج يرد <b style="color:var(--text)">ACK</b> تلقائياً (§5.2.1). النوعان يُعالَجان بنفس المحرّك.<br>
+              • يدعم نمطَي MLLP (§3.2.1): <b style="color:var(--text)">Full</b> ‹SB›Msg‹EB›‹CR› و<b style="color:var(--text)">Custom</b> Msg‹EB›‹CR› — ويرد بنفس النمط المستلَم.<br>
+              • في HL7 رقم العيّنة يُقرأ من <b style="color:var(--text)">SAC-3</b> («No.» على الشاشة) واحتياطاً <b style="color:var(--text)">SPM-2</b> («Sample ID»). مقطع PID غير مدعوم من الشركة فلا يصل اسم المريض.<br>
+              • <b style="color:#ffb020">الكنترول (QC)</b>: نصّياً عندما Test condition = <b>CONTROL</b>، وفي HL7 عندما <b>SPM-11 = Q</b> — يُتجاهَل تلقائياً.<br>
               • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
             </div>
           </div>
@@ -11544,6 +11610,46 @@ function _reqHasCBC(req){
 }
 window._reqHasCBC = _reqHasCBC;
 
+/* ══════════════════════════════════════════════════════════════════
+ *  🔬 تحليل الـ CBC المرتبط بالجهاز داخل الطلب
+ *  ──────────────────────────────────────────────────────────────────
+ *  عندما يُختار CBC للمريض يدخل بمعرّفه من الكتالوج ('h001' / كوده
+ *  'CBC')، بينما نتيجته تصل من الجهاز وتُحفظ في req.cbcData — لا في
+ *  req.results — فيخرج صفّه في «التقرير العام» فارغاً، ولو كان CBC
+ *  التحليلَ الوحيد خرجت صفحة عامة فارغة تماماً قبل صفحة الـ CBC.
+ *  الحل: إخفاء هذا الصف من التقرير العام **فقط** عندما تكون نتيجته
+ *  من الجهاز موجودة (لأنّ لها صفحة تقرير CBC مستقلة). أي نتيجة يدوية
+ *  مكتوبة في results تُبقي الصف كما هو — فلا يتغيّر أي سلوك قديم.
+ * ══════════════════════════════════════════════════════════════════ */
+function _isCbcCatalogTest(t){
+  if(!t) return false;
+  var id  = String(t.id||'').trim();
+  var cod = String(t.code||'').trim().toUpperCase();
+  return id==='h001' || id==='CBC' || cod==='CBC';
+}
+window._isCbcCatalogTest = _isCbcCatalogTest;
+
+/* يستبعد تحليل الـ CBC من قائمة التحاليل العادية عندما تكون نتيجته
+   من الجهاز (له صفحة مستقلة). يُعيد نفس المصفوفة إن لا شيء يُستبعد. */
+function _dropDeviceCbcTest(list, req){
+  try{
+    if(!req || !Array.isArray(list) || !list.length) return list;
+    if(!_reqHasCBC(req)) return list;
+    var out = list.filter(function(t){
+      if(!_isCbcCatalogTest(t)) return true;
+      /* نتيجة يدوية حقيقية مكتوبة في جدول الإدخال ⇒ أبقِ الصف كما هو */
+      var v = req.results ? req.results[t.id] : undefined;
+      if(v!==undefined && v!==null){
+        var s = String(v).trim();
+        if(s!=='' && s!=='done' && s!=='__manual__') return true;
+      }
+      return false;
+    });
+    return (out.length===list.length) ? list : out;
+  }catch(e){ return list; }
+}
+window._dropDeviceCbcTest = _dropDeviceCbcTest;
+
 function openPrintModal(rid){
   // Fix 2: resolve reqId from parameter, hidden select, or currentReqId
   if(rid) currentReqId=rid;
@@ -11568,7 +11674,7 @@ function openPrintModal(rid){
 
   // Build combined preview: regular report + any saved special exam reports
   const allTests=req.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean);
-  const regularTests=allTests.filter(t=>!t.isSpecialExam && !t.isCalc);
+  const regularTests=_dropDeviceCbcTest(allTests.filter(t=>!t.isSpecialExam && !t.isCalc), req);
   const calcTests=allTests.filter(t=>t.isCalc && req.results && req.results[t.id]);
   const specialTests=allTests.filter(t=>t.isSpecialExam);
 
@@ -16569,12 +16675,17 @@ function buildPrintHTML(req, opts){
   const pt       = patients.find(p=>p.id===req.patientId)||{};
   // Only exclude special exams (UA/Stool) from regular report — they print separately
   // التحاليل المحسوبة (isCalc) تطبع أيضاً في صفحة منفردة
-  const reqTests = req.tests.map(tid=>tests.find(t=>t.id===tid)).filter(t=>{
+  let reqTests = req.tests.map(tid=>tests.find(t=>t.id===tid)).filter(t=>{
     if(!t) return false;
     if(t.isSpecialExam) return false; // Urine/Stool have their own report pages
     if(t.isCalc) return false;        // Calculated tests have their own report pages
     return true;
   });
+  /* 🔬 CBC وارد من الجهاز ⇒ لا يُطبع صفّاً فارغاً هنا (له صفحته المستقلة).
+     أوراق الـ CBC الفارغة (blankBody/cbcBlank) تبقى كما هي تماماً. */
+  if(!blankBody && !cbcBlank && typeof _dropDeviceCbcTest==='function'){
+    reqTests = _dropDeviceCbcTest(reqTests, req);
+  }
   const today    = new Date().toLocaleDateString('en-GB');
   const showHL   = document.getElementById('tog-highlight')?.classList.contains('on');
   const showPrev = document.getElementById('tog-prev')?.classList.contains('on');
@@ -18429,6 +18540,9 @@ function doPrint(reqId){
 
   const allTests=req.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean);
   const regularTests=allTests.filter(t=>!t.isSpecialExam && !t.isCalc);
+  /* 🔬 ما يُطبع فعلاً في «التقرير العام»: بلا تحليل CBC الوارد من الجهاز
+     (له صفحة تقرير مستقلة). regularTests تبقى كما هي لخصم المخزون. */
+  const printableTests=_dropDeviceCbcTest(regularTests, req);
   const calcTests=allTests.filter(t=>t.isCalc && req.results && req.results[t.id]);
   const specialTests=allTests.filter(t=>t.isSpecialExam);
 
@@ -18494,7 +18608,7 @@ function doPrint(reqId){
   }
 
   // Print regular tests report via hidden iframe (silent print - no printer dialog open step)
-  if(regularTests.length>0){
+  if(printableTests.length>0){
     const content=buildPrintHTML(req);
     // محاولة الطباعة الصامتة عبر Electron
     const _printerName = settings.printerMain||'';
@@ -18506,8 +18620,26 @@ function doPrint(reqId){
       _doPrintFallback(content, afterRegularPrint);
     }
   } else {
-    // لا توجد تحاليل عادية — اطبع المحسوبة ثم الخاصة مباشرة
-    afterRegularPrint();
+    /* 🔬 لا توجد تحاليل عادية تُطبع. إن كان الطلب يحمل نتيجة CBC من
+       الجهاز (CBC وحده مثلاً) نطبع تقرير الـ CBC بدل ورقة عامة فارغة. */
+    var _cbcOnlyHTML = null;
+    try{
+      if(typeof _reqHasCBC==='function' && _reqHasCBC(req) && typeof _cbcPageHTML==='function')
+        _cbcOnlyHTML = _cbcPageHTML(req);
+    }catch(e){ _cbcOnlyHTML = null; }
+    if(_cbcOnlyHTML){
+      const _pn = settings.printerMain||'';
+      if(window.electronAPI && window.electronAPI.printContent && _pn){
+        window.electronAPI.printContent({html:_cbcOnlyHTML, printer:_pn, silent:true})
+          .then(function(){ afterRegularPrint(); })
+          .catch(function(){ _doPrintFallback(_cbcOnlyHTML, afterRegularPrint); });
+      } else {
+        _doPrintFallback(_cbcOnlyHTML, afterRegularPrint);
+      }
+    } else {
+      // لا توجد تحاليل عادية — اطبع المحسوبة ثم الخاصة مباشرة
+      afterRegularPrint();
+    }
   }
   req.printed=true;
   req._updatedAt=Date.now(); // وقت التعديل — يُستخدم في المزامنة الذكية
@@ -18610,7 +18742,10 @@ function generatePDFBlob(callback){
 
   // ── جمع كل الصفحات (عادية + محسوبة) كلٌّ في HTML مستقل ──
   const allTests=req.tests.map(function(tid){return tests.find(function(t){return t.id===tid;});}).filter(Boolean);
-  const regularTests=allTests.filter(function(t){return !t.isSpecialExam && !t.isCalc;});
+  /* 🔬 CBC من الجهاز له صفحته المستقلة ⇒ لا يُحتسب ضمن التحاليل العادية،
+     فإن كان وحده لا تُولَّد صفحة تقرير عام فارغة قبل صفحة الـ CBC. */
+  const regularTests=_dropDeviceCbcTest(
+    allTests.filter(function(t){return !t.isSpecialExam && !t.isCalc;}), req);
   const calcTests=allTests.filter(function(t){return t.isCalc && req.results && req.results[t.id];});
 
   const pageHTMLs=[];
@@ -26967,25 +27102,41 @@ window._smSetters['cultureRecords'] = function(v){ cultureRecords = v; };
 function loadCultureRecords(){
   cultureRecords = load('cultureRecords', []);
 }
+// ⭐ عدّاد الكتابات الجارية إلى IndexedDB — يمنع قراءة نسخة قديمة أثناء الحفظ
+window._cultIdbBusy = 0;
 function saveCultureRecords(){
   save('cultureRecords', cultureRecords);
-  // حفظ فوري في IDB لضمان عدم الضياع بعد الريفريش
+  // حفظ فوري في IDB لضمان عدم الضياع بعد الريفريش — ويُنتظر إتمامه
   try{
     const pfx = DB._pfx();
-    IDB.set(pfx+'cultureRecords', cultureRecords).catch(function(){});
-  }catch(e){}
+    window._cultIdbBusy++;
+    return IDB.set(pfx+'cultureRecords', cultureRecords)
+      .catch(function(){ return false; })
+      .then(function(r){ window._cultIdbBusy--; return r; });
+  }catch(e){ return Promise.resolve(false); }
 }
 // تحميل نتائج الزرع من IDB مع دمج localStorage — يُستدعى عند فتح صفحة الزرع
+// ⚠️ الدمج يرجّح الأحدث زمنياً (_updatedAt) ولا يفرض نسخة IDB دائماً،
+//    وإلا فإن قراءة تسبق اكتمال الكتابة تُرجع التعديل إلى ما كان عليه.
 async function loadCultureRecordsFromIDB(){
   try{
+    if(window._cultIdbBusy > 0) return;   // كتابة جارية — لا تقرأ الآن
     const pfx = DB._pfx();
     const idbVal = await IDB.get(pfx+'cultureRecords');
+    if(window._cultIdbBusy > 0) return;   // بدأت كتابة أثناء القراءة — تجاهل النتيجة
     if(idbVal && Array.isArray(idbVal) && idbVal.length > 0){
-      const lsVal = load('cultureRecords', []);
-      const merged = [...idbVal];
-      const existIds = new Set(merged.map(function(x){return x.id;}));
-      lsVal.forEach(function(r){ if(r.id && !existIds.has(r.id)){ merged.push(r); existIds.add(r.id); } });
-      cultureRecords = merged;
+      const lsVal = load('cultureRecords', []) || [];
+      const _ts = function(r){ return (r && (r._updatedAt || r.updatedAt || r.createdAt)) || 0; };
+      const map = new Map(); const order = [];
+      const _put = function(r){
+        if(!r || r.id == null) return;
+        const id = String(r.id);
+        if(!map.has(id)){ map.set(id, r); order.push(id); return; }
+        if(_ts(r) > _ts(map.get(id))) map.set(id, r);   // الأحدث يفوز
+      };
+      idbVal.forEach(_put);
+      lsVal.forEach(_put);
+      cultureRecords = order.map(function(id){ return map.get(id); });
       // أعد حفظ الدمج في كليهما
       save('cultureRecords', cultureRecords);
     }
@@ -27866,14 +28017,42 @@ async function saveCultureEntry(){
 
   // تحميل السجلات من IDB + localStorage قبل الحفظ لضمان عدم فقدان السجلات السابقة
   await loadCultureRecordsFromIDB();
+
+  // ⭐ إذا أُدخل رقم هاتف هنا ولم يكن في ملف المريض — احفظه في الملف أيضاً
+  try{
+    if(rec.patientPhone && ptId){
+      const _pt=patients.find(p=>p.id===ptId);
+      if(_pt && !_pt.phone){
+        _pt.phone=rec.patientPhone;
+        _pt._updatedAt=Date.now();
+        saveOne('patients',patients,_pt);
+        addToPhoneBook(_pt.name, _pt.phone);
+      }
+    }
+  }catch(e){}
+
   if(window._editCultureId){
     const idx=cultureRecords.findIndex(c=>c.id===window._editCultureId);
+    // ⭐ عند التعديل: حافظ على تاريخ الإنشاء وختم الجهاز الأصلي
+    if(idx>-1){
+      const _old=cultureRecords[idx];
+      if(_old){
+        if(_old.createdAt) rec.createdAt=_old.createdAt;
+        if(_old._dev) rec._dev=_old._dev;
+        if(_old._org) rec._org=_old._org;
+      }
+    }
+    // ⭐ ختم وقت التعديل — أساس ترجيح الأحدث في الدمج ومزامنة LAN
+    try{ _stamp(rec); }catch(e){}
+    rec._updatedAt=Date.now();
     if(idx>-1) cultureRecords[idx]=rec; else cultureRecords.push(rec);
   } else {
+    try{ _stamp(rec); }catch(e){}
+    rec._updatedAt=Date.now();
     // تحقق أنه لم يُضف مسبقاً (حماية من الضغط المزدوج)
     if(!cultureRecords.find(c=>c.id===rec.id)) cultureRecords.push(rec);
   }
-  saveCultureRecords();
+  await saveCultureRecords();   // ⭐ انتظر اكتمال الكتابة قبل إعادة القراءة
   closeModal('m-culture');
   renderCultureList();
   showNotif('تم الحفظ','تم حفظ نتيجة الزرع ✅','success');
@@ -27883,7 +28062,7 @@ async function deleteCultureRecord(cid){
   if(!confirm('حذف هذا السجل؟'))return;
   await loadCultureRecordsFromIDB();
   cultureRecords=cultureRecords.filter(c=>c.id!==cid);
-  saveCultureRecords();
+  await saveCultureRecords();   // ⭐ انتظر الحذف الفعلي قبل إعادة القراءة
   renderCultureList();
   showNotif('تم','تم الحذف','success');
 }
@@ -30094,6 +30273,17 @@ function applyCustomExamFields(){
       Object.keys(saved2).forEach(k=>{ if(SEMEN_FIELDS_2[k]) SEMEN_FIELDS_2[k].fields=saved2[k].fields; });
     }
   }catch(e){}
+  /* 🔬 نموذج ٢ — ضمان أن Grade D حقل محسوب تلقائياً حتى في النسخ
+     المخصّصة المحفوظة سابقاً (D = 100 − A − B − C). لا يمسّ أي حقل آخر. */
+  try{
+    const _m2 = SEMEN_FIELDS_2 && SEMEN_FIELDS_2.motility;
+    const _fd = _m2 && _m2.fields && _m2.fields.filter(function(f){ return f && f.id==='s_grade_d'; })[0];
+    if(_fd){
+      _fd.type    = 'number-auto';
+      _fd.autoFrom= ['s_grade_a','s_grade_b','s_grade_c'];
+      if(!_fd.placeholder) _fd.placeholder = 'يُحسب تلقائياً';
+    }
+  }catch(e){}
   // ⭐ تخصيصات نموذج السائل المنوي رقم ٣ (البسيط) — مخزن منفصل تماماً
   try{
     const sm3 = getBigCached('semenFieldsCustom3');
@@ -31046,8 +31236,67 @@ var CBC_IMG_LABEL={
   '15056':'RBC Histogram','15116':'PLT Histogram',
   '15250':'BASO Scattergram','15300':'RET Scattergram',
   '15301':'PLT-O Scattergram','15302':'RET-EXT Scattergram',
-  '15350':'NRBC Scattergram','15600':'WNB Scattergram'
+  '15350':'NRBC Scattergram','15600':'WNB Scattergram',
+  // ── 🩸 Zybio Z60 / Z3 (دليل الشركة — الملحق 4.2) ────────────────
+  //    13003 WBC Histogram BMP · 13053 RBC · 13103 PLT
+  //    13151..13168 Scattergrams (WBC DIFF / BASO / RET / PLT-O /
+  //    RET-EXT / NRBC) — ثلاث زوايا لكل نوع (LS-MS · LS-HS · HS-MS)
+  '13003':'WBC Histogram','13053':'RBC Histogram','13103':'PLT Histogram',
+  '13151':'WBC DIFF Scattergram','13152':'WBC DIFF Scattergram','13153':'WBC DIFF Scattergram',
+  '13154':'BASO Scattergram','13155':'BASO Scattergram','13156':'BASO Scattergram',
+  '13157':'RET Scattergram','13158':'RET Scattergram','13159':'RET Scattergram',
+  '13160':'PLT-O Scattergram','13161':'PLT-O Scattergram','13162':'PLT-O Scattergram',
+  '13163':'RET-EXT Scattergram','13164':'RET-EXT Scattergram','13165':'RET-EXT Scattergram',
+  '13166':'NRBC Scattergram','13167':'NRBC Scattergram','13168':'NRBC Scattergram'
 };
+// 🩸 Zybio: تُضاف أكوادها لترتيب العرض بعد أكواد Mindray مباشرة
+CBC_IMG_ORDER = CBC_IMG_ORDER.concat(
+  ['13003','13053','13103','13151','13152','13153','13154','13155','13156',
+   '13157','13158','13159','13160','13161','13162','13163','13164','13165',
+   '13166','13167','13168']);
+
+/* ══════════════════════════════════════════════════════════════════
+   🩸 قناة كل صورة (WBC / RBC / PLT) — تُستخدم في النموذجين ٩ و١٠
+   ──────────────────────────────────────────────────────────────────
+   النموذجان يرسمان منحنى SVG من نقاط خام (HIST_*) ترسلها أجهزة
+   BC-30s / BC-20s. أما BC-5000 و BC-6000 و Zybio فترسل الهيستوغرام
+   صورةً جاهزة (BMP/Base64). لذلك: إن لم تتوفر النقاط الخام نعرض
+   صورة الجهاز نفسها في مكان المنحنى — فتُطبع المخططات في نفس
+   النماذج تماماً كما تُطبع لأجهزة Mindray.
+   معزول: إن لم تصل صورة ولا نقاط يبقى السلوك السابق حرفياً.
+   ══════════════════════════════════════════════════════════════════ */
+var CBC_IMG_CHANNEL={
+  // Mindray BC-5000 / BC-5150
+  '15000':'WBC','15008':'WBC','15050':'RBC','15100':'PLT',
+  // Mindray BC-6000
+  '15056':'RBC','15116':'PLT',
+  // Zybio Z60 / Z3
+  '13003':'WBC','13053':'RBC','13103':'PLT'
+};
+/* إرجاع صورة الهيستوغرام الخاصة بقناة معيّنة من صور الطلب */
+function cbcGraphicByChannel(req, ch){
+  var g=(req&&req.cbcGraphics)||[];
+  for(var i=0;i<g.length;i++){
+    var c=String(g[i].code||'').trim();
+    if(CBC_IMG_CHANNEL[c]===ch && g[i].b64 && _cbcImgValid(g[i].b64)) return g[i];
+  }
+  return null;
+}
+/* وسم قلب الألوان للصور — نفس إعداد settings.cbcGraphInvert المستخدم
+   في النموذج ٥ (الافتراضي 'histo' = قلب الهيستوغرام فقط).            */
+function _cbcImgInvertCSS(){
+  var m=(typeof settings!=='undefined'&&settings.cbcGraphInvert)||'histo';
+  if(m==='off') return '';
+  return 'filter:invert(1) hue-rotate(180deg);-webkit-filter:invert(1) hue-rotate(180deg);';
+}
+/* بناء وسم <img> لصورة مخطط جاهزة بمقاس يملأ الخلية */
+function _cbcImgTag(g, extraStyle){
+  if(!g||!g.b64) return '';
+  var mime=g.mime||'image/bmp';
+  return '<img src="data:'+mime+';base64,'+g.b64+'" alt="histogram" '
+    +'style="width:100%;height:auto;display:block;background:#fff;'
+    +_cbcImgInvertCSS()+(extraStyle||'')+'">';
+}
 
 /* استخراج جزء Base64 من قيمة ED */
 function _cbcHistExtractB64(v){
@@ -31167,7 +31416,7 @@ function _cbcHistDeviceSVG(pts, label, ticks, axisMax){
 /* بناء بطاقات المخططات الثلاث بنمط الجهاز (WBC · RBC · PLT) للنموذج 9.
    يعتمد فقط على البيانات الخام الواردة من الجهاز (HIST_*). إن لم تتوفّر
    بيانات مُعامل، تبقى بطاقته فارغة الرسم مع إبقاء العنوان والمحور. */
-function buildCBCDeviceHistRow(cbcParams){
+function buildCBCDeviceHistRow(cbcParams, req){
   var DEF=[
     {key:'WBC', label:'WBC', ticks:[0,100,200,300], axisMax:300, meta:'15004'},
     {key:'RBC', label:'RBC', ticks:[0,100,200,300], axisMax:300, meta:'15053'},
@@ -31184,6 +31433,11 @@ function buildCBCDeviceHistRow(cbcParams){
         var pts=_cbcHistDecode(val, meta);
         if(pts){ svg=_cbcHistDeviceSVG(pts, def.label, def.ticks, def.axisMax); if(svg) any=true; }
       }
+    }
+    // 🩸 لا نقاط خام؟ → صورة الجهاز الجاهزة (Zybio / BC-5000 / BC-6000)
+    if(!svg && typeof cbcGraphicByChannel==='function'){
+      var _gimg=cbcGraphicByChannel(req, def.key);
+      if(_gimg){ svg=_cbcImgTag(_gimg,''); if(svg) any=true; }
     }
     if(!svg){
       // لا بيانات — نعرض إطاراً بمحور مرقّم فقط (كي يبقى التصميم مطابقاً)
@@ -31440,7 +31694,12 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     //    15000 WBC Histogram · 15008 WBC BMP · 15050 RBC · 15100 PLT
     //    15200/15201 WBC DIFF Scattergram
     var _gOrder=['15000','15008','15050','15100','15200','15201',
-                 '15056','15116','15250','15300','15301','15302','15350','15600'];
+                 '15056','15116','15250','15300','15301','15302','15350','15600',
+                 // 🩸 Zybio Z60 / Z3 — دليل الشركة (الملحق 4.2)
+                 '13003','13053','13103','13151','13152','13153',
+                 '13154','13155','13156','13157','13158','13159',
+                 '13160','13161','13162','13163','13164','13165',
+                 '13166','13167','13168'];
     var _gLabel={
       // BC-5000 / BC-5150
       '15000':'WBC Histogram','15008':'WBC Histogram',
@@ -31451,7 +31710,15 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       '15200':'WBC DIFF Scattergram','15250':'BASO Scattergram',
       '15300':'RET Scattergram','15301':'PLT-O Scattergram',
       '15302':'RET-EXT Scattergram','15350':'NRBC Scattergram',
-      '15600':'WNB Scattergram'
+      '15600':'WNB Scattergram',
+      // 🩸 Zybio Z60 / Z3
+      '13003':'WBC Histogram','13053':'RBC Histogram','13103':'PLT Histogram',
+      '13151':'WBC DIFF Scattergram','13152':'WBC DIFF Scattergram','13153':'WBC DIFF Scattergram',
+      '13154':'BASO Scattergram','13155':'BASO Scattergram','13156':'BASO Scattergram',
+      '13157':'RET Scattergram','13158':'RET Scattergram','13159':'RET Scattergram',
+      '13160':'PLT-O Scattergram','13161':'PLT-O Scattergram','13162':'PLT-O Scattergram',
+      '13163':'RET-EXT Scattergram','13164':'RET-EXT Scattergram','13165':'RET-EXT Scattergram',
+      '13166':'NRBC Scattergram','13167':'NRBC Scattergram','13168':'NRBC Scattergram'
     };
     var _gSorted=_g.slice().sort(function(a,b){
       var ia=_gOrder.indexOf(a.code), ib=_gOrder.indexOf(b.code);
@@ -31784,7 +32051,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     const _msgCol=_msgBox('WBC Message',_msg.WBC)+_msgBox('RBC Message',_msg.RBC)+_msgBox('PLT Message',_msg.PLT);
 
     // ── صفّ المخططات الثلاثة بنمط الجهاز ──
-    const _histRow=(typeof buildCBCDeviceHistRow==='function')?buildCBCDeviceHistRow(cbcParams):'';
+    const _histRow=(typeof buildCBCDeviceHistRow==='function')?buildCBCDeviceHistRow(cbcParams,req):'';
 
     const css='*{margin:0;padding:0;box-sizing:border-box}'
       +'html,body{background:#fff;color:#000;font-family:Arial,"Segoe UI",sans-serif;}'
@@ -31820,6 +32087,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'.dh-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px;padding-top:6px;border-top:1px dashed '+ac+'66;}'
       +'.dh-card{border:1px solid #ccc;border-radius:4px;padding:3px 4px 2px;background:#fff;break-inside:avoid;page-break-inside:avoid;}'
       +'.dh-lbl{font-size:11px;font-weight:800;color:#000;text-align:center;padding:1px 0 2px;}'
+      +'.dh-card img{width:100%;height:auto;display:block;object-fit:contain;}'
       +'.foot{border-top:1.5px solid '+ac+';margin-top:8px;padding-top:4px;display:flex;justify-content:space-between;font-size:10px;color:#555;}';
 
     return '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8"><style>'+css+'</style></head><body>'+hdr
@@ -31851,6 +32119,12 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
   if(tpl==='10'){
     const ac=tableColor;
     const ttlColor=nameColor||'#c0182b';
+    /* 🎨 فصل النصوص عن الخلفيات (النموذج ١٠ فقط):
+       • النصوص (رؤوس الجداول · رؤوس النتائج السابقة · الـ ID وما تحته)
+         تأخذ «لون خط شريط (Test/Result/Ref)» من الخطوط والألوان.
+       • الخلفيات (شريط الـ ID وعنوان Complete Blood Count)
+         تأخذ «لون جدول النتائج». */
+    const sc = settings.colorStripText || '#000000';
 
     // ── تسميات وصفية كاملة (كما في ورقة الجهاز) ──
     const L10={
@@ -31897,8 +32171,16 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
           if(typeof _cbcHistDecode==='function') _pts=_cbcHistDecode(_v,_m);
         }
       }catch(e){ _pts=null; }
-      const _svg=(typeof _cbcHistColorSVG==='function')
-        ? _cbcHistColorSVG(_pts,g.color,g.id,g.ticks,g.axisMax,g.marks) : '';
+      // 🩸 صورة الجهاز الجاهزة (Zybio / BC-5000 / BC-6000) بديلاً عن
+      //    المنحنى المرسوم عندما لا يُرسل الجهاز نقاطاً خاماً.
+      let _gimg10=null;
+      if(!_pts && typeof cbcGraphicByChannel==='function'){
+        try{ _gimg10=cbcGraphicByChannel(req,g.id); }catch(e){ _gimg10=null; }
+      }
+      const _svg=_gimg10
+        ? _cbcImgTag(_gimg10,'')
+        : ((typeof _cbcHistColorSVG==='function')
+            ? _cbcHistColorSVG(_pts,g.color,g.id,g.ticks,g.axisMax,g.marks) : '');
       const bTop=gi?'border-top:2px solid #ccd6e0;':'';
       gKeys.forEach(function(key,idx){
         const {val,flag,flagColor,ref,unit}=getParam(key);
@@ -31953,12 +32235,12 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
       +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
       // ── العنوان ──
-      +'.ttl10{margin:5px 0 6px;padding:5px 12px 4px;border:1.6px solid '+ac+'99;border-radius:8px;'
-        +'background:linear-gradient(180deg,'+ac+'22,#ffffff 72%);text-align:center;position:relative;}'
-      +'.ttl10 h1{font-size:20px;font-weight:900;letter-spacing:2.5px;color:'+ttlColor+';text-transform:uppercase;line-height:1.15;}'
-      +'.ttl10 .sub{font-size:9.5px;font-weight:800;letter-spacing:3.5px;color:'+ac+';margin-top:2px;}'
+      +'.ttl10{margin:5px 0 6px;padding:5px 12px 4px;border:1.6px solid '+ac+';border-radius:8px;'
+        +'background:'+ac+';text-align:center;position:relative;}'
+      +'.ttl10 h1{font-size:20px;font-weight:900;letter-spacing:2.5px;color:'+sc+';text-transform:uppercase;line-height:1.15;}'
+      +'.ttl10 .sub{font-size:9.5px;font-weight:800;letter-spacing:3.5px;color:'+sc+';margin-top:2px;}'
       +'.ttl10 .rule{height:2px;width:120px;margin:4px auto 0;border-radius:2px;'
-        +'background:linear-gradient(90deg,transparent,'+ac+',transparent);}'
+        +'background:linear-gradient(90deg,transparent,'+sc+',transparent);}'
       // ── شريط بيانات المريض ──
       +'.pbar{display:flex;justify-content:space-between;align-items:stretch;border:1.2px solid '+ac+'88;'
         +'border-radius:7px;overflow:hidden;margin:0 0 7px;background:#fff;}'
@@ -31966,12 +32248,12 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'.pF{display:flex;align-items:baseline;font-size:12px;margin:1.5px 22px 1.5px 0;}'
       +'.pK{color:#55677a;font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;margin-right:7px;}'
       +'.pV{font-weight:800;color:#12202e;font-size:13px;}'+'.pV.big{font-size:16px;font-weight:900;letter-spacing:.2px;}'
-      +'.pR{background:linear-gradient(160deg,'+ac+','+ac+'cc);color:#fff;padding:5px 11px;display:flex;'
+      +'.pR{background:'+ac+';color:'+sc+';padding:5px 11px;display:flex;'
         +'flex-direction:column;justify-content:center;min-width:132px;}'
-      +'.chip{background:rgba(255,255,255,.18);border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:800;text-align:center;letter-spacing:.4px;margin:1.5px 0;}'
+      +'.chip{background:'+ac+';color:'+sc+';border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:800;text-align:center;letter-spacing:.4px;margin:1.5px 0;}'
       // ── الجدول الرئيسي ──
       +'table.lab{width:100%;border-collapse:collapse;table-layout:auto;}'
-      +'table.lab thead th{background:linear-gradient(180deg,#ffffff,'+ac+'1f);color:'+ac+';font-size:11px;'
+      +'table.lab thead th{background:linear-gradient(180deg,#ffffff,'+ac+'1f);color:'+sc+';font-size:11px;'
         +'font-weight:900;letter-spacing:.9px;text-transform:uppercase;padding:5px 8px;text-align:center;'
         +'border-bottom:2px solid '+ac+';border-top:1px solid '+ac+'55;}'
       +'table.lab thead th.l{text-align:left;}'
@@ -31984,6 +32266,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'.fl{display:inline-block;min-width:17px;padding:0 5px;border-radius:9px;border:1px solid;font-size:11px;font-weight:900;line-height:15px;}'
       +'.t-ref{text-align:center;font-size:11.5px;color:#20374b;font-weight:700;white-space:nowrap;}'
       +'.t-hist{width:216px;padding:4px 5px!important;border-left:1px solid '+ac+'3a;background:#fff;}'
+      +'.t-hist img{width:100%;height:auto;display:block;object-fit:contain;}'
       +'.hcard{border:1px solid '+ac+'55;border-radius:5px;padding:2px 3px 1px;background:#fff;margin:0 auto;}'
       +'.hgbp{font-size:11.5px;font-weight:700;color:#22384d;text-align:center;padding:1px 0 3px;}'
       +'.hgbp b{color:'+ttlColor+';font-size:12.5px;}'
@@ -31991,9 +32274,9 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'.hx-wrap{margin-top:8px;border:1.3px solid '+ac+'99;border-radius:8px;overflow:hidden;'
         +'break-inside:avoid;page-break-inside:avoid;}'
       +'table.hx{width:100%;border-collapse:collapse;}'
-      +'table.hx th{background:linear-gradient(180deg,#ffffff,'+ac+'26);color:'+ac+';font-size:10.5px;font-weight:900;'
+      +'table.hx th{background:linear-gradient(180deg,#ffffff,'+ac+'26);color:'+sc+';font-size:10.5px;font-weight:900;'
         +'padding:4px 3px;text-align:center;border:1px solid '+ac+'4d;letter-spacing:.3px;}'
-      +'table.hx th.hx-lbl{color:'+ttlColor+';font-size:11.5px;letter-spacing:.5px;white-space:nowrap;padding:4px 10px;min-width:134px;}'
+      +'table.hx th.hx-lbl{color:'+sc+';font-size:11.5px;letter-spacing:.5px;white-space:nowrap;padding:4px 10px;min-width:134px;}'
       +'table.hx td{font-size:11px;font-weight:700;color:#16222f;text-align:center;padding:3.5px 3px;border:1px solid '+ac+'2e;white-space:nowrap;}'
       +'table.hx td.dt{font-weight:900;color:#0a7a4f;letter-spacing:.3px;padding:3.5px 10px;text-align:left;}'
       +'table.hx tr.cur td{background:'+ac+'0d;}'
@@ -32480,7 +32763,7 @@ const SEMEN_FIELDS_2 = {
       {id:'s_grade_b',      label:'Grade B — Slow Progressive (%)',  type:'number', normal:'', placeholder:'>=20%',  min:'0',max:'100',step:'0.1', ref:'>= 20%'},
       {id:'s_pr',           label:'PR = A+B  Total Progressive (%)', type:'number-auto', normal:'', placeholder:'>=35%', min:'0',max:'100',step:'0.1', ref:'>= 35%', autoFrom:['s_grade_a','s_grade_b']},
       {id:'s_grade_c',      label:'Grade C — Non-Progressive NP (%)',type:'number', normal:'', placeholder:'',       min:'0',max:'100',step:'0.1'},
-      {id:'s_grade_d',      label:'Grade D — Immotile IM (%)',       type:'number', normal:'', placeholder:'',       min:'0',max:'100',step:'0.1'},
+      {id:'s_grade_d',      label:'Grade D — Immotile IM (%)',       type:'number-auto', normal:'', placeholder:'يُحسب تلقائياً = 100 − (A+B+C)', min:'0',max:'100',step:'0.1', autoFrom:['s_grade_a','s_grade_b','s_grade_c']},
       {id:'s_total_motile', label:'Total Motile  PR+NP (%)',         type:'number', normal:'', placeholder:'>=42%',  min:'0',max:'100',step:'0.1', ref:'>= 42%'},
       {id:'s_vitality',     label:'Vitality — Live Spermatozoa (%)',type:'number', normal:'', placeholder:'>=54%',   min:'0',max:'100',step:'0.1', ref:'>= 54%'},
     ]
@@ -32807,17 +33090,41 @@ function _buildSemenModalBody(r, req){
 // (لا تعمل إطلاقاً في نموذج ١ لأن حقوله غير موجودة)
 // ════════════════════════════════════════════════════════════════════
 function _semenAutoCalc(){
-  if(semenTpl()!=='2') return;               // نموذج ١ لا يُمسّ نهائياً
-  // PR = Grade A + Grade B  (جمع تلقائي)
-  const aEl=document.getElementById('semenf-s_grade_a');
-  const bEl=document.getElementById('semenf-s_grade_b');
+  if(semenTpl()!=='2') return;               // نموذج ١ و٣ لا يُمسّان نهائياً
+  const aEl =document.getElementById('semenf-s_grade_a');
+  const bEl =document.getElementById('semenf-s_grade_b');
+  const cEl =document.getElementById('semenf-s_grade_c');
+  const dEl =document.getElementById('semenf-s_grade_d');
   const prEl=document.getElementById('semenf-s_pr');
-  if(!prEl||!aEl||!bEl) return;
-  const aRaw=(aEl.value||'').trim(), bRaw=(bEl.value||'').trim();
-  if(aRaw==='' && bRaw===''){ prEl.value=''; return; }
-  const a=parseFloat(aRaw)||0;
-  const b=parseFloat(bRaw)||0;
-  prEl.value=(a+b).toFixed(1);
+
+  const aRaw = aEl ? (aEl.value||'').trim() : '';
+  const bRaw = bEl ? (bEl.value||'').trim() : '';
+  const cRaw = cEl ? (cEl.value||'').trim() : '';
+  const a = parseFloat(aRaw)||0;
+  const b = parseFloat(bRaw)||0;
+  const c = parseFloat(cRaw)||0;
+
+  /* ① PR = Grade A + Grade B  (كما كان تماماً) */
+  if(prEl && aEl && bEl){
+    if(aRaw==='' && bRaw==='') prEl.value='';
+    else prEl.value=(a+b).toFixed(1);
+  }
+
+  /* ② Grade D = ما تبقّى من 100٪  ⇒  D = 100 − (A + B + C)
+     • يُحسب فور إدخال أي من A/B/C، ويُقيَّد بين 0 و100.
+     • إن كانت A و B و C كلها فارغة لا نمسّ D إطلاقاً
+       (حمايةً للسجلات القديمة التي أُدخل فيها D يدوياً). */
+  if(dEl){
+    if(aRaw==='' && bRaw==='' && cRaw===''){
+      /* لا شيء يُحسب منه — اترك D كما هو */
+    } else {
+      let d = 100 - (a + b + c);
+      if(!isFinite(d) || d < 0) d = 0;
+      if(d > 100) d = 100;
+      dEl.value = d.toFixed(1);
+      try{ dEl.readOnly = true; }catch(e){}
+    }
+  }
 }
 function _semenPillHTML(fid, v){
   return '<span style="background:rgba(0,212,255,0.18);border:1px solid rgba(0,212,255,0.4);border-radius:5px;padding:1px 7px;font-size:10px;color:var(--primary);display:flex;align-items:center;gap:3px">'+v
@@ -34478,7 +34785,7 @@ function openWaitScreen(mode){
 
   // ── بناء البيانات مباشرةً عند الفتح ──
   var today = new Date().toISOString().slice(0,10);
-  var todayReqs = requests.filter(function(r){ return (r.date||'').slice(0,10)===today; });
+  var todayReqs = requests.filter(function(r){ return (r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r); });
   var filteredReqs = _wsFilterRequests(todayReqs);
   // ⭐ نفس منطق التحديث الدوري (_wsEffStatus) حتى لا تختلف اللقطة الأولى عمّا بعدها
   var initCnt = {
@@ -34954,8 +35261,22 @@ function openWaitScreen(mode){
     _pushWaitScreenData();
   }, 5000);
 }
+/* ⭐ طلب أُنشئ تلقائياً من نتيجة الجهاز (LIS-CBC-…) لأن المريض لم يكن له
+   طلب مسجّل. هذا الطلب داخلي بحت لحفظ النتيجة — لا يُعرض على شاشة الانتظار
+   ولا شاشة البث (لا صف ولا عدّاد ولا نداء).
+   يُقرأ من منطق شاشة الانتظار فقط — لا يمسّ النتائج/الطباعة/المخزون/التقارير. */
+function _wsIsAutoDeviceReq(r){
+  try{
+    if(!r) return false;
+    if(r.fromDevice === true) return true;
+    return String(r.id||'').indexOf('LIS-CBC-') === 0;
+  }catch(e){ return false; }
+}
+
 function _wsFilterRequests(reqs){
   var ws = (settings&&settings.waitScreen)||{};
+  /* 🔕 استبعاد الطلبات المُنشأة تلقائياً من الجهاز قبل أي فلترة أخرى */
+  reqs = (reqs||[]).filter(function(r){ return !_wsIsAutoDeviceReq(r); });
   var doctorFilter = ws.doctorFilter; // null = الكل، array = قائمة IDs
   if(doctorFilter === null || doctorFilter === undefined) return reqs; // الكل ظاهر
   return reqs.filter(function(r){
@@ -35121,6 +35442,9 @@ function _wsCallPatient(reqId){
     if(ws.speakEnabled === false) return;
     var r = requests.find(function(x){ return x.id === reqId; });
     if(!r) return;
+    /* 🔕 طلب أُنشئ تلقائياً من الجهاز (LIS-CBC-…) لا يظهر على شاشة الانتظار
+       ولا يُنادى صاحبه إطلاقاً. */
+    if(_wsIsAutoDeviceReq(r)) return;
     /* 🔒 قفل مركزي: مهما كان المسار المُستدعي، لا نداء (بطاقة/جرس/تسجيل)
        ما لم يكن الطلب جاهزاً فعلاً بطباعة مؤهِّلة بيد المستخدم. */
     if(!_wsIsReady(r)) return;
@@ -35140,7 +35464,7 @@ function _pushWaitScreenData(){
   const win = window._waitScreenWin;
   if(!win || win.closed) return;
   const today = new Date().toISOString().slice(0,10);
-  const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
+  const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r));
   const filteredReqs = _wsFilterRequests(todayReqs);
   const cnt = {
     pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
@@ -35197,7 +35521,7 @@ function _pushTvCastData(){
   if(!window._tvCastActive) return;
   try{
     const today = new Date().toISOString().slice(0,10);
-    const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today);
+    const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r));
     const filteredReqs = _wsFilterRequests(todayReqs);
     const cnt = {
       pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
@@ -35928,6 +36252,9 @@ function lisWizSelectVendor(vendor,name,proto){
   // ⭐ Chorus TRIO: Serial (RS-232C) بروتوكول ثنائي خاص — كابل مستقيم لا متقاطع.
   const chorusHint=document.getElementById('wiz-chorus-serial-hint');
   if(chorusHint) chorusHint.style.display=vendor==='diesse_chorus'?'block':'none';
+  // 🟩 NX600: Serial (RS-232C · §2.1.2) أو LAN (§2.1.3)
+  const fujiHint=document.getElementById('wiz-fuji-serial-hint');
+  if(fujiHint) fujiHint.style.display=vendor==='fuji_nx600'?'block':'none';
   document.getElementById('wiz-btn-next').disabled=false;
 }
 
@@ -36005,6 +36332,32 @@ function lisWizShowConnFields(){
     const bd=document.getElementById('wiz-baud');
     if(bd) bd.value='38400';
   }
+  // 🟩 NX600 عبر LAN: إرشاد وضع السيرفر + المنفذ الافتراضي 65535 (الملحق §3.1.1.1)
+  const fjLan=document.getElementById('wiz-fuji-lan-hint');
+  if(fjLan) fjLan.style.display=(_wizVendor==='fuji_nx600'&&_wizConn==='tcpserver')?'block':'none';
+  if(_wizVendor==='fuji_nx600'&&_wizConn==='tcpserver'){
+    const sp=document.getElementById('wiz-srv-port');
+    if(sp && (!sp.value || sp.value==='5100')) sp.value='65535';
+  }
+  // 🟩 NX600 عبر Serial: السرعة تتبع نوع البروتوكول (§2.1.2)
+  if(_wizVendor==='fuji_nx600'&&_wizConn==='serial') lisWizFujiTypeChanged();
+}
+
+// 🟩 NX600: نوع البروتوكول يضبط السرعة (§2.1.2)
+//    Type 1 · 2 · A · B = 19200   ·   Type 3 = 9600 (بروتوكول FDC4000)
+//    (§2.1.1: كل الأنواع عدا 4 و C تعمل على RS-232C أو LAN بالتبادل)
+function lisWizFujiTypeChanged(){
+  const t=String((document.getElementById('wiz-fuji-type')||{}).value||'auto').toUpperCase();
+  const bd=document.getElementById('wiz-baud');
+  if(!bd) return;
+  if(t==='3')         bd.value='9600';
+  else if(t!=='AUTO') bd.value='19200';   // 1 · 2 · A · B
+}
+
+// 🟩 NX600: تغيير صيغة LAN بين النصّي و HL7
+function lisWizFujiModeChanged(){
+  const m=(document.getElementById('wiz-fuji-lan-mode')||{}).value||'text';
+  _wizProtocol=(m==='hl7')?'hl7':'fuji';
 }
 
 function lisWizBuildSummary(){
@@ -36074,13 +36427,31 @@ async function lisWizFinish(){
     // 🧫 BS-230: الرد ACK^R01 إلزامي أيضاً + يدعم استعلام QRY^Q02
     // 🩸 BC-30s: الرد ACK^R01 إلزامي حسب الدليل (1.1.1 و 4.6.2)
     // 🩸 BC-6000: الرد ACK^R01 إلزامي حسب الدليل (1.2.4 و 1.2.6.2)
-    sendAck:(_wizVendor==='zybio'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'),
+    sendAck:(_wizVendor==='zybio'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'||_wizVendor==='nano'),
     // 🧪 cobas e 411: صيغة البروتوكول المختارة على شاشة الجهاز (cobas/elecsys)
     e411Type:(_wizVendor==='roche_e411'
       ? ((document.getElementById('wiz-e411-type')?.value)||'cobas')
       : undefined),
+    // 🟩 NX600: نوع البروتوكول 1/2/3/A/B (§2.1.2) وصيغة LAN (نصّي/HL7)
+    fujiType:(_wizVendor==='fuji_nx600'
+      ? ((document.getElementById('wiz-fuji-type')?.value)||'auto')
+      : undefined),
+    fujiMode:(_wizVendor==='fuji_nx600'
+      ? ((_wizConn==='tcpserver')
+          ? ((document.getElementById('wiz-fuji-lan-mode')?.value)||'text')
+          : 'text')
+      : undefined),
     _wizConn:_wizConn,
   };
+
+  // 🟩 NX600: البروتوكول يتبع الصيغة — نصّي (fuji) أو HL7 (Type 4)
+  if(_wizVendor==='fuji_nx600'){
+    dev.protocol = (dev.fujiMode==='hl7') ? 'hl7' : 'fuji';
+    dev.type     = 'chemistry';
+    // HL7 (Type 4) أحادي الاتجاه ويتطلّب ACK على كل رسالة (الملحق §5.2.1)
+    if(dev.fujiMode==='hl7') dev.sendAck = true;
+    if(_wizConn==='serial') dev.baud = (String(dev.fujiType).toUpperCase()==='3') ? '9600' : '19200';
+  }
 
   lisDevices.push(dev);
   lisSaveState();
@@ -36643,6 +37014,9 @@ function lisAutoFillDevice(){
     snibe:   {name:'MAGLUMI 600',        proto:'astm', conn:'serial',   baud:'9600'},
     // 🩸 Zybio Z60/Z3: الجهاز هو من يتصل بالبرنامج (LIS Server) — دليل الشركة 2.1
     zybio:   {name:'Zybio Z60',          proto:'hl7',  conn:'tcpserver', port:'5100'},
+    // 🩸 Nano 3001 (Nanomax): عدّاد دم ثلاثي — الجهاز يتصل بالبرنامج
+    //    (LIS Server) عبر HL7 v2.3.1 فوق MLLP. البورت المضبوط في الجهاز 5150.
+    nano:    {name:'Nano 3001',          proto:'hl7',  conn:'tcpserver', port:'5150'},
     // 🧫 Mindray BS-230: جهاز صامت — يتصل بالبرنامج (LIS Server) عبر HL7
     mindray_bs230:{name:'Mindray BS-230',proto:'hl7',  conn:'tcpserver', port:'5100'},
     // 🩸 Mindray BC-30s: جهاز دم (CBC) — يتصل بالبرنامج (LIS Server) عبر HL7
@@ -36652,6 +37026,9 @@ function lisAutoFillDevice(){
     // 🧿 DIESSE Chorus TRIO: مناعة/أمصال — Serial RS-232C ببروتوكول ثنائي
     //    خاص (§5.6). السرعة المصنعية 38400 والكابل مستقيم (لا Null-Modem).
     diesse_chorus:{name:'DIESSE Chorus TRIO',proto:'chorus',conn:'serial', baud:'38400'},
+    // 🟩 FUJIFILM DRI-CHEM NX600: كيمياء — Serial (19200 لـ Type 1/2) أو LAN
+    //    (الجهاز Client والبرنامج Server — §2.1.3، المنفذ الافتراضي 65535)
+    fuji_nx600:{name:'FUJIFILM DRI-CHEM NX600',proto:'fuji',conn:'serial', baud:'19200', port:'65535'},
     biobase: {name:'Biobase',            proto:'astm', conn:'serial'},
     rayto:   {name:'Rayto',              proto:'astm', conn:'serial'},
     other:   {name:'',                   proto:'astm', conn:'serial'},
@@ -36821,7 +37198,12 @@ async function lisConnectSerialDevice(dev){
         name:     dev.name,
         // ⭐ cobas c 111 / e 411: مرّر البصمة لتفعيل محرك ASTM الكامل + اسم البرنامج للرؤوس
         // 🧿 Chorus TRIO: نفس الحقل يفعّل محرّك البروتوكول الثنائي (diesse_chorus)
-        vendor:   (dev.vendor === 'roche_c111' || dev.vendor === 'roche_e411' || dev.vendor === 'diesse_chorus') ? dev.vendor : (dev.vendor || ''),
+        // 🟩 NX600: نفس الحقل يفعّل محرّك البروتوكول النصّي (fuji_nx600)
+        vendor:   (dev.vendor === 'roche_c111' || dev.vendor === 'roche_e411' || dev.vendor === 'diesse_chorus' || dev.vendor === 'fuji_nx600') ? dev.vendor : (dev.vendor || ''),
+        // 🟩 NX600: نوع البروتوكول + RTS/CTS (§2.1.2)
+        //    rtscts يبقى false لكل جهاز آخر ⇒ لا يتغيّر سلوك أي جهاز قائم.
+        fujiType: dev.vendor === 'fuji_nx600' ? (dev.fujiType || 'auto') : undefined,
+        rtscts:   dev.vendor === 'fuji_nx600',
         dataBits: 8, parity: 'none', stopBits: 1,   // N_8_1 — يطابق c111/e411 و Chorus TRIO (§5.6.2)
         systemId: (typeof labSettings!=='undefined' && labSettings && labSettings.systemId) ? labSettings.systemId : 'MedLabPro',
         // 🧪 e411: صيغة البروتوكول (cobas/elecsys) — يُهمَل لغير e411
@@ -37382,6 +37764,9 @@ async function lisHandleHl7Query(info){
 // معزول تماماً — لا يمسّ HL7/MAGLUMI/BC-5000.
 // ═══════════════════════════════════════════════════════════════
 async function lisHandleC111Query(info){
+  // 🟩 NX600 يمرّ عبر نفس القناة (بلا preload جديد) لكن بمعالج مستقل تماماً:
+  //    استعلاماته مختلفة البنية (فهرس قائمة عمل §4.1 · بيانات عيّنة §4.3).
+  if(info && info.isFuji){ return lisHandleFujiQuery(info); }
   // 🧪 e411 يأتي عبر نفس الحدث لكن بعلم isE411 — الرد يمرّ عبر نفس القناة
   //    (main.js يوجّهه لـ e411 حسب queryId). منطق الهول بلود يخصّ c111 فقط.
   // 🧿 Chorus TRIO كذلك: نفس القناة بعلم isChorus، والرد يُوجَّه في main.js
@@ -37498,6 +37883,237 @@ async function lisHandleC111Query(info){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// FUJIFILM DRI-CHEM NX600 — الجانب الأمامي (renderer)
+// ─────────────────────────────────────────────────────────────
+// مرجع: NX600 Series Communication Interface — 027-004-01E
+//        §4.1/§4.2 (فهرس قائمة العمل) · §4.3/§4.4 (بيانات العيّنة)
+//
+// معزول تماماً: كل الدوال هنا مسبوقة بـ lisFuji/_fuji ولا تُستدعى
+// إلا عندما يكون vendor === 'fuji_nx600'. لا تمسّ c111/e411/Chorus
+// ولا أي جهاز HL7 قائم.
+//
+// لا قنوات IPC جديدة: الرد يمرّ عبر electronAPI.c111QueryResponse
+// الموجود أصلاً في preload (نفس أسلوب e411 و Chorus TRIO).
+// ═══════════════════════════════════════════════════════════════
+
+// عدد الفهارس الأقصى الذي يقبله الجهاز في طلب واحد (§4.1: 1..99)
+var FUJI_MAX_INDEX = 99;
+
+// ── هل الجهاز NX600؟ ───────────────────────────────────────────
+function _isFujiDevice(d){
+  return !!(d && String(d.vendor||'').toLowerCase()==='fuji_nx600');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// اسم التحليل كما يعرفه الجهاز (٨ محارف كحدّ أقصى — §4.4)
+// الأولوية: رمز الجهاز في جدول الربط ← القناة ← رمز التحليل عندنا.
+// NX600 يتعامل بأسماء أبجدية (GLU · BUN · TCHO …) وليس بأرقام قنوات
+// مثل c111 — لذلك deviceCode هو المصدر الصحيح هنا.
+// ═══════════════════════════════════════════════════════════════
+function _fujiDeviceCodeFor(t, tid){
+  var mapping = (typeof lisMappings!=='undefined'?lisMappings:[]).find(function(m){
+    var mc=_lisMedlabCode(m);
+    return mc && t && t.code && mc.toUpperCase()===String(t.code).toUpperCase();
+  });
+  var code='';
+  if(mapping){
+    if(mapping.deviceCode && String(mapping.deviceCode).trim()) code=String(mapping.deviceCode).trim();
+    else if(mapping.channel && String(mapping.channel).trim())  code=String(mapping.channel).trim();
+  }
+  if(!code && t && t.code) code=String(t.code).trim();
+  if(!code) code=String(tid||'').trim();
+  return code.slice(0,8);
+}
+
+// ── تحويل جنس المريض إلى ترميز الجهاز (§4.2: 0 ذكر · 1 أنثى · 9 غير محدّد) ──
+function _fujiSexCode(g){
+  var s=String(g||'').trim().toLowerCase();
+  if(s==='male'||s==='m'||s==='ذكر')   return '0';
+  if(s==='female'||s==='f'||s==='أنثى') return '1';
+  return '9';
+}
+
+// ── العمر بالسنوات (§4.2: ٣ خانات · 999 = غير محدّد) ──────────
+// §4.2: حقل العمر ٣ خانات · 999 = غير محدّد.
+// MedLab يخزّن العمر بصيغ عدة (ageY رقمية · ageVal عشرية · age نصّية
+// مثل "35Y" أو "35 year" · وأحياناً على الطلب req.age) — نقبلها جميعاً.
+function _fujiAgeOf(pt, req){
+  var cands=[ pt&&pt.ageY, pt&&pt.ageVal, pt&&pt.age, pt&&pt.years,
+              req&&req.age, req&&req.ageY ];
+  for(var i=0;i<cands.length;i++){
+    var v=cands[i];
+    if(v==null||v==='') continue;
+    var m=String(v).match(/\d+(\.\d+)?/);
+    if(!m) continue;
+    var a=Math.floor(parseFloat(m[0]));
+    if(isFinite(a)&&a>=0&&a<=998) return String(a);
+  }
+  return '999';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// بناء سطر فهرس واحد لعيّنة (§4.2)
+//   Sample No. إلزامي · ويجب وجود Patient ID أو Patient name
+// ═══════════════════════════════════════════════════════════════
+function _fujiIndexEntry(req, pt, sampleNoHint){
+  // ⚠️ حقل «Sample No.» نوعه Numerical في جداول الدليل (§4.1/§4.2/§4.3)،
+  //    وهو الرقم الذي يقرأه الجهاز من ملصق الأنبوب. في MedLab هذا الملصق
+  //    يحمل رقم المريض (barcode/id) — أمّا رقم الطلب (RQ1-7866) فأبجدي
+  //    رقمي ولا يُقبل هنا: يستقبله الجهاز ثم يقطع الاتصال ويتعلّق.
+  //    لذلك الأولوية لباركود المريض ثم رقمه، والطلب احتياط أخير.
+  var sn = String((sampleNoHint
+                || (pt  && (pt.barcode || pt.id))
+                || (req && (req.barcode || req.sampleId || req.sampleNum || req.patientId || req.id))
+                || '')).trim();
+  if(!sn) return null;
+  var pid = String((pt&&pt.id) || (req&&(req.patientId||req.ptId)) || '').trim();
+  var pnm = String((pt&&pt.name) || (req&&req.patientName) || '').trim();
+  if(!pid && !pnm) return null;
+  return {
+    sampleNo:    sn,
+    patientId:   pid,
+    patientName: pnm,
+    species:     0,                    // §4.2: رقم النوع الحيواني — 0 للبشر
+    sex:         _fujiSexCode(pt&&pt.gender),
+    age:         _fujiAgeOf(pt, req),
+  };
+}
+
+// ── إيجاد المريض المرتبط بطلب ──────────────────────────────────
+function _fujiPatientOfReq(req){
+  if(!req) return null;
+  var list=(typeof patients!=='undefined'?patients:[]);
+  var pid=String(req.patientId||req.ptId||'').trim();
+  if(!pid) return null;
+  return list.find(function(p){ return String(p.id||'').trim()===pid; }) || null;
+}
+
+// ── إيجاد المريض برقم عيّنة/باركود ─────────────────────────────
+function _fujiPatientBySid(sid){
+  var S=String(sid||'').trim();
+  if(!S) return null;
+  var list=(typeof patients!=='undefined'?patients:[]);
+  return list.find(function(p){
+    return String(p.barcode||'').trim()===S || String(p.id||'').trim()===S;
+  }) || null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// معالج استعلامات NX600 — يُستدعى من lisHandleC111Query عند info.isFuji
+//   fujiKind='index'  → §4.1 : الجهاز يطلب فهرس قائمة العمل
+//   fujiKind='sample' → §4.3 : الجهاز يطلب بيانات عيّنة + أسماء تحاليلها
+// ⏱ الجهاز ينتظر ٥ ثوانٍ فقط (§2.2.2) — main.js يضع مهلة ٤ ثوانٍ،
+//    فلا نُجري هنا أي عملية بطيئة (بحث محلّي فقط).
+// ═══════════════════════════════════════════════════════════════
+async function lisHandleFujiQuery(info){
+  var kind  = String(info&&info.fujiKind||'sample');
+  var sid   = String(info&&info.sampleId||'').trim();
+  var count = Math.min(Math.max(parseInt(info&&info.count,10)||1,1),FUJI_MAX_INDEX);
+
+  lisAddLog('astm','🟩 NX600 يطلب '+(kind==='index'?('فهرس قائمة العمل (عدد '+count+')'):'بيانات عيّنة')+
+    ' — العيّنة: '+(sid||'(بلا رقم)'));
+
+  var payload={ queryId: info.queryId };
+
+  try{
+    if(kind==='index'){
+      // ── §4.1: البحث يبدأ من رقم العيّنة المُرسَل (إن وُجد) ──────
+      var out=[];
+      if(sid){
+        var pt0  = _fujiPatientBySid(sid);
+        var req0 = _lisPickOpenRequest(sid, pt0);
+        if(req0){
+          var e0=_fujiIndexEntry(req0, pt0||_fujiPatientOfReq(req0), sid);
+          if(e0) out.push(e0);
+        }
+        if(!out.length){
+          lisAddLog('warn','⛔ لا طلب مفتوح للعيّنة '+sid+' — سيُرد بـ 0 (مع نسخ رقم العيّنة حسب §4.2)');
+        }
+      } else {
+        // بلا رقم عيّنة: أحدث الطلبات المفتوحة حتى العدد المطلوب
+        var reqs=(typeof requests!=='undefined'&&requests?requests:[])
+          .filter(function(r){ return _lisIsOpenReq(r); })
+          .slice()
+          .sort(function(a,b){ return _lisReqDateMs(b)-_lisReqDateMs(a) || _lisReqSeqNo(b)-_lisReqSeqNo(a); });
+        for(var i=0;i<reqs.length && out.length<count;i++){
+          var p=_fujiPatientOfReq(reqs[i]);
+          var e=_fujiIndexEntry(reqs[i], p, '');
+          if(e && !out.some(function(x){return x.sampleNo===e.sampleNo;})) out.push(e);
+        }
+        lisAddLog('info','📋 فهرس بلا رقم عيّنة — أُرسل '+out.length+' من أحدث الطلبات المفتوحة');
+      }
+      payload.indexes=out;
+      out.forEach(function(x){
+        lisAddLog('info','🔗 فهرس: '+x.sampleNo+' | ID '+(x.patientId||'-')+' | '+(x.patientName||'-')+
+          ' | جنس '+x.sex+' | عمر '+x.age);
+      });
+
+    } else {
+      // ── §4.3/§4.4: أسماء تحاليل العيّنة ──────────────────────
+      var pt  = _fujiPatientBySid(sid);
+      var req = _lisPickOpenRequest(sid, pt);
+      if(!pt && req) pt=_fujiPatientOfReq(req);
+      if(pt) lisAddLog('info','👤 المريض: '+(pt.name||pt.id));
+      else   lisAddLog('warn','⚠️ لا مريض بـ SID='+sid);
+
+      var names=[];
+      if(req){
+        lisAddLog('info','📌 آخر طلب مفتوح: '+(req.id||'-')+' | تاريخ '+(req.date||'-')+
+          ' | تحاليل '+((req.tests||[]).length));
+        (req.tests||[]).forEach(function(tid){
+          var t=(typeof tests!=='undefined'?tests:[]).find(function(x){return x.id===tid||x.code===tid;});
+          if(!t){ lisAddLog('warn','⚠️ تحليل مفقود: '+tid); return; }
+          var dc=_fujiDeviceCodeFor(t,tid);
+          if(!dc){ lisAddLog('warn','⚠️ '+(t.code||t.name)+' → لا يوجد رمز جهاز. أضِف الرمز في جدول الربط.'); return; }
+          if(names.indexOf(dc)===-1){
+            names.push(dc);
+            lisAddLog('info','🔗 '+(t.code||t.name)+' → '+dc);
+          }
+        });
+      } else {
+        lisAddLog('warn','⛔ لا طلب مفتوح لـ '+sid+' — سيُرد بـ 0 تحاليل');
+      }
+
+      payload.tests   = names.map(function(n){ return {name:n, code:n}; });
+      payload.patient = {
+        sampleNo:    sid,
+        patientId:   (pt&&pt.id)||'',
+        patientName: (pt&&pt.name)||'',
+      };
+    }
+  }catch(e){
+    lisAddLog('err','خطأ في تجهيز رد NX600: '+e.message);
+  }
+
+  if(!(window.electronAPI && window.electronAPI.c111QueryResponse)){
+    lisAddLog('err','❌ c111QueryResponse غير متاح في preload!');
+    return;
+  }
+  var res=await window.electronAPI.c111QueryResponse(payload);
+  if(res && res.ok){
+    lisAddLog('ok','✅ رُدّ على NX600 — '+(kind==='index'
+      ? ((payload.indexes||[]).length+' عيّنة في الفهرس')
+      : ((payload.tests||[]).length+' تحليل للعيّنة '+sid)));
+  } else {
+    lisAddLog('err','❌ فشل الرد على NX600: '+((res&&res.error)||'غير معروف'));
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// تنبيه عند وصول أسماء عربية لجهاز NX600 (§3.1.1)
+// «Usable character codes are 20H to 7EH and A1H to DFH» — أي أن
+// البروتوكول النصّي لا ينقل العربية. main.js يحذف الحروف تلقائياً،
+// وهنا نُنبّه المستخدم مرّة واحدة لكل جهاز حتى لا يتفاجأ.
+// ═══════════════════════════════════════════════════════════════
+function _fujiWarnArabicOnce(dev){
+  if(!dev || dev._fujiArabicWarned) return;
+  dev._fujiArabicWarned=true;
+  lisAddLog('warn','ℹ️ NX600: البروتوكول النصّي لا يدعم الأحرف العربية (§3.1.1) — '+
+    'ستُرسل الأسماء اللاتينية فقط، ولن يتأثر حفظ النتائج عندنا إطلاقاً.');
+}
+
+
 // cobas c 111 — إرسال طلبات مبادر (Push) للجهاز عبر Serial (§9.11)
 async function lisC111PushOrder(deviceId, sampleId, medlabCodes){
   if(!window.electronAPI || !window.electronAPI.c111PushOrder){
@@ -37601,6 +38217,8 @@ async function lisStartTCPServer(dev){
     protocol,
     sendAck:  dev.sendAck === true,  // false افتراضياً
     vendor:   dev.vendor || '',      // 'snibe' → MAGLUMI HL7 (تمييز/تشخيص)
+    // 🟩 NX600: نوع البروتوكول النصّي عبر LAN (§2.1.3)
+    fujiType: dev.vendor === 'fuji_nx600' ? (dev.fujiType || 'auto') : undefined,
   });
   if(!res||!res.ok){
     lisAddLog('err','فشل تشغيل Server: '+(res&&res.error||''));
@@ -37661,6 +38279,12 @@ function lisParseByProtocol(text,dev){
   //    نمرّره لمحلّل ASTM لأنه سيُنتج قراءات خاطئة — نسجّله فقط.
   if(proto==='chorus'){
     lisAddLog('astm','🧿 Chorus TRIO — بيانات خام (لا تُحلَّل كنص): '+String(text||'').slice(0,120));
+    return;
+  }
+  // 🟩 NX600: النتائج تصل جاهزة (parsed) من main.js. أي نص خام هنا هو
+  //    تشخيص أو ضوضاء — لا يجوز تمريره لمحلّل ASTM.
+  if(proto==='fuji'){
+    lisAddLog('astm','🟩 NX600 — بيانات خام (لا تُحلَّل كنص): '+String(text||'').slice(0,120));
     return;
   }
   if(proto==='hl7') lisParseHL7(text,dev.name);
@@ -37996,6 +38620,7 @@ const CBC_PARAMS_MAP = {
   'PLT':    {ar:'PLT  الصفائح الدموية',        unit:'10^9/L',  refM:'150-400',   order:20},
   'MPV':    {ar:'MPV  متوسط حجم الصفيحة',     unit:'fL',      refM:'7-11',      order:21},
   'PDW':    {ar:'PDW  توزيع الصفائح',         unit:'',        refM:'9-17',      order:22},
+  'PDW-CV': {ar:'PDW-CV توزيع الصفائح CV',    unit:'%',       refM:'15.0-18.0', order:22.5},
   'PCT':    {ar:'PCT  كمية الصفائح',          unit:'mL/L',    refM:'1.08-2.82', order:23},
   'P-LCR':  {ar:'P-LCR نسبة الصفائح الكبيرة',  unit:'%',       refM:'11-45',     order:24},
   'P-LCC':  {ar:'P-LCC عدد الصفائح الكبيرة',   unit:'10^9/L',  refM:'30-90',     order:25},
@@ -38043,7 +38668,13 @@ var _CBC_HIST_MAP={
 var _CBC_IMG_CODES={
   '15000':1,'15008':1,'15050':1,'15100':1,'15200':1,'15201':1,
   '15056':1,'15116':1,'15250':1,'15300':1,'15301':1,'15302':1,
-  '15350':1,'15600':1
+  '15350':1,'15600':1,
+  // 🩸 Zybio Z60/Z3 (الملحق 4.2): 13003 WBC · 13053 RBC · 13103 PLT
+  //    و 13151..13168 للـ Scattergram. نوعها ED وقيمتها ^Image^BMP^Base64^
+  '13003':1,'13053':1,'13103':1,
+  '13151':1,'13152':1,'13153':1,'13154':1,'13155':1,'13156':1,
+  '13157':1,'13158':1,'13159':1,'13160':1,'13161':1,'13162':1,
+  '13163':1,'13164':1,'13165':1,'13166':1,'13167':1,'13168':1
 };
 function cbcCaptureHistogram(sampleId, rawCode, rawValue, obxName){
   var code=String(rawCode||'').trim();
@@ -38105,6 +38736,59 @@ function cbcAttachExtras(sampleId, graphics, alarms, patName){
       if(!buf.alarms.some(function(x){return x.code===a.code;})) buf.alarms.push(a);
     });
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 🩸 Nano 3001 — التقاط مخططات الهيستوغرام (HEX → نقاط → مخزن CBC)
+// ─────────────────────────────────────────────────────────────
+// الجهاز يرسل المنحنى بترميز HEX داخل OBX من نوع ED:
+//   OBX|2|ED|WBCHistogram||3^Histogram^32Byte^HEX^000000...0405|...
+// بينما أجهزة Mindray/Zybio ترسله Base64 بأكواد رقمية (15000/13003...).
+// لذلك لا يلتقطه cbcCaptureHistogram (يطابق بالكود الرقمي فقط).
+//
+// main.js يفكّ الـ HEX ويمرّره جاهزاً في parsed.nanoHist بالشكل:
+//   [{ key:'WBC', left:18, right:51, middle:63, points:[0,0,1,2,5,...] }, ...]
+// هنا نحوّل النقاط إلى Base64 ونخزّنها تحت نفس المفاتيح المُعتمدة
+// (HIST_WBC / HIST_RBC / HIST_PLT) مع meta='1' (بايت واحد لكل نقطة)،
+// فترسمها النماذج ٩ و١٠ بنفس المسار المُجرَّب بلا أي منطق رسم جديد.
+//
+// معزول تماماً: nanoHist غير موجودة أصلاً لأي جهاز آخر.
+function _nanoHistToB64(points){
+  try{
+    var s='';
+    for(var i=0;i<points.length;i++){
+      var v=parseInt(points[i],10);
+      if(!isFinite(v)) v=0;
+      s+=String.fromCharCode(v<0?0:(v>255?255:v));
+    }
+    // _cbcHistDecode يشترط طول Base64 من مضاعفات ٤ — btoa يضمن ذلك
+    return s?btoa(s):'';
+  }catch(e){ return ''; }
+}
+function cbcCaptureNanoHist(sampleId, nanoHist, patName){
+  if(!sampleId||!nanoHist||!nanoHist.length) return 0;
+  var n=0;
+  for(var i=0;i<nanoHist.length;i++){
+    var h=nanoHist[i];
+    if(!h||!h.key||!h.points||!h.points.length) continue;
+    var b64=_nanoHistToB64(h.points);
+    if(!b64||b64.length<8) continue;
+    if(!_cbcBuffer[sampleId]) _cbcBuffer[sampleId]={params:{},name:patName||'',timer:null};
+    var buf=_cbcBuffer[sampleId];
+    var key='HIST_'+String(h.key).toUpperCase();
+    if(!buf.params[key]||typeof buf.params[key]!=='object') buf.params[key]={value:'',meta:''};
+    buf.params[key].value=b64;
+    buf.params[key].meta='1';
+    // خطوط الفصل (Left/Right/Middle) — تُحفظ للاستخدام المستقبلي ولا
+    // تدخل جدول النتائج لأن مفتاحها يبدأ بـ HIST_
+    if(h.left!=null||h.right!=null||h.middle!=null){
+      buf.params[key].lines={left:h.left,right:h.right,middle:h.middle};
+    }
+    n++;
+    if(buf.timer) clearTimeout(buf.timer);
+    buf.timer=setTimeout(function(){cbcFlush(sampleId);},2000);
+  }
+  return n;
 }
 
 function cbcAddParam(sampleId,code,value,unit,refRange,flag,patName){
@@ -38509,6 +39193,14 @@ function lisParseHL7Parsed(parsed, deviceName, devObj){
         try{ if(cbcCaptureHistogram(_sidH,h.code,h.value,h.name||'')) _okH++; }catch(_){}
       });
       if(_okH) lisAddLog('ok','📈 '+deviceName+' — استُلمت بيانات مخطط ('+_okH+' مقطع) SID:'+_sidH);
+    }
+  }catch(_){}
+  // ── 🩸 Nano 3001: مخططات HEX — تُلتقط قبل أي خروج مبكر ─────────────
+  try{
+    if(!parsed.isQC && parsed.nanoHist && parsed.nanoHist.length &&
+       typeof cbcCaptureNanoHist==='function'){
+      var _okN=cbcCaptureNanoHist(parsed.patientId||'', parsed.nanoHist, parsed.patientName);
+      if(_okN) lisAddLog('ok','📈 '+deviceName+' — مخططات Nano ('+_okN+') SID:'+(parsed.patientId||''));
     }
   }catch(_){}
   if(!parsed.results||!parsed.results.length) return;
