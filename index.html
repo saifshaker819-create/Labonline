@@ -32125,6 +32125,9 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
        • الخلفيات (شريط الـ ID وعنوان Complete Blood Count)
          تأخذ «لون جدول النتائج». */
     const sc = settings.colorStripText || '#000000';
+    /* 🖍️ خطوط الجداول والإطارات ثابتة بالأسود دائماً — لا تتبع لون الجدول،
+       فلا تختفي إطلاقاً عند اختيار خلفية بيضاء أو فاتحة. */
+    const ln = '#000000';
 
     // ── تسميات وصفية كاملة (كما في ورقة الجهاز) ──
     const L10={
@@ -32181,7 +32184,7 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
         ? _cbcImgTag(_gimg10,'')
         : ((typeof _cbcHistColorSVG==='function')
             ? _cbcHistColorSVG(_pts,g.color,g.id,g.ticks,g.axisMax,g.marks) : '');
-      const bTop=gi?'border-top:2px solid #ccd6e0;':'';
+      const bTop=gi?'border-top:1.6px solid #000000;':'';
       gKeys.forEach(function(key,idx){
         const {val,flag,flagColor,ref,unit}=getParam(key);
         const isAbn=flag&&flag!=='N';
@@ -32235,56 +32238,56 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
       +'@page{margin:0!important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
       +'body{padding:1mm 3mm;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
       // ── العنوان ──
-      +'.ttl10{margin:5px 0 6px;padding:5px 12px 4px;border:1.6px solid '+ac+';border-radius:8px;'
+      +'.ttl10{margin:5px 0 6px;padding:5px 12px 4px;border:1.6px solid '+ln+';border-radius:8px;'
         +'background:'+ac+';text-align:center;position:relative;}'
       +'.ttl10 h1{font-size:20px;font-weight:900;letter-spacing:2.5px;color:'+sc+';text-transform:uppercase;line-height:1.15;}'
       +'.ttl10 .sub{font-size:9.5px;font-weight:800;letter-spacing:3.5px;color:'+sc+';margin-top:2px;}'
       +'.ttl10 .rule{height:2px;width:120px;margin:4px auto 0;border-radius:2px;'
         +'background:linear-gradient(90deg,transparent,'+sc+',transparent);}'
       // ── شريط بيانات المريض ──
-      +'.pbar{display:flex;justify-content:space-between;align-items:stretch;border:1.2px solid '+ac+'88;'
+      +'.pbar{display:flex;justify-content:space-between;align-items:stretch;border:1.2px solid '+ln+';'
         +'border-radius:7px;overflow:hidden;margin:0 0 7px;background:#fff;}'
       +'.pL{flex:1;padding:5px 12px;display:flex;flex-wrap:wrap;align-items:baseline;}'
       +'.pF{display:flex;align-items:baseline;font-size:12px;margin:1.5px 22px 1.5px 0;}'
       +'.pK{color:#55677a;font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;margin-right:7px;}'
       +'.pV{font-weight:800;color:#12202e;font-size:13px;}'+'.pV.big{font-size:16px;font-weight:900;letter-spacing:.2px;}'
-      +'.pR{background:'+ac+';color:'+sc+';padding:5px 11px;display:flex;'
+      +'.pR{background:'+ac+';color:'+sc+';padding:5px 11px;display:flex;border-left:1.2px solid '+ln+';'
         +'flex-direction:column;justify-content:center;min-width:132px;}'
       +'.chip{background:'+ac+';color:'+sc+';border-radius:4px;padding:2px 7px;font-size:10.5px;font-weight:800;text-align:center;letter-spacing:.4px;margin:1.5px 0;}'
       // ── الجدول الرئيسي ──
-      +'table.lab{width:100%;border-collapse:collapse;table-layout:auto;}'
+      +'table.lab{width:100%;border-collapse:collapse;table-layout:auto;border:1.2px solid '+ln+';}'
       +'table.lab thead th{background:linear-gradient(180deg,#ffffff,'+ac+'1f);color:'+sc+';font-size:11px;'
         +'font-weight:900;letter-spacing:.9px;text-transform:uppercase;padding:5px 8px;text-align:center;'
-        +'border-bottom:2px solid '+ac+';border-top:1px solid '+ac+'55;}'
+        +'border-bottom:1.6px solid '+ln+';border-top:1.6px solid '+ln+';}'
       +'table.lab thead th.l{text-align:left;}'
-      +'table.lab td{padding:2.9px 8px;font-size:12.5px;border-bottom:1px solid #e2eaf2;vertical-align:middle;}'+'table.lab tr{break-inside:avoid;page-break-inside:avoid;}'+'table.lab thead{display:table-header-group;}'
-      +'tr.zz td{background:'+ac+'0d;}'
+      +'table.lab td{padding:2.9px 8px;font-size:12.5px;border-bottom:0.8px solid '+ln+'33;vertical-align:middle;}'+'table.lab tr{break-inside:avoid;page-break-inside:avoid;}'+'table.lab thead{display:table-header-group;}'
+      +'tr.zz td{background:#f4f6f8;}'
       +'.t-name{text-align:left;font-weight:800;color:#0e1e30;white-space:nowrap;padding-left:11px!important;}'
       +'.t-res{text-align:center;font-weight:900;font-size:14px;white-space:nowrap;}'
       +'.t-unit{text-align:center;font-size:11px;color:#1f3346;font-weight:800;white-space:nowrap;}'
       +'.t-flag{text-align:center;width:36px;}'
       +'.fl{display:inline-block;min-width:17px;padding:0 5px;border-radius:9px;border:1px solid;font-size:11px;font-weight:900;line-height:15px;}'
       +'.t-ref{text-align:center;font-size:11.5px;color:#20374b;font-weight:700;white-space:nowrap;}'
-      +'.t-hist{width:216px;padding:4px 5px!important;border-left:1px solid '+ac+'3a;background:#fff;}'
+      +'.t-hist{width:216px;padding:4px 5px!important;border-left:1px solid '+ln+';background:#fff;}'
       +'.t-hist img{width:100%;height:auto;display:block;object-fit:contain;}'
-      +'.hcard{border:1px solid '+ac+'55;border-radius:5px;padding:2px 3px 1px;background:#fff;margin:0 auto;}'
+      +'.hcard{border:1px solid '+ln+';border-radius:5px;padding:2px 3px 1px;background:#fff;margin:0 auto;}'
       +'.hgbp{font-size:11.5px;font-weight:700;color:#22384d;text-align:center;padding:1px 0 3px;}'
       +'.hgbp b{color:'+ttlColor+';font-size:12.5px;}'
       // ── سجل النتائج السابقة ──
-      +'.hx-wrap{margin-top:8px;border:1.3px solid '+ac+'99;border-radius:8px;overflow:hidden;'
+      +'.hx-wrap{margin-top:8px;border:1.3px solid '+ln+';border-radius:8px;overflow:hidden;'
         +'break-inside:avoid;page-break-inside:avoid;}'
       +'table.hx{width:100%;border-collapse:collapse;}'
       +'table.hx th{background:linear-gradient(180deg,#ffffff,'+ac+'26);color:'+sc+';font-size:10.5px;font-weight:900;'
-        +'padding:4px 3px;text-align:center;border:1px solid '+ac+'4d;letter-spacing:.3px;}'
+        +'padding:4px 3px;text-align:center;border:1px solid '+ln+';letter-spacing:.3px;}'
       +'table.hx th.hx-lbl{color:'+sc+';font-size:11.5px;letter-spacing:.5px;white-space:nowrap;padding:4px 10px;min-width:134px;}'
-      +'table.hx td{font-size:11px;font-weight:700;color:#16222f;text-align:center;padding:3.5px 3px;border:1px solid '+ac+'2e;white-space:nowrap;}'
-      +'table.hx td.dt{font-weight:900;color:#0a7a4f;letter-spacing:.3px;padding:3.5px 10px;text-align:left;}'
-      +'table.hx tr.cur td{background:'+ac+'0d;}'
-      +'table.hx tr.cur td.dt{color:'+ac+';}'
-      +'.nowtag{display:inline-block;margin-left:7px;background:'+ac+';color:#fff;border-radius:8px;'
+      +'table.hx td{font-size:11px;font-weight:700;color:#16222f;text-align:center;padding:3.5px 3px;border:1px solid '+ln+';white-space:nowrap;}'
+      +'table.hx td.dt{font-weight:900;color:'+sc+';letter-spacing:.3px;padding:3.5px 10px;text-align:left;}'
+      +'table.hx tr.cur td{background:#f4f6f8;}'
+      +'table.hx tr.cur td.dt{color:'+sc+';}'
+      +'.nowtag{display:inline-block;margin-left:7px;background:'+ac+';color:'+sc+';border-radius:8px;'
         +'padding:0 6px;font-size:9px;font-weight:800;letter-spacing:.5px;line-height:13px;vertical-align:1px;}'
       // ── التذييل ──
-      +'.foot{border-top:1.5px solid '+ac+';margin-top:7px;padding-top:4px;display:flex;'
+      +'.foot{border-top:1.5px solid '+ln+';margin-top:7px;padding-top:4px;display:flex;'
         +'justify-content:space-between;font-size:10.5px;color:#3f4d5b;font-weight:700;'
         +'break-inside:avoid;page-break-inside:avoid;}';
 
