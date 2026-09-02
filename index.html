@@ -13833,7 +13833,7 @@ function _spReturnToResultEntry(reqId){
       var r=(typeof requests!=='undefined'&&requests.find)?requests.find(function(x){return x.id===id;}):null;
       if(r){
         var o=document.createElement('option');
-        o.value=r.id; o.textContent=r.id+' - '+r.patientName+(r.status==='done'?' ✅':'');
+        o.value=r.id; o.textContent=(typeof _reqNoText==='function'?_reqNoText(r):r.id)+' - '+r.patientName+(r.status==='done'?' ✅':'');
         sel.appendChild(o);
       }
     }
@@ -14238,7 +14238,7 @@ function goToResult(id){
       if(req){
         var opt=document.createElement('option');
         opt.value=id;
-        opt.textContent=id+' - '+req.patientName+(req.status==='done'?' ✅':'');
+        opt.textContent=_reqNoText(req)+' - '+req.patientName+(req.status==='done'?' ✅':'');
         opt.style.color='#00c46a';
         sel.appendChild(opt);
       }
@@ -14258,7 +14258,7 @@ function openViewResultsModal(rid){
   currentReqId=rid;
   const pt=patients.find(p=>p.id===r.patientId)||{};
   const printed=!!r.printed;
-  document.getElementById('vr-title').innerHTML=`📊 نتائج ${r.id} - ${r.patientName} ${printed?'<span class="bdg bdg-ok" style="margin-right:8px">🖨️ مطبوع</span>':'<span class="bdg bdg-w" style="margin-right:8px">⏸ غير مطبوع</span>'}`;
+  document.getElementById('vr-title').innerHTML=`📊 نتائج ${(typeof _reqNoText==='function'?_reqNoText(r):r.id)} - ${r.patientName} ${printed?'<span class="bdg bdg-ok" style="margin-right:8px">🖨️ مطبوع</span>':'<span class="bdg bdg-w" style="margin-right:8px">⏸ غير مطبوع</span>'}`;
 
   // جلب آخر 4 طلبات مكتملة لنفس المريض (غير الطلب الحالي)
   // استبعاد أي طلب بنفس تاريخ الطلب الحالي (لا يُحسب كنتيجة "سابقة")
@@ -14661,6 +14661,12 @@ function vrSavePatientEdit(pid, rid){
 // ============================================================
 // RESULTS ENTRY
 // ============================================================
+// 🆕 الرقم المعروض للطلب في كل واجهات النتائج = رقم الطلب على الملصق.
+//    الطلبات القديمة (بلا orderNo) تعرض معرّفها الداخلي كما كانت.
+function _reqNoText(r){
+  try{ return String((r && (r.orderNo || r.id)) || ''); }catch(_){ return ''; }
+}
+
 function loadResultsDropdown(){
   const sel=document.getElementById('res-req-sel');if(!sel)return;
   // ── حماية: إذا المستخدم يكتب في حقول النتائج — لا تُعيد البناء ──
@@ -14679,7 +14685,7 @@ function loadResultsDropdown(){
     const _cur=requests.find(r=>r.id===currentReqId);
     if(_cur) _combined.push(_cur);
   }
-  sel.innerHTML='<option value="">-- اختر طلب --</option>'+_combined.map(r=>`<option value="${r.id}" ${r.status==='done'?'style="color:#00c46a"':''}>${r.id} - ${r.patientName}${r.status==='done'?' ✅':''}</option>`).join('');
+  sel.innerHTML='<option value="">-- اختر طلب --</option>'+_combined.map(r=>`<option value="${r.id}" ${r.status==='done'?'style="color:#00c46a"':''}>${_reqNoText(r)} - ${r.patientName}${r.status==='done'?' ✅':''}</option>`).join('');
   // فقط حدد الطلب إذا currentReqId موجود فعلاً في القائمة
   if(currentReqId){
     // الطلب المعروض حالياً صار مضموناً في القائمة أعلاه — يكفي وجوده أصلاً
@@ -14745,7 +14751,7 @@ function loadResultEntry(){
   const _drManual = !!(req.doctorName && !doctors.find(d=>d.id===req.doctorId));
   bar.innerHTML=`
     <div class="pt-bar-item"><label>المريض</label><span class="ptb-v ptb-name">${req.patientName||'-'}</span></div>
-    <div class="pt-bar-item"><label>رقم الملف</label><span class="ptb-v ptb-mono">${pt.id||'-'}</span></div>
+    <div class="pt-bar-item"><label>رقم الطلب</label><span class="ptb-v ptb-mono" title="رقم ملف المريض: ${pt.id||'-'}">${_reqNoText(req)||'-'}</span></div>
     <div class="pt-bar-item"><label>العمر</label><span class="ptb-v">${pt.ageDisplay||calcAgeFromInput(pt.dob,pt.age)||'-'}</span></div>
     <div class="pt-bar-item"><label>الطبيب</label>
       <select id="res-doctor-sel" class="ptb-sel" onchange="resUpdateDoctor(this)">
