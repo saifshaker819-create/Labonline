@@ -3824,10 +3824,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div style="font-size:13px;font-weight:800;color:var(--text);margin-bottom:2px">اختر الشهر لعرض الإحصائيات</div>
           <div style="font-size:11px;color:var(--text2)">يمكنك تحديد أي شهر لعرض بياناته</div>
         </div>
+        <select id="rp-scope" class="fc" style="width:150px;padding:8px 12px;font-size:13px;font-weight:700" onchange="renderReports()">
+          <option value="month" selected>📅 شهر محدد</option>
+          <option value="all">🌐 كل الفترات</option>
+        </select>
         <input type="month" id="rp-month-picker" class="fc" style="width:180px;padding:8px 12px;font-size:13px;font-weight:700"
           onchange="renderReports()"
           value="">
-        <button class="btn btn-s btn-sm" onclick="document.getElementById('rp-month-picker').value='';renderReports()">↩️ الشهر الحالي</button>
+        <button class="btn btn-s btn-sm" onclick="_rpResetMonth()">↩️ الشهر الحالي</button>
       </div>
       <div class="stats">
         <div class="scard" style="--cc:rgba(0,212,255,0.2);cursor:pointer" onclick="showMonthDetailModal('patients')"><div class="scard-lbl" id="rp-month-pts-lbl">مرضى الشهر</div><div class="scard-val" id="rp-month-pts" style="color:var(--primary)">0</div><div class="scard-ic">👥</div></div>
@@ -13959,6 +13963,11 @@ function _reqStatusBdg(r){
   try{
     if(r && r.status === 'done' && !_spAllEntered(r))
       return '<span class="bdg bdg-p">🔄 جاري</span>';
+    /* 🩸 طلب فيه نتيجة CBC من الجهاز: لا يُعرض «مكتمل» إلا بعد طباعة
+       كل نتائجه (تقرير CBC + التقرير العام + الفحوصات الخاصة). */
+    if(r && r.status === 'done' && typeof _reqHasCBC === 'function' && _reqHasCBC(r)
+       && typeof _reqFullyPrinted === 'function' && !_reqFullyPrinted(r))
+      return '<span class="bdg bdg-p">🔄 جاري</span>';
   }catch(e){}
   return getStatusBdg(r ? r.status : '');
 }
@@ -20443,17 +20452,51 @@ function saveQC(){qcRecords.push({date:new Date().toISOString().split('T')[0],de
 // ============================================================
 // REPORTS
 // ============================================================
+/* ══════════════════════════════════════════════════════════════════
+ * 📅 نطاق التقارير — مصدر واحد للحقيقة
+ * يقرأ منتقي الشهر أعلى صفحة التقارير + خيار «كل الفترات»،
+ * وتستعمله كل تقارير الصفحة (المرضى / الإيرادات / التحاليل).
+ * الافتراضي: الشهر الحالي.
+ * ══════════════════════════════════════════════════════════════════ */
+const RP_MONTH_NAMES=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+function _rpMonthLabel(m){
+  try{
+    var p=String(m||'').split('-');
+    var i=parseInt(p[1],10);
+    if(!p[0]||isNaN(i)) return String(m||'');
+    return (RP_MONTH_NAMES[i-1]||p[1])+' '+p[0];
+  }catch(e){ return String(m||''); }
+}
+function _rpScope(){
+  var thisMonth=new Date().toISOString().slice(0,7);
+  var picker=document.getElementById('rp-month-picker');
+  var scopeEl=document.getElementById('rp-scope');
+  if(picker && !picker.value) picker.value=thisMonth;      /* الافتراضي: الشهر الحالي */
+  var all=!!(scopeEl && scopeEl.value==='all');
+  var month=(picker&&picker.value)||thisMonth;
+  if(picker){ picker.disabled=all; picker.style.opacity=all?'0.45':'1'; }
+  return {
+    all:all,
+    month:month,
+    label: all ? 'كل الفترات' : _rpMonthLabel(month),
+    /* هل يقع هذا التاريخ (YYYY-MM-DD) ضمن النطاق المختار؟ */
+    has: function(d){ return all ? true : String(d||'').slice(0,7)===month; }
+  };
+}
+window._rpScope=_rpScope;
+window._rpMonthLabel=_rpMonthLabel;
+
+function _rpResetMonth(){
+  var sc=document.getElementById('rp-scope'); if(sc) sc.value='month';
+  var picker=document.getElementById('rp-month-picker');
+  if(picker){ picker.disabled=false; picker.style.opacity='1'; picker.value=new Date().toISOString().slice(0,7); }
+  renderReports();
+}
+window._rpResetMonth=_rpResetMonth;
+
 function renderReports(){
-  const today=new Date().toISOString().split('T')[0];
-  const thisMonth=today.slice(0,7);
-  // تحديد الشهر المحدد من المنتقي أو الشهر الحالي
-  const picker=document.getElementById('rp-month-picker');
-  if(picker && !picker.value) picker.value=thisMonth;
-  const selMonth=(picker&&picker.value)||thisMonth;
-  // تحديث تسمية البطاقات بالشهر المختار
-  const monthNames=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-  const [mYear,mMon]=selMonth.split('-');
-  const mLabel=monthNames[parseInt(mMon)-1]+' '+mYear;
+  const S=_rpScope();
+  const mLabel=S.label;
   const lPts=document.getElementById('rp-month-pts-lbl');
   const lTests=document.getElementById('rp-month-tests-lbl');
   const lRev=document.getElementById('rp-month-rev-lbl');
@@ -20461,48 +20504,45 @@ function renderReports(){
   if(lTests) lTests.textContent='تحاليل '+mLabel;
   if(lRev) lRev.textContent='إيرادات '+mLabel;
   document.getElementById('rp-total-pts').textContent=patients.length;
-  document.getElementById('rp-month-pts').textContent=patients.filter(p=>(p.registered||'').startsWith(selMonth)).length;
-  document.getElementById('rp-month-tests').textContent=requests.filter(r=>r.date.startsWith(selMonth)).reduce((s,r)=>s+r.tests.length,0);
-  const revVal=invoices.filter(i=>i.date.startsWith(selMonth)).reduce((s,i)=>s+i.total,0);
+  document.getElementById('rp-month-pts').textContent=patients.filter(p=>S.has(p.registered)).length;
+  const rqs=requests.filter(r=>S.has(r.date));
+  document.getElementById('rp-month-tests').textContent=rqs.reduce((s,r)=>s+((r.tests||[]).length),0);
+  const revVal=invoices.filter(i=>S.has(i.date)).reduce((s,i)=>s+(parseFloat(i.total)||0),0);
   document.getElementById('rp-month-rev').textContent=revVal.toLocaleString('ar')+(settings.currency?' '+(settings.currency||'IQD'):'');
-  const cnt={};requests.forEach(r=>r.tests.forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
+  /* أكثر التحاليل طلباً — ضمن النطاق المختار أيضاً */
+  const cnt={};rqs.forEach(r=>(r.tests||[]).forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
   const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,5);
   document.getElementById('rp-top-tests').innerHTML=sorted.map(([tid,c])=>{
-    const t=tests.find(x=>x.id===tid);const pct=Math.round(c/Math.max(1,requests.length)*100);
+    const t=tests.find(x=>x.id===tid);const pct=Math.round(c/Math.max(1,rqs.length)*100);
     return`<div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span>${t?t.nameEn:tid}</span><span>${c} orders</span></div><div class="pbar"><div class="pfill" style="width:${pct}%"></div></div></div>`;
-  }).join('')||'<div style="color:var(--text2);font-size:12px">No data yet</div>';
+  }).join('')||'<div style="color:var(--text2);font-size:12px">لا توجد بيانات في '+mLabel+'</div>';
 }
 
 function showMonthDetailModal(type){
-  const picker=document.getElementById('rp-month-picker');
-  const today=new Date().toISOString().split('T')[0];
-  const thisMonth=today.slice(0,7);
-  const selMonth=(picker&&picker.value)||thisMonth;
-  const [mYear,mMon]=selMonth.split('-');
-  const monthNames=['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
-  const mLabel=monthNames[parseInt(mMon)-1]+' '+mYear;
+  const S=_rpScope();
+  const mLabel=S.label;
 
   let title='', content='';
   if(type==='patients'){
-    const pts=patients.filter(p=>(p.registered||'').startsWith(selMonth));
+    const pts=patients.filter(p=>S.has(p.registered));
     title='👥 مرضى '+mLabel+' ('+pts.length+')';
-    if(!pts.length){content='<div style="text-align:center;padding:30px;color:var(--text2)">لا يوجد مرضى في هذا الشهر</div>';}
+    if(!pts.length){content='<div style="text-align:center;padding:30px;color:var(--text2)">لا يوجد مرضى في '+mLabel+'</div>';}
     else{
       content='<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>الاسم</th><th>تاريخ التسجيل</th><th>الهاتف</th></tr></thead><tbody>'+
       pts.map((p,i)=>`<tr><td>${i+1}</td><td>${p.name}</td><td>${p.registered||'-'}</td><td>${p.phone||'-'}</td></tr>`).join('')+
       '</tbody></table></div>';
     }
   } else if(type==='tests'){
-    const reqs=requests.filter(r=>r.date.startsWith(selMonth));
-    const total=reqs.reduce((s,r)=>s+r.tests.length,0);
+    const reqs=requests.filter(r=>S.has(r.date));
+    const total=reqs.reduce((s,r)=>s+((r.tests||[]).length),0);
     title='🧪 تحاليل '+mLabel+' ('+total+' تحليل / '+reqs.length+' طلب)';
-    if(!reqs.length){content='<div style="text-align:center;padding:30px;color:var(--text2)">لا توجد طلبات في هذا الشهر</div>';}
+    if(!reqs.length){content='<div style="text-align:center;padding:30px;color:var(--text2)">لا توجد طلبات في '+mLabel+'</div>';}
     else{
       // إحصاء التحاليل الأكثر طلباً في هذا الشهر
       const cnt={};
       reqs.forEach(r=>r.tests.forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
       const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-      content='<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:8px">📊 أكثر التحاليل طلباً هذا الشهر:</div>'+
+      content='<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:8px">📊 أكثر التحاليل طلباً — '+mLabel+':</div>'+
       sorted.map(([tid,c])=>{const t=tests.find(x=>x.id===tid);const pct=Math.round(c/Math.max(1,total)*100);
         return`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px"><span>${t?t.nameEn:tid}</span><span style="color:var(--primary);font-weight:700">${c} مرة (${pct}%)</span></div><div class="pbar"><div class="pfill" style="width:${pct}%"></div></div></div>`;
       }).join('')+'</div>'+
@@ -20511,11 +20551,11 @@ function showMonthDetailModal(type){
       '</tbody></table></div>';
     }
   } else if(type==='revenue'){
-    const invs=invoices.filter(i=>i.date.startsWith(selMonth));
+    const invs=invoices.filter(i=>S.has(i.date));
     const total=invs.reduce((s,i)=>s+i.total,0);
     const curr=settings.currency||'IQD';
     title='💰 إيرادات '+mLabel+' ('+total.toLocaleString('ar')+' '+curr+')';
-    if(!invs.length){content='<div style="text-align:center;padding:30px;color:var(--text2)">لا توجد فواتير في هذا الشهر</div>';}
+    if(!invs.length){content='<div style="text-align:center;padding:30px;color:var(--text2)">لا توجد فواتير في '+mLabel+'</div>';}
     else{
       // ملخص يومي
       const byDay={};
@@ -20551,19 +20591,27 @@ function exportReport(type){
   const today=new Date().toISOString().split('T')[0];
   const curr=settings.currency||'IQD';
   const labName=(settings.labName||'MedLab Pro');
+  /* 📅 كل التقارير تخضع لنطاق الشهر المختار أعلى الصفحة (أو «كل الفترات») */
+  const S=(typeof _rpScope==='function')?_rpScope():{all:true,label:'كل الفترات',has:function(){return true;}};
+  const perLbl=S.label;
+  const periodBar='<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;background:rgba(0,212,255,0.07);'+
+    'border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:8px 14px">'+
+    '<span style="font-size:15px">📅</span>'+
+    '<span style="font-size:12px;color:var(--text2);font-weight:700">الفترة:</span>'+
+    '<span style="font-size:13px;font-weight:900;color:var(--primary)">'+perLbl+'</span></div>';
   let title='', tableHTML='', csvRows=[], summaryHTML='';
 
   if(type==='patients'){
-    title='📥 تقرير المرضى الكامل';
-    const list=[...patients].sort((a,b)=>(b.registered||'').localeCompare(a.registered||''));
+    title='📥 تقرير المرضى — '+perLbl;
+    const list=patients.filter(p=>S.has(p.registered)).sort((a,b)=>(b.registered||'').localeCompare(a.registered||''));
     csvRows.push(['#','الاسم','الجنس','العمر','الهاتف','تاريخ التسجيل','رقم الملف']);
     list.forEach((p,i)=>{
       csvRows.push([i+1, p.name, p.gender==='female'?'أنثى':'ذكر', p.age||'-', p.phone||'-', p.registered||'-', p.id]);
     });
-    summaryHTML=`<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+    summaryHTML=periodBar+`<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
       <div style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:12px 20px;text-align:center">
         <div style="font-size:22px;font-weight:900;color:var(--primary)">${list.length}</div>
-        <div style="font-size:11px;color:var(--text2)">إجمالي المرضى</div>
+        <div style="font-size:11px;color:var(--text2)">${S.all?'إجمالي المرضى':'مرضى '+perLbl}</div>
       </div>
       <div style="background:rgba(0,245,147,0.08);border:1px solid rgba(0,245,147,0.25);border-radius:10px;padding:12px 20px;text-align:center">
         <div style="font-size:22px;font-weight:900;color:var(--success)">${list.filter(p=>(p.registered||'').startsWith(today.slice(0,7))).length}</div>
@@ -20583,8 +20631,8 @@ function exportReport(type){
       `</tbody></table>`;
 
   } else if(type==='revenue'){
-    title='💰 تقرير الإيرادات الكامل';
-    const list=[...invoices].sort((a,b)=>b.date.localeCompare(a.date));
+    title='💰 تقرير الإيرادات — '+perLbl;
+    const list=invoices.filter(i=>S.has(i.date)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     const total=list.reduce((s,i)=>s+(parseFloat(i.total)||0),0);
     const paid=list.filter(i=>i.status==='paid').reduce((s,i)=>s+(parseFloat(i.total)||0),0);
     const unpaid=list.filter(i=>i.status!=='paid').reduce((s,i)=>s+(parseFloat(i.total)||0),0);
@@ -20596,7 +20644,7 @@ function exportReport(type){
       const [yr,mo]=m.split('-');
       return`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border)"><span style="font-size:12px">${monthNames[parseInt(mo)-1]} ${yr}</span><span style="font-weight:800;color:var(--warning)">${v.toLocaleString('ar')} ${curr}</span></div>`;
     }).join('');
-    summaryHTML=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    summaryHTML=periodBar+`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div style="background:rgba(255,214,10,0.08);border:1px solid rgba(255,214,10,0.3);border-radius:10px;padding:12px 20px;text-align:center;flex:1;min-width:130px">
         <div style="font-size:20px;font-weight:900;color:var(--warning)">${total.toLocaleString('ar')} ${curr}</div>
         <div style="font-size:11px;color:var(--text2)">إجمالي الإيرادات</div>
@@ -20623,14 +20671,15 @@ function exportReport(type){
       `</tbody></table>`;
 
   } else if(type==='tests'){
-    title='🧪 تقرير التحاليل الكامل';
-    // إحصاء كل تحليل
+    title='🧪 تقرير التحاليل — '+perLbl;
+    // إحصاء كل تحليل ضمن الفترة المختارة
     const cnt={};
-    requests.forEach(r=>r.tests.forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
+    const rqsIn=requests.filter(r=>S.has(r.date));
+    rqsIn.forEach(r=>(r.tests||[]).forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
     const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
-    const totalOrders=requests.length;
+    const totalOrders=rqsIn.length;
     const totalTestsCount=Object.values(cnt).reduce((s,v)=>s+v,0);
-    summaryHTML=`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    summaryHTML=periodBar+`<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">
       <div style="background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:12px 20px;text-align:center;flex:1">
         <div style="font-size:22px;font-weight:900;color:var(--primary)">${totalTestsCount.toLocaleString()}</div>
         <div style="font-size:11px;color:var(--text2)">إجمالي التحاليل المُجراة</div>
@@ -20717,6 +20766,12 @@ function exportReport(type){
     }
   }
 
+  /* 📭 لا توجد بيانات ضمن الفترة المختارة */
+  if(type!=='critical' && csvRows.length<=1){
+    tableHTML='<div style="text-align:center;padding:40px;color:var(--text2);font-size:14px;font-weight:700">'+
+              '📭 لا توجد بيانات في '+perLbl+'</div>';
+  }
+
   // ── حفظ البيانات عالمياً لاستخدامها في الأزرار ──
   window._expReportCSVRows = csvRows;
   window._expReportTitle = title;
@@ -20741,7 +20796,7 @@ function exportReport(type){
     <div class="mftr" style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-s" onclick="document.getElementById('m-export-report').remove()">✕ إغلاق</button>
       <div style="flex:1"></div>
-      ${csvRows.length?`<button class="btn btn-ok" onclick="_expReportCSV()">📊 تصدير CSV</button>`:''}
+      ${csvRows.length>1?`<button class="btn btn-ok" onclick="_expReportCSV()">📊 تصدير CSV</button>`:''}
       <button class="btn btn-p" onclick="_expReportPrint()">🖨️ طباعة التقرير</button>
     </div>
   </div>`;
@@ -32680,9 +32735,9 @@ function printCBCFromDevice(reqId, opts){
   /* 🔕 شاشة المرضى: طباعة تقرير CBC (تلقائية أو يدوية) لا تُنادي المريض
      ولا تجعله «جاهزاً» — النداء حصراً عند «حفظ وطباعة» للطلب. */
   try{ if(!_autoCbcPrint && typeof _wsMarkPrinted==='function') _wsMarkPrinted(req.id, 'cbc'); }catch(_){}
-  /* 🩸 سجّل أن تقرير الـ CBC طُبع — يكمل حالة «مطبوع» للطلب الذي معه
-     فحص إدرار/خروج بلا تحاليل عامة أخرى. */
-  try{ if(!_autoCbcPrint && typeof _cbcMarkPrinted==='function') _cbcMarkPrinted(req.id); }catch(_){}
+  /* 🩸 سجّل أن تقرير الـ CBC طُبع (تلقائياً كان أم يدوياً) — تحدّد
+     _cbcMarkPrinted بنفسها متى يصبح الطلب «مطبوعاً». */
+  try{ if(typeof _cbcMarkPrinted==='function') _cbcMarkPrinted(req.id); }catch(_){}
 }
 
 function printCBCBlank(){
@@ -35886,11 +35941,13 @@ function _cbcMarkPrinted(reqId){
 
     var P = (typeof _reqParts === 'function') ? _reqParts(r) : null;
     var needsGeneral = P ? (P.regularNonCbc.length > 0 || P.calc.length > 0) : true;
-    if(!needsGeneral && !r.printed){
+    /* الفحوصات الخاصة (إدرار/خروج/سائل منوي) يجب أن تكون مطبوعة أيضاً */
+    var spOk = (typeof _spAllPrinted === 'function') ? _spAllPrinted(r) : true;
+    if(!needsGeneral && spOk && !r.printed){
       r.printed = true;
       r.cbcOnlyPrinted = true;      /* لشاشة الانتظار فقط — لا نداء */
       if(!r.resultDate) r.resultDate = new Date().toISOString().split('T')[0];
-      if(typeof _spAllPrinted === 'function' && _spAllPrinted(r) && typeof showNotif === 'function')
+      if(typeof showNotif === 'function')
         showNotif('تم', '✅ اكتملت طباعة الطلب — الحالة الآن «مطبوع»', 'success');
     }
 
@@ -39751,16 +39808,18 @@ function cbcFlush(sampleId){
       var _lastPrint=_cbcAutoPrintLog[_autoCBCReqId]||0;
       if(_now-_lastPrint>=60000){
         _cbcAutoPrintLog[_autoCBCReqId]=_now;
-        // بما أن البرنامج يطبع CBC تلقائياً — نعتبر الطلب مكتملاً ومطبوعاً
+        /* 🖨️ الطباعة التلقائية لتقرير الـ CBC:
+           • الطلب فيه CBC فقط  ⇒ يصبح «مكتمل ومطبوع».
+           • فيه تحاليل أخرى (عامة أو إدرار/خروج) ⇒ يبقى «جاري وغير مطبوع»
+             حتى تُطبع بقيّتها — لا نضبط printed ولا status هنا إطلاقاً.
+           التنفيذ عبر _cbcMarkPrinted وهي التي تفحص هذه الشروط مركزياً. */
         try{
-          targetReq.status='done';
-          targetReq.printed=true;
-          // ⭐ علامة لشاشة الانتظار فقط: هذه الطباعة مصدرها CBC الجهاز تلقائياً.
-          //    لا يقرأها أي جزء آخر من النظام (نتائج/مخزون/تقارير/مزامنة).
+          // ⭐ علامة لشاشة الانتظار فقط: هذه الطباعة مصدرها CBC الجهاز تلقائياً
+          //    (لا نداء للمريض) — لا يقرأها أي جزء آخر من النظام.
           targetReq.cbcAutoPrinted=true;
-          if(!targetReq.resultDate) targetReq.resultDate=new Date().toISOString().split('T')[0];
           targetReq._updatedAt=Date.now();
-          if(typeof saveOne==='function') saveOne('requests',requests,targetReq); else if(typeof save==='function') save('requests',requests);
+          if(typeof _cbcMarkPrinted==='function') _cbcMarkPrinted(targetReq.id);
+          else if(typeof saveOne==='function') saveOne('requests',requests,targetReq);
           if(typeof updateBadges==='function'){ try{ updateBadges(); }catch(_){} }
           if(typeof renderRequests==='function'){ try{ renderRequests(); }catch(_){} }
           // ⭐ استعادة لطيفة: لا ترمش ولا تقاطع الكتابة إن كان التركيز سليماً
