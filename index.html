@@ -13421,34 +13421,6 @@ function printTubeLabel(reqId, copies, tubeKind){
   if(_isWB) barcodeId=_c111WbSid(barcodeId)||barcodeId;
   var ptName=r.patientName||pt.name||'—';
 
-  // ══ 🆕 «طلب ١ من ٢» — يظهر فقط إذا للمريض أكثر من طلب بنفس اليوم ══
-  //   الغرض: الفنّي يشوف بعينه إن أكو ملصق ثانٍ فلا ينسى تيوباً.
-  //   الترتيب حتمي (رقم الطلب تصاعدياً) فالنتيجة نفسها عند أي إعادة طباعة
-  //   وعلى أي حاسبة. قراءة فقط — لا تمسّ أي بيانات.
-  var _ordTag='';
-  try{
-    var _arDigit=function(v){
-      return String(v).replace(/[0-9]/g,function(d){ return '٠١٢٣٤٥٦٧٨٩'.charAt(+d); });
-    };
-    var _sameDay=(typeof requests!=='undefined'&&requests?requests:[]).filter(function(x){
-      return x && String(x.patientId)===String(r.patientId) &&
-             String(x.date||'')===String(r.date||'');
-    });
-    if(_sameDay.length>1){
-      _sameDay.sort(function(a,b){
-        var na=parseInt(String(a.orderNo||'').replace(/[^0-9]/g,''),10)||0;
-        var nb=parseInt(String(b.orderNo||'').replace(/[^0-9]/g,''),10)||0;
-        if(na!==nb) return na-nb;
-        var sa=(typeof _lisReqSeqNo==='function')?_lisReqSeqNo(a):0;
-        var sb=(typeof _lisReqSeqNo==='function')?_lisReqSeqNo(b):0;
-        return sa-sb;
-      });
-      var _ix=-1;
-      for(var _i=0;_i<_sameDay.length;_i++){ if(_sameDay[_i].id===r.id){ _ix=_i; break; } }
-      if(_ix>=0) _ordTag='<div class="ord-tag">طلب '+_arDigit(_ix+1)+' من '+_arDigit(_sameDay.length)+'</div>';
-    }
-  }catch(_){}
-
   // حجم الملصق من الإعدادات
   var _lw=parseFloat((typeof settings!=='undefined'&&settings.labelW)||57)||57;
   var _lh=parseFloat((typeof settings!=='undefined'&&settings.labelH)||30)||30;
@@ -13479,16 +13451,12 @@ function printTubeLabel(reqId, copies, tubeKind){
       +'.pt-name{font-size:7.5pt;font-weight:900;color:#000;text-align:center;'
       +'width:96%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;'
       +'border-top:0.4pt solid #bbb;padding-top:0.4mm;margin-top:0.2mm}'
-      +'.ord-tag{font-size:6.5pt;font-weight:900;color:#000;text-align:center;'
-      +'border:0.8pt solid #000;border-radius:1mm;padding:0.1mm 1.6mm;margin-bottom:0.2mm;'
-      +'letter-spacing:0.3px;direction:rtl;line-height:1.2}'
       +'.tube-tag{font-size:7pt;font-weight:900;color:#000;text-align:center;'
       +'border:1pt solid #000;border-radius:1mm;padding:0.2mm 1.5mm;margin-bottom:0.3mm;'
       +'letter-spacing:0.5px;direction:rtl;line-height:1.25}'
       +'@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}'
       +'</style></head><body>'
       // 🩸 وسم التيوب — يظهر على ملصق الهول بلود فقط، لمنع لصقه على التيوب الخطأ
-      +_ordTag
       +(_isWB ? '<div class="tube-tag">🩸 EDTA — تراكمي</div>' : '')
       +'<div class="bc-wrap">'+_bcMarkup+'</div>'
       +'<div class="bc-num">'+barcodeId+'</div>'
