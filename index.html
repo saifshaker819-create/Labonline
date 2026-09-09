@@ -3289,9 +3289,6 @@ body.light-mode .dp-viewer{background:#d8dde3;}
     <div class="ni" id="dp-nav-btn" onclick="dpOpenModal()" style="color:#00e87a;">
       <span class="ni-ic">🩺</span>بوابة الطبيب
     </div>
-    <div class="ni" id="store-nav-btn" onclick="openStore()" style="color:#00d4ff;">
-      <span class="ni-ic">🏬</span>متجر التجهيزات
-    </div>
   </div>
   <div class="sidebar-footer">
     <div class="lab-card">
@@ -53443,24 +53440,844 @@ window.mlDerived={
 };
 
 })();
+</script>
 
-// ═══════════════════════════════════════════════════
-// 🏬 متجر التجهيزات المختبرية
-// نافذة مستقلة (store.html) لها قاعدة IndexedDB خاصة بها،
-// فلا تؤثر على إقلاع البرنامج ولا على المزامنة ولا على النسخ الاحتياطي.
-// الفتح الفعلي يتم في main.js عبر اسم النافذة MedLabStore.
-// ═══════════════════════════════════════════════════
-function openStore(){
-  try{
-    var s = (typeof settings==='object' && settings) ? settings : {};
-    var qs = 'lab='   + encodeURIComponent(s.name  || '') +
-             '&phone='+ encodeURIComponent(s.phone || '') +
-             '&addr=' + encodeURIComponent(s.addr  || '');
-    window.open('store.html?'+qs, 'MedLabStore');
-  }catch(e){
-    console.error('store open failed', e);
-    try{ window.open('store.html','MedLabStore'); }catch(_){}
+<!-- ═══════════════════════════════════════════════════════════
+     📦 مشاركة الباقات عبر واتساب + إصلاح دفتر الهاتف
+     كتلة مستقلة تماماً — تستبدل sharePkg و renderPhoneBook
+     القديمتين تلقائياً دون المساس بأي كود آخر.
+     ═══════════════════════════════════════════════════════ -->
+<script>
+(function () {
+'use strict';
+
+/* ═══════════════ 1) رسم بطاقة الباقة ═══════════════ */
+function _mix(a, b, t) {
+  var p = function (h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; };
+  var A, B;
+  try { A = p(a); B = p(b); } catch (e) { return a; }
+  return '#' + A.map(function (v, i) {
+    return Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0');
+  }).join('');
+}
+function _rr(c, x, y, w, h, r) {
+  c.beginPath();
+  if (c.roundRect) { c.roundRect(x, y, w, h, r); return; }
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y,     x + w, y + h, r);
+  c.arcTo(x + w, y + h, x,     y + h, r);
+  c.arcTo(x,     y + h, x,     y,     r);
+  c.arcTo(x,     y,     x + w, y,     r);
+  c.closePath();
+}
+function _fmtNum(n) { return Number(n || 0).toLocaleString('en-US'); }
+function _wrap(ctx, text, max) {
+  var words = String(text || '').split(/\s+/), out = [], line = '';
+  words.forEach(function (w) {
+    var t = line ? line + ' ' + w : w;
+    if (ctx.measureText(t).width > max && line) { out.push(line); line = w; }
+    else line = t;
+  });
+  if (line) out.push(line);
+  return out.length ? out : [''];
+}
+
+// ترسم البطاقة وتُعيد canvas — اسم المختبر في الأعلى، هاتفه في الأسفل
+window.drawPackageCard = function (p, st) {
+  st = st || {};
+  var W = 1080, PAD = 64, R = 44;
+  var accent = p.color || '#0F6E56';
+  var tint   = _mix(accent, '#ffffff', 0.88);
+  var dark   = _mix(accent, '#000000', 0.72);
+  var F = function (w, s) { return w + ' ' + s + 'px Cairo, "Segoe UI", Tahoma, sans-serif'; };
+
+  var items = String(p.desc || '').split(/[،,+\n]/).map(function (s) { return s.trim(); })
+                                  .filter(Boolean).slice(0, 7);
+
+  var m = document.createElement('canvas').getContext('2d');
+  m.font = F(800, 60);
+  var nameLines = _wrap(m, p.name || '', W - PAD * 2);
+  m.font = F(400, 40);
+  var itemsH = 0;
+  var itemLines = items.map(function (t) {
+    var L = _wrap(m, t, W - PAD * 2 - 76);
+    itemsH += L.length * 54 + 30;
+    return L;
+  });
+
+  var headH = 250, y = headH + 60;
+  var nameY = y + 60;  y += nameLines.length * 72 + 28;
+  var divY  = y;       y += 46;
+  var itemsY= y;       y += itemsH + 24;
+  var priceY= y;       y += 190 + 46;
+  var footY = y;       y += 110;
+  var H = Math.round(y);
+
+  var cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  var c = cv.getContext('2d');
+  c.textAlign = 'right';
+  try { c.direction = 'rtl'; } catch (e) {}
+
+  c.fillStyle = '#FFFFFF'; _rr(c, 0, 0, W, H, R); c.fill();
+  c.save(); _rr(c, 0, 0, W, H, R); c.clip();
+  c.fillStyle = accent; c.fillRect(0, 0, W, headH); c.restore();
+
+  // ── اسم المختبر في الأعلى ──
+  c.fillStyle = '#FFFFFF'; c.font = F(800, 46);
+  c.fillText(st.lab || 'المختبر الطبي', W - PAD, 118);
+  if (st.labSub) {
+    c.fillStyle = 'rgba(255,255,255,0.72)'; c.font = F(400, 28);
+    c.fillText(st.labSub, W - PAD, 168);
+  }
+  c.fillStyle = dark; _rr(c, PAD, 88, 218, 66, 33); c.fill();
+  c.fillStyle = '#FFFFFF'; c.font = F(600, 30); c.textAlign = 'center';
+  c.fillText('عرض خاص', PAD + 109, 131);
+  if (p.ic) { c.font = '64px serif'; c.fillText(p.ic, PAD + 109, 214); }
+  c.textAlign = 'right';
+
+  c.fillStyle = '#141618'; c.font = F(800, 60);
+  nameLines.forEach(function (ln, i) { c.fillText(ln, W - PAD, nameY + i * 72); });
+
+  c.strokeStyle = '#E6E9E7'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(PAD, divY); c.lineTo(W - PAD, divY); c.stroke();
+
+  var iy = itemsY + 34;
+  itemLines.forEach(function (L) {
+    c.fillStyle = tint;
+    c.beginPath(); c.arc(W - PAD - 24, iy - 14, 24, 0, 6.2832); c.fill();
+    c.strokeStyle = accent; c.lineWidth = 4; c.lineCap = 'round'; c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(W - PAD - 35, iy - 14); c.lineTo(W - PAD - 26, iy - 5); c.lineTo(W - PAD - 12, iy - 24);
+    c.stroke();
+    c.fillStyle = '#141618'; c.font = F(400, 40);
+    L.forEach(function (ln, i) { c.fillText(ln, W - PAD - 76, iy + i * 54); });
+    iy += L.length * 54 + 30;
+  });
+
+  c.fillStyle = tint; _rr(c, PAD, priceY, W - PAD * 2, 190, 28); c.fill();
+  c.fillStyle = accent; c.font = F(800, 78);
+  c.fillText(_fmtNum(p.price) + ' ' + (st.currency || 'د.ع'), W - PAD - 32, priceY + 104);
+  if (p.oldPrice && p.oldPrice > p.price) {
+    c.fillStyle = '#7A8288'; c.font = F(400, 32);
+    var t = 'بدلاً من ' + _fmtNum(p.oldPrice);
+    c.fillText(t, W - PAD - 32, priceY + 152);
+    var w = c.measureText(t).width;
+    c.strokeStyle = '#7A8288'; c.lineWidth = 2;
+    c.beginPath(); c.moveTo(W - PAD - 32, priceY + 142); c.lineTo(W - PAD - 32 - w, priceY + 142); c.stroke();
+    var off = Math.round((1 - p.price / p.oldPrice) * 100);
+    if (off > 0) {
+      c.fillStyle = accent; _rr(c, PAD + 32, priceY + 62, 190, 66, 33); c.fill();
+      c.fillStyle = '#FFFFFF'; c.font = F(600, 34); c.textAlign = 'center';
+      c.fillText('خصم ' + off + '%', PAD + 127, priceY + 106);
+      c.textAlign = 'right';
+    }
+  }
+
+  // ── رقم هاتف المختبر في الأسفل ──
+  c.strokeStyle = '#E6E9E7'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(PAD, footY); c.lineTo(W - PAD, footY); c.stroke();
+  c.fillStyle = '#141618'; c.font = F(600, 34);
+  c.fillText('للحجز: ' + (st.phone || ''), W - PAD, footY + 54);
+  if (st.expiry) {
+    c.fillStyle = '#8B9296'; c.font = F(400, 28);
+    c.fillText('العرض ساري حتى ' + st.expiry, W - PAD, footY + 96);
+  }
+  return cv;
+};
+
+/* ═══════════════ 2) تصحيح صيغة الأرقام ═══════════════ */
+// يحوّل أي صيغة عراقية إلى الصيغة الدولية 964XXXXXXXXXX
+window.normalizeWAPhone = function (raw, cc) {
+  cc = String(cc || '964').replace(/\D/g, '');
+  var s = String(raw || '')
+    .replace(/[٠-٩]/g, function (d) { return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); })
+    .replace(/[۰-۹]/g, function (d) { return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d); })
+    .replace(/\D/g, '');
+  if (!s) return '';
+  if (s.indexOf('00' + cc) === 0) s = s.slice(2);
+  if (s.indexOf('0' + cc) === 0)  s = s.slice(1);
+  if (s.indexOf(cc) === 0 && s.length >= cc.length + 9) return s;
+  s = s.replace(/^0+/, '');
+  if (s.length < 9) return '';
+  return cc + s;
+};
+
+/* ═══════════════ 3) سجل الإرسال والحد اليومي ═══════════════ */
+function _sentLog()      { try { return load('pkgSentLog', {}) || {}; } catch (e) { return {}; } }
+function _saveSentLog(o) { try { save('pkgSentLog', o); } catch (e) {} }
+function _today()        { return new Date().toISOString().slice(0, 10); }
+function _daily()        { var d = load('waDaily', null); return (d && d.date === _today()) ? d : { date: _today(), n: 0 }; }
+function _bumpDaily(n)   { var d = _daily(); d.n += n; save('waDaily', d); }
+
+/* ═══════════════ 4) لوحة المشاركة ═══════════════ */
+var _shareState = null;
+
+function _buildModal() {
+  if (document.getElementById('m-pkg-share')) return;
+  var d = document.createElement('div');
+  d.className = 'moverlay';
+  d.id = 'm-pkg-share';
+  d.innerHTML =
+   '<div class="modal" style="max-width:640px">' +
+    '<div class="mhdr"><div class="mtitle">📤 مشاركة الباقة عبر واتساب</div>' +
+      '<button class="mclose" onclick="closeModal(\'m-pkg-share\')">×</button></div>' +
+    '<div class="mbody">' +
+      '<div id="pks-wa-state" style="border-radius:10px;padding:11px 14px;font-size:12px;font-weight:700;margin-bottom:14px"></div>' +
+      '<canvas id="pks-cv" style="width:100%;max-width:340px;height:auto;border-radius:12px;display:block;margin:0 auto 14px"></canvas>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">' +
+        '<div class="fg" style="margin:0"><label class="fl">السعر قبل الخصم (اختياري)</label>' +
+          '<input class="fc" id="pks-old" type="number" placeholder="مثلاً 40000"></div>' +
+        '<div class="fg" style="margin:0"><label class="fl">ساري حتى (اختياري)</label>' +
+          '<input class="fc" id="pks-exp" placeholder="30 أيلول"></div>' +
+      '</div>' +
+      '<div class="fg"><label class="fl">نص الرسالة المرافقة</label>' +
+        '<textarea class="fc" id="pks-msg" rows="7" style="line-height:1.8"></textarea></div>' +
+      '<div id="pks-count" style="background:rgba(0,212,255,0.06);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:12px;line-height:1.9"></div>' +
+      '<div id="pks-prog" style="display:none;margin-top:14px">' +
+        '<div style="height:8px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden">' +
+          '<div id="pks-bar" style="height:100%;width:0%;background:#25d366;transition:width .3s"></div></div>' +
+        '<div id="pks-ptxt" style="font-size:12px;margin-top:9px;line-height:1.8"></div>' +
+        '<div id="pks-plog" style="max-height:130px;overflow:auto;font-size:11px;color:var(--text2);margin-top:8px;line-height:1.7"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="mftr">' +
+      '<button class="btn btn-s" onclick="closeModal(\'m-pkg-share\')">إغلاق</button>' +
+      '<button class="btn btn-s" id="pks-test">🧪 تجربة على رقمي</button>' +
+      '<button class="btn btn-w" id="pks-go">🚀 ابدأ الإرسال</button>' +
+      '<button class="btn btn-d" id="pks-stop" style="display:none">⏹ إيقاف</button>' +
+    '</div>' +
+   '</div>';
+  document.body.appendChild(d);
+
+  document.getElementById('pks-go').onclick   = _startSend;
+  document.getElementById('pks-stop').onclick = function () {
+    if (window.waAPI) window.waAPI.stop();
+    showNotif('إيقاف', 'سيتوقف الإرسال بعد الرسالة الحالية', 'info');
+  };
+  document.getElementById('pks-test').onclick = _testSend;
+  ['pks-old', 'pks-exp'].forEach(function (id) {
+    document.getElementById(id).addEventListener('input', _refreshPreview);
+  });
+}
+
+function _pkgSettings() {
+  return {
+    lab:      (typeof settings !== 'undefined' && settings.name)  || 'المختبر الطبي',
+    labSub:   (typeof settings !== 'undefined' && settings.addr)  || '',
+    phone:    (typeof settings !== 'undefined' && settings.phone) || '',
+    currency: (typeof settings !== 'undefined' && settings.currency) || 'د.ع',
+    expiry:   (document.getElementById('pks-exp') || {}).value || ''
+  };
+}
+
+function _refreshPreview() {
+  if (!_shareState) return;
+  var p = Object.assign({}, _shareState.pkg);
+  var ov = parseFloat((document.getElementById('pks-old') || {}).value);
+  p.oldPrice = isNaN(ov) ? 0 : ov;
+  _shareState.oldPrice = p.oldPrice;
+  var cv = window.drawPackageCard(p, _pkgSettings());
+  var out = document.getElementById('pks-cv');
+  out.width = cv.width; out.height = cv.height;
+  out.getContext('2d').drawImage(cv, 0, 0);
+  _shareState.canvas = cv;
+}
+
+function _defaultMsg(p, st) {
+  return 'يسر ' + st.lab + ' أن يقدّم لكم عرضاً خاصاً على ' + (p.name || 'باقة التحاليل') + '.\n\n' +
+         'تفاصيل الباقة والسعر موضّحة في الصورة المرفقة.\n' +
+         'نسعد بخدمتكم ونتمنى لكم دوام الصحة والعافية.\n\n' +
+         (st.phone ? 'للحجز والاستفسار: ' + st.phone + '\n\n' : '\n') +
+         'لإيقاف استلام العروض أرسل كلمة: إيقاف\n' +
+         'ولاستئناف استلامها لاحقاً أرسل كلمة: استئناف';
+}
+
+function _paintState(state) {
+  var el = document.getElementById('pks-wa-state');
+  if (!el) return;
+  var map = {
+    ready:   ['rgba(37,211,102,0.12)', '#25d366', '✅ واتساب مرتبط وجاهز للإرسال'],
+    qr:      ['rgba(255,214,10,0.12)', '#ffd60a', '🔗 غير مرتبط — اضغط هنا لربط واتساب بمسح رمز QR'],
+    loading: ['rgba(255,255,255,0.06)', 'var(--text2)', '⏳ جارٍ فتح واتساب…'],
+    none:    ['rgba(255,77,109,0.12)', '#ff4d6d', '💻 الإرسال التلقائي يعمل في نسخة سطح المكتب فقط']
+  };
+  var m = map[state] || map.loading;
+  el.style.background = m[0]; el.style.color = m[1];
+  el.style.border = '1px solid ' + (m[1] === 'var(--text2)' ? 'var(--border)' : m[1]);
+  el.textContent = m[2];
+  el.style.cursor = (state === 'qr') ? 'pointer' : 'default';
+  el.onclick = (state === 'qr') ? _doLink : null;
+}
+
+function _doLink() {
+  if (!window.waAPI) return;
+  _paintState('loading');
+  showNotif('ربط واتساب', 'ستفتح نافذة — امسح رمز QR من هاتفك', 'info');
+  window.waAPI.link().then(function (r) {
+    _paintState(r && r.ok ? 'ready' : 'qr');
+    if (r && r.ok) showNotif('تم', 'تم ربط واتساب بنجاح ✅', 'success');
+  });
+}
+
+function _refreshCount() {
+  if (!_shareState) return;
+  var log = _sentLog()[_shareState.pkg.id] || {};
+  var pb  = (typeof getPhoneBook === 'function') ? getPhoneBook() : [];
+  var seen = {}, list = [];
+  pb.forEach(function (e) {
+    var ph = window.normalizeWAPhone(e.phone);
+    if (!ph || seen[ph]) return;
+    seen[ph] = 1;
+    if (log[ph]) return;
+    list.push({ phone: ph, name: e.name || '' });
+  });
+  _shareState.items = list;
+  var d = _daily();
+  var limit = 150;
+  document.getElementById('pks-count').innerHTML =
+    '👥 أرقام فريدة في الدفتر: <b>' + Object.keys(seen).length + '</b>' +
+    (pb.length !== Object.keys(seen).length
+      ? ' <span style="color:var(--text2)">(من ' + pb.length + ' سجلاً)</span>' : '') + '<br>' +
+    '✅ صالحة وجديدة لهذه الباقة: <b style="color:var(--success)">' + list.length + '</b><br>' +
+    '🔁 استلمت هذه الباقة سابقاً: <b>' + Object.keys(log).length + '</b><br>' +
+    '📅 أُرسل اليوم: <b>' + d.n + '</b> من ' + limit +
+    ' &nbsp;·&nbsp; ⏱ الوقت التقريبي: <b>' +
+    Math.ceil(Math.min(list.length, limit - d.n) * 11 / 60) + ' دقيقة</b>';
+}
+
+window.sharePkg = function (id) {
+  var p = (typeof packages !== 'undefined') ? packages.find(function (x) { return x.id === id; }) : null;
+  if (!p) return;
+  var colors = ['#0F6E56', '#185FA5', '#534AB7', '#854F0B', '#A32D2D'];
+  var pk = Object.assign({}, p);
+  if (!pk.color) pk.color = colors[packages.indexOf(p) % colors.length];
+
+  _buildModal();
+  _shareState = { pkg: pk, canvas: null, items: [] };
+
+  document.getElementById('pks-old').value = p.oldPrice || '';
+  document.getElementById('pks-exp').value = p.expiry   || '';
+  document.getElementById('pks-prog').style.display = 'none';
+  document.getElementById('pks-go').style.display   = '';
+  document.getElementById('pks-stop').style.display = 'none';
+
+  _refreshPreview();
+  document.getElementById('pks-msg').value = _defaultMsg(pk, _pkgSettings());
+  _refreshCount();
+  openModal('m-pkg-share');
+
+  if (window.waAPI) {
+    _paintState('loading');
+    window.waAPI.status().then(function (r) { _paintState((r && r.state) || 'loading'); });
+  } else {
+    _paintState('none');
+  }
+};
+
+function _jobBase() {
+  var st  = _pkgSettings();
+  var msg = document.getElementById('pks-msg').value;
+  var img = _shareState.canvas ? _shareState.canvas.toDataURL('image/png') : null;
+  // نحفظ الحقول الاختيارية في الباقة نفسها
+  try {
+    var p = packages.find(function (x) { return x.id === _shareState.pkg.id; });
+    if (p) {
+      p.oldPrice = _shareState.oldPrice || 0;
+      p.expiry   = st.expiry || '';
+      save('packages', packages);
+    }
+  } catch (e) {}
+  return { caption: msg, image: img, minDelay: 8, maxDelay: 15, batchEvery: 30, batchPause: 90,
+           pkgId: _shareState.pkg.id, pkgName: _shareState.pkg.name };
+}
+
+function _testSend() {
+  if (!window.waAPI) { showNotif('غير متاح', 'التجربة تحتاج نسخة سطح المكتب', 'error'); return; }
+  var raw = prompt('أدخل رقماً للتجربة (رقمك مثلاً):', (settings && settings.phone) || '');
+  if (!raw) return;
+  var ph = window.normalizeWAPhone(raw);
+  if (!ph) { showNotif('خطأ', 'الرقم غير صالح', 'error'); return; }
+  var job = _jobBase();
+  job.items = [{ phone: ph, name: 'تجربة' }];
+  job.test = true;
+  _showProgress(1);
+  window.waAPI.start(job).then(function (r) {
+    if (!r || !r.ok) showNotif('تعذّر', r && r.error === 'busy' ? 'هناك إرسال جارٍ' : 'فشل بدء التجربة', 'error');
+  });
+}
+
+function _showProgress(total) {
+  document.getElementById('pks-prog').style.display = 'block';
+  document.getElementById('pks-go').style.display   = 'none';
+  document.getElementById('pks-stop').style.display = '';
+  document.getElementById('pks-bar').style.width    = '0%';
+  document.getElementById('pks-plog').innerHTML     = '';
+  document.getElementById('pks-ptxt').innerHTML     = '⏳ جارٍ التحضير… (0 من ' + total + ')';
+}
+
+function _startSend() {
+  if (!_shareState) return;
+  if (!window.waAPI) {
+    showNotif('غير متاح', 'الإرسال التلقائي يعمل في نسخة سطح المكتب فقط', 'error');
+    return;
+  }
+  var d = _daily(), limit = 150;
+  var items = _shareState.items.slice(0, Math.max(0, limit - d.n));
+  if (!items.length) {
+    showNotif('تنبيه', d.n >= limit ? 'بلغت الحد اليومي — أكمل غداً' : 'لا توجد أرقام جديدة لهذه الباقة', 'error');
+    return;
+  }
+  if (!confirm('سيتم إرسال الباقة إلى ' + items.length + ' رقماً في الخلفية.\n' +
+               'تقدر تكمل عملك على البرنامج عادي. هل نبدأ؟')) return;
+
+  var job = _jobBase();
+  job.items = items;
+  _showProgress(items.length);
+  window.waAPI.start(job).then(function (r) {
+    if (!r || !r.ok) {
+      document.getElementById('pks-go').style.display = '';
+      document.getElementById('pks-stop').style.display = 'none';
+      showNotif('تعذّر البدء', r && r.error === 'busy' ? 'هناك إرسال جارٍ بالفعل' : 'تحقق من ربط واتساب', 'error');
+    }
+  });
+}
+
+/* ═══════════════ 5) استقبال التقدّم ═══════════════ */
+var _plogLines = [];
+if (window.waAPI && window.waAPI.onProgress) {
+  window.waAPI.onProgress(function (d) {
+    var bar = document.getElementById('pks-bar');
+    var txt = document.getElementById('pks-ptxt');
+    var lg  = document.getElementById('pks-plog');
+
+    if (d.type === 'busy' && txt) {
+      txt.innerHTML = '📨 جارٍ الإرسال إلى <b>' + (d.name || d.phone) + '</b> — ' +
+                      d.i + ' من ' + d.total;
+    }
+    if (d.type === 'item') {
+      if (bar) bar.style.width = Math.round(d.i / d.total * 100) + '%';
+      if (txt) txt.innerHTML = '✅ نجح <b style="color:var(--success)">' + d.ok + '</b> · ' +
+                               '✖ فشل <b style="color:var(--danger)">' + d.fail + '</b> · ' +
+                               'المتبقي <b>' + (d.total - d.i) + '</b>';
+      var msg = { ok: '✅', no_wa: '📵 لا يملك واتساب', timeout: '⏱ لم تفتح المحادثة' }[d.result] || ('✖ ' + d.result);
+      _plogLines.unshift(msg + ' — ' + (d.name || '') + ' ' + d.phone);
+      if (lg) lg.innerHTML = _plogLines.slice(0, 60).join('<br>');
+      _bumpDaily(1);
+    }
+    if (d.type === 'wait' && txt) {
+      txt.innerHTML += ' &nbsp;<span style="color:var(--text2)">· انتظار ' +
+                       Math.round(d.ms / 1000) + 'ث</span>';
+    }
+    if (d.type === 'logout') {
+      _paintState('qr');
+      showNotif('انقطع الربط', 'أُلغي ربط واتساب — أعد الربط ثم استأنف', 'error');
+    }
+    if (d.type === 'done') {
+      var go = document.getElementById('pks-go'), sp = document.getElementById('pks-stop');
+      if (go) go.style.display = '';
+      if (sp) sp.style.display = 'none';
+      // سجّل من استلم فعلاً حتى لا يتكرر
+      try {
+        if (_shareState && d.sent && d.sent.length) {
+          var all = _sentLog();
+          var mine = all[_shareState.pkg.id] || {};
+          d.sent.forEach(function (ph) { mine[ph] = _today(); });
+          all[_shareState.pkg.id] = mine;
+          _saveSentLog(all);
+          _refreshCount();
+        }
+      } catch (e) {}
+      if (txt) txt.innerHTML = (d.finished ? '🎉 اكتمل الإرسال — ' : '⏹ توقف — ') +
+                               'نجح ' + d.ok + ' · فشل ' + d.fail;
+      showNotif(d.finished ? 'اكتمل' : 'توقف',
+                'نجح ' + d.ok + ' · فشل ' + d.fail, d.finished ? 'success' : 'info');
+    }
+  });
+
+  // استئناف طابور غير مكتمل بعد إعادة تشغيل البرنامج
+  setTimeout(function () {
+    window.waAPI.pending().then(function (r) {
+      if (!r || !r.pending) return;
+      var q = r.pending;
+      if (confirm('يوجد إرسال غير مكتمل للباقة "' + (q.pkgName || '') + '"\n' +
+                  'وصل إلى ' + q.cursor + ' من ' + q.total + '.\nهل تستأنفه الآن؟')) {
+        window.waAPI.resume();
+        showNotif('استئناف', 'يكمل الإرسال في الخلفية', 'info');
+      } else {
+        window.waAPI.clearPending();
+      }
+    });
+  }, 6000);
+}
+
+/* ═══════════════ 6) دفتر الهاتف — عرض سريع بلا تعليق ═══════════════ */
+var _pbPage = 0, _pbSize = 40, _pbFiltered = [], _pbTimer = null;
+
+function _pbRow(e) {
+  var wa = window.normalizeWAPhone(e.phone);
+  return '<div style="display:flex;align-items:center;justify-content:space-between;' +
+    'background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;padding:10px 14px">' +
+    '<div style="display:flex;align-items:center;gap:10px">' +
+      '<div style="width:34px;height:34px;background:rgba(0,212,255,0.12);border-radius:50%;' +
+      'display:flex;align-items:center;justify-content:center;font-size:15px">👤</div>' +
+      '<div><div style="font-size:13px;font-weight:700;color:var(--text)">' + (e.name || '') + '</div>' +
+      '<div style="font-size:11px;color:var(--text2);direction:ltr">' + e.phone + '</div></div>' +
+    '</div>' +
+    '<div style="display:flex;gap:6px">' +
+      (wa ? '<a href="https://wa.me/' + wa + '" target="_blank" style="background:rgba(37,211,102,0.15);' +
+        'border:1px solid rgba(37,211,102,0.35);color:#25d366;border-radius:7px;padding:4px 9px;' +
+        'font-size:11px;font-weight:700;text-decoration:none">💬 واتساب</a>' : '') +
+      '<button data-pbdel="' + e.phone + '" style="background:rgba(255,34,68,0.1);' +
+      'border:1px solid rgba(255,34,68,0.25);color:var(--danger);border-radius:7px;padding:4px 9px;' +
+      'font-size:11px;font-weight:700;cursor:pointer">🗑️</button>' +
+    '</div></div>';
+}
+
+function _pbPaint(reset) {
+  var list  = document.getElementById('phone-book-list');
+  var empty = document.getElementById('phone-book-empty');
+  if (!list) return;
+  if (reset) { list.innerHTML = ''; _pbPage = 0; }
+  if (!_pbFiltered.length) { if (empty) empty.style.display = 'block'; return; }
+  if (empty) empty.style.display = 'none';
+
+  var start = _pbPage * _pbSize;
+  var slice = _pbFiltered.slice(start, start + _pbSize);
+  if (!slice.length) return;
+
+  var frag = document.createElement('div');
+  frag.style.cssText = 'display:flex;flex-direction:column;gap:8px';
+  frag.innerHTML = slice.map(_pbRow).join('');
+  var old = list.querySelector('[data-pbmore]');
+  if (old) old.remove();
+  list.appendChild(frag);
+  _pbPage++;
+
+  var rest = _pbFiltered.length - _pbPage * _pbSize;
+  if (rest > 0) {
+    var more = document.createElement('button');
+    more.setAttribute('data-pbmore', '1');
+    more.className = 'btn btn-s';
+    more.style.cssText = 'width:100%;margin-top:4px';
+    more.textContent = '⬇️ عرض ' + Math.min(rest, _pbSize) + ' رقماً إضافياً (المتبقي ' + rest + ')';
+    more.onclick = function () { _pbPaint(false); };
+    list.appendChild(more);
   }
 }
 
+window.renderPhoneBook = function () {
+  var list = document.getElementById('phone-book-list');
+  if (!list) return;
+  var q = ((document.getElementById('phone-book-search') || {}).value || '').trim().toLowerCase();
+  var pb = (typeof getPhoneBook === 'function') ? getPhoneBook() : [];
+  _pbFiltered = q
+    ? pb.filter(function (e) { return ((e.name || '') + (e.phone || '')).toLowerCase().indexOf(q) !== -1; })
+    : pb;
+  // الرسم مؤجَّل إطاراً واحداً حتى تُفتح البطاقة فوراً دون تعليق
+  requestAnimationFrame(function () { _pbPaint(true); });
+};
+
+// حذف عبر تفويض الأحداث — بدل onclick داخل كل صف
+document.addEventListener('click', function (ev) {
+  var b = ev.target && ev.target.closest ? ev.target.closest('[data-pbdel]') : null;
+  if (!b) return;
+  var ph = b.getAttribute('data-pbdel');
+  if (!confirm('حذف هذا الرقم من دفتر الهاتف؟')) return;
+  try {
+    var pb = getPhoneBook().filter(function (e) { return e.phone !== ph; });
+    savePhoneBook(pb);
+    window.renderPhoneBook();
+  } catch (e) {}
+});
+
+// بحث بتأخير بسيط بدل الرسم عند كل حرف
+function _pbBindSearch() {
+  var s = document.getElementById('phone-book-search');
+  if (!s || s._pbBound) return;
+  s._pbBound = true;
+  s.removeAttribute('oninput');
+  s.oninput = null;
+  s.addEventListener('input', function () {
+    clearTimeout(_pbTimer);
+    _pbTimer = setTimeout(window.renderPhoneBook, 220);
+  });
+}
+
+// فتح/غلق سلس: نفرغ القائمة عند الغلق حتى لا تثقل الصفحة
+(function () {
+  var orig = window.toggleStCard;
+  if (typeof orig !== 'function') return;
+  window.toggleStCard = function (id) {
+    var r = orig.apply(this, arguments);
+    if (id === 'stc-phones') {
+      var body = document.getElementById('body-stc-phones');
+      var open = body && body.style.display === 'block';
+      if (open) { _pbBindSearch(); }
+      else {
+        var list = document.getElementById('phone-book-list');
+        if (list) list.innerHTML = '';
+        _pbFiltered = []; _pbPage = 0;
+      }
+    }
+    return r;
+  };
+})();
+
+document.addEventListener('DOMContentLoaded', _pbBindSearch);
+setTimeout(_pbBindSearch, 1500);
+
+
+/* ═══════════════ 7) تنظيف دفتر الهاتف ═══════════════ */
+// المشكلة: الدفتر تراكمت فيه نسخ مكرّرة من نفس الرقم بصيغ مختلفة
+// (٠٧٧٠ / 0770 / +964770 ...) ومع كل مزامنة تتضاعف. الحل: توحيد
+// الصيغة واعتماد سجل واحد لكل رقم، وإعادة البناء من قائمة المرضى.
+window.pbAnalyze = function () {
+  var pb = (typeof getPhoneBook === 'function') ? getPhoneBook() : [];
+  var seen = {}, valid = 0, invalid = 0, dup = 0;
+  pb.forEach(function (e) {
+    var n = window.normalizeWAPhone(e && e.phone);
+    if (!n) { invalid++; return; }
+    if (seen[n]) { dup++; return; }
+    seen[n] = 1; valid++;
+  });
+  return { total: pb.length, valid: valid, dup: dup, invalid: invalid };
+};
+
+window.rebuildPhoneBook = function (silent) {
+  var before = window.pbAnalyze();
+  var map = {};   // رقم موحّد → سجل واحد
+
+  function put(name, phone, added) {
+    var n = window.normalizeWAPhone(phone);
+    if (!n) return;
+    var cur = map[n];
+    if (!cur) { map[n] = { name: (name || '').trim(), phone: phone, added: added || '' }; return; }
+    if (!cur.name && name) cur.name = String(name).trim();
+    if (added && (!cur.added || added > cur.added)) cur.added = added;
+  }
+
+  // 1) المصدر الأساسي: سجل المرضى — مريض واحد = رقم واحد
+  try {
+    if (typeof patients !== 'undefined' && Array.isArray(patients))
+      patients.forEach(function (p) { if (p && p.phone) put(p.name, p.phone, p.registered); });
+  } catch (e) {}
+
+  // 2) الأرقام المضافة يدوياً والتي لا تخص مريضاً مسجّلاً — لا نفقدها
+  try {
+    (getPhoneBook() || []).forEach(function (e) { if (e && e.phone) put(e.name, e.phone, e.added); });
+  } catch (e) {}
+
+  var out = Object.keys(map).map(function (n) {
+    return { name: map[n].name, phone: map[n].phone, added: map[n].added || new Date().toISOString().slice(0, 10) };
+  }).sort(function (a, b) { return (a.name || '').localeCompare(b.name || '', 'ar'); });
+
+  savePhoneBook(out);
+  try { localStorage.setItem('mlab_pb_clean_v1', '1'); } catch (e) {}
+  if (typeof window.renderPhoneBook === 'function') window.renderPhoneBook();
+  _pbToolbar(true);
+
+  if (!silent) {
+    alert('🧹 تم تنظيف دفتر الهاتف\n\n' +
+          'قبل التنظيف: ' + before.total + ' سجلاً\n' +
+          '• مكرّرة حُذفت: ' + before.dup + '\n' +
+          '• أرقام غير صالحة حُذفت: ' + before.invalid + '\n\n' +
+          'بعد التنظيف: ' + out.length + ' رقماً فريداً');
+  }
+  return out.length;
+};
+
+// شريط معلومات + زر تنظيف داخل بطاقة أرقام الهاتف
+function _pbToolbar(refreshOnly) {
+  var body = document.getElementById('body-stc-phones');
+  if (!body) return;
+  var bar = document.getElementById('pb-toolbar');
+  if (!bar) {
+    if (refreshOnly) return;
+    bar = document.createElement('div');
+    bar.id = 'pb-toolbar';
+    bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;' +
+      'background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;' +
+      'padding:10px 13px;margin-bottom:12px;flex-wrap:wrap';
+    body.insertBefore(bar, body.firstChild);
+  }
+  var a = window.pbAnalyze();
+  bar.innerHTML =
+    '<div style="font-size:12px;line-height:1.8">👥 أرقام فريدة: <b style="color:var(--success)">' + a.valid + '</b>' +
+    (a.dup || a.invalid
+      ? '<br><span style="color:var(--danger)">⚠️ ' + a.dup + ' مكرّر · ' + a.invalid + ' غير صالح</span>'
+      : '') + '</div>' +
+    '<button class="btn btn-s btn-sm" id="pb-clean-btn">🧹 تنظيف الدفتر</button>';
+  var b = document.getElementById('pb-clean-btn');
+  if (b) b.onclick = function () {
+    if (confirm('سيتم توحيد صيغة الأرقام وحذف المكرّر وغير الصالح.\nلن يُفقد أي رقم حقيقي. متابعة؟'))
+      window.rebuildPhoneBook(false);
+  };
+}
+
+// منع تكرار الأرقام مستقبلاً: المقارنة بالصيغة الموحّدة لا بالنص الخام
+window.addToPhoneBook = function (name, phone) {
+  if (!phone || !name) return;
+  var ph = String(phone).trim().replace(/\s/g, '');
+  var n  = window.normalizeWAPhone(ph);
+  if (!ph || !n) return;
+  var pb = getPhoneBook();
+  var hit = null;
+  for (var i = 0; i < pb.length; i++) {
+    if (window.normalizeWAPhone(pb[i].phone) === n) { hit = pb[i]; break; }
+  }
+  if (!hit) {
+    pb.push({ name: String(name).trim(), phone: ph, added: new Date().toISOString().slice(0, 10) });
+    savePhoneBook(pb);
+  } else if (hit.name !== String(name).trim()) {
+    hit.name = String(name).trim();
+    savePhoneBook(pb);
+  }
+};
+
+// تنظيف تلقائي مرة واحدة على الأجهزة التي تراكم فيها التكرار
+setTimeout(function () {
+  try {
+    if (localStorage.getItem('mlab_pb_clean_v1')) return;
+    var a = window.pbAnalyze();
+    if (a.dup + a.invalid > 50) {
+      var n = window.rebuildPhoneBook(true);
+      if (typeof showNotif === 'function')
+        showNotif('تنظيف دفتر الهاتف', 'حُذف ' + (a.total - n) + ' سجلاً مكرّراً — بقي ' + n + ' رقماً فريداً', 'success');
+    } else {
+      localStorage.setItem('mlab_pb_clean_v1', '1');
+    }
+  } catch (e) {}
+}, 8000);
+
+/* ═══════════════ 8) الشروط وسياسة الخصوصية ═══════════════ */
+var PRIVACY_URL = 'https://saifshaker819-create.github.io/MedLabPro/privacy.html';
+var TERMS_URL   = 'https://saifshaker819-create.github.io/MedLabPro/privacy.html';
+var CONSENT_KEY = 'mlab_terms_v1';
+
+function _hasConsent() { try { return !!localStorage.getItem(CONSENT_KEY); } catch (e) { return false; } }
+function _setConsent() {
+  try { localStorage.setItem(CONSENT_KEY, JSON.stringify({ v: 1, at: new Date().toISOString() })); } catch (e) {}
+}
+
+// ── مربع الموافقة داخل شاشة الدخول ──
+function _injectLoginConsent() {
+  if (document.getElementById('login-consent')) return;
+  var sec = document.getElementById('login-staff-section');
+  var btn = sec && sec.querySelector('.login-btn');
+  if (!sec || !btn) return;
+
+  var box = document.createElement('div');
+  box.id = 'login-consent';
+  box.style.cssText = 'margin:4px 0 14px;font-size:12px;line-height:1.9';
+  box.innerHTML =
+    '<label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">' +
+      '<input type="checkbox" id="cb-consent" style="margin-top:3px;width:17px;height:17px;flex-shrink:0;cursor:pointer">' +
+      '<span>أوافق على <a href="' + TERMS_URL + '" target="_blank" style="color:var(--primary);font-weight:700">شروط الخدمة</a>' +
+      ' و<a href="' + PRIVACY_URL + '" target="_blank" style="color:var(--primary);font-weight:700">سياسة الخصوصية</a>' +
+      ' وأقرّ بأنني قرأتهما.</span>' +
+    '</label>' +
+    '<div id="consent-err" style="display:none;margin-top:9px;background:rgba(255,77,109,0.12);' +
+      'border:1px solid #ff4d6d;color:#ff4d6d;border-radius:9px;padding:9px 12px;font-weight:700">' +
+      '⚠️ يجب الموافقة على شروط الخدمة وسياسة الخصوصية قبل الدخول</div>';
+  sec.insertBefore(box, btn);
+
+  if (_hasConsent()) document.getElementById('cb-consent').checked = true;
+  document.getElementById('cb-consent').addEventListener('change', function () {
+    if (this.checked) document.getElementById('consent-err').style.display = 'none';
+  });
+}
+
+// ── بوابة الدخول: لا دخول بلا موافقة ──
+(function () {
+  var orig = window.doLogin;
+  if (typeof orig !== 'function') return;
+  window.doLogin = function () {
+    var cb = document.getElementById('cb-consent');
+    if (cb && !cb.checked) {
+      var e = document.getElementById('consent-err');
+      if (e) e.style.display = 'block';
+      var box = document.getElementById('login-consent');
+      if (box) {
+        box.animate(
+          [{ transform: 'translateX(0)' }, { transform: 'translateX(-7px)' },
+           { transform: 'translateX(7px)' }, { transform: 'translateX(0)' }],
+          { duration: 260, iterations: 2 });
+      }
+      return;
+    }
+    _setConsent();
+    return orig.apply(this, arguments);
+  };
+})();
+
+// ── شاشة الموافقة للمستخدمين الحاليين عند فتح البرنامج ──
+function _showConsentGate() {
+  if (document.getElementById('consent-gate')) return;
+  var g = document.createElement('div');
+  g.id = 'consent-gate';
+  g.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(3,7,14,0.94);' +
+    'backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;' +
+    'font-family:inherit;overflow:auto';
+  g.innerHTML =
+   '<div style="background:var(--bg-card,#0f1720);border:1px solid var(--border,#22303c);border-radius:18px;' +
+     'max-width:520px;width:100%;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,.55);max-height:92vh;overflow:auto">' +
+     '<div style="text-align:center;font-size:42px;margin-bottom:8px">📋</div>' +
+     '<h2 style="margin:0 0 6px;font-size:19px;text-align:center;color:var(--text,#e8ecef)">شروط الخدمة وسياسة الخصوصية</h2>' +
+     '<p style="margin:0 0 18px;font-size:12.5px;color:var(--text2,#8b97a3);text-align:center;line-height:1.9">' +
+       'قبل متابعة استخدام MedLab Pro، يرجى الاطلاع على الشروط والموافقة عليها.</p>' +
+     '<div style="background:rgba(255,255,255,0.04);border:1px solid var(--border,#22303c);border-radius:12px;' +
+       'padding:15px;font-size:12.5px;line-height:2.1;color:var(--text,#e8ecef);margin-bottom:18px">' +
+       '• بيانات المرضى تُخزَّن على جهازك وتحت مسؤوليتك، ويلتزم المستخدم بسريّتها وفق القوانين المعمول بها.<br>' +
+       '• يُستخدم البرنامج للأغراض المخبرية المشروعة فقط.<br>' +
+       '• النسخ الاحتياطي مسؤولية المستخدم، ولا يتحمّل المزوّد فقدان بيانات ناتجاً عن عطل أو سوء استخدام.<br>' +
+       '• رسائل العروض تُرسل للمرضى الذين وافقوا على استلامها، ويمكنهم إيقافها في أي وقت.<br>' +
+       '• استمرارك في الاستخدام يعني قبولك الكامل للشروط وسياسة الخصوصية.' +
+     '</div>' +
+     '<div style="display:flex;gap:10px;justify-content:center;margin-bottom:18px;flex-wrap:wrap">' +
+       '<a href="' + TERMS_URL + '" target="_blank" style="color:var(--primary,#00d4ff);font-size:12.5px;font-weight:700">📄 شروط الخدمة</a>' +
+       '<span style="color:var(--text2,#8b97a3)">·</span>' +
+       '<a href="' + PRIVACY_URL + '" target="_blank" style="color:var(--primary,#00d4ff);font-size:12.5px;font-weight:700">🔒 سياسة الخصوصية</a>' +
+     '</div>' +
+     '<div style="display:flex;gap:10px">' +
+       '<button id="cg-no"  style="flex:1;padding:13px;border-radius:11px;border:1px solid var(--border,#22303c);' +
+         'background:transparent;color:var(--text2,#8b97a3);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer">غير موافق</button>' +
+       '<button id="cg-yes" style="flex:2;padding:13px;border-radius:11px;border:none;background:#00d4ff;' +
+         'color:#04121a;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">✓ موافق ومتابعة</button>' +
+     '</div>' +
+   '</div>';
+  document.body.appendChild(g);
+
+  document.getElementById('cg-yes').onclick = function () {
+    _setConsent();
+    var cb = document.getElementById('cb-consent');
+    if (cb) cb.checked = true;
+    g.remove();
+  };
+  document.getElementById('cg-no').onclick = function () {
+    g.innerHTML =
+     '<div style="background:var(--bg-card,#0f1720);border:1px solid #ff4d6d;border-radius:18px;max-width:440px;' +
+       'width:100%;padding:30px;text-align:center">' +
+       '<div style="font-size:44px;margin-bottom:10px">🚫</div>' +
+       '<h2 style="margin:0 0 10px;font-size:18px;color:#ff4d6d">لا يمكن استخدام البرنامج</h2>' +
+       '<p style="font-size:13px;color:var(--text2,#8b97a3);line-height:2;margin:0 0 20px">' +
+         'الموافقة على شروط الخدمة وسياسة الخصوصية شرط أساسي لتشغيل MedLab Pro.<br>' +
+         'يمكنك مراجعة الشروط والعودة في أي وقت.</p>' +
+       '<button id="cg-back" style="width:100%;padding:13px;border-radius:11px;border:none;background:#00d4ff;' +
+         'color:#04121a;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer">مراجعة الشروط مرة أخرى</button>' +
+     '</div>';
+    document.getElementById('cg-back').onclick = function () { g.remove(); _showConsentGate(); };
+  };
+}
+
+function _consentInit() {
+  _injectLoginConsent();
+  if (!_hasConsent()) _showConsentGate();
+}
+document.addEventListener('DOMContentLoaded', _consentInit);
+setTimeout(_consentInit, 1200);
+setTimeout(function () { _pbToolbar(false); }, 2500);
+
+})();
 </script>
+
