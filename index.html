@@ -6030,6 +6030,33 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               </div>
             </div>
             <!-- مؤشر المساحة -->
+            <!-- 📥 استيراد من برنامج آخر (Green Lab System / Access) -->
+            <div class="db-acc" id="db-acc-glimport">
+              <div class="db-acc-hdr" onclick="dbAccToggle(this)">
+                <span class="db-acc-ico">📥</span>
+                <div class="db-acc-ttl">استيراد من برنامج آخر (Green Lab System)<div class="db-acc-sub">ملف Access ‏accdb أو مضغوط zip · مرضى · زيارات · نتائج · CBC · إدرار · خروج · منوي · زرع</div></div>
+                <span class="db-acc-arrow">▼</span>
+              </div>
+              <div class="db-acc-body"><div class="db-acc-body-inner">
+                <div style="background:rgba(0,212,255,0.05);border:1.5px solid rgba(0,212,255,0.25);border-radius:14px;padding:18px;margin-bottom:12px">
+                  <div style="font-size:12px;color:var(--text2);line-height:2;margin-bottom:12px">
+                    • اختر ملف قاعدة بيانات Green Lab ‏<b style="color:var(--text)">database.accdb</b> أو نسخته المضغوطة <b style="color:var(--text)">zip</b> — لا حاجة لبرنامج Access.<br>
+                    • القراءة والمعاينة لا تغيّر أي شيء — الحفظ يبدأ فقط عند ضغط «بدء الاستيراد».<br>
+                    • كل مريض يُنشأ له ملف يضم كل زياراته، ويُدمج مع المريض الموجود في ميدلاب إذا تطابق <b>الاسم الثلاثي والجنس والعمر</b>.<br>
+                    • أرقام الملفات والطلبات تُولَّد بصيغة ميدلاب ولا تتداخل مع الموجود — وإعادة الاستيراد لا تكرر أي زيارة.<br>
+                    • نفّذ الاستيراد على <b>حاسبة واحدة</b> فقط، والحاسبات الأخرى تستلم البيانات عبر المزامنة.
+                  </div>
+                  <input type="file" id="gl-file" accept=".accdb,.mdb,.zip" style="display:none" onchange="glImportFileChosen(this)">
+                  <button class="btn btn-p btn-lg" style="width:100%" onclick="glImportPick()">📂 اختيار ملف قاعدة البيانات (accdb / zip)</button>
+                  <div id="gl-prog" style="display:none;margin-top:12px">
+                    <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden"><div id="gl-prog-bar" style="height:100%;width:0;background:linear-gradient(90deg,#00d4ff,#00f593);transition:width .2s"></div></div>
+                    <div id="gl-prog-text" style="font-size:11.5px;color:var(--text2);margin-top:6px"></div>
+                  </div>
+                </div>
+                <div id="gl-preview"></div>
+              </div></div>
+            </div><!-- /db-acc-glimport -->
+
             <div class="db-acc" id="db-acc-storage">
               <div class="db-acc-hdr" onclick="dbAccToggle(this)">
                 <span class="db-acc-ico">💾</span>
@@ -54281,3 +54308,1711 @@ setTimeout(function () { _pbToolbar(false); }, 2500);
 })();
 </script>
 
+<script>
+/* ═══════════ 📥 GreenLab Import v1 — قارئ Access + مطابقة + تحويل + واجهة ═══════════ */
+
+/* ══════════════════════════════════════════════════════════════════
+   GreenLab import — مطابقة أسماء التحاليل (دوال خالصة بلا DOM)
+   القاعدة: أعلى تشابه ≥ 35% = نفس التحليل، بشرط ألا يوجد تعارض مميِّز
+   (IgG/IgM · HDL/LDL · Ab/Ag · T3/T4 · Free · العيّنة · الأرقام …)
+   ══════════════════════════════════════════════════════════════════ */
+var GLM = (function(){
+  'use strict';
+  var STOP = {'test':1,'tests':1,'level':1,'levels':1,'s':1,'b':1,'by':1,'cobas':1,'c111':1,'e411':1,'the':1,'of':1,
+    'and':1,'in':1,'for':1,'quantitative':1,'quant':1,'qualitative':1,'screen':1,'screening':1,'assay':1,
+    'nephlometric':1,'nephelometric':1,'elisa':1,'eclia':1,'clia':1,'card':1,'send':1,'out':1,'q':1};
+  var MOD = {'ab':1,'ag':1,'anti':1,'igg':1,'igm':1,'iga':1,'ige':1,'total':1,'free':1,'titer':1,'titre':1,'count':1,
+    'ratio':1,'index':1,'profile':1,'urine':1,'stool':1,'serum':1,'blood':1,'plasma':1,'hormone':1,'factor':1,
+    'protein':1,'acid':1,'cell':1,'time':1,'virus':1,'culture':1,'sensitivity':1,'analysi':1,'analysis':1,
+    'examination':1,'general':1,'fasting':1,'random':1,'conc':1,'am':1,'pm':1,'morning':1,'evening':1,'stat':1,
+    'fluid':1,'swab':1,'direct':1,'indirect':1,'ionized':1,'rapid':1,'smear':1,'stain':1,'ova':1,'parasite':1,
+    'tumor':1,'marker':1,'c':1,'a':1,'antibody':1,'antigen':1,'combo':1,'typing':1,'rh':1};
+  var SYN = [
+    [/β/g,' beta '],[/\banti\s*-?\s*m(u|ü)ll?erian\s*(hormone)?\b/g,' amh '],[/\banti\s*-?\s*xa\b/g,' antixa '],
+    [/\banti\s*-?\s*thrombin\b/g,' antithrombin '],[/\bglucose\s*-?\s*6\s*-?\s*phosphate dehydrogenase\b/g,' g6pd '],
+    [/\btissue transglutaminase\b|\banti\s*-?\s*tissue\b/g,' anti ttg '],[/\ba\s*-?\s*ttg\b/g,' anti ttg '],
+    [/\brheumatoid factor\b|\br\s*\.?\s*f\b/g,' rf '],
+    [/\bhbs\s*ag\b|\bhbsag\b/g,' hbs ag '],[/\banti\s*-?\s*hbs\b|\bhbs\s*ab\b/g,' hbs ab '],
+    [/\bhbc\s*ag\b/g,' hbc ag '],[/\bhbe\s*ag\b/g,' hbe ag '],[/\banti\s*-?\s*hbc\b/g,' hbc ab '],[/\banti\s*-?\s*hbe\b/g,' hbe ab '],
+    [/\bd\s*\.?\s*s\s*\.?\s*-?\s*dna\b|\bdna\s*\(?\s*d\s*\.\s*s\s*\)?/g,' dsdna '],[/\bs\s*\.?\s*s\s*\.?\s*-?\s*dna\b/g,' ssdna '],
+    [/\bdhea\s*-?\s*s(o4)?\b/g,' dheas '],[/\bck\s*-?\s*mb\b/g,' ckmb '],[/\bhs\s*-?\s*crp\b/g,' hscrp '],
+    [/\bnt\s*-?\s*pro\s*-?\s*bnp\b|\bpro\s*-?\s*bnp\b/g,' probnp '],
+    [/\binsulin sensitivity\b/g,' insulinsensitivity '],
+    [/\bphosphate\b/g,' phosphorus '],
+    [/\b17\s*-?\s*oh\s*-?\s*p\b/g,' 17oh progesterone '],[/\b17\s*-?\s*oh\b/g,' 17oh '],
+    [/\b1\s*,\s*25\s*-?\s*(oh|dihydroxy)\b/g,' 125oh '],
+    [/\bs\.?\s*g\.?\s*o\.?\s*t\b|\bgot\b/g,' ast '],[/\bs\.?\s*g\.?\s*p\.?\s*t\b|\bgpt\b/g,' alt '],
+    [/\baspartate aminotransferase\b/g,' ast '],[/\balanine aminotransferase\b/g,' alt '],
+    [/\balk(aline)?\.?\s*phos(phatase)?\b/g,' alp '],
+    [/\bhb\s*a\s*1\s*c\b|\bglycated h(a)?emoglobin\b|\bglycosylated h(a)?emoglobin\b/g,' hba1c '],
+    [/\bantibod(y|ies)\b/g,' ab '],[/\bantigen\b/g,' ag '],
+    [/\bh\s*[.\-]?\s*pylori\b|\bhelicobacter pylori\b/g,' hpylori '],
+    [/\bvit(amin)?\.?\s*-?\s*/g,' vitamin '],
+    [/\b25\s*-?\s*oh\b|\b25\s*-?\s*hydroxy\b/g,' 25oh '],
+    [/\bvitamin\s+d\s*3?\b(?!\s*\d)/g,' vitamin d 25oh '],
+    [/\bbeta\s*-?\s*hcg\b|\bb\s*-?\s*hcg\b/g,' hcg '],
+    [/\bpcv\b|\bhaematocrit\b|\bhematocrit\b/g,' hct '],[/\bhaemoglobin\b|\bhemoglobin\b|\bhgb\b/g,' hb '],
+    [/\btriglycerides?\b/g,' triglyceride '],
+    [/\bh\.?d\.?l\b/g,' hdl '],[/\bv\.?l\.?d\.?l\b/g,' vldl '],[/\bl\.?d\.?l\b/g,' ldl '],
+    [/\bfree\s*t\s*3\b|\bft\s*3\b/g,' free t3 '],[/\bfree\s*t\s*4\b|\bft\s*4\b/g,' free t4 '],
+    [/\bt\s*3\b/g,' t3 '],[/\bt\s*4\b/g,' t4 '],
+    [/\bf\s*-?\s*psa\b/g,' free psa '],[/\bp\.?\s*s\.?\s*a\b/g,' psa '],
+    [/\bc\s*-?\s*reactive protein\b/g,' crp '],[/\berythrocyte sedimentation rate\b/g,' esr '],
+    [/\bprothrombin time\b/g,' pt '],[/\bpartial thromboplastin time\b|\baptt\b/g,' ptt '],
+    [/\brandom blood (sugar|glucose)\b|\brbg\b/g,' rbs '],[/\bfasting blood (sugar|glucose)\b|\bfbg\b/g,' fbs '],
+    [/\bthyroid stimulating hormone\b/g,' tsh '],
+    [/\bs\.\s*/g,' '],[/\bb\.\s*/g,' '],
+    [/\bmicro\s*-?\s*albumin\b/g,' microalbumin '],[/\bcreat\b/g,' creatinine '],
+    [/\bna\+?(?=\W|$)/g,' sodium '],[/\bk\+?(?=\W|$)/g,' potassium '],[/\bcl-?(?=\W|$)/g,' chloride '],
+    [/\bmg(?=\W|$)/g,' magnesium '],[/\bfe(?=\W|$)/g,' iron '],
+    [/\bca\+?\+?(?=\W|$)(?!\s*\d)/g,' calcium ']
+  ];
+  /* وجود أي عنصر في طرف دون الآخر (أو عنصرين مختلفين) = تحليلان مختلفان */
+  var STRICT = [['igg','igm','iga','ige'],['ag'],['125oh'],['hdl','ldl','vldl'],['non'],['t3','t4'],['direct','indirect'],
+    ['ratio','clearance','index'],['hscrp'],['ckmb'],['breath'],['ionized'],['rna','dna','pcr','viral','load'],
+    ['culture'],['conc'],['electrophoresi','electrophoresis'],['24h','24hr'],['probnp'],['insulinsensitivity']];
+  /* عنصران مختلفان من نفس المجموعة = تحليلان مختلفان (غياب أحدهما مسموح) */
+  var EXCL = [
+    ['fbs','rbs','pprbs','gtt'],['am','pm'],['ab','ag'],
+    ['urine','stool','csf','semen','sputum','pus','swab','fluid','blood','hair','skin','nail'],
+    ['hcv','hbv','hiv','hav','hev','hsv','cmv','ebv','hbs','hbe','hbc'],
+    ['sodium','potassium','chloride','calcium','magnesium','phosphorus','iron','zinc','copper','lithium'],
+    ['lh','fsh','prolactin','estradiol','progesterone','testosterone','cortisol','dheas','dhea','amh','inhibin','acth','aldosterone'],
+    ['microalbumin','albumin','protein','globulin'],['typhi','paratyphi'],
+    ['toxoplasma','rubella','cytomegalovirus','herpes','chlamydia'],['hb','hba1c','hbf','hba2'],
+    ['crp','hscrp'],['ck','ckmb','cknac'],['tpo','tg'],['c3','c4'],['ssdna','dsdna'],['bnp','probnp'],
+    ['typhoid','brucella','rubella','covid','cmv'],['gliadin','ttg'],['ssa','ssb'],['ro','la']
+  ];
+  function clean(raw){
+    var s=String(raw||'').split(/\r?\n/)[0].toLowerCase();
+    s=s.replace(/\bby\s+cobas.*$/,'').replace(/[‐‑–—_]/g,'-');
+    s=' '+s.replace(/[()\[\]{},;:\/\\|]+/g,' ')+' ';
+    for(var i=0;i<SYN.length;i++) s=s.replace(SYN[i][0],SYN[i][1]);
+    s=s.replace(/[^a-z0-9\u0600-\u06ff+%.\- ]+/g,' ').replace(/(\D)\.(\D)/g,'$1 $2').replace(/\s+/g,' ').trim();
+    return s;
+  }
+  function bigrams(s){
+    var c=String(s).replace(/[^a-z0-9\u0600-\u06ff+%]/g,''), m={}, n=0;
+    if(c.length<2){ if(c){ m[c]=1; n=1; } return {m:m,n:n}; }
+    for(var i=0;i<c.length-1;i++){ var g=c.substr(i,2); m[g]=(m[g]||0)+1; n++; }
+    return {m:m,n:n};
+  }
+  function dice(a,b){
+    if(!a.n||!b.n) return 0;
+    var inter=0; for(var g in a.m){ if(b.m[g]) inter+=Math.min(a.m[g],b.m[g]); }
+    return 2*inter/(a.n+b.n);
+  }
+  function tokens(s){
+    var out=[];
+    s.split(/[\s\-.]+/).forEach(function(t){
+      if(!t || STOP[t]) return;
+      if(t.length>=4 && /[^s]s$/.test(t) && !/(us|is|ss)$/.test(t)) t=t.slice(0,-1);
+      if(out.indexOf(t)<0) out.push(t);
+    });
+    if((out.indexOf('anti')>=0 || out.indexOf('igg')>=0 || out.indexOf('igm')>=0 || out.indexOf('iga')>=0) && out.indexOf('ab')<0) out.push('ab');
+    return out;
+  }
+  function tokSim(a,b){
+    if(a===b) return true;
+    if(a.length<5 || b.length<5 || /\d/.test(a) || /\d/.test(b) || a.slice(0,3)!==b.slice(0,3)) return false;
+    return dice(bigrams(a),bigrams(b))>=0.8;
+  }
+  function prep(raw){
+    var c=clean(raw), t=tokens(c);
+    return {raw:String(raw||''), c:c, t:t, set:new Set(t), comp:t.join(''), bg:bigrams(t.join(''))};
+  }
+  /* U = اتحاد رموز كل أسماء التحليل (الاسم/المختصر/الكود) — أساس كشف التعارض */
+  function conflict(A,U){
+    for(var q=0;q<STRICT.length;q++){
+      var G=STRICT[q], ha=[], hb=[];
+      for(var j=0;j<G.length;j++){ if(A.set.has(G[j])) ha.push(G[j]); if(U.has(G[j])) hb.push(G[j]); }
+      if((ha.length||hb.length) && !ha.some(function(x){ return hb.indexOf(x)>=0; })) return true;
+    }
+    var af=A.set.has('free'), bf=U.has('free');
+    if(af && !bf) return true;
+    if(bf && !af && !(U.has('total') && A.set.has('total'))) return true;
+    for(var i=0;i<EXCL.length;i++){
+      var g=EXCL[i], ina=[], inb=[];
+      for(var k=0;k<g.length;k++){ if(A.set.has(g[k])) ina.push(g[k]); if(U.has(g[k])) inb.push(g[k]); }
+      if(ina.length && inb.length && !ina.some(function(x){ return inb.indexOf(x)>=0; })) return true;
+    }
+    /* الأرقام: رقمان مختلفان في الطرفين = تعارض؛ ورمز حرفي-رقمي (T3/C4/B12/17OH) في طرف واحد = تعارض */
+    var na=A.t.filter(function(x){ return /\d/.test(x); }), nb=Array.from(U).filter(function(x){ return /\d/.test(x); });
+    var alnum=function(x){ return /\d/.test(x) && /[a-z]/.test(x); };
+    var uComp=Array.from(U).join('');
+    if(na.length && nb.length && !na.some(function(x){ return nb.indexOf(x)>=0 || uComp.indexOf(x)>=0; })
+       && !nb.some(function(x){ return A.comp.indexOf(x)>=0; })) return true;
+    if(na.some(function(x){ return alnum(x) && nb.indexOf(x)<0 && uComp.indexOf(x)<0; })) return true;
+    if(nb.some(function(x){ return alnum(x) && na.indexOf(x)<0 && A.comp.indexOf(x)<0; })) return true;
+    /* اسم قديم يدل على أجسام مضادة ↔ تحليل ليس أجساماً مضادة */
+    if(A.set.has('ab') && !U.has('ab')) return true;
+    return false;
+  }
+  function score1(A,B){
+    if(!A.c || !B.c) return 0;
+    if(A.c===B.c || (A.comp && A.comp===B.comp)) return 1;
+    var inter=0, core=0, matchedB={}, matchedA={}, Bt=B.t;
+    for(var x=0;x<A.t.length;x++){
+      for(var i=0;i<Bt.length;i++){
+        if(tokSim(A.t[x],Bt[i])){ inter++; matchedB[i]=1; matchedA[x]=1;
+          if(!MOD[A.t[x]] && !/^\d+$/.test(A.t[x])) core++;
+          break; }
+      }
+    }
+    var isCoreTok=function(t){ return !MOD[t] && !/^\d+$/.test(t); };
+    var unA=A.t.filter(function(t,k){ return !matchedA[k] && isCoreTok(t); }).length;
+    var unB=Bt.filter(function(t,k){ return !matchedB[k] && isCoreTok(t); }).length;
+    var tok=(A.t.length+Bt.length)? 2*inter/(A.t.length+Bt.length) : 0;
+    var dc=dice(A.bg,B.bg);
+    /* يجب مشاركة كلمة جوهرية، أو احتواء الاسم الأقصر بالكامل، أو تشابه حروف عالٍ جداً */
+    if(!core){
+      /* بلا كلمة جوهرية مشتركة: يُقبل فقط إن كان الفرق كله كلمات وصفية (Total IgE ↔ IgE) أو تشابه حروف عالٍ جداً */
+      if(!((unA===0 && unB===0 && inter>0) || dc>=0.85)) return 0;
+    }
+    return 0.55*dc+0.45*tok;
+  }
+  function indexCatalog(catalog){
+    var out=[];
+    (catalog||[]).forEach(function(t,ix){
+      if(!t || !t.id) return;
+      var names=[t.nameEn,t.nameShort,t.code].filter(function(x){ return x && String(x).trim() && x!=='N/A'; });
+      var seen={}, P=[], U=new Set();
+      names.forEach(function(n){ var p=prep(n); if(p.c && !seen[p.c]){ seen[p.c]=1; P.push(p); } });
+      /* رموز التعارض من الاسم والمختصر فقط (الأكواد مثل TT4 تُربك الكشف) */
+      var cn=[t.nameEn,t.nameShort].filter(function(x){ return x && String(x).trim(); });
+      if(!cn.length) cn=names;
+      cn.forEach(function(n){ prep(n).t.forEach(function(k){ U.add(k); }); });
+      if(P.length) out.push({t:t, ix:ix, P:P, U:U, rawBg:bigrams(String(t.nameEn||'').toLowerCase())});
+    });
+    return out;
+  }
+  function scoreEntry(A,e){
+    if(conflict(A,e.U)) return 0;
+    var s=0; for(var j=0;j<e.P.length;j++){ var v=score1(A,e.P[j]); if(v>s) s=v; }
+    return s;
+  }
+  function best(oldName, idx){
+    var A=prep(oldName), rawA=bigrams(String(oldName||'').toLowerCase()), top=null, second=null;
+    for(var i=0;i<idx.length;i++){
+      var e=idx[i], s=scoreEntry(A,e);
+      if(s<=0) continue;
+      if(top && Math.abs(s-top.s)<1e-9){
+        if(dice(rawA,e.rawBg)>dice(rawA,top.e.rawBg)){ second=top; top={e:e,s:s}; }
+        else if(!second || s>second.s) second={e:e,s:s};
+        continue;
+      }
+      if(!top || s>top.s){ second=top; top={e:e,s:s}; }
+      else if(!second || s>second.s){ second={e:e,s:s}; }
+    }
+    return {test: top?top.e.t:null, score: top?top.s:0, second: second?{test:second.e.t,score:second.s}:null};
+  }
+  return {clean:clean, prep:prep, indexCatalog:indexCatalog, best:best};
+})();
+if(typeof module!=='undefined') module.exports=GLM;
+
+
+/* ══════════════════════════════════════════════════════════════════
+   GreenLab import — قارئ ملفات Access (accdb/mdb · Jet4/ACE) + فك ZIP
+   بلا مكتبات خارجية وبلا برنامج Access. يقرأ فقط (لا يكتب أبداً).
+   ══════════════════════════════════════════════════════════════════ */
+var GLA = (function(){
+  'use strict';
+
+  /* ───────────── ZIP ───────────── */
+  function _u16(b,o){ return b[o]|(b[o+1]<<8); }
+  function _u32(b,o){ return (b[o]|(b[o+1]<<8)|(b[o+2]<<16))+(b[o+3]*16777216); }
+
+  function zipEntries(u8){
+    var eocd=-1;
+    for(var i=u8.length-22;i>=Math.max(0,u8.length-65557);i--){
+      if(u8[i]===0x50&&u8[i+1]===0x4b&&u8[i+2]===0x05&&u8[i+3]===0x06){ eocd=i; break; }
+    }
+    if(eocd<0) throw new Error('ملف ZIP تالف: لا يوجد فهرس');
+    var n=_u16(u8,eocd+10), off=_u32(u8,eocd+16), out=[];
+    if(off===0xFFFFFFFF) throw new Error('ملف ZIP64 غير مدعوم — افتح الضغط يدوياً واختر ملف accdb');
+    for(var k=0;k<n;k++){
+      if(_u32(u8,off)!==0x02014b50) throw new Error('ملف ZIP تالف (الفهرس المركزي)');
+      var flags=_u16(u8,off+8), method=_u16(u8,off+10), csize=_u32(u8,off+20), usize=_u32(u8,off+24);
+      var nl=_u16(u8,off+28), xl=_u16(u8,off+30), cl=_u16(u8,off+32), loff=_u32(u8,off+42);
+      var nameBytes=u8.subarray(off+46,off+46+nl), name;
+      try{ name=new TextDecoder((flags&0x800)?'utf-8':'utf-8').decode(nameBytes); }catch(e){ name=String.fromCharCode.apply(null,nameBytes); }
+      out.push({name:name, method:method, csize:csize, usize:usize, loff:loff, enc:!!(flags&1)});
+      off+=46+nl+xl+cl;
+    }
+    return out;
+  }
+
+  /* inflate خام بلغة JS — احتياط إن لم يدعم المتصفح DecompressionStream */
+  function inflateRawJS(src, outSize){
+    var out=new Uint8Array(outSize||Math.max(1024,src.length*4)), op=0, bp=0, bb=0, bc=0;
+    function need(n){ while(bc<n){ if(bp>=src.length) throw new Error('بيانات مضغوطة ناقصة'); bb|=src[bp++]<<bc; bc+=8; } }
+    function bits(n){ need(n); var v=bb&((1<<n)-1); bb>>>=n; bc-=n; return v; }
+    function grow(n){ if(op+n<=out.length) return; var no=new Uint8Array(Math.max(out.length*2,op+n)); no.set(out); out=no; }
+    function build(lens){
+      var max=0,i; for(i=0;i<lens.length;i++) if(lens[i]>max) max=lens[i];
+      var cnt=new Uint16Array(max+1), offs=new Uint16Array(max+2);
+      for(i=0;i<lens.length;i++) cnt[lens[i]]++;
+      cnt[0]=0; for(i=1;i<=max;i++) offs[i+1]=offs[i]+cnt[i];
+      var sym=new Uint16Array(lens.length);
+      for(i=0;i<lens.length;i++) if(lens[i]) sym[offs[lens[i]]++]=i;
+      return {cnt:cnt, sym:sym, max:max};
+    }
+    function decode(h){
+      var code=0, first=0, index=0;
+      for(var len=1;len<=h.max;len++){
+        code|=bits(1); var c=h.cnt[len];
+        if(code-c<first) return h.sym[index+(code-first)];
+        index+=c; first+=c; first<<=1; code<<=1;
+      }
+      throw new Error('رمز Huffman غير صالح');
+    }
+    var LB=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+    var LE=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0];
+    var DB=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+    var DE=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13];
+    var fixedL=null, fixedD=null;
+    var last=0;
+    while(!last){
+      last=bits(1); var type=bits(2);
+      if(type===0){
+        bb=0; bc=0;
+        var len=_u16(src,bp); bp+=4;
+        grow(len); out.set(src.subarray(bp,bp+len),op); op+=len; bp+=len;
+      } else {
+        var lh, dh;
+        if(type===1){
+          if(!fixedL){
+            var l=new Uint8Array(288), j;
+            for(j=0;j<144;j++) l[j]=8; for(;j<256;j++) l[j]=9; for(;j<280;j++) l[j]=7; for(;j<288;j++) l[j]=8;
+            fixedL=build(l); var d=new Uint8Array(30); for(j=0;j<30;j++) d[j]=5; fixedD=build(d);
+          }
+          lh=fixedL; dh=fixedD;
+        } else if(type===2){
+          var hl=bits(5)+257, hd=bits(5)+1, hc=bits(4)+4;
+          var ORD=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15], cl=new Uint8Array(19), q;
+          for(q=0;q<hc;q++) cl[ORD[q]]=bits(3);
+          var ch=build(cl), all=new Uint8Array(hl+hd), p=0;
+          while(p<hl+hd){
+            var s=decode(ch);
+            if(s<16) all[p++]=s;
+            else if(s===16){ var pv=all[p-1], r=3+bits(2); while(r--) all[p++]=pv; }
+            else if(s===17){ var r2=3+bits(3); while(r2--) all[p++]=0; }
+            else { var r3=11+bits(7); while(r3--) all[p++]=0; }
+          }
+          lh=build(all.subarray(0,hl)); dh=build(all.subarray(hl));
+        } else throw new Error('نوع كتلة ضغط غير صالح');
+        for(;;){
+          var sy=decode(lh);
+          if(sy<256){ grow(1); out[op++]=sy; }
+          else if(sy===256) break;
+          else {
+            sy-=257; var ln=LB[sy]+bits(LE[sy]); var ds=decode(dh); var dist=DB[ds]+bits(DE[ds]);
+            grow(ln); for(var t=0;t<ln;t++){ out[op]=out[op-dist]; op++; }
+          }
+        }
+      }
+    }
+    return out.subarray(0,op);
+  }
+
+  async function inflateRaw(comp, usize){
+    if(typeof DecompressionStream==='function'){
+      try{
+        var ds=new DecompressionStream('deflate-raw');
+        var stream=new Blob([comp]).stream().pipeThrough(ds);
+        var reader=stream.getReader(), out=new Uint8Array(usize||comp.length*4), op=0;
+        for(;;){
+          var r=await reader.read(); if(r.done) break;
+          var ch=r.value;
+          if(op+ch.length>out.length){ var no=new Uint8Array(Math.max(out.length*2,op+ch.length)); no.set(out.subarray(0,op)); out=no; }
+          out.set(ch,op); op+=ch.length;
+        }
+        return out.subarray(0,op);
+      }catch(e){ /* نسقط إلى نسخة JS */ }
+    }
+    return inflateRawJS(comp, usize);
+  }
+
+  /* يُرجع {name, bytes} لملف accdb/mdb داخل ZIP */
+  async function extractAccessFromZip(u8){
+    var ents=zipEntries(u8).filter(function(e){ return /\.(accdb|mdb|accde|mde)$/i.test(e.name) && !/(^|\/)__MACOSX\//.test(e.name); });
+    if(!ents.length) throw new Error('لا يوجد ملف accdb أو mdb داخل الملف المضغوط');
+    ents.sort(function(a,b){ var pa=/\.(accdb|mdb)$/i.test(a.name)?0:1, pb=/\.(accdb|mdb)$/i.test(b.name)?0:1; return pa-pb || b.usize-a.usize; });
+    var e=ents[0];
+    if(e.enc) throw new Error('الملف المضغوط محمي بكلمة مرور — افتحه يدوياً أولاً');
+    var lo=e.loff;
+    if(_u32(u8,lo)!==0x04034b50) throw new Error('ملف ZIP تالف (رأس الملف)');
+    var start=lo+30+_u16(u8,lo+26)+_u16(u8,lo+28);
+    var comp=u8.subarray(start,start+e.csize), bytes;
+    if(e.method===0) bytes=comp;
+    else if(e.method===8) bytes=await inflateRaw(comp,e.usize);
+    else throw new Error('طريقة ضغط غير مدعومة ('+e.method+') — استخدم ZIP العادي');
+    if(e.usize && bytes.length!==e.usize) throw new Error('فك الضغط غير مكتمل ('+bytes.length+' من '+e.usize+' بايت)');
+    return {name:e.name, bytes:bytes};
+  }
+
+  /* ───────────── Access (Jet4 / ACE) ───────────── */
+  var PG=4096;
+  function AccessDB(u8){
+    this.b=u8; this.dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength);
+    this.npages=Math.floor(u8.length/PG);
+    var sig=String.fromCharCode.apply(null,u8.subarray(4,19));
+    if(sig!=='Standard ACE DB' && sig!=='Standard Jet DB') throw new Error('هذا ليس ملف قاعدة بيانات Access');
+    var ver=u8[0x14];
+    if(ver===0) throw new Error('صيغة Access 97 القديمة غير مدعومة — افتح الملف ببرنامج Access واحفظه بصيغة أحدث');
+    /* فك ترويسة RC4 لمعرفة التشفير */
+    var key=[0xc7,0xda,0x39,0x6b], S=[], i, j=0, t;
+    for(i=0;i<256;i++) S[i]=i;
+    for(i=0;i<256;i++){ j=(j+S[i]+key[i%4])&255; t=S[i]; S[i]=S[j]; S[j]=t; }
+    var hdr=new Uint8Array(126); i=0; j=0;
+    for(var k=0;k<126;k++){ i=(i+1)&255; j=(j+S[i])&255; t=S[i]; S[i]=S[j]; S[j]=t; hdr[k]=u8[0x18+k]^S[(S[i]+S[j])&255]; }
+    var dbKey=hdr[0x3e-0x18]|hdr[0x3f-0x18]|hdr[0x40-0x18]|hdr[0x41-0x18];
+    if(dbKey) throw new Error('قاعدة البيانات مشفّرة بكلمة مرور — أزل كلمة المرور من Access ثم أعد المحاولة');
+    this._tables=null;
+  }
+  AccessDB.prototype.u16=function(o){ return this.dv.getUint16(o,true); };
+  AccessDB.prototype.u32=function(o){ return this.dv.getUint32(o,true); };
+  AccessDB.prototype.rowBounds=function(pn,rn){
+    var base=pn*PG, nrows=this.u16(base+12);
+    if(rn>=nrows) return null;
+    var off=this.u16(base+14+2*rn), st=off&0x1fff;
+    var en=(rn===0)?PG-1:((this.u16(base+14+2*(rn-1))&0x1fff)-1);
+    return {base:base, st:base+st, en:base+en, flags:off>>>14};
+  };
+  AccessDB.prototype.readTdef=function(pn){
+    var b=this.b;
+    if(b[pn*PG]!==2) throw new Error('صفحة تعريف جدول غير صالحة: '+pn);
+    var parts=[b.subarray(pn*PG,(pn+1)*PG)], total=PG, nxt=this.u32(pn*PG+4), guard=0;
+    while(nxt && guard++<1000){ parts.push(b.subarray(nxt*PG+8,(nxt+1)*PG)); total+=PG-8; nxt=this.u32(nxt*PG+4); }
+    var buf=new Uint8Array(total), o=0;
+    parts.forEach(function(p){ buf.set(p,o); o+=p.length; });
+    var dv=new DataView(buf.buffer);
+    var T={numRows:dv.getUint32(16,true), numVarCols:dv.getUint16(43,true), cols:[]};
+    var ncols=dv.getUint16(45,true), nridx=dv.getUint32(51,true), pos=63+nridx*12, c;
+    T.usage=dv.getUint32(55,true);
+    for(c=0;c<ncols;c++){
+      T.cols.push({type:buf[pos], num:dv.getUint16(pos+5,true), offV:dv.getUint16(pos+7,true), flags:buf[pos+15],
+        offF:dv.getUint16(pos+21,true), len:dv.getUint16(pos+23,true), scale:buf[pos+12]});
+      pos+=25;
+    }
+    for(c=0;c<ncols;c++){
+      var l=dv.getUint16(pos,true); pos+=2;
+      T.cols[c].name=new TextDecoder('utf-16le').decode(buf.subarray(pos,pos+l)); pos+=l;
+    }
+    return T;
+  };
+  AccessDB.prototype.usagePages=function(T){
+    var ptr=T.usage, r=this.rowBounds(ptr>>>8, ptr&0xff);
+    if(!r) return [];
+    var m=this.b.subarray(r.st,r.en+1), pages=[], i, bit;
+    if(m[0]===0){
+      var base=m[1]|(m[2]<<8)|(m[3]<<16)|(m[4]<<24);
+      for(i=5;i<m.length;i++){ var by=m[i]; if(!by) continue; for(bit=0;bit<8;bit++) if(by>>bit&1) pages.push(base+(i-5)*8+bit); }
+    } else {
+      for(var k=0;k*4+5<=m.length;k++){
+        var mp=m[1+k*4]|(m[2+k*4]<<8)|(m[3+k*4]<<16)|(m[4+k*4]<<24);
+        if(!mp || mp>=this.npages) continue;
+        var q=this.b.subarray(mp*PG+4,(mp+1)*PG);
+        for(i=0;i<q.length;i++){ var bq=q[i]; if(!bq) continue; for(bit=0;bit<8;bit++) if(bq>>bit&1) pages.push(k*(PG-4)*8+i*8+bit); }
+      }
+    }
+    return pages;
+  };
+  AccessDB.prototype.text=function(st,len){
+    var b=this.b;
+    if(len>=2 && b[st]===0xff && b[st+1]===0xfe){
+      var codes=[], comp=true, i=st+2, end=st+len;
+      while(i<end){
+        if(b[i]===0){ comp=!comp; i++; }
+        else if(comp){ codes.push(b[i]); i++; }
+        else if(i+1<end){ codes.push(b[i]|(b[i+1]<<8)); i+=2; }
+        else break;
+      }
+      var s=''; for(var k=0;k<codes.length;k+=8192) s+=String.fromCharCode.apply(null,codes.slice(k,k+8192));
+      return s;
+    }
+    return new TextDecoder('utf-16le').decode(this.b.subarray(st,st+(len&~1)));
+  };
+  AccessDB.prototype.lval=function(st,len){
+    if(len<12) return null;
+    var raw=this.u32(st), flag=raw&0xc0000000, ln=raw&0x3fffffff;
+    if(flag&0x80000000) return {st:st+12, len:Math.min(ln,len-12)};
+    var ptr=this.u32(st+4), rn=ptr&0xff, pn=ptr>>>8;
+    if(flag&0x40000000){
+      var r=this.rowBounds(pn,rn); if(!r) return null;
+      return {st:r.st, len:Math.min(ln,r.en-r.st+1)};
+    }
+    var out=new Uint8Array(ln), op=0, guard=0;
+    while(pn && op<ln && guard++<200000){
+      var r2=this.rowBounds(pn,rn); if(!r2) break;
+      var nptr=this.u32(r2.st), chunk=this.b.subarray(r2.st+4,r2.en+1);
+      var take=Math.min(chunk.length,ln-op); out.set(chunk.subarray(0,take),op); op+=take;
+      rn=nptr&0xff; pn=nptr>>>8;
+    }
+    return {bytes:out.subarray(0,op)};
+  };
+  function _dateParts(v){
+    if(!isFinite(v)) return null;
+    var ms=Math.round((v-25569)*86400000);
+    var d=new Date(ms);
+    if(isNaN(d.getTime())) return null;
+    return {y:d.getUTCFullYear(), m:d.getUTCMonth()+1, d:d.getUTCDate(), H:d.getUTCHours(), M:d.getUTCMinutes(), S:d.getUTCSeconds()};
+  }
+  AccessDB.prototype.value=function(c,st,len){
+    var dv=this.dv;
+    switch(c.type){
+      case 2: return this.b[st];
+      case 3: return dv.getInt16(st,true);
+      case 4: return dv.getInt32(st,true);
+      case 5: return Number(dv.getBigInt64(st,true))/10000;
+      case 6: return dv.getFloat32(st,true);
+      case 7: return dv.getFloat64(st,true);
+      case 8: return _dateParts(dv.getFloat64(st,true));
+      case 10: return this.text(st,len);
+      case 12: {
+        var lv=this.lval(st,len); if(!lv) return null;
+        if(lv.bytes){
+          var tmp=new AccessDB.__Buf(lv.bytes); return tmp.text();
+        }
+        return this.text(lv.st,lv.len);
+      }
+      case 15: { var h=''; for(var i=0;i<16;i++) h+=('0'+this.b[st+i].toString(16)).slice(-2); return h; }
+      case 16: {
+        var neg=this.b[st]&0x80, w=[this.u32(st+1),this.u32(st+5),this.u32(st+9),this.u32(st+13)];
+        var val=w[3]*Math.pow(2,96)+w[2]*Math.pow(2,64)+w[1]*4294967296+w[0];
+        val=val/Math.pow(10,c.scale||0); return neg?-val:val;
+      }
+      case 18: return Number(dv.getBigInt64(st,true));
+      case 17: return dv.getInt32(st,true);
+      default: return null;   /* OLE/ثنائي — غير مطلوب */
+    }
+  };
+  /* نص memo متعدد الصفحات بعد تجميعه في مصفوفة مستقلة */
+  AccessDB.__Buf=function(bytes){ this.bytes=bytes; };
+  AccessDB.__Buf.prototype.text=function(){
+    var b=this.bytes;
+    if(b.length>=2 && b[0]===0xff && b[1]===0xfe){
+      var codes=[], comp=true, i=2;
+      while(i<b.length){
+        if(b[i]===0){ comp=!comp; i++; }
+        else if(comp){ codes.push(b[i]); i++; }
+        else if(i+1<b.length){ codes.push(b[i]|(b[i+1]<<8)); i+=2; }
+        else break;
+      }
+      var s=''; for(var k=0;k<codes.length;k+=8192) s+=String.fromCharCode.apply(null,codes.slice(k,k+8192));
+      return s;
+    }
+    return new TextDecoder('utf-16le').decode(b.subarray(0,b.length&~1));
+  };
+  AccessDB.prototype.crack=function(T,st,en,want){
+    var rowcols=this.u16(st), bsz=(rowcols+7)>>3, nmStart=en-bsz+1;
+    var nvar=0, voff=null;
+    if(T.numVarCols>0){
+      nvar=this.u16(en-bsz-1);
+      if(nvar>rowcols+1) throw new Error('bad row');
+      voff=new Array(nvar+1);
+      for(var i=0;i<=nvar;i++) voff[i]=this.u16(en-bsz-3-2*i);
+    }
+    var rec={}, cols=T.cols;
+    for(var k=0;k<cols.length;k++){
+      var c=cols[k], n=c.num;
+      if(want && !want.has(c.name)) continue;
+      var present = n<rowcols && ((this.b[nmStart+(n>>3)]>>(n&7))&1);
+      if(c.type===1){ rec[c.name]=!!present; continue; }
+      if(!present){ rec[c.name]=null; continue; }
+      if(c.flags&1){
+        rec[c.name]=this.value(c,st+2+c.offF,c.len);
+      } else {
+        var vi=c.offV;
+        if(vi>=nvar){ rec[c.name]=null; continue; }
+        var a=voff[vi], z=voff[vi+1];
+        if(z<a || st+z>en+1){ rec[c.name]=null; continue; }
+        rec[c.name]=this.value(c,st+a,z-a);
+      }
+    }
+    return rec;
+  };
+  AccessDB.prototype.tables=function(){
+    if(this._tables) return this._tables;
+    var T=this.readTdef(2), map={}, self=this;
+    this._scan(2,T,function(o){
+      if(o.Type===1 && o.Name && !/^MSys/i.test(o.Name)) map[o.Name.toLowerCase()]={name:o.Name, page:o.Id&0xffffff};
+      else if((o.Type===6||o.Type===4) && o.Name && !/^MSys/i.test(o.Name)) map[o.Name.toLowerCase()]={name:o.Name, linked:true, db:o.Database||''};
+    });
+    this._tables=map;
+    return map;
+  };
+  AccessDB.prototype._scan=function(tpg,T,cb,want){
+    var pages=this.usagePages(T), b=this.b, bad=0, cnt=0;
+    for(var x=0;x<pages.length;x++){
+      var pn=pages[x]; if(pn>=this.npages) continue;
+      var base=pn*PG;
+      if(b[base]!==1 || this.u32(base+4)!==tpg) continue;
+      var nr=this.u16(base+12);
+      for(var rn=0;rn<nr;rn++){
+        var off=this.u16(base+14+2*rn), fl=off>>>14;
+        if(fl>=2) continue;                             /* 0x8000 = هدف تحويل / 0xC000 = محذوف */
+        var st=base+(off&0x1fff);
+        var en=base+((rn===0)?PG-1:((this.u16(base+14+2*(rn-1))&0x1fff)-1));
+        if(fl===1){                                     /* 0x4000 = مؤشر إلى الصف الحقيقي */
+          var ptr=this.u32(st), r=this.rowBounds(ptr>>>8,ptr&0xff);
+          if(!r){ bad++; continue; }
+          st=r.st; en=r.en;
+        }
+        if(en-st<3){ bad++; continue; }
+        var rec;
+        try{ rec=this.crack(T,st,en,want); }catch(e){ bad++; continue; }
+        cnt++; cb(rec);
+      }
+    }
+    return {count:cnt, bad:bad};
+  };
+  /* قراءة جدول كامل كصفوف (أسماء الأعمدة كما هي) */
+  AccessDB.prototype.readTable=function(name, columns){
+    var t=this.tables()[String(name).toLowerCase()];
+    if(!t) return null;
+    if(t.linked) throw new Error('الجدول '+name+' مرتبط بملف خارجي: '+t.db);
+    var T=this.readTdef(t.page), rows=[];
+    var want=null;
+    if(columns && columns.length){
+      /* الأعمدة المطلوبة فقط (توفير الذاكرة) — مطابقة غير حساسة لحالة الأحرف */
+      var lc={}; columns.forEach(function(c){ lc[String(c).toLowerCase()]=1; });
+      want=new Set(T.cols.filter(function(c){ return lc[c.name.toLowerCase()]; }).map(function(c){ return c.name; }));
+    }
+    var st=this._scan(t.page,T,function(r){ rows.push(r); },want);
+    rows._bad=st.bad; rows._declared=T.numRows;
+    return rows;
+  };
+  return {zipEntries:zipEntries, extractAccessFromZip:extractAccessFromZip, inflateRawJS:inflateRawJS, AccessDB:AccessDB};
+})();
+if(typeof module!=='undefined') module.exports=GLA;
+
+
+/* ══════════════════════════════════════════════════════════════════
+   GreenLab import — التحويل من Green Lab System إلى بنية ميدلاب برو
+   دوال خالصة: تستقبل البيانات والحالة الحالية، وتُرجع السجلات الجاهزة
+   دون أي كتابة. الكتابة تتم في طبقة الواجهة بعد موافقة المستخدم.
+   ══════════════════════════════════════════════════════════════════ */
+var GLC = (function(){
+  'use strict';
+  var TABLES = ['reservation_tbl','test_order_tbl','test_tbl','normals_tbl','CBC_tbl','CBC_Normals_tbl','urine_tbl',
+    'stool_tbl','Semen_tbl','culture_tbl','sensitivity_tbl','homa_tbl','grouping_tbl','widal_tbl','PT_tbl','ratio_tbl',
+    'stone_tbl','settings_general_tbl'];
+
+  /* ───────── أدوات عامة ───────── */
+  function s(v){ return (v===null||v===undefined)?'':String(v); }
+  function tr(v){ return s(v).replace(/[\u200e\u200f\u202a-\u202e\ufeff]/g,'').replace(/\s+/g,' ').trim(); }
+  function lines(v){ return s(v).split(/\r?\n/).map(function(x){ return x.replace(/\s+/g,' ').trim(); }).filter(Boolean).join(' / '); }
+  function num(v){ if(v===null||v===undefined||v==='') return null; var n=Number(v); return isFinite(n)?n:null; }
+  function fmtNum(v){ var n=num(v); if(n===null) return ''; return String(Number(n.toFixed(4))); }
+  function pad(n){ return (n<10?'0':'')+n; }
+  function dateStr(d){ return d? d.y+'-'+pad(d.m)+'-'+pad(d.d) : ''; }
+  function validDate(d){ return !!(d && d.y>=2000 && d.y<=2100); }
+  function msOf(d,t){ return Date.UTC(d.y,d.m-1,d.d,t?t.H:0,t?t.M:0,t?t.S:0)+new Date(d.y,d.m-1,d.d).getTimezoneOffset()*60000; }
+  function decYear(d){ return d.y+((Date.UTC(d.y,d.m-1,d.d)-Date.UTC(d.y,0,1))/86400000)/365.25; }
+  function h32(str){ var h=5381,i=String(str).length; while(i) h=((h*33)^String(str).charCodeAt(--i))>>>0; return h>>>0; }
+
+  /* توحيد الاسم العربي للمطابقة فقط (الاسم المحفوظ يبقى كما كُتب) */
+  function normAr(name){
+    return tr(name).replace(/[\u064B-\u0652\u0670\u0640]/g,'')
+      .replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+      .replace(/[^\u0600-\u06FFa-zA-Z0-9 ]/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+  }
+  /* الأسماء المركبة تُعدّ جزءاً واحداً: عبد الحسين · أبو بكر · نور الهدى · جار الله · زين العابدين */
+  var NM_HEAD={'عبد':1,'ابو':1,'ام':1,'امه':1,'بو':1};
+  var NM_SUFFIX={'الله':1,'الدين':1,'الهدي':1,'الزهراء':1,'الرحمن':1,'الرضا':1,'الامير':1,'الزمان':1,'العابدين':1,'الاسلام':1,'النبي':1,'الحق':1};
+  var NM_ALHEAD={'نور':1,'سيف':1,'عز':1,'شمس':1,'بدر':1,'صلاح':1,'علاء':1,'جمال':1,'كمال':1,'زين':1,'محي':1,'حسام':1,'ضياء':1,
+    'شهاب':1,'فخر':1,'تاج':1,'خير':1,'بهاء':1,'نصر':1,'عماد':1,'نجم':1,'جار':1,'حسب':1,'فتح':1,'عطا':1,'ولي':1,'رسول':1,'غلام':1};
+  function nameParts(name){
+    var w=normAr(name).split(' ').filter(Boolean), out=[];
+    for(var i=0;i<w.length;i++){
+      var cur=w[i];
+      while(i+1<w.length && (NM_HEAD[cur] || NM_SUFFIX[w[i+1]] || (NM_ALHEAD[cur] && /^ال/.test(w[i+1])))){ cur=cur+' '+w[i+1]; i++; }
+      out.push(cur);
+    }
+    return out;
+  }
+  function key3(name){ var p=nameParts(name); return p.length>=3 ? p.slice(0,3).join(' ') : p.join(' '); }
+  function normDoctor(n){
+    return normAr(String(n||'').replace(/المحترم[ةه]?|الدكتور[ةه]?|دكتور[ةه]?|^\s*د\s*[\/.]?\s*/g,' '));
+  }
+
+  /* ───────── تصنيف تحاليل التقارير الخاصة ───────── */
+  function kindOf(name){
+    var n=s(name).split(/\r?\n/)[0].trim().toLowerCase();
+    if(n==='cbc') return 'cbc';
+    if(n==='urine') return 'ua';
+    if(n==='stool') return 'stool';
+    if(n==='sfa' || n==='semen' || n==='seminal fluid analysis') return 'semen';
+    if(/culture/.test(n)) return 'culture';
+    if(n==='homa-ir' || n==='homa ir') return 'homa';
+    if(/^blood group/.test(n)) return 'group';
+    if(/widal/.test(n)) return 'widal';
+    if(n==='prothrombin time') return 'pt';
+    if(/albumin\s*\/\s*creatinine\s*ratio/.test(n)) return 'ratio';
+    if(n==='stone') return 'stone';
+    return '';
+  }
+  var CULT_TYPE = function(name, sample){
+    var n=(s(name)+' '+s(sample)).toLowerCase();
+    if(/urethral/.test(n)) return 'urethral';
+    if(/urine/.test(n)) return 'urine';
+    if(/blood/.test(n)) return 'blood';
+    if(/semen|seminal/.test(n)) return 'semen';
+    if(/sputum/.test(n)) return 'sputum';
+    if(/stool/.test(n)) return 'stool';
+    if(/csf/.test(n)) return 'csf';
+    if(/throat/.test(n)) return 'swab_throat';
+    if(/ear/.test(n)) return 'swab_ear';
+    if(/eye/.test(n)) return 'swab_eye';
+    if(/vagin|hvs/.test(n)) return 'hvs';
+    return 'wound';   /* قيح / مسحة جرح / مسحة عامة */
+  };
+
+  /* الأعمدة المطلوبة من الجداول الكبيرة فقط (الباقي يُقرأ كاملاً لأنه صغير) */
+  var CBC_COLS=['ID','age','comment','wbc','net','lym','mon','eos','bas','netp','lymp','monp','eosp','basp','rbc','hgb','hct','mcv',
+    'mch','mchc','rdwcv','rdwsd','plt','mpv','pdw','pct','segmp','bandp','segm','band','hgbp'];
+  var COLS = {
+    reservation_tbl:['ID','pname','ptitle','gender','age','ageunit','Y','M','D','mobile','phone','adress','ref_by','vdate','vtime',
+      'note','total','service_price'],
+    test_order_tbl:['ID','num','tcode','test','result','comment','torder','vdate'],
+    CBC_tbl:CBC_COLS.concat(CBC_COLS.slice(3).map(function(x){ return x+'_s'; })),
+    urine_tbl:['ID','volume','colour','aspect','odor','gravity','reaction','protein','glucose','Ketones','nitrite','bilirubin',
+      'urobilinogen','leucocytes','blood','pus','rbc','epithelial','mucus','bacteria','crystals','casts','others','amorphous','comment'],
+    settings_general_tbl:['lab_name']
+  };
+  /* ═════════════ ① القراءة ═════════════ */
+  async function readAll(db, onStep){
+    var tabs=db.tables(), out={}, missing=[], linked=[];
+    for(var i=0;i<TABLES.length;i++){
+      var name=TABLES[i], t=tabs[name.toLowerCase()];
+      if(onStep) await onStep(name, i, TABLES.length);
+      if(!t){ missing.push(name); out[name]=[]; continue; }
+      if(t.linked){ linked.push(name+' ← '+t.db); out[name]=[]; continue; }
+      out[name]=db.readTable(name, COLS[name])||[];
+    }
+    if(!tabs['reservation_tbl'] || !tabs['test_order_tbl'])
+      throw new Error('هذا الملف ليس قاعدة بيانات Green Lab System (لا يوجد جدول الزيارات أو التحاليل)');
+    if(tabs['reservation_tbl'].linked)
+      throw new Error('هذا ملف واجهة البرنامج فقط — الجداول مرتبطة بملف آخر: '+tabs['reservation_tbl'].db+' — اختر ملف database.accdb');
+    out._missing=missing; out._linked=linked;
+    return out;
+  }
+
+  /* ═════════════ ② التحليل والمعاينة (بلا كتابة) ═════════════ */
+  function analyze(raw, ctx){
+    var R=raw.reservation_tbl, T=raw.test_order_tbl;
+    var lab=(raw.settings_general_tbl[0]||{}).lab_name||'';
+    var labTag=h32(tr(lab)||'greenlab').toString(36).slice(0,5);
+    var visits={}, badVisits=0;
+    R.forEach(function(r){
+      if(r.ID==null) return;
+      if(!validDate(r.vdate) || !tr(r.pname)){ badVisits++; return; }
+      visits[r.ID]=r;
+    });
+    var testsByVisit={}, orphan=0, garbage=0, total=0;
+    T.forEach(function(t){
+      if(!validDate(t.vdate) || !tr(t.test) || /[\u0000-\u0008]/.test(s(t.test))){ garbage++; return; }
+      if(!visits[t.ID]){ orphan++; return; }
+      (testsByVisit[t.ID]||(testsByVisit[t.ID]=[])).push(t); total++;
+    });
+    /* أسماء التحاليل */
+    var names={};
+    Object.keys(testsByVisit).forEach(function(id){
+      testsByVisit[id].forEach(function(t){
+        var k=s(t.test).trim();
+        var e=names[k]||(names[k]={name:k, count:0, tcodes:{}, kind:kindOf(k)});
+        e.count++; e.tcodes[t.tcode]=(e.tcodes[t.tcode]||0)+1;
+      });
+    });
+    var idx=GLM.indexCatalog(ctx.tests);
+    var list=Object.keys(names).map(function(k){
+      var e=names[k], target=null, score=0, how='';
+      var special=null;
+      if(e.kind==='cbc') special=ctx.tests.find(function(x){ return x && (x.id==='h001' || String(x.code||'').trim().toUpperCase()==='CBC'); });
+      else if(e.kind==='ua' || e.kind==='stool' || e.kind==='semen')
+        special=ctx.tests.find(function(x){ return x && x.isSpecialExam===e.kind; });
+      if(special){ target=special; score=1; how='special'; }
+      else {
+        var b=GLM.best(k, idx);
+        if(b.test && b.score>=0.35){ target=b.test; score=b.score; how='match'; }
+        else { score=b.score; how='new'; }
+      }
+      var tc=Object.keys(e.tcodes).sort(function(a,b){ return e.tcodes[b]-e.tcodes[a]; })[0];
+      return {name:k, count:e.count, kind:e.kind, tcode:tc, testId: target?target.id:'__new__',
+              testName: target?target.nameEn:'', score:Math.round(score*100), how:how};
+    }).sort(function(a,b){ return b.count-a.count; });
+
+    /* مرضى: تجميع مبدئي للعرض */
+    var seen=new Set(), existingKeys=new Set();
+    (ctx.requests||[]).forEach(function(r){ if(r && r.glKey) existingKeys.add(r.glKey); });
+    var already=0, toImport=0;
+    Object.keys(visits).forEach(function(id){
+      if(existingKeys.has('GL'+labTag+'-'+id)){ already++; return; }
+      toImport++;
+    });
+    var cnt=function(n){ return (raw[n]||[]).length; };
+    return {
+      labName:lab, labTag:labTag, visits:visits, testsByVisit:testsByVisit, mapping:list,
+      stats:{visits:Object.keys(visits).length, badVisits:badVisits, tests:total, orphanTests:orphan, garbageTests:garbage,
+        alreadyImported:already, toImport:toImport, cbc:cnt('CBC_tbl'), ua:cnt('urine_tbl'), stool:cnt('stool_tbl'),
+        semen:cnt('Semen_tbl'), culture:cnt('culture_tbl'), sensitivity:cnt('sensitivity_tbl'),
+        newTests:list.filter(function(x){ return x.testId==='__new__'; }).length,
+        matchedTests:list.filter(function(x){ return x.testId!=='__new__'; }).length,
+        missingTables:raw._missing||[]}
+    };
+  }
+
+  /* ═════════════ ③ البناء ═════════════ */
+  var UA_MAP={colour:'color',aspect:'appearance',odor:'odor',reaction:'ph',protein:'protein',glucose:'glucose',
+    Ketones:'ketones',blood:'blood',bilirubin:'bilirubin',urobilinogen:'urobilinogen',nitrite:'nitrite',
+    leucocytes:'leukocyte',pus:'wbc_ua',rbc:'rbc_ua',epithelial:'epithelial',casts:'casts',amorphous:'am_urate',
+    crystals:'crystals',bacteria:'bacteria_ua',mucus:'mucus'};
+  var STOOL_MAP={color:'s_color',consistency:'s_consistency',ph:'s_ph',pus:'s_wbc',rbc:'s_rbc',fat:'s_fat',
+    starch:'s_starch',undigestive:'s_undig_food'};
+  var CBC_KEYS=[ // [مفتاح ميدلاب, عمود Green Lab, عمود المرجع, الوحدة]
+    ['WBC','wbc','WBC','10^9/L'],['NEU#','net','Net','10^9/L'],['LYM#','lym','Lym','10^9/L'],['MON#','mon','Mon','10^9/L'],
+    ['EOS#','eos','Eos','10^9/L'],['BAS#','bas','Bas','10^9/L'],['NEU%','netp','Netp','%'],['LYM%','lymp','Lymp','%'],
+    ['MON%','monp','Monp','%'],['EOS%','eosp','Eosp','%'],['BAS%','basp','Basp','%'],
+    ['RBC','rbc','RBC','10^12/L'],['HGB','hgb','HGB','g/dL'],['HCT','hct','HCT','%'],['MCV','mcv','MCV','fL'],
+    ['MCH','mch','MCH','pg'],['MCHC','mchc','MCHC','g/dL'],['RDW-CV','rdwcv','RDWcv','%'],['RDW-SD','rdwsd','RDWsd','fL'],
+    ['PLT','plt','PLT','10^9/L'],['MPV','mpv','MPV','fL'],['PDW','pdw','PDW',''],['PCT','pct','PCT','%'],
+    /* تُحفظ للأرشيف ولا تغيّر شكل التقرير */
+    ['SEGM%','segmp','segmp','%'],['BAND%','bandp','bandp','%'],['SEGM#','segm','segm','10^9/L'],['BAND#','band','band','10^9/L'],
+    ['HGB%','hgbp','','%']
+  ];
+
+  /* قيمة «غائب» في البرنامج القديم ↔ صيغة الغياب الطبيعية في ميدلاب (نفس المعنى، تجنّباً لتلوينها كغير طبيعية) */
+  var ABSENT_RE=/^(absent|nil|none|none seen|not seen|not detected|negative|-ve|no)$/i;
+  function eqNormal(val, normal){
+    if(val && normal && ABSENT_RE.test(String(val).trim()) && ABSENT_RE.test(String(normal).trim())) return normal;
+    return val;
+  }
+  function ageOf(r){
+    var Y=parseInt(r.Y,10)||0, M=parseInt(r.M,10)||0, D=parseInt(r.D,10)||0;
+    if(!Y && !M && !D){
+      var a=parseInt(r.age,10)||0, u=s(r.ageunit).toLowerCase();
+      if(/^mon/.test(u)) M=a; else if(/^day/.test(u)) D=a; else Y=a;
+    }
+    var val=Y+M/12+D/365, parts=[];
+    if(Y>0) parts.push(Y+' سنة'); if(M>0) parts.push(M+' شهر'); if(D>0) parts.push(D+' يوم');
+    return {Y:Y, M:M, D:D, val:val, display:parts.join(' و '), known: val>0};
+  }
+  function ptBirth(p){
+    try{
+      if(p.dob && /^\d{4}-\d{2}-\d{2}/.test(p.dob)){ var q=p.dob.split('-'); return decYear({y:+q[0],m:+q[1],d:+q[2]}); }
+      if(p.birthYear && +p.birthYear>1900) return +p.birthYear+0.5;
+      var av=parseFloat(p.ageVal)||0;
+      if(av>0 && p.registered && /^\d{4}-\d{2}-\d{2}/.test(p.registered)){
+        var z=p.registered.split('-'); return decYear({y:+z[0],m:+z[1],d:+z[2]})-av;
+      }
+    }catch(e){}
+    return null;
+  }
+
+  async function build(raw, plan, ctx, opts, tick){
+    opts=opts||{}; tick=tick||function(){ return null; };
+    var now=ctx.now||Date.now(), dev=ctx.devNo, lanId=ctx.lanDeviceId||('d'+dev);
+    var catalog=ctx.tests.slice(), catIndex={};
+    catalog.forEach(function(t,i){ if(t&&t.id) catIndex[t.id]=i; });
+    var mapByName={}; plan.mapping.forEach(function(m){ mapByName[m.name]=m; });
+    if(opts.overrides) Object.keys(opts.overrides).forEach(function(k){ if(mapByName[k]) mapByName[k].testId=opts.overrides[k]; });
+    var rep={patientsNew:0, patientsMatched:0, visitsSkipped:0, requests:0, results:0, emptyResults:0, notes:0,
+      cbc:0, cbcEmpty:0, ua:0, stool:0, semen:0, semenEmpty:0, culture:0, abx:0, doctorsNew:0, testsNew:0, abxNew:0,
+      invoices:0, dupResults:0, warnings:[]};
+
+    /* ── معرّفات بلا تداخل ── */
+    var ptIds=new Set((ctx.patients||[]).map(function(p){ return p&&String(p.id); }));
+    var rqIds=new Set((ctx.requests||[]).map(function(r){ return r&&String(r.id); }));
+    var invIds=new Set((ctx.invoices||[]).map(function(x){ return x&&String(x.id); }));
+    var ptC=ctx.counters.pt||0, rqC=Math.max(1000,ctx.counters.rq||0), invC=Math.max(ctx.counters.inv||0,1000+(ctx.invoices||[]).length);
+    function newPtId(){
+      var base=dev*1000000, cand;
+      do{ ptC++; if(ptC>499999) throw new Error('نفد مدى أرقام الملفات لهذه الحاسبة'); cand=String(base+ptC); } while(ptIds.has(cand));
+      ptIds.add(cand); return cand;
+    }
+    function newRqId(){ var cand; do{ rqC++; cand='RQ'+dev+'-'+rqC; } while(rqIds.has(cand)); rqIds.add(cand); return cand; }
+    function newInvId(){ var cand; do{ invC++; cand='INV-'+invC; } while(invIds.has(cand)); invIds.add(cand); return cand; }
+
+    /* ── التحاليل الجديدة للدليل ── */
+    var TT={}; (raw.test_tbl||[]).forEach(function(t){ TT[t.tcode]=t; });
+    var NR={}; (raw.normals_tbl||[]).forEach(function(n){ (NR[n.tcode]||(NR[n.tcode]=[])).push(n); });
+    var CAT={BIOCHEMISTRY:'Biochemistry',IMMUNOLOGY:'Immunology',HAEMATOLOGY:'Hematology',HEMATOLOGY:'Hematology',
+      MICROBIOLOGY:'Microbiology',HORMONES:'Hormones'};
+    var newTests=[], newTestByName={};
+    function unitOf(u){ return {years:'year',year:'year',months:'month',month:'month',days:'day',day:'day'}[s(u).toLowerCase()]||'year'; }
+    function ensureNewTest(m){
+      if(newTestByName[m.name]) return newTestByName[m.name];
+      var src=TT[m.tcode]||{}, id='custom-gl-'+labTagSafe()+'-'+(m.tcode!=null?m.tcode:h32(m.name).toString(36));
+      var existing=catalog.find(function(x){ return x && x.id===id; });
+      if(existing){ newTestByName[m.name]=existing; return existing; }
+      var lm=num(src.lmale), hm=num(src.hmale), lf=num(src.lfemale), hf=num(src.hfemale);
+      if(!lm && !hm){ lm=null; hm=null; }
+      if(!lf && !hf){ lf=null; hf=null; }
+      var rm=s(src.rmale).replace(/\r\n/g,'\n').trim(), rf=s(src.rfemale).replace(/\r\n/g,'\n').trim();
+      var ageRanges=[], refType='simple';
+      if(/age/i.test(s(src.normal_type)) && NR[m.tcode]){
+        NR[m.tcode].forEach(function(n){
+          ageRanges.push({from:num(n.from)||0, fromUnit:unitOf(n.Ageunit), to:num(n.to)!=null?num(n.to):999, toUnit:unitOf(n.Ageunit),
+            sex:/^m/i.test(s(n.Gender))?'male':(/^f/i.test(s(n.Gender))?'female':'both'),
+            min:num(n.Low), max:num(n.High), ref:tr(n.Reference)});
+        });
+        if(ageRanges.length) refType='gender-age';
+      }
+      if(refType==='simple' && ((lm!==null||hm!==null||lf!==null||hf!==null) && (lm!==lf||hm!==hf||rm!==rf))) refType='gender';
+      var cat=CAT[s(src.main).toUpperCase()]||'Special';
+      var t={id:id, code:tr(src.barcode||m.name).slice(0,30)||'N/A', nameEn:s(m.name).split(/\r?\n/)[0].trim(), nameShort:'',
+        cat:cat, subCat:tr(src.sub)||'Other', unit:tr(src.unit), minVal:lm, maxVal:hm,
+        minF:(refType==='gender'?lf:lm), maxF:(refType==='gender'?hf:hm), ageRanges:ageRanges, refType:refType,
+        ref:(rm===rf||!rf)?rm:('M: '+rm+' | F: '+rf), refM:rm, refF:rf, time:'', price:num(src.patient_price)||0,
+        notes:'مستورد من Green Lab', glImported:true};
+      if(ageRanges.length){ t.minVal=ageRanges[0].min; t.maxVal=ageRanges[0].max; t.minF=ageRanges[0].min; t.maxF=ageRanges[0].max; }
+      newTests.push(t); catalog.push(t); catIndex[id]=catalog.length-1; newTestByName[m.name]=t; rep.testsNew++;
+      return t;
+    }
+    function labTagSafe(){ return plan.labTag; }
+    function testFor(name){
+      var m=mapByName[s(name).trim()];
+      if(!m) return null;
+      if(m.testId==='__new__') return ensureNewTest(m);
+      var t=catalog[catIndex[m.testId]];
+      return t||ensureNewTest(m);
+    }
+
+    /* ── الأطباء ── */
+    var drIndex={}, newDoctors=[];
+    (ctx.doctors||[]).forEach(function(d){ if(d&&d.name){ var k=normDoctor(d.name); if(k&&!drIndex[k]) drIndex[k]=d; } });
+    function doctorFor(name){
+      var n=tr(name);
+      if(!n || /^(himself|herself|self|نفسه|نفسها|-+|\.+)$/i.test(n)) return {id:'',name:''};
+      var k=normDoctor(n); if(!k) return {id:'',name:''};
+      if(!drIndex[k]){
+        var d={id:'dr-gl-'+h32(k).toString(36), name:n, spec:'', phone:'', hosp:'', comm:0, email:''};
+        drIndex[k]=d; newDoctors.push(d); rep.doctorsNew++;
+      }
+      return {id:drIndex[k].id, name:drIndex[k].name};
+    }
+
+    /* ── المضادات الحيوية ── */
+    var abxList=(ctx.allAbx||[]).slice(), abxByCode={}, newAbx=[];
+    abxList.forEach(function(a){ abxByCode[a.code]=a; });
+    function abxLetters(x){ return s(x).toLowerCase().replace(/\(.*?\)/g,'').replace(/[^a-z]/g,''); }
+    /* أسماء تجارية/إملائية شائعة ← الاسم العلمي (بالحروف فقط) */
+    var ABX_SYN={amoxycillin:'amoxicillin',cefalexin:'cephalexin',cefotaximesodium:'cefotaxime',naldocicacid:'nalidixicacid',
+      negram:'nalidixicacid',gentsmycin:'gentamicin',gramycin:'gentamicin',gramycingaram:'gentamicin',garamycin:'gentamicin',
+      augmentin:'amoxicillinclavulanate',penicilin:'penicillin',cefatazidime:'ceftazidime',nitrofurontoin:'nitrofurantoin',
+      imipenem:'imipenemcilastatin',amikacinami:'amikacin',cotrimoxazole:'trimethoprimsulfamethoxazole'};
+    function abxFor(short, name){
+      var nm=abxLetters(name); nm=ABX_SYN[nm]||nm;
+      var best=null, bs=0;
+      if(nm){
+        abxList.forEach(function(a){
+          var an=abxLetters(a.name); if(!an) return;
+          var sc=diceStr(nm,an);
+          if(sc>bs+1e-9){ bs=sc; best=a; }
+        });
+      }
+      if(best && bs>=0.82) return best.code;
+      /* لا نعتمد على الاختصار القديم (غير ثابت في البرنامج القديم) — الكود من الاسم */
+      var code='GL-'+(abxLetters(name)||tr(short).toLowerCase()).toUpperCase().slice(0,40);
+      if(!abxByCode[code]){
+        var a={code:code, name:tr(name)||code, cls:'MISC', r:''};
+        abxByCode[code]=a; abxList.push(a); newAbx.push(a); rep.abxNew++;
+      }
+      return code;
+    }
+    function diceStr(a,b){
+      if(a===b) return 1; if(a.length<2||b.length<2) return 0;
+      var m={},n=0,i,inter=0;
+      for(i=0;i<a.length-1;i++){ var g=a.substr(i,2); m[g]=(m[g]||0)+1; n++; }
+      var n2=b.length-1;
+      for(i=0;i<b.length-1;i++){ var g2=b.substr(i,2); if(m[g2]){ m[g2]--; inter++; } }
+      return 2*inter/(n+n2);
+    }
+
+    /* ── فهارس التقارير الخاصة ── */
+    function byID(list){ var o={}; (list||[]).forEach(function(r){ if(r&&r.ID!=null) (o[r.ID]||(o[r.ID]=[])).push(r); }); return o; }
+    var CBC=byID(raw.CBC_tbl), UA=byID(raw.urine_tbl), ST=byID(raw.stool_tbl), SE=byID(raw.Semen_tbl),
+        CU=byID(raw.culture_tbl), SEN=byID(raw.sensitivity_tbl), HOMA=byID(raw.homa_tbl), GRP=byID(raw.grouping_tbl),
+        WID=byID(raw.widal_tbl), PTT=byID(raw.PT_tbl), RAT=byID(raw.ratio_tbl), STN=byID(raw.stone_tbl);
+    var CBCN={}; (raw.CBC_Normals_tbl||[]).forEach(function(n){ CBCN[tr(n.Age).toLowerCase()]=n; });
+    var cbcTestId=(catalog.find(function(x){ return x && (x.id==='h001'||String(x.code||'').trim().toUpperCase()==='CBC'); })||{}).id;
+    var usedCult=new Set(), importedVisit={}, kindVisits={cbc:{},ua:{},stool:{},semen:{}};
+
+    /* ── تجميع المرضى (الاسم الثلاثي + الجنس + العمر) ── */
+    var groups={};   // key3|gender -> [{pt|null, birth, visits:[]}]
+    (ctx.patients||[]).forEach(function(p){
+      if(!p || !p.name) return;
+      var g=(p.gender==='female')?'female':'male';
+      var k=key3(p.name)+'|'+g;
+      (groups[k]||(groups[k]=[])).push({pt:p, birth:ptBirth(p), visits:[], existing:true});
+    });
+    var existingKeys=new Set(); (ctx.requests||[]).forEach(function(r){ if(r&&r.glKey) existingKeys.add(r.glKey); });
+    var vids=Object.keys(plan.visits).map(Number).sort(function(a,b){
+      var A=plan.visits[a], B=plan.visits[b];
+      return (msOf(A.vdate,A.vtime)-msOf(B.vdate,B.vtime)) || (a-b);
+    });
+    var TOL=1.5, done=0;
+    for(var vi=0;vi<vids.length;vi++){
+      var id=vids[vi], v=plan.visits[id];
+      if(existingKeys.has('GL'+plan.labTag+'-'+id)){ rep.visitsSkipped++; continue; }
+      var g=/^f/i.test(s(v.gender))?'female':'male', k=key3(v.pname)+'|'+g;
+      if(!key3(v.pname)){ k='noname:'+id; rep.noName=(rep.noName||0)+1; }   /* اسم رموز فقط: ملف مستقل بلا دمج */
+      var age=ageOf(v), birth=age.known? decYear(v.vdate)-age.val : null;
+      var cands=groups[k]||(groups[k]=[]), pick=null;
+      if(birth!==null){
+        var bestD=1e9;
+        cands.forEach(function(c){ if(c.birth!==null){ var dd=Math.abs(c.birth-birth); if(dd<=TOL && dd<bestD){ bestD=dd; pick=c; } } });
+        if(!pick && cands.length===1 && cands[0].birth===null) pick=cands[0];
+      } else if(cands.length===1){ pick=cands[0]; }
+      if(!pick){ pick={pt:null, birth:birth, visits:[], existing:false}; cands.push(pick); }
+      if(pick.birth===null && birth!==null) pick.birth=birth;
+      pick.visits.push(id);
+      if(++done%4000===0) await tick('patients', vi, vids.length);
+    }
+
+    /* ── بناء السجلات ── */
+    var outPatients=[], updPatients=[], outReqs=[], outInv=[], outUA=[], outStool=[], outSemen=[], outCult=[];
+    var semenKeys=['s_abstinence','s_collection','s_volume','s_appearance','s_liquefaction','s_viscosity','s_ph'];
+    var allGroups=[]; Object.keys(groups).forEach(function(k){ groups[k].forEach(function(c){ if(c.visits.length) allGroups.push(c); }); });
+    var built=0;
+    for(var gi=0;gi<allGroups.length;gi++){
+      var G=allGroups[gi], V=G.visits.map(function(x){ return plan.visits[x]; });
+      var first=V[0], last=V[V.length-1], pt;
+      var lastAge=ageOf(last), lastDr=doctorFor(last.ref_by);
+      if(G.existing){
+        pt=G.pt; rep.patientsMatched++;
+      } else {
+        var phone=tr(last.mobile)||tr(last.phone);
+        for(var q=V.length-1;!phone&&q>=0;q--) phone=tr(V[q].mobile)||tr(V[q].phone);
+        var addr=''; for(var q2=V.length-1;!addr&&q2>=0;q2--) addr=tr(V[q2].adress);
+        var title=''; for(var q3=V.length-1;!title&&q3>=0;q3--) title=tr(V[q3].ptitle);
+        var pid=newPtId();
+        pt={id:pid, barcode:pid, name:tr(last.pname), nameEn:'', title:title,
+          gender:/^f/i.test(s(last.gender))?'female':'male',
+          dob:'', birthYear:'', ageVal:Number(lastAge.val.toFixed(4)), ageY:lastAge.Y, ageM:lastAge.M, ageD:lastAge.D,
+          ageDisplay:lastAge.display, ageUnit:'year', sideLab:false,
+          phone:phone.replace(/[^\d+]/g,''), phoneCC:'964', addr:addr,
+          doctorId:lastDr.id, doctorName:lastDr.name, insurance:'', chronic:[], notes:'',
+          registered:dateStr(first.vdate), regTime:msOf(first.vdate,first.vtime), visits:0, lastVisit:'', status:'active',
+          _dev:lanId, _org:now, _updatedAt:now, glImport:plan.labTag};
+        outPatients.push(pt); rep.patientsNew++;
+      }
+      var ptAgeDisp=pt.ageDisplay||'';
+      for(var vj=0;vj<V.length;vj++){
+        var visit=V[vj], vid=visit.ID, vdate=dateStr(visit.vdate), vms=msOf(visit.vdate,visit.vtime);
+        importedVisit[vid]=1;
+        var dr=doctorFor(visit.ref_by), rows=(plan.testsByVisit[vid]||[]).slice().sort(function(a,b){ return (a.torder||0)-(b.torder||0) || (a.num||0)-(b.num||0); });
+        var req={id:newRqId(), orderNo:'', patientId:pt.id, patientName:pt.name, tests:[], testNames:[], sample:'',
+          priority:'Routine', note:lines(visit.note), doctorId:dr.id, doctorName:dr.name, date:vdate,
+          time:ctx.fmtTime?ctx.fmtTime(vms):'', status:'pending', results:{}, tech:'', resultDate:vdate,
+          resultNotes:'', resultNotesPer:{}, sideLab:false, printed:true, wsPrinted:true,
+          _dev:lanId, _org:now, _updatedAt:now, glKey:'GL'+plan.labTag+'-'+vid};
+        var used={}, spKinds=[], tlist=[], anyMissing=false;
+        var addNote=function(tid,txt){ if(!txt) return; req.resultNotesPer[tid]=req.resultNotesPer[tid]?(req.resultNotesPer[tid]+' | '+txt):txt; rep.notes++; };
+        for(var ri=0;ri<rows.length;ri++){
+          var row=rows[ri], t=testFor(row.test);
+          if(!t){ rep.warnings.push('تحليل بلا مطابقة: '+row.test); continue; }
+          var kind=kindOf(row.test), val=tr(row.result), isSR=/^see\s*report$/i.test(val);
+          if(kindVisits[kind]) kindVisits[kind][vid]=1;
+          if(!used[t.id]){ used[t.id]=true; tlist.push({t:t, order:catIndex[t.id]}); }
+          var gotValue=false;
+          if(kind==='cbc' && t.id===cbcTestId){
+            if(!req.cbcData){
+              var c=(CBC[vid]||[])[0];
+              if(c && [c.hgb,c.wbc,c.plt,c.rbc].some(function(x){ return num(x); })){
+                var nr=CBCN[tr(c.age).toLowerCase()]||null, pr={};
+                CBC_KEYS.forEach(function(kk){
+                  var vv=num(c[kk[1]]); if(vv===null) return;
+                  var ref='';
+                  if(nr && kk[2]){
+                    var L=num(nr[kk[2]+'_L']), H=num(nr[kk[2]+'_H']);
+                    ref=(L!==null&&H!==null)?(fmtNum(L)+'-'+fmtNum(H)):tr(nr[kk[2]+'_R']);
+                  }
+                  var fl=tr(c[kk[1]+'_s']).toUpperCase();
+                  pr[kk[0]]={value:fmtNum(vv), unit:kk[3], refRange:ref, flag:(fl==='H'||fl==='L')?fl:''};
+                });
+                req.cbcData=pr; req.cbcComments=tr(c.comment)?[lines(c.comment)]:[];
+                req.results['CBC']='done'; req.cbcPrinted=true; rep.cbc++; gotValue=true;
+                if(tr(c.age)) req.cbcAgeGroup=tr(c.age);
+              } else if(c){ rep.cbcEmpty++; }
+            } else gotValue=true;
+          }
+          else if(kind==='ua' && t.isSpecialExam==='ua'){
+            if(spKinds.indexOf('ua')<0){
+              var u=(UA[vid]||[])[0];
+              if(u){
+                var ur={id:'ua-gl'+dev+'-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name,
+                  patientAge:ptAgeDisp, patientGender:pt.gender, doctorId:dr.id, doctorName:dr.name, date:vdate,
+                  createdAt:vms, _updatedAt:now, _dev:lanId, _org:now, glImport:plan.labTag};
+                Object.keys(UA_MAP).forEach(function(col){ var x=lines(u[col]); if(x) ur[UA_MAP[col]]=eqNormal(x,(ctx.uaNormals||{})[UA_MAP[col]]); });
+                if(ur.sg===undefined && u.gravity!=null){ var gv=tr(u.gravity); if(/^\d{4}$/.test(gv)) ur.sg=(gv/1000).toFixed(3); else if(gv) ur.sg=gv; }
+                var uNote=[]; if(lines(u.others) && !/^absent$/i.test(lines(u.others))) uNote.push('Others: '+lines(u.others));
+                if(lines(u.comment)) uNote.push(lines(u.comment));
+                if(uNote.length) ur.ua_note=uNote.join('\n');
+                if(tr(u.volume)) ur.gl_sample=tr(u.volume);
+                outUA.push(ur); spKinds.push('ua'); rep.ua++; gotValue=true;
+              }
+            } else gotValue=true;
+          }
+          else if(kind==='stool' && t.isSpecialExam==='stool'){
+            if(spKinds.indexOf('stool')<0){
+              var so=(ST[vid]||[])[0];
+              if(so){
+                var sr={id:'stl-gl'+dev+'-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name,
+                  patientAge:ptAgeDisp, patientGender:pt.gender, doctorId:dr.id, doctorName:dr.name, date:vdate,
+                  createdAt:vms, _updatedAt:now, _dev:lanId, _org:now, glImport:plan.labTag};
+                Object.keys(STOOL_MAP).forEach(function(col){ var x=lines(so[col]); if(x) sr[STOOL_MAP[col]]=eqNormal(x,(ctx.stoolNormals||{})[STOOL_MAP[col]]); });
+                var para=[];
+                [['cyst','Cyst'],['troph','Trophozoite'],['ova','Ova'],['larva','Larva'],['worms','Worm']].forEach(function(p){
+                  s(so[p[0]]).split(/\r?\n/).map(tr).filter(function(x){ return x && !/^(absent|not detected|none|nil|-)$/i.test(x); })
+                    .forEach(function(x){ para.push(x+' — '+p[1]); });
+                });
+                sr.s_para_multi=para.join('||');
+                var sn=[];
+                [['mucus','Mucus'],['blood','Blood'],['odor','Odor'],['food_part','Food particles'],['muscles','Muscle fibres'],
+                 ['vegetables','Vegetable cells'],['others','Others']].forEach(function(p){
+                  var x=lines(so[p[0]]); if(x && !/^absent$/i.test(x) && !(p[0]==='odor' && /^offensive$/i.test(x))) sn.push(p[1]+': '+x);
+                });
+                if(lines(so.comment)) sn.push(lines(so.comment));
+                if(sn.length) sr.s_note=sn.join('\n');
+                if(tr(so.odor)) sr.gl_odor=tr(so.odor);
+                outStool.push(sr); spKinds.push('stool'); rep.stool++; gotValue=true;
+              }
+            } else gotValue=true;
+          }
+          else if(kind==='semen' && t.isSpecialExam==='semen'){
+            if(spKinds.indexOf('semen')<0){
+              var se=(SE[vid]||[])[0];
+              if(se){
+                var conc=num(se.conc), tot=num(se.total), vol=num(se.volume), cm=lines(se.comment);
+                var A=num(se.RP), B=num(se.NP), C=num(se['RP+NP']), D=num(se.IM);
+                var empty=!conc && !tot && !vol && !cm && !A && !B && !C;
+                if(empty){ rep.semenEmpty++; }
+                else {
+                  var mr={id:'semen-gl'+dev+'-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name,
+                    patientAge:ptAgeDisp, patientGender:pt.gender, patientPhone:pt.phone||'', doctorId:dr.id, doctorName:dr.name,
+                    date:vdate, createdAt:vms, _updatedAt:now, _dev:lanId, _org:now, glImport:plan.labTag};
+                  if(tr(se.method)) mr.s_collection=tr(se.method);
+                  if(tr(se.color)) mr.s_appearance=tr(se.color);
+                  if(tr(se.viscosity)) mr.s_viscosity=tr(se.viscosity);
+                  if(vol!==null) mr.s_volume=fmtNum(vol);
+                  if(num(se.ph)!==null) mr.s_ph=fmtNum(se.ph);
+                  if(num(se.liq_time)!==null) mr.s_liquefaction=fmtNum(se.liq_time)+' min';
+                  if(num(se.Abs)!==null) mr.s_abstinence=fmtNum(se.Abs)+(num(se.Abs)===1?' day':' days');
+                  if(conc!==null) mr.s_conc=fmtNum(conc);
+                  if(tot!==null) mr.s_total_count=fmtNum(tot);
+                  mr.s_azoospermia=(conc===0 && (/azoo/i.test(cm) || (!tot && !A && !B && !C)))?'Yes':'No';
+                  /* الحركة: RP=A · NP=B · (RP+NP)=C · IM=D  (مجموعها 100 في البيانات الأصلية) */
+                  if(A!==null) mr.s_grade_a=fmtNum(A);
+                  if(B!==null) mr.s_grade_b=fmtNum(B);
+                  if(C!==null){ mr.s_grade_c=fmtNum(C); mr.s_np=fmtNum(C); }
+                  if(D!==null){ mr.s_grade_d=fmtNum(D); mr.s_im=fmtNum(D); }
+                  if(A!==null||B!==null){ mr.s_pr=fmtNum((A||0)+(B||0)); }
+                  if(A!==null||B!==null||C!==null){ mr.s_total_motile=fmtNum((A||0)+(B||0)+(C||0)); }
+                  var vit=num(se.Vitality); if(vit) mr.s_vitality=fmtNum(vit);
+                  if(num(se.total_nf)!==null && (num(se.total_nf)||num(se.total_af))) mr.s_normal_forms=fmtNum(se.total_nf);
+                  if(num(se.head)) mr.s_head_defect=fmtNum(se.head);
+                  if(num(se.mid)) mr.s_mid_defect=fmtNum(se.mid);
+                  if(num(se.tail)) mr.s_tail_defect=fmtNum(se.tail);
+                  if(tr(se.pus)) mr.s_wbc=lines(se.pus);
+                  if(tr(se.RBCs)) mr.s_rbc=lines(se.RBCs);
+                  if(tr(se.Agglutination)) mr.s_agglutination=lines(se.Agglutination);
+                  if(conc===0 && /azoo/i.test(cm)) mr.s_diagnosis='Azoospermia';
+                  var nn=[];
+                  if(tr(se.spermatocyte)) nn.push('Spermatocytes: '+lines(se.spermatocyte));
+                  if(tr(se.epithelial) && !/^absent$/i.test(tr(se.epithelial))) nn.push('Epithelial cells: '+lines(se.epithelial));
+                  if(num(se.total_af)) nn.push('Abnormal forms: '+fmtNum(se.total_af)+' %');
+                  if(cm) nn.push(cm);
+                  if(nn.length) mr.s_note=nn.join('\n');
+                  if(se.time_collection && se.time_collection.H!=null) mr.gl_collection_time=pad(se.time_collection.H)+':'+pad(se.time_collection.M);
+                  if(tr(se.conc_unit)) mr.gl_conc_unit=tr(se.conc_unit);
+                  outSemen.push(mr); spKinds.push('semen'); rep.semen++; gotValue=true;
+                }
+              }
+            } else gotValue=true;
+          }
+          else if(kind==='culture'){
+            var cu=(CU[vid]||[]).filter(function(x){ return String(x.tcode)===String(row.tcode); })[0] || ((CU[vid]||[]).length===1?CU[vid][0]:null);
+            if(cu && !usedCult.has(cu)){
+              usedCult.add(cu);
+              var org=tr(cu.organism), note=[];
+              var ng=/no\s+(bacterial\s+)?growth|no growth of bacteria/i;
+              if(!org && (cu.no===true || ng.test(s(cu.comment)))) org='No Growth';
+              else if(ng.test(org)){ if(!/^no growth$/i.test(org)) note.push(org); org='No Growth'; }
+              if(tr(cu.condition)) note.push('Condition: '+tr(cu.condition));
+              if(lines(cu.comment) && !(org==='No Growth' && ng.test(lines(cu.comment)))) note.push(lines(cu.comment));
+              if(lines(cu.other)) note.push(lines(cu.other));
+              var abx=(SEN[vid]||[]).filter(function(x){ return String(x.tcode)===String(cu.tcode); }).sort(function(a,b){ return (a.num||0)-(b.num||0); })
+                .map(function(x){
+                  var st=s(x.stype).toLowerCase();
+                  return {code:abxFor(x.short,x.antibiotic), result:/^sens/.test(st)?'S':(/^res/.test(st)?'R':(/^mod|^inter/.test(st)?'I':'')), mic:tr(x.zone)};
+                });
+              var cr={id:'cult-gl'+dev+'-'+plan.labTag+'-'+vid+'-'+s(cu.tcode), reqId:req.id, patientId:pt.id, patientName:pt.name,
+                patientTitle:pt.title||'', patientPhone:pt.phone||'', cultureType:CULT_TYPE(cu.test,cu.sample),
+                specimenDetail:tr(cu.sample), date:vdate, doctorId:dr.id, doctorName:dr.name, ageOverride:'', ageUnit:'سنة',
+                orgGroup:(ctx.cultGroupOf?ctx.cultGroupOf(org):''), organism:org, gramStain:'', wbc:tr(cu.wbc), sqEpi:'',
+                epithelial:'', pusCells:'', hideDirect:false, colony:tr(cu.count), note:note.join('\n'),
+                antibiotics:(org==='No Growth')?[]:abx, status:org?'done':'pending', createdAt:vms, _updatedAt:now,
+                _dev:lanId, _org:now, glImport:plan.labTag};
+              outCult.push(cr); rep.culture++; rep.abx+=cr.antibiotics.length;
+              if(org){ req.results[t.id]=org; gotValue=true; }
+            }
+          }
+          else if(kind==='homa' && isSR){
+            var hm=(HOMA[vid]||[])[0];
+            if(hm && num(hm.homa)!==null){
+              req.results[t.id]=fmtNum(hm.homa); gotValue=true;
+              var hn=[]; if(num(hm.fbg)!==null) hn.push('FBG: '+fmtNum(hm.fbg)); if(num(hm.insulin)!==null) hn.push('Insulin: '+fmtNum(hm.insulin));
+              if(lines(hm.Comment)) hn.push(lines(hm.Comment));
+              addNote(t.id,hn.join(' · '));
+            }
+          }
+          else if(kind==='group' && isSR){
+            var gr=(GRP[vid]||[])[0];
+            if(gr && tr(gr.group)){
+              var rh=s(gr.rh).toLowerCase(), grp=tr(gr.group).replace(/[+\-]$/,'');
+              req.results[t.id]=/^pos/.test(rh)?grp+' ( + )':(/^neg/.test(rh)?grp+' ( - )':tr(gr.group));
+              gotValue=true; if(lines(gr.comment)) addNote(t.id,lines(gr.comment));
+            }
+          }
+          else if(kind==='widal' && isSR){
+            var wd=(WID[vid]||[])[0];
+            if(wd){
+              var ws=['A','B','C','D','E','F'].map(function(x){ return tr(wd[x]); });
+              var allSame=ws.every(function(x){ return x===ws[0]; });
+              var wv=allSame?ws[0]:['A','B','C','D','E','F'].map(function(x,i){ return x+': '+(ws[i]||'—'); }).join(' | ');
+              if(wv){ req.results[t.id]=wv; gotValue=true; }
+              if(lines(wd.comment)) addNote(t.id,lines(wd.comment));
+            }
+          }
+          else if(kind==='pt' && isSR){
+            var pp=(PTT[vid]||[])[0];
+            if(pp && num(pp.pt)!==null){
+              req.results[t.id]=fmtNum(pp.pt); gotValue=true;
+              var pn=[]; if(num(pp.control)!==null) pn.push('Control: '+fmtNum(pp.control)+' sec');
+              if(num(pp.inr)!==null) pn.push('INR: '+fmtNum(pp.inr)); if(num(pp.ratio)!==null) pn.push('Ratio: '+fmtNum(pp.ratio));
+              if(num(pp.conc)!==null) pn.push('Conc: '+fmtNum(pp.conc)+' %'); if(num(pp.isi)!==null) pn.push('ISI: '+fmtNum(pp.isi));
+              addNote(t.id,pn.join(' · '));
+            }
+          }
+          else if(kind==='ratio' && isSR){
+            var ra=(RAT[vid]||[])[0];
+            if(ra && num(ra.ratio)!==null){
+              req.results[t.id]=fmtNum(ra.ratio); gotValue=true;
+              var rn=[]; if(num(ra.alb)!==null) rn.push('Albumin: '+fmtNum(ra.alb)); if(num(ra.creat)!==null) rn.push('Creatinine: '+fmtNum(ra.creat));
+              if(lines(ra.Comment)) rn.push(lines(ra.Comment));
+              addNote(t.id,rn.join(' · '));
+            }
+          }
+          else if(kind==='stone' && isSR){
+            var sto=(STN[vid]||[])[0];
+            if(sto){
+              var comp=['Fibrin','Cystine','Ammonium','Uricacid','Calcium','Oxalate','Magnesium','Phosphate','Carbonate','Urates']
+                .filter(function(x){ return tr(sto[x]) && !/^nil$/i.test(tr(sto[x])); }).map(function(x){ return x+': '+tr(sto[x]); });
+              req.results[t.id]=lines(sto.Comment)||tr(sto.Type)||'See note'; gotValue=true;
+              addNote(t.id,['Type: '+tr(sto.Type),'Shape: '+tr(sto.Shape),'Color: '+tr(sto.Color),'Size: '+tr(sto.Size),
+                'Texture: '+tr(sto.Texture),'Consistency: '+tr(sto.Consistency)].concat(comp).join(' · '));
+            }
+          }
+          /* نتيجة عادية */
+          if(!gotValue && val && !isSR){
+            if(req.results[t.id]!==undefined && req.results[t.id]!==val){
+              addNote(t.id, s(row.test).split(/\r?\n/)[0].trim()+': '+val); rep.dupResults++;
+            } else if(req.results[t.id]===undefined){ req.results[t.id]=lines(row.result); rep.results++; }
+            gotValue=true;
+          }
+          if(lines(row.comment)) addNote(t.id, lines(row.comment));
+          if(!gotValue){ anyMissing=true; rep.emptyResults++; }
+        }
+        tlist.sort(function(a,b){ return a.order-b.order; });
+        req.tests=tlist.map(function(x){ return x.t.id; });
+        req.testNames=tlist.map(function(x){ return x.t.nameEn; });
+        if(spKinds.length) req.spPrinted=spKinds.slice();
+        if(!Object.keys(req.resultNotesPer).length) delete req.resultNotesPer;
+        req.status = !req.tests.length ? 'pending' : (anyMissing ? (Object.keys(req.results).length||spKinds.length ? 'inprogress':'pending') : 'done');
+        outReqs.push(req); rep.requests++;
+        if(opts.invoices){
+          var totalAmt=num(visit.total)||0, rawAmt=num(visit.service_price)||totalAmt;
+          outInv.push({id:newInvId(), patientId:pt.id, patientName:pt.name, reqId:req.id, rawTotal:rawAmt,
+            discount:rawAmt? Math.round((1-totalAmt/rawAmt)*1000)/10 : 0, total:totalAmt, insType:'', insAmt:0,
+            status:'مدفوعة', date:vdate, glImport:plan.labTag, _updatedAt:now});
+          rep.invoices++;
+        }
+        if(++built%3000===0) await tick('build', built, plan.stats.toImport);
+      }
+      /* تحديث ملف المريض */
+      var dates=G.visits.map(function(x){ return dateStr(plan.visits[x].vdate); }).sort();
+      if(G.existing){
+        pt=G.pt;
+        var copy=Object.assign({}, pt);
+        copy.visits=(parseInt(pt.visits,10)||0)+G.visits.length;
+        if(!copy.lastVisit || dates[dates.length-1]>copy.lastVisit) copy.lastVisit=dates[dates.length-1];
+        if(!copy.phone){ var ph=''; for(var z=V.length-1;!ph&&z>=0;z--) ph=tr(V[z].mobile)||tr(V[z].phone); if(ph){ copy.phone=ph.replace(/[^\d+]/g,''); } }
+        copy._updatedAt=now;
+        updPatients.push(copy);
+      } else {
+        pt.visits=G.visits.length; pt.lastVisit=dates[dates.length-1];
+      }
+    }
+    /* سجلات تقارير خاصة في زيارات لا تحتوي تحليلها (حُذف التحليل من الطلب في البرنامج القديم) — لا تُستورد */
+    function orphanCount(map,kind){ var n=0; Object.keys(map).forEach(function(id){ if(importedVisit[id] && !kindVisits[kind][id]) n++; }); return n; }
+    rep.orphanSheets={cbc:orphanCount(CBC,'cbc'), ua:orphanCount(UA,'ua'), stool:orphanCount(ST,'stool'), semen:orphanCount(SE,'semen')};
+    var cultKeys={}; (raw.culture_tbl||[]).forEach(function(c){ cultKeys[c.ID+'|'+c.tcode]=1; });
+    rep.unlinkedAbx=(raw.sensitivity_tbl||[]).filter(function(x){ return !cultKeys[x.ID+'|'+x.tcode]; }).length;
+    return {patientsNew:outPatients, patientsUpd:updPatients, requests:outReqs, invoices:outInv, ua:outUA, stool:outStool,
+      semen:outSemen, culture:outCult, doctorsNew:newDoctors, testsNew:newTests, abxNew:newAbx,
+      counters:{pt:ptC, rq:rqC, inv:invC}, report:rep};
+  }
+
+  return {nameParts:nameParts, TABLES:TABLES, readAll:readAll, analyze:analyze, build:build, normAr:normAr, key3:key3, kindOf:kindOf};
+})();
+if(typeof module!=='undefined') module.exports=GLC;
+
+
+/* ══════════════════════════════════════════════════════════════════
+   📥 استيراد من Green Lab System (Access) — واجهة الاستيراد والحفظ
+   ------------------------------------------------------------------
+   المراحل: ① اختيار الملف (zip أو accdb)  ② قراءة وتحليل ومعاينة
+            ③ مراجعة مطابقة التحاليل  ④ نسخة احتياطية  ⑤ بناء السجلات
+            ⑥ حفظ مُنتظَر في IndexedDB + تحقق من العدد  ⑦ بث LAN وتحديث الواجهة
+   لا يُكتب أي شيء قبل ضغط «بدء الاستيراد».
+   ══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var ST = { raw:null, plan:null, fileName:'', overrides:{}, filter:'all', busy:false };
+  window._glImportState = ST;
+
+  function $(id){ return document.getElementById(id); }
+  function esc(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmt(n){ try{ return Number(n||0).toLocaleString('en-US'); }catch(e){ return String(n); } }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms||0); }); }
+  function notif(t,m,k){ try{ showNotif(t,m,k||'info'); }catch(e){ console.log(t,m); } }
+
+  function setProg(pct, text){
+    var box=$('gl-prog'); if(!box) return;
+    box.style.display='block';
+    var bar=$('gl-prog-bar'), tx=$('gl-prog-text');
+    if(bar) bar.style.width=Math.max(0,Math.min(100,pct))+'%';
+    if(tx) tx.textContent=text||'';
+    var ov=$('gl-overlay-text'); if(ov && ST.busy) ov.textContent=(text||'')+' — '+Math.round(pct)+'%';
+    var ob=$('gl-overlay-bar'); if(ob) ob.style.width=Math.max(0,Math.min(100,pct))+'%';
+  }
+  function overlay(on){
+    var o=$('gl-overlay');
+    if(on && !o){
+      o=document.createElement('div'); o.id='gl-overlay';
+      o.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(5,10,25,0.82);display:flex;align-items:center;justify-content:center;direction:rtl';
+      o.innerHTML='<div style="background:var(--bg2,#101a2e);border:1.5px solid var(--border,#234);border-radius:16px;padding:26px 30px;width:min(520px,92vw);text-align:center">'+
+        '<div style="font-size:40px;margin-bottom:8px">📥</div>'+
+        '<div style="font-size:15px;font-weight:800;color:var(--primary,#00d4ff);margin-bottom:6px">جارٍ الاستيراد — لا تغلق البرنامج</div>'+
+        '<div id="gl-overlay-text" style="font-size:12px;color:var(--text2,#9ab);margin-bottom:14px;min-height:18px"></div>'+
+        '<div style="height:10px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden"><div id="gl-overlay-bar" style="height:100%;width:0;background:linear-gradient(90deg,#00d4ff,#00f593);transition:width .2s"></div></div></div>';
+      document.body.appendChild(o);
+    } else if(!on && o){ o.remove(); }
+  }
+
+  /* ─────────── ① اختيار الملف ─────────── */
+  window.glImportPick=function(){
+    if(ST.busy) return;
+    var inp=$('gl-file'); if(!inp) return;
+    inp.value=''; inp.click();
+  };
+
+  window.glImportFileChosen=async function(inp){
+    var f=inp && inp.files && inp.files[0]; if(!f) return;
+    if(ST.busy) return;
+    if(typeof GLA==='undefined' || typeof GLC==='undefined' || typeof GLM==='undefined'){
+      notif('خطأ','وحدة الاستيراد غير محمّلة','error'); return;
+    }
+    ST.busy=true; ST.raw=null; ST.plan=null; ST.overrides={}; ST.fileName=f.name;
+    var pv=$('gl-preview'); if(pv) pv.innerHTML='';
+    var t0=Date.now();
+    try{
+      setProg(2,'قراءة الملف ('+(f.size/1048576).toFixed(1)+' MB)…'); await sleep(30);
+      var buf=new Uint8Array(await f.arrayBuffer()), bytes=buf;
+      var isZip=buf.length>4 && buf[0]===0x50 && buf[1]===0x4b && buf[2]===0x03 && buf[3]===0x04;
+      if(isZip){
+        setProg(6,'فك الضغط…'); await sleep(30);
+        var ex=await GLA.extractAccessFromZip(buf);
+        bytes=ex.bytes; ST.fileName=f.name+' ← '+ex.name; buf=null;
+      }
+      setProg(12,'فتح قاعدة البيانات…'); await sleep(30);
+      var db=new GLA.AccessDB(bytes);
+      var raw=await GLC.readAll(db, async function(name,i,n){ setProg(14+Math.round(i/n*56),'قراءة الجدول '+name+'…'); await sleep(0); });
+      bytes=null; db=null;
+      setProg(74,'تحليل البيانات ومطابقة التحاليل…'); await sleep(30);
+      var plan=GLC.analyze(raw, _ctx());
+      ST.raw=raw; ST.plan=plan;
+      setProg(100,'اكتملت القراءة خلال '+Math.round((Date.now()-t0)/1000)+' ثانية ✅');
+      _renderPreview();
+    }catch(e){
+      console.error('[GL import] read error',e);
+      setProg(0,'');
+      if(pv) pv.innerHTML='<div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:10px;padding:14px;color:var(--danger);font-size:13px;line-height:1.9">❌ '+esc(e && e.message || e)+'</div>';
+    }finally{ ST.busy=false; }
+  };
+
+  function _ctx(){
+    return {
+      tests:(typeof tests!=='undefined' && Array.isArray(tests))?tests:[],
+      patients:(typeof patients!=='undefined')?patients:[],
+      requests:(typeof requests!=='undefined')?requests:[],
+      doctors:(typeof doctors!=='undefined')?doctors:[],
+      invoices:(typeof invoices!=='undefined')?invoices:[],
+      allAbx:(typeof ALL_ABX!=='undefined')?ALL_ABX:[],
+      devNo:(typeof _devNo==='function')?_devNo():1,
+      lanDeviceId:(typeof _lanDeviceId==='string' && _lanDeviceId)?_lanDeviceId:'',
+      counters:{
+        pt:parseInt(localStorage.getItem('medlab_pt_counter')||'0',10)||0,
+        rq:parseInt(localStorage.getItem('medlab_rq_counter')||'0',10)||0,
+        inv:parseInt(localStorage.getItem('medlab_inv_counter')||'0',10)||0
+      },
+      fmtTime:function(ms){ try{ return new Date(ms).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } },
+      cultGroupOf:(typeof _cultGroupOfOrganism==='function')?_cultGroupOfOrganism:null,
+      uaNormals:_normalsOf(typeof UA_FIELDS!=='undefined'?UA_FIELDS:null),
+      stoolNormals:_normalsOf(typeof STOOL_FIELDS!=='undefined'?STOOL_FIELDS:null)
+    };
+  }
+
+  function _normalsOf(F){
+    var o={};
+    try{ if(F) Object.keys(F).forEach(function(s){ ((F[s]||{}).fields||[]).forEach(function(f){ if(f && f.id && f.normal) o[f.id]=f.normal; }); }); }catch(e){}
+    return o;
+  }
+  /* ─────────── ② المعاينة ─────────── */
+  function _statBox(v,l,c){
+    return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:10px 6px;text-align:center">'+
+      '<div style="font-size:18px;font-weight:900;color:'+(c||'var(--primary)')+'">'+fmt(v)+'</div><div style="font-size:10.5px;color:var(--text2)">'+l+'</div></div>';
+  }
+  function _renderPreview(){
+    var pv=$('gl-preview'), P=ST.plan; if(!pv||!P) return;
+    var s=P.stats;
+    var h='';
+    h+='<div style="font-size:12px;color:var(--text2);margin:6px 0 10px">📄 '+esc(ST.fileName)+(P.labName?' · 🏥 '+esc(P.labName):'')+'</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;margin-bottom:12px">'+
+      _statBox(s.visits,'زيارة')+_statBox(s.tests,'تحليل (سطر)','var(--success)')+_statBox(s.cbc,'تقرير CBC','#a78bfa')+
+      _statBox(s.ua,'فحص إدرار','#fbbf24')+_statBox(s.stool,'فحص خروج','#f97316')+_statBox(s.semen,'سائل منوي','#38bdf8')+
+      _statBox(s.culture,'زرع','#f472b6')+_statBox(s.sensitivity,'نتيجة مضاد','#f472b6')+
+      _statBox(s.matchedTests,'اسم تحليل مطابق','var(--success)')+_statBox(s.newTests,'تحليل يُضاف للدليل','#fbbf24')+'</div>';
+    if(s.alreadyImported){
+      h+='<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12px;line-height:1.9">'+
+        '♻️ <b>'+fmt(s.alreadyImported)+'</b> زيارة مستوردة سابقاً من هذا الملف — ستُتجاوز تلقائياً. المتبقي للاستيراد: <b>'+fmt(s.toImport)+'</b></div>';
+    }
+    if(s.orphanTests||s.garbageTests){
+      h+='<div style="font-size:11px;color:var(--text2);margin-bottom:10px">ℹ️ سيُستبعد: '+
+        (s.garbageTests?fmt(s.garbageTests)+' سطر تالف · ':'')+(s.orphanTests?fmt(s.orphanTests)+' تحليل لزيارة محذوفة من البرنامج القديم':'')+'</div>';
+    }
+    /* جدول مطابقة التحاليل */
+    h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 8px">'+
+      '<div style="font-size:13px;font-weight:800;color:var(--text);flex:1">🔗 مطابقة أسماء التحاليل ('+fmt(P.mapping.length)+' اسم)</div>'+
+      ['all:الكل','new:الجديدة','low:أقل من 60%','special:التقارير الخاصة'].map(function(x){
+        var p=x.split(':'); return '<button class="btn btn-sm '+(ST.filter===p[0]?'btn-p':'')+'" style="padding:4px 10px;font-size:11px" onclick="glImportFilter(\''+p[0]+'\')">'+p[1]+'</button>';
+      }).join('')+'</div>';
+    h+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.8">القاعدة: أعلى تشابه ≥ 35% يُعتبر نفس التحليل، مع منع التطابق بين تحاليل تختلف بكلمة مميّزة (IgG/IgM · HDL/LDL · Ab/Ag · T3/T4 · Free · نوع العيّنة · الأرقام). غير المطابق يُضاف لدليل التحاليل بوحدته ومداه الطبيعي من البرنامج القديم. يمكنك تغيير أي مطابقة بالضغط على ✏️.</div>';
+    h+='<div id="gl-map-wrap" style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:10px"></div>';
+    /* الخيارات */
+    h+='<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px">'+
+      '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="gl-opt-backup" checked style="margin-top:3px"> <span>💾 تنزيل نسخة احتياطية كاملة من ميدلاب قبل الاستيراد <span style="color:var(--text2)">(موصى به بشدة)</span></span></label>'+
+      '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="gl-opt-inv" style="margin-top:3px"> <span>🧾 استيراد مبالغ الزيارات كفواتير <b>مدفوعة</b> بتواريخها <span style="color:var(--text2)">(تُضاف لتقارير الحسابات للسنوات السابقة — البرنامج القديم لا يسجّل حالة الدفع)</span></span></label>'+
+      '</div>';
+    h+='<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">'+
+      '<button class="btn btn-ok btn-lg" style="flex:1;min-width:200px" id="gl-start-btn" onclick="glImportStart()"'+(s.toImport?'':' disabled')+'>🚀 بدء الاستيراد ('+fmt(s.toImport)+' زيارة)</button>'+
+      '<button class="btn btn-lg" onclick="glImportReset()">إلغاء</button></div>';
+    h+='<div id="gl-result" style="margin-top:14px"></div>';
+    pv.innerHTML=h;
+    _renderMap();
+  }
+  window.glImportFilter=function(f){ ST.filter=f; _renderPreview(); };
+  window.glImportReset=function(){
+    if(ST.busy) return;
+    ST.raw=null; ST.plan=null; ST.overrides={};
+    var pv=$('gl-preview'); if(pv) pv.innerHTML='';
+    var pg=$('gl-prog'); if(pg) pg.style.display='none';
+  };
+
+  function _targetOf(m){ return ST.overrides.hasOwnProperty(m.name) ? ST.overrides[m.name] : m.testId; }
+  function _testName(id){
+    if(id==='__new__') return null;
+    var t=(tests||[]).find(function(x){ return x && x.id===id; });
+    return t ? t.nameEn : id;
+  }
+  function _renderMap(){
+    var wrap=$('gl-map-wrap'), P=ST.plan; if(!wrap||!P) return;
+    var rows=P.mapping.filter(function(m){
+      var tg=_targetOf(m);
+      if(ST.filter==='new') return tg==='__new__';
+      if(ST.filter==='low') return tg!=='__new__' && m.how!=='special' && m.score<60 && !ST.overrides.hasOwnProperty(m.name);
+      if(ST.filter==='special') return !!m.kind;
+      return true;
+    });
+    var h='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--bg2,#0d1526)">'+
+      '<th style="padding:7px;text-align:right;border-bottom:1px solid var(--border)">الاسم في Green Lab</th>'+
+      '<th style="padding:7px;border-bottom:1px solid var(--border)">العدد</th>'+
+      '<th style="padding:7px;text-align:right;border-bottom:1px solid var(--border)">← في ميدلاب برو</th>'+
+      '<th style="padding:7px;border-bottom:1px solid var(--border)">التشابه</th><th style="border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+    rows.forEach(function(m){
+      var tg=_targetOf(m), nm=_testName(tg), ov=ST.overrides.hasOwnProperty(m.name);
+      var badge = ov ? '<span style="color:#38bdf8">يدوي</span>'
+        : (m.how==='special' ? '<span style="color:#a78bfa">تقرير خاص</span>'
+        : (tg==='__new__' ? '<span style="color:#fbbf24">جديد</span>'
+        : '<span style="color:'+(m.score>=80?'var(--success)':(m.score>=60?'#fbbf24':'#f97316'))+'">'+m.score+'%</span>'));
+      h+='<tr data-gl-name="'+esc(m.name)+'" style="border-bottom:1px solid rgba(255,255,255,0.05)">'+
+        '<td style="padding:6px 7px;direction:ltr;text-align:left">'+esc(String(m.name).split(/\r?\n/).join(' ⏎ '))+'</td>'+
+        '<td style="padding:6px;text-align:center;color:var(--text2)">'+fmt(m.count)+'</td>'+
+        '<td class="gl-tgt" style="padding:6px 7px;direction:ltr;text-align:left">'+(nm?esc(nm):'<span style="color:#fbbf24">➕ يُضاف كتحليل جديد</span>')+'</td>'+
+        '<td style="padding:6px;text-align:center">'+badge+'</td>'+
+        '<td style="padding:6px;text-align:center"><button class="btn btn-sm" style="padding:2px 8px" title="تغيير المطابقة" onclick="glImportEditRow(this)">✏️</button></td></tr>';
+    });
+    if(!rows.length) h+='<tr><td colspan="5" style="padding:16px;text-align:center;color:var(--text2)">لا توجد عناصر</td></tr>';
+    h+='</tbody></table>';
+    wrap.innerHTML=h;
+  }
+  window.glImportEditRow=function(btn){
+    var tr=btn.closest('tr'); if(!tr) return;
+    var name=tr.getAttribute('data-gl-name');
+    var m=ST.plan.mapping.find(function(x){ return x.name===name; }); if(!m) return;
+    var cell=tr.querySelector('.gl-tgt'); if(!cell || cell.querySelector('select')) return;
+    var cur=_targetOf(m);
+    var list=(tests||[]).filter(function(t){ return t && t.id; }).slice().sort(function(a,b){ return String(a.nameEn).localeCompare(String(b.nameEn)); });
+    var opts='<option value="__new__"'+(cur==='__new__'?' selected':'')+'>➕ إضافة كتحليل جديد</option>'+
+      list.map(function(t){ return '<option value="'+esc(t.id)+'"'+(t.id===cur?' selected':'')+'>'+esc(t.nameEn)+(t.code&&t.code!=='N/A'?' ['+esc(t.code)+']':'')+'</option>'; }).join('');
+    cell.innerHTML='<select class="fc" style="padding:4px 6px;font-size:12px;direction:ltr">'+opts+'</select>';
+    var sel=cell.querySelector('select');
+    sel.focus();
+    sel.onchange=function(){
+      if(sel.value===m.testId) delete ST.overrides[m.name]; else ST.overrides[m.name]=sel.value;
+      _renderMap();
+    };
+    sel.onblur=function(){ setTimeout(_renderMap,150); };
+  };
+
+  /* ─────────── الحفظ المُنتظَر (نفس مسار DB.set لكن مع انتظار الإتمام) ─────────── */
+  async function _persist(k, arr, ids){
+    var pk=DB._pfx()+k;
+    _MC[pk]=arr;
+    try{ if(_IDB_KEYS.has(k)) localStorage.removeItem(pk); }catch(e){}
+    var useIds=(ids && ids.size)? new Set(ids) : null;
+    /* لا نُضيّع تعديلات معلّقة من المستخدم على نفس المجموعة */
+    try{
+      if(typeof _idbPending!=='undefined' && Object.prototype.hasOwnProperty.call(_idbPending,pk)){
+        var p=_idbPendingIds[pk];
+        if(!p) useIds=null; else if(useIds) p.forEach(function(x){ useIds.add(x); });
+      }
+      if(typeof _touched!=='undefined'){
+        if(_touchedBad[k]) useIds=null;
+        else if(_touched[k] && useIds) _touched[k].forEach(function(x){ useIds.add(x); });
+        delete _touched[k]; delete _touchedBad[k];
+      }
+      _idbCancelPending(pk);
+    }catch(e){}
+    var ok=await IDB.set(pk, arr, useIds||undefined);
+    try{ if(useIds) _scheduleLegacySnapshot(pk); }catch(e){}
+    return ok!==false;
+  }
+  async function _verify(k, arr){
+    try{
+      var pk=DB._pfx()+k;
+      if(!(await IDB.isRecordMode(pk))) return {k:k, ok:true, mode:'blob'};
+      var n=await IDB.countRecords(pk);
+      var uniq=new Set(); arr.forEach(function(r){ if(r&&r.id!=null) uniq.add(String(r.id)); });
+      return {k:k, ok:n>=uniq.size, stored:n, expected:uniq.size};
+    }catch(e){ return {k:k, ok:false, err:String(e&&e.message||e)}; }
+  }
+  function _pushAll(arr, items){ for(var i=0;i<items.length;i++) arr.push(items[i]); }
+
+  async function _downloadBackup(){
+    if(typeof _fsa_buildDownloadBackup!=='function') throw new Error('دالة النسخ الاحتياطي غير متاحة');
+    var json=await _fsa_buildDownloadBackup();
+    var d=new Date(), name='MedLab_Backup_BEFORE_GreenLab_Import_'+d.toISOString().slice(0,10)+'_'+String(d.getHours()).padStart(2,'0')+'-'+String(d.getMinutes()).padStart(2,'0')+'.json';
+    var blob=new Blob([json],{type:'application/json'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} }, 4000);
+    return name;
+  }
+
+  /* ─────────── ③ التنفيذ ─────────── */
+  window.glImportStart=async function(){
+    if(ST.busy || !ST.plan || !ST.raw) return;
+    var P=ST.plan;
+    var withInv=!!($('gl-opt-inv')||{}).checked, withBackup=!!($('gl-opt-backup')||{}).checked;
+    var msg='سيتم استيراد '+fmt(P.stats.toImport)+' زيارة مع نتائجها إلى قاعدة ميدلاب.\n\n'+
+      '• يُفضَّل تنفيذ الاستيراد على حاسبة واحدة فقط، والبقية تستلم عبر المزامنة.\n'+
+      '• لا تغلق البرنامج حتى تظهر رسالة الانتهاء.\n\nهل تريد المتابعة؟';
+    if(!confirm(msg)) return;
+    ST.busy=true; overlay(true);
+    var res=$('gl-result'); if(res) res.innerHTML='';
+    var btn=$('gl-start-btn'); if(btn) btn.disabled=true;
+    var t0=Date.now(), backupName='';
+    try{
+      if(withBackup){
+        setProg(2,'إنشاء نسخة احتياطية قبل الاستيراد…'); await sleep(50);
+        try{ backupName=await _downloadBackup(); }
+        catch(e){
+          overlay(false);
+          if(!confirm('تعذّر إنشاء النسخة الاحتياطية: '+(e&&e.message||e)+'\n\nهل تريد المتابعة بدون نسخة احتياطية؟')){ ST.busy=false; if(btn) btn.disabled=false; return; }
+          overlay(true);
+        }
+      }
+      /* تأكد من تحميل سجلات الأقسام الخاصة قبل الإضافة إليها */
+      setProg(6,'تجهيز سجلات الأقسام…'); await sleep(20);
+      try{ if(typeof loadUARecords==='function') loadUARecords(); }catch(e){}
+      try{ if(typeof loadStoolExamRecords==='function') loadStoolExamRecords(); }catch(e){}
+      try{ if(typeof loadSemenRecords==='function') loadSemenRecords(); }catch(e){}
+      try{ if(typeof loadCultureRecordsFromIDB==='function') await loadCultureRecordsFromIDB(); else if(typeof loadCultureRecords==='function') loadCultureRecords(); }catch(e){}
+      if(typeof _idbFlushAll==='function'){ try{ _idbFlushAll(); }catch(e){} await sleep(400); }
+
+      /* بناء السجلات من الحالة الحالية لحظة التنفيذ */
+      var _tm=Date.now(), _lap=function(l){ console.log('[GL import] '+l+' '+(Date.now()-_tm)+'ms'); _tm=Date.now(); };
+      _lap('prepare');
+      var ctx=_ctx();
+      var out=await GLC.build(ST.raw, P, ctx, {overrides:ST.overrides, invoices:withInv}, async function(stage,i,n){
+        setProg(stage==='patients' ? 8+Math.round(i/Math.max(1,n)*12) : 20+Math.round(i/Math.max(1,n)*45),
+          stage==='patients' ? 'مطابقة المرضى وتجميع الزيارات…' : 'بناء الطلبات والنتائج… '+fmt(i)+' / '+fmt(n));
+        await sleep(0);
+      });
+      var R=out.report;
+      _lap('build');
+
+      /* ── الإضافة إلى الذاكرة ── */
+      setProg(66,'إضافة السجلات…'); await sleep(20);
+      var ids={patients:new Set(), requests:new Set(), invoices:new Set(), uaRecords:new Set(), stoolExamRecords:new Set(), semenRecords:new Set(), cultureRecords:new Set()};
+      if(out.testsNew.length){ _pushAll(tests, out.testsNew); }
+      if(out.doctorsNew.length){ _pushAll(doctors, out.doctorsNew); }
+      if(out.abxNew.length && typeof ALL_ABX!=='undefined'){
+        out.abxNew.forEach(function(a){ if(!ALL_ABX.find(function(x){ return x.code===a.code; })) ALL_ABX.push(a); });
+      }
+      var ptIdx=new Map(); patients.forEach(function(p,i){ if(p) ptIdx.set(String(p.id),i); });
+      out.patientsUpd.forEach(function(u){
+        var i=ptIdx.get(String(u.id));
+        if(i!==undefined){
+          var chg={visits:u.visits, lastVisit:u.lastVisit, _updatedAt:u._updatedAt};
+          if(u.phone && !patients[i].phone) chg.phone=u.phone;
+          Object.assign(patients[i], chg); ids.patients.add(String(u.id));
+        }
+      });
+      _pushAll(patients, out.patientsNew); out.patientsNew.forEach(function(p){ ids.patients.add(String(p.id)); });
+      _pushAll(requests, out.requests); out.requests.forEach(function(r){ ids.requests.add(String(r.id)); });
+      if(out.invoices.length){ _pushAll(invoices, out.invoices); out.invoices.forEach(function(r){ ids.invoices.add(String(r.id)); }); }
+      _pushAll(uaRecords, out.ua); out.ua.forEach(function(r){ ids.uaRecords.add(String(r.id)); });
+      _pushAll(stoolExamRecords, out.stool); out.stool.forEach(function(r){ ids.stoolExamRecords.add(String(r.id)); });
+      _pushAll(semenRecords, out.semen); out.semen.forEach(function(r){ ids.semenRecords.add(String(r.id)); });
+      _pushAll(cultureRecords, out.culture); out.culture.forEach(function(r){ ids.cultureRecords.add(String(r.id)); });
+
+      /* العدادات: الأرقام القادمة تبدأ بعد آخر رقم مستخدم (بلا تداخل) */
+      var setMax=function(key,v){ try{ var c=parseInt(localStorage.getItem(key)||'0',10)||0; if(v>c) localStorage.setItem(key,String(v)); }catch(e){} };
+      setMax('medlab_pt_counter', out.counters.pt);
+      setMax('medlab_rq_counter', out.counters.rq);
+      if(out.invoices.length) setMax('medlab_inv_counter', out.counters.inv);
+
+      /* ── الحفظ المُنتظَر ── */
+      var steps=[['tests',tests,null],['doctors',doctors,null],['patients',patients,ids.patients],['requests',requests,ids.requests],
+        ['uaRecords',uaRecords,ids.uaRecords],['stoolExamRecords',stoolExamRecords,ids.stoolExamRecords],
+        ['semenRecords',semenRecords,ids.semenRecords],['cultureRecords',cultureRecords,ids.cultureRecords]];
+      if(out.invoices.length) steps.push(['invoices',invoices,ids.invoices]);
+      var failed=[];
+      for(var si=0;si<steps.length;si++){
+        var st=steps[si];
+        if(st[2] && !st[2].size) continue;
+        if(!st[2] && ((st[0]==='tests' && !out.testsNew.length) || (st[0]==='doctors' && !out.doctorsNew.length))) continue;
+        setProg(68+Math.round(si/steps.length*24),'حفظ '+st[0]+' في قاعدة البيانات…'); await sleep(10);
+        if(st[0]==='cultureRecords') window._cultIdbBusy=(window._cultIdbBusy||0)+1;
+        var ok=false;
+        try{ ok=await _persist(st[0], st[1], st[2]); }
+        finally{ if(st[0]==='cultureRecords') window._cultIdbBusy=Math.max(0,(window._cultIdbBusy||1)-1); }
+        if(!ok) failed.push(st[0]);
+        _lap('persist '+st[0]);
+      }
+      if(out.abxNew.length){
+        try{ save('customAbxEntries', ALL_ABX.filter(function(a){ return a.cls==='MISC' && !window._builtinAbxCodes.has(a.code); })); }catch(e){}
+      }
+
+      /* ── التحقق من العدد المحفوظ فعلياً ── */
+      setProg(93,'التحقق من الحفظ…'); await sleep(10);
+      var checks=[];
+      for(var vi=0;vi<steps.length;vi++){
+        if(steps[vi][2] && steps[vi][2].size) checks.push(await _verify(steps[vi][0], steps[vi][1]));
+      }
+      var badChecks=checks.filter(function(c){ return !c.ok; });
+      _lap('verify');
+
+      /* ── بث المزامنة للحاسبات الأخرى ── */
+      setProg(96,'إرسال التحديث للحاسبات الأخرى…'); await sleep(10);
+      steps.forEach(function(st){
+        if((st[2] && !st[2].size) || (!st[2] && ((st[0]==='tests' && !out.testsNew.length) || (st[0]==='doctors' && !out.doctorsNew.length)))) return;
+        try{ if(typeof window._lanOnSave==='function') window._lanOnSave(st[0], st[1]); }catch(e){}
+      });
+
+      _lap('lan');
+      /* ── تحديث الواجهة ── */
+      ['updateDbStats','updateBadges','buildTestCatTabs','renderTestsDB','renderDoctors'].forEach(function(fn){ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+      try{ if(typeof renderPatients==='function') renderPatients(); }catch(e){}
+      try{ if(typeof renderRequests==='function') renderRequests('all'); }catch(e){}
+      try{ if(typeof updateDashboard==='function') updateDashboard(true); }catch(e){}
+
+      _lap('render');
+      var secs=Math.round((Date.now()-t0)/1000);
+      setProg(100,'اكتمل الاستيراد خلال '+secs+' ثانية');
+      var log={at:new Date().toISOString(), file:ST.fileName, lab:P.labName, labTag:P.labTag, secs:secs, backup:backupName,
+        report:Object.assign({}, R, {warnings:(R.warnings||[]).slice(0,50)}), checks:checks, failed:failed};
+      try{ localStorage.setItem('medlab_greenlab_import_last', JSON.stringify(log)); }catch(e){}
+      overlay(false);
+      _renderResult(out, checks, failed, secs, backupName);
+      ST.raw=null;   /* تحرير الذاكرة */
+      if(failed.length || badChecks.length) notif('تنبيه','اكتمل الاستيراد مع تحذيرات — راجع التقرير','warning');
+      else notif('تم','تم استيراد '+fmt(R.requests)+' زيارة بنجاح ✅','success');
+    }catch(e){
+      console.error('[GL import] commit error',e);
+      overlay(false);
+      if(res) res.innerHTML='<div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:10px;padding:14px;color:var(--danger);font-size:13px;line-height:1.9">❌ توقف الاستيراد: '+esc(e&&e.message||e)+
+        '<br>'+(backupName?'النسخة الاحتياطية المنزّلة: <b>'+esc(backupName)+'</b>':'')+'</div>';
+      notif('خطأ','توقف الاستيراد: '+(e&&e.message||e),'error');
+    }finally{
+      ST.busy=false; overlay(false);
+    }
+  };
+
+  function _renderResult(out, checks, failed, secs, backupName){
+    var res=$('gl-result'); if(!res) return;
+    var R=out.report, row=function(l,v,c){ return '<tr><td style="padding:5px 8px;color:var(--text2)">'+l+'</td><td style="padding:5px 8px;font-weight:800;color:'+(c||'var(--text)')+'">'+v+'</td></tr>'; };
+    var h='<div style="background:rgba(0,245,147,0.06);border:1.5px solid rgba(0,245,147,0.3);border-radius:12px;padding:16px">'+
+      '<div style="font-size:15px;font-weight:900;color:var(--success);margin-bottom:10px">✅ اكتمل الاستيراد ('+secs+' ثانية)</div>'+
+      '<table style="width:100%;font-size:12.5px;border-collapse:collapse">'+
+      row('ملفات مرضى جديدة',fmt(R.patientsNew))+
+      row('مرضى موجودون أُضيفت لهم زيارات',fmt(R.patientsMatched))+
+      row('طلبات (زيارات) مستوردة',fmt(R.requests),'var(--success)')+
+      row('نتائج تحاليل',fmt(R.results))+
+      row('تقارير CBC',fmt(R.cbc))+row('فحوص إدرار',fmt(R.ua))+row('فحوص خروج',fmt(R.stool))+row('سائل منوي',fmt(R.semen))+
+      row('زرع / نتائج مضادات',fmt(R.culture)+' / '+fmt(R.abx))+
+      row('ملاحظات نتائج',fmt(R.notes))+
+      (R.invoices?row('فواتير',fmt(R.invoices)):'')+
+      row('أطباء أُضيفوا',fmt(R.doctorsNew))+row('تحاليل أُضيفت للدليل',fmt(R.testsNew))+row('مضادات حيوية أُضيفت',fmt(R.abxNew))+
+      (R.visitsSkipped?row('زيارات مستوردة سابقاً (تُجووزت)',fmt(R.visitsSkipped),'#fbbf24'):'')+
+      '</table>';
+    var info=[];
+    if(R.emptyResults) info.push(fmt(R.emptyResults)+' تحليل بلا نتيجة في البرنامج القديم (أُضيف للطلب فارغاً)');
+    if(R.cbcEmpty) info.push(fmt(R.cbcEmpty)+' تقرير CBC فارغ لم يُستورد');
+    if(R.semenEmpty) info.push(fmt(R.semenEmpty)+' تقرير سائل منوي فارغ لم يُستورد');
+    var os=R.orphanSheets||{}, osN=(os.cbc||0)+(os.ua||0)+(os.stool||0)+(os.semen||0);
+    if(osN) info.push(fmt(osN)+' ورقة تقرير لتحليل محذوف من طلبه في البرنامج القديم لم تُستورد (CBC '+(os.cbc||0)+' · إدرار '+(os.ua||0)+' · خروج '+(os.stool||0)+' · منوي '+(os.semen||0)+')');
+    if(R.unlinkedAbx) info.push(fmt(R.unlinkedAbx)+' نتيجة مضاد لزرع محذوف لم تُستورد');
+    if(R.dupResults) info.push(fmt(R.dupResults)+' نتيجة مكررة لنفس التحليل حُفظت في ملاحظة التحليل');
+    if(backupName) info.push('النسخة الاحتياطية قبل الاستيراد: '+backupName);
+    if(info.length) h+='<div style="margin-top:10px;font-size:11.5px;color:var(--text2);line-height:1.9">ℹ️ '+info.map(esc).join('<br>ℹ️ ')+'</div>';
+    var bad=checks.filter(function(c){ return !c.ok; });
+    if(failed.length || bad.length){
+      h+='<div style="margin-top:10px;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:8px;padding:10px;font-size:12px;color:var(--danger)">⚠️ تحقق الحفظ: '+
+        esc(failed.concat(bad.map(function(c){ return c.k+(c.stored!=null?' ('+c.stored+'/'+c.expected+')':''); })).join(' · '))+
+        '<br>لا تغلق البرنامج — أعد تحميل الصفحة ثم تحقق من الأعداد في قاعدة البيانات.</div>';
+    } else {
+      h+='<div style="margin-top:10px;font-size:11.5px;color:var(--success)">🔒 تم التحقق: كل السجلات محفوظة فعلياً في قاعدة البيانات ('+
+        checks.map(function(c){ return c.k+' '+fmt(c.stored!=null?c.stored:'✓'); }).join(' · ')+')</div>';
+    }
+    h+='</div>';
+    res.innerHTML=h;
+    var sb=$('gl-start-btn'); if(sb){ sb.disabled=true; sb.textContent='✅ تم الاستيراد'; }
+  }
+})();
+
+</script>
