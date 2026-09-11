@@ -56016,3 +56016,631 @@ if(typeof module!=='undefined') module.exports=GLC;
 })();
 
 </script>
+
+<!-- ══════ 📣 شرائح الإعلانات (مرتبطة بلوحة الأدمن — promos) ══════ -->
+<style>
+/* ══════════════════════════════════════════════════════════════
+   📣 شرائح الإعلانات — التصميم المشترك (البرنامج + معاينة الأدمن)
+   ══════════════════════════════════════════════════════════════ */
+.pz-root{container-type:inline-size;margin:0 0 22px;direction:rtl;font-family:'Cairo',var(--font-family,sans-serif)}
+.pz-root[hidden]{display:none!important}
+.pz-stage{position:relative;height:172px;height:clamp(150px,17cqw,198px);border-radius:18px;overflow:hidden;isolation:isolate;
+  background:#060d1d;border:1px solid var(--border,rgba(0,212,255,.22));
+  box-shadow:0 14px 34px -22px rgba(0,0,0,.9);user-select:none;-webkit-user-select:none;touch-action:pan-y;outline:none}
+.pz-stage:focus-visible{box-shadow:0 0 0 2px var(--primary,#00d4ff),0 14px 34px -22px rgba(0,0,0,.9)}
+body.light-mode .pz-stage{background:#e9eef5;border-color:#d5dee8;box-shadow:0 12px 28px -20px rgba(15,40,80,.45)}
+
+/* ── الشريحة ── */
+.pz-slide{position:absolute;inset:0;overflow:hidden;opacity:0;visibility:hidden;transform:translateX(var(--pz-from,0));
+  color:var(--pz-fg,#fff);background:linear-gradient(var(--pz-ang,120deg),var(--pz-c1,#00b4d8),var(--pz-c2,#0a3d91));
+  transition:opacity .55s cubic-bezier(.2,.7,.2,1),transform .55s cubic-bezier(.2,.7,.2,1),visibility 0s linear .55s}
+.pz-slide.is-on{opacity:1;visibility:visible;transform:none;
+  transition:opacity .55s cubic-bezier(.2,.7,.2,1),transform .55s cubic-bezier(.2,.7,.2,1),visibility 0s}
+.pz-slide.is-link{cursor:pointer}
+
+/* إضاءة ناعمة خلف النص */
+.pz-t-text::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(90% 150% at 100% 0%,rgba(255,255,255,.2),transparent 55%),
+             radial-gradient(70% 120% at 0% 100%,rgba(0,0,0,.22),transparent 62%)}
+
+/* العدسة — حلقات متداخلة مثل طبق الزرع/عدسة المجهر */
+.pz-lens{position:absolute;z-index:1;top:50%;inset-inline-end:5cqw;height:132%;aspect-ratio:1;border-radius:50%;
+  transform:translateY(-50%);display:grid;place-items:center;pointer-events:none;
+  border:1.5px solid rgba(var(--pz-ink,255,255,255),.22);
+  box-shadow:inset 0 0 0 16px rgba(var(--pz-ink,255,255,255),.045),inset 0 0 0 17.5px rgba(var(--pz-ink,255,255,255),.12),
+             0 0 0 20px rgba(var(--pz-ink,255,255,255),.035)}
+.pz-lens span{font-size:clamp(40px,6.4cqw,70px);line-height:1;transform:rotate(-8deg);filter:drop-shadow(0 6px 14px rgba(0,0,0,.25))}
+
+/* ── الصورة ── */
+.pz-t-image{background:#050b18}
+.pz-back{position:absolute;inset:-24px;background-size:cover;background-position:center;filter:blur(22px) saturate(1.15) brightness(.78);transform:scale(1.08)}
+.pz-img{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;-webkit-user-drag:none}
+.pz-fit-cover .pz-img,.pz-t-mixed .pz-img{object-fit:cover}
+.pz-fit-cover .pz-back,.pz-t-mixed .pz-back{display:none}
+.pz-scrim{position:absolute;inset:0;z-index:1;background:linear-gradient(to left,var(--pz-s1) 0%,var(--pz-s2) 44%,var(--pz-s3) 80%)}
+.pz-al-center .pz-scrim{background:var(--pz-s2)}
+
+/* ── النص ── */
+.pz-body{position:relative;z-index:2;height:100%;max-width:66%;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;
+  gap:5px;padding:24px clamp(18px,3.6cqw,42px) 16px;text-align:right;
+  opacity:0;transform:translateY(8px);transition:opacity .6s .12s cubic-bezier(.2,.7,.2,1),transform .6s .12s cubic-bezier(.2,.7,.2,1)}
+.pz-slide.is-on .pz-body{opacity:1;transform:none}
+.pz-t-mixed .pz-body{max-width:58%}
+.pz-al-center .pz-body{max-width:100%;align-items:center;text-align:center;margin:0 auto;padding-inline:clamp(24px,9cqw,120px)}
+.pz-title,.pz-text,.pz-cta{flex-shrink:0;max-width:100%}
+.pz-title{font-weight:900;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-wrap:balance}
+.pz-ts-1{font-size:clamp(15px,1.75cqw,20px)}
+.pz-ts-2{font-size:clamp(17px,2.2cqw,25px)}
+.pz-ts-3{font-size:clamp(19px,2.8cqw,31px);line-height:1.25}
+.pz-text{font-size:clamp(12px,1.35cqw,14.5px);font-weight:600;line-height:1.75;opacity:.9;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pz-title strong,.pz-text strong{font-weight:900}
+.pz-cta{margin-top:5px;display:inline-flex;align-items:center;padding:5px 16px;border-radius:999px;font-size:12.5px;font-weight:800;white-space:nowrap;
+  background:rgba(var(--pz-ink,255,255,255),.16);border:1px solid rgba(var(--pz-ink,255,255,255),.38);color:inherit}
+.pz-slide.is-link:hover .pz-cta{background:rgba(var(--pz-ink,255,255,255),.26)}
+.pz-t-mixed.pz-lightfg .pz-title,.pz-t-mixed.pz-lightfg .pz-text{text-shadow:0 2px 14px rgba(0,0,0,.35)}
+
+/* ── شريط التقدم ── */
+.pz-bars{position:absolute;z-index:5;top:11px;inset-inline:16px;display:flex;gap:5px;pointer-events:none}
+.pz-bars i{flex:1;height:3px;border-radius:3px;background:rgba(255,255,255,.3);overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.pz-bars b{display:block;height:100%;border-radius:3px;background:#fff;transform:scaleX(0);transform-origin:right center}
+.pz-bars i.done b{transform:scaleX(1)}
+.pz-bars i.run b{animation:pzFill var(--pz-dur,6s) linear forwards}
+.pz-root.is-paused .pz-bars i.run b{animation-play-state:paused}
+.pz-stage.on-light .pz-bars i{background:rgba(11,37,69,.14);box-shadow:none}
+.pz-stage.on-light .pz-bars b{background:rgba(11,37,69,.72)}
+@keyframes pzFill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+
+/* ── أزرار ── */
+.pz-nav,.pz-min{position:absolute;z-index:6;display:grid;place-items:center;padding:0;cursor:pointer;color:#fff;
+  background:rgba(4,8,20,.42);border:1px solid rgba(255,255,255,.26);border-radius:50%;font:inherit}
+.pz-nav{top:50%;width:34px;height:34px;margin-top:-17px;opacity:0;transition:opacity .2s}
+.pz-nav svg,.pz-min svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.pz-prev{inset-inline-start:10px}
+.pz-next{inset-inline-end:10px}
+.pz-stage:hover .pz-nav,.pz-nav:focus-visible{opacity:1}
+.pz-nav:hover,.pz-min:hover{background:rgba(4,8,20,.7)}
+.pz-min{top:22px;inset-inline-end:12px;width:26px;height:26px;opacity:.72}
+.pz-min svg{width:13px;height:13px}
+.pz-stage:hover .pz-min{opacity:1}
+.pz-stage.one .pz-nav,.pz-stage.one .pz-bars{display:none}
+.pz-stage.one .pz-min{top:12px}
+@media (hover:none){.pz-nav{display:none}}
+
+/* ── الشريط المصغّر ── */
+.pz-mini{display:none;width:100%;align-items:center;justify-content:space-between;gap:10px;padding:9px 16px;border-radius:14px;cursor:pointer;
+  border:1px dashed var(--border,rgba(0,212,255,.3));background:var(--bg-glass,rgba(255,255,255,.05));color:var(--text2,rgba(255,255,255,.65));
+  font-family:'Cairo',sans-serif;font-size:12.5px;font-weight:700;text-align:right}
+.pz-mini b{color:var(--primary,#00d4ff);font-weight:800}
+.pz-root.is-min .pz-stage{display:none}
+.pz-root.is-min .pz-mini{display:flex}
+
+/* ── الشاشات الضيقة ── */
+@container (max-width:560px){
+  .pz-stage{height:188px}
+  .pz-body,.pz-t-mixed .pz-body{max-width:100%;padding:24px 18px 12px;gap:4px}
+  .pz-t-text .pz-body{max-width:80%}
+  .pz-lens{inset-inline-end:-16%;opacity:.55}
+  .pz-text{font-size:12px;line-height:1.7}
+  .pz-scrim{background:linear-gradient(to left,var(--pz-s1) 0%,var(--pz-s2) 60%,var(--pz-s2) 100%)}
+}
+@media (prefers-reduced-motion:reduce){
+  .pz-slide,.pz-slide.is-on,.pz-body{transition:none!important}
+}
+/* ── تثبيت الألوان ضد قواعد الوضع النهاري العامة في البرنامج ── */
+.pz-slide,.pz-slide *{color:var(--pz-fg,#fff)!important}
+.pz-nav,.pz-min,.pz-nav *,.pz-min *{color:#fff!important}
+.pz-mini b{color:var(--primary,#00d4ff)!important}
+@media print{.pz-root{display:none!important}}
+</style>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   📣 شرائح الإعلانات — المُصيِّر المشترك (نفس الكود في البرنامج ولوحة الأدمن)
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+if(window.PZ) return;
+
+var PRESETS = {
+  ocean:  {n:'محيطي',  c1:'#00b4d8', c2:'#0a3d91', ang:120, fg:'#ffffff'},
+  violet: {n:'بنفسجي', c1:'#8b3fff', c2:'#2b1a6b', ang:125, fg:'#ffffff'},
+  mint:   {n:'زمردي',  c1:'#00c9a7', c2:'#05476b', ang:120, fg:'#ffffff'},
+  sunset: {n:'غروب',   c1:'#ff9a3c', c2:'#d7265e', ang:115, fg:'#ffffff'},
+  urgent: {n:'عاجل',   c1:'#ff3b5c', c2:'#6e0b2a', ang:120, fg:'#ffffff'},
+  gold:   {n:'ذهبي',   c1:'#f9dc7c', c2:'#c7901a', ang:120, fg:'#2a1c00'},
+  night:  {n:'ليلي',   c1:'#1b2a4e', c2:'#050a18', ang:135, fg:'#e8f6ff'},
+  paper:  {n:'فاتح',   c1:'#ffffff', c2:'#d9e8fb', ang:120, fg:'#0b2545'}
+};
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+/* نص الأدمن: هروب كامل + *عريض* + أسطر جديدة */
+function fmt(s){
+  return esc(s).replace(/\*([^*\n]{1,120})\*/g,'<strong>$1</strong>').replace(/\r?\n/g,'<br>');
+}
+
+function rgb(h){
+  h=String(h||'').trim().replace('#','');
+  if(h.length===3) h=h.split('').map(function(c){return c+c;}).join('');
+  var n=parseInt(h,16);
+  if(h.length!==6||isNaN(n)) return [255,255,255];
+  return [(n>>16)&255,(n>>8)&255,n&255];
+}
+function isLight(h){ var c=rgb(h); return (0.299*c[0]+0.587*c[1]+0.114*c[2])>150; }
+
+function safeUrl(u){
+  u=String(u||'').trim();
+  if(!u) return '';
+  if(/^(https?:\/\/|whatsapp:\/\/|tel:|mailto:)/i.test(u)) return u;
+  if(/^www\./i.test(u)) return 'https://'+u;
+  return '';
+}
+
+/* حالة الإعلان حسب التفعيل والتواريخ */
+function status(ad, now){
+  now = now || Date.now();
+  if(!ad) return 'off';
+  if(ad.active===false) return 'off';
+  if(ad.end && now>ad.end) return 'expired';
+  if(ad.start && now<ad.start) return 'scheduled';
+  return 'live';
+}
+
+function countLabel(n){
+  if(n===1) return 'إعلان واحد';
+  if(n===2) return 'إعلانان';
+  if(n>=3 && n<=10) return n+' إعلانات';
+  return n+' إعلاناً';
+}
+
+var ICON_PREV='<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>';
+var ICON_NEXT='<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>';
+var ICON_MIN ='<svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg>';
+
+/* يبني عنصر شريحة واحدة. img = dataURL أو null.
+   يُرجع null إذا كان الإعلان صورة فقط بلا صورة متاحة. */
+function buildSlide(ad, img){
+  if(!ad) return null;
+  var type = ad.type==='image'||ad.type==='mixed' ? ad.type : 'text';
+  if(type!=='text' && !img){
+    if(type==='image') return null;
+    type='text';                       // صورة+نص بلا صورة ← يظهر كنص
+  }
+  var p   = PRESETS[ad.preset]||PRESETS.ocean;
+  var c1  = ad.c1||p.c1, c2=ad.c2||p.c2, fg=ad.fg||p.fg;
+  var ang = (ad.ang!=null && !isNaN(+ad.ang)) ? +ad.ang : p.ang;
+  var lightFg = isLight(fg);
+  var ink = rgb(fg).join(',');
+  var s   = rgb(c1).join(',');
+  var align = ad.align==='center' ? 'center' : 'start';
+  var ts  = [1,2,3].indexOf(+ad.tsz)>=0 ? +ad.tsz : 2;
+  var url = safeUrl(ad.url);
+
+  var el=document.createElement('div');
+  el.className='pz-slide pz-t-'+type+' pz-al-'+align+
+    (ad.fit==='cover'?' pz-fit-cover':'')+(lightFg?' pz-lightfg':' pz-darkfg')+(url?' is-link':'');
+  el.setAttribute('role','group');
+  el.setAttribute('aria-roledescription','slide');
+  if(ad.title) el.setAttribute('aria-label', String(ad.title));
+  el.style.setProperty('--pz-c1',c1);
+  el.style.setProperty('--pz-c2',c2);
+  el.style.setProperty('--pz-ang',ang+'deg');
+  el.style.setProperty('--pz-fg',fg);
+  el.style.setProperty('--pz-ink',ink);
+  el.style.setProperty('--pz-s1','rgba('+s+',.94)');
+  el.style.setProperty('--pz-s2','rgba('+s+',.62)');
+  el.style.setProperty('--pz-s3','rgba('+s+',0)');
+  if(url) el.setAttribute('data-url',url);
+
+  var h='';
+  if(type!=='text') h+='<div class="pz-back"></div><img class="pz-img" alt="" draggable="false">';
+  if(type==='mixed') h+='<div class="pz-scrim"></div>';
+  if(type==='text' && ad.icon && align==='start') h+='<div class="pz-lens" aria-hidden="true"><span>'+esc(ad.icon)+'</span></div>';
+  if(type!=='image'){
+    var icoInline = ad.icon && (type==='mixed' || align==='center') ? esc(ad.icon)+' ' : '';
+    h+='<div class="pz-body">';
+    if(ad.title) h+='<div class="pz-title pz-ts-'+ts+'">'+icoInline+fmt(ad.title)+'</div>';
+    if(ad.body)  h+='<div class="pz-text">'+fmt(ad.body)+'</div>';
+    if(ad.cta)   h+='<span class="pz-cta">'+esc(ad.cta)+'</span>';
+    h+='</div>';
+  }
+  el.innerHTML=h;
+  if(type!=='text'){
+    var im=el.querySelector('.pz-img'); if(im) im.src=img;
+    var bk=el.querySelector('.pz-back'); if(bk) bk.style.backgroundImage='url("'+img+'")';
+  }
+  el._pzOnLight = type==='text' && !lightFg;
+  return el;
+}
+
+/* هيكل الشريط (بدون شرائح) */
+function buildFrame(){
+  var root=document.createElement('section');
+  root.className='pz-root';
+  root.setAttribute('dir','rtl');
+  root.innerHTML=
+    '<div class="pz-stage" tabindex="0" role="region" aria-roledescription="carousel" aria-label="الإعلانات">'+
+      '<div class="pz-track"></div>'+
+      '<div class="pz-bars"></div>'+
+      '<button type="button" class="pz-nav pz-prev" aria-label="السابق">'+ICON_PREV+'</button>'+
+      '<button type="button" class="pz-nav pz-next" aria-label="التالي">'+ICON_NEXT+'</button>'+
+      '<button type="button" class="pz-min" aria-label="تصغير الإعلانات" title="تصغير">'+ICON_MIN+'</button>'+
+    '</div>'+
+    '<button type="button" class="pz-mini"><span>📢 <span class="pz-mini-n"></span> في لوحة التحكم</span><b>إظهار</b></button>';
+  return root;
+}
+
+window.PZ = { PRESETS:PRESETS, esc:esc, fmt:fmt, rgb:rgb, isLight:isLight, safeUrl:safeUrl,
+  status:status, countLabel:countLabel, buildSlide:buildSlide, buildFrame:buildFrame };
+})();
+</script>
+<script>
+/* ══════════════════════════════════════════════════════════════
+   📣 شرائح الإعلانات — داخل MedLab Pro
+   • تظهر في لوحة التحكم تحت بطاقات الإحصائيات فقط.
+   • Firebase:  promos/meta/{id}  = نص/ألوان/جدولة (صغير — يُراقَب لحظياً)
+                promos/img/{id}   = الصورة (تُنزَّل مرة واحدة لكل نسخة)
+   • نسخة محلية في IndexedDB ← تعمل بدون إنترنت.
+   • حذف الإعلان من الأدمن ← يختفي فوراً وتُمسح صورته من الجهاز.
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+if(window.__pzAppBooted) return;
+window.__pzAppBooted = true;
+
+var MIN_KEY = 'mlp_pz_min';
+
+/* ─────────── IndexedDB صغير ─────────── */
+var _idbP=null, _mem={};
+function idb(){
+  if(_idbP) return _idbP;
+  _idbP = new Promise(function(res){
+    try{
+      var rq=indexedDB.open('mlp_promos',1);
+      rq.onupgradeneeded=function(){ rq.result.createObjectStore('kv'); };
+      rq.onsuccess=function(){ res(rq.result); };
+      rq.onerror=function(){ res(null); };
+    }catch(e){ res(null); }
+  });
+  return _idbP;
+}
+function kvGet(k){
+  return idb().then(function(db){
+    if(!db) return _mem[k];
+    return new Promise(function(res){
+      try{ var r=db.transaction('kv','readonly').objectStore('kv').get(k);
+        r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ res(undefined); };
+      }catch(e){ res(undefined); }
+    });
+  });
+}
+function kvSet(k,v){
+  _mem[k]=v;
+  return idb().then(function(db){
+    if(!db) return;
+    return new Promise(function(res){
+      try{ var t=db.transaction('kv','readwrite'); t.objectStore('kv').put(v,k);
+        t.oncomplete=res; t.onerror=res; t.onabort=res;
+      }catch(e){ res(); }
+    });
+  });
+}
+function kvDel(k){
+  delete _mem[k];
+  return idb().then(function(db){
+    if(!db) return;
+    return new Promise(function(res){
+      try{ var t=db.transaction('kv','readwrite'); t.objectStore('kv').delete(k);
+        t.oncomplete=res; t.onerror=res; t.onabort=res;
+      }catch(e){ res(); }
+    });
+  });
+}
+function kvKeys(){
+  return idb().then(function(db){
+    if(!db) return Object.keys(_mem);
+    return new Promise(function(res){
+      try{ var r=db.transaction('kv','readonly').objectStore('kv').getAllKeys();
+        r.onsuccess=function(){ res(r.result||[]); }; r.onerror=function(){ res([]); };
+      }catch(e){ res([]); }
+    });
+  });
+}
+
+/* ─────────── أدوات ─────────── */
+function now(){ try{ if(typeof getTrustedNow==='function') return getTrustedNow(); }catch(e){} return Date.now(); }
+function me(){ try{ var s=(typeof getSession==='function')?getSession():null; return (s&&s.username)||''; }catch(e){ return ''; } }
+function fb(){
+  try{
+    if(typeof fbReady!=='undefined' && fbReady && typeof fbDb!=='undefined' && fbDb) return fbDb;
+  }catch(e){}
+  return null;
+}
+function authed(){
+  try{ return typeof fbAuth!=='undefined' && fbAuth && !!fbAuth.currentUser; }catch(e){ return false; }
+}
+function openUrl(u){
+  u=PZ.safeUrl(u); if(!u) return;
+  try{
+    if(window.IS_ELECTRON && window.electronAPI && window.electronAPI.openExternal){ window.electronAPI.openExternal(u); return; }
+  }catch(e){}
+  try{ window.open(u,'_blank','noopener'); }catch(e){}
+}
+function targetsMe(ad, u){
+  if(!ad) return false;
+  if(!ad.to || ad.to==='all') return true;
+  return !!(u && typeof ad.to==='object' && ad.to[u]);
+}
+
+/* ─────────── الواجهة ─────────── */
+var root=null, stage=null, track=null, bars=null;
+var slides=[], cur=0, lastSig='';
+var pause={hover:false, focus:false, hold:false, hidden:false, inactive:false};
+
+function mount(){
+  if(root && document.body.contains(root)) return true;
+  var stats=document.getElementById('dash-stats');
+  if(!stats) return false;
+  root=PZ.buildFrame();
+  root.id='mlp-promos';
+  root.hidden=true;
+  stats.insertAdjacentElement('afterend', root);
+  stage=root.querySelector('.pz-stage');
+  track=root.querySelector('.pz-track');
+  bars =root.querySelector('.pz-bars');
+  bind();
+  watchDashboard();
+  return true;
+}
+
+function setPaused(){
+  if(!root) return;
+  root.classList.toggle('is-paused', pause.hover||pause.focus||pause.hold||pause.hidden||pause.inactive||root.classList.contains('is-min'));
+}
+
+function renderBars(){
+  if(!bars) return;
+  if(slides.length<2){ bars.innerHTML=''; return; }
+  var h='';
+  for(var k=0;k<slides.length;k++) h+='<i class="'+(k<cur?'done':k===cur?'run':'')+'"><b></b></i>';
+  bars.innerHTML=h;
+  var ad=slides[cur]&&slides[cur].ad;
+  var d=Math.max(3,Math.min(20,+(ad&&ad.dur)||6));
+  bars.style.setProperty('--pz-dur', d+'s');
+  var run=bars.querySelector('i.run b');
+  if(run) run.addEventListener('animationend', function(){ go(cur+1, 1); }, {once:true});
+}
+
+function go(n, dir){
+  if(!slides.length) return;
+  var len=slides.length;
+  n=((n%len)+len)%len;
+  var prev=slides[cur]&&slides[cur].el;
+  var next=slides[n].el;
+  if(prev && prev!==next){
+    prev.style.setProperty('--pz-from', dir>=0 ? '28px' : '-28px');
+    prev.classList.remove('is-on');
+  }
+  if(next){
+    next.style.transition='none';
+    next.style.setProperty('--pz-from', dir>=0 ? '-28px' : '28px');
+    void next.offsetWidth;
+    next.style.transition='';
+    next.classList.add('is-on');
+    stage.classList.toggle('on-light', !!next._pzOnLight);
+  }
+  cur=n;
+  renderBars();
+}
+
+function render(list){
+  if(!mount()) return;
+  var sig=list.map(function(x){ return x.id+':'+(x.ad.ver||0)+':'+(x.img?1:0); }).join('|');
+  if(sig===lastSig) return;
+  lastSig=sig;
+
+  var keepId = slides[cur] && slides[cur].id;
+  track.innerHTML='';
+  slides=[];
+  list.forEach(function(x){
+    var el=PZ.buildSlide(x.ad, x.img);
+    if(!el) return;
+    track.appendChild(el);
+    slides.push({id:x.id, ad:x.ad, el:el});
+  });
+
+  if(!slides.length){ root.hidden=true; bars.innerHTML=''; return; }
+  root.hidden=false;
+  stage.classList.toggle('one', slides.length===1);
+  root.querySelector('.pz-mini-n').textContent=PZ.countLabel(slides.length);
+
+  // تصغير محفوظ؟ يبقى مصغّراً إلا إذا وصل إعلان جديد
+  var ids=slides.map(function(s){return s.id;});
+  var minIds=null; try{ minIds=JSON.parse(localStorage.getItem(MIN_KEY)||'null'); }catch(e){}
+  if(Array.isArray(minIds) && ids.every(function(i){ return minIds.indexOf(i)>=0; })){
+    root.classList.add('is-min');
+  } else {
+    root.classList.remove('is-min');
+    if(minIds) try{ localStorage.removeItem(MIN_KEY); }catch(e){}
+  }
+
+  var idx=0;
+  for(var k=0;k<slides.length;k++) if(slides[k].id===keepId){ idx=k; break; }
+  cur=idx;
+  slides[idx].el.classList.add('is-on');
+  stage.classList.toggle('on-light', !!slides[idx].el._pzOnLight);
+  renderBars();
+  setPaused();
+}
+
+function bind(){
+  // الإيقاف عند مرور الماوس فقط (اللمس لا يُصدر خروجاً فيعلق الإيقاف)
+  stage.addEventListener('pointerenter', function(e){ if(e.pointerType==='mouse'){ pause.hover=true;  setPaused(); } });
+  stage.addEventListener('pointerleave', function(e){ if(e.pointerType==='mouse'){ pause.hover=false; setPaused(); } });
+  // الإيقاف عند التركيز بلوحة المفاتيح فقط — النقر بالماوس لا يوقف العرض
+  stage.addEventListener('focusin', function(e){
+    var kb=false; try{ kb=e.target.matches(':focus-visible'); }catch(_){}
+    pause.focus=kb; setPaused();
+  });
+  stage.addEventListener('focusout', function(){ pause.focus=false; setPaused(); });
+
+  root.querySelector('.pz-prev').addEventListener('click', function(e){ e.stopPropagation(); go(cur-1,-1); });
+  root.querySelector('.pz-next').addEventListener('click', function(e){ e.stopPropagation(); go(cur+1, 1); });
+  root.querySelector('.pz-min').addEventListener('click', function(e){
+    e.stopPropagation();
+    root.classList.add('is-min');
+    try{ localStorage.setItem(MIN_KEY, JSON.stringify(slides.map(function(s){return s.id;}))); }catch(_){}
+    setPaused();
+  });
+  root.querySelector('.pz-mini').addEventListener('click', function(){
+    root.classList.remove('is-min');
+    try{ localStorage.removeItem(MIN_KEY); }catch(_){}
+    renderBars();
+    setPaused();
+  });
+
+  stage.addEventListener('keydown', function(e){
+    if(e.key==='ArrowLeft'){ e.preventDefault(); go(cur+1, 1); }      // RTL: اليسار = التالي
+    else if(e.key==='ArrowRight'){ e.preventDefault(); go(cur-1,-1); }
+    else if(e.key==='Enter'){ var s=slides[cur]; if(s) openUrl(s.el.getAttribute('data-url')); }
+  });
+
+  // سحب باللمس/الماوس
+  var sx=0, sy=0, down=false, swiped=false;
+  stage.addEventListener('pointerdown', function(e){
+    if(e.target.closest('button')) return;
+    down=true; swiped=false; sx=e.clientX; sy=e.clientY;
+    pause.hold=true; setPaused();
+  });
+  function up(e){
+    if(!down) return;
+    down=false; pause.hold=false; setPaused();
+    var dx=e.clientX-sx, dy=e.clientY-sy;
+    if(slides.length>1 && Math.abs(dx)>45 && Math.abs(dx)>Math.abs(dy)*1.3){
+      swiped=true;
+      go(dx>0 ? cur+1 : cur-1, dx>0 ? 1 : -1);
+    }
+  }
+  stage.addEventListener('pointerup', up);
+  stage.addEventListener('pointercancel', function(){ down=false; pause.hold=false; setPaused(); });
+  stage.addEventListener('click', function(e){
+    if(swiped){ swiped=false; return; }
+    if(e.target.closest('button')) return;
+    var s=slides[cur]; if(!s) return;
+    var u=s.el.getAttribute('data-url'); if(u) openUrl(u);
+  });
+
+  document.addEventListener('visibilitychange', function(){ pause.hidden=document.hidden; setPaused(); });
+}
+
+function watchDashboard(){
+  var sec=document.getElementById('sec-dashboard');
+  if(!sec) return;
+  var upd=function(){ pause.inactive=!sec.classList.contains('active'); setPaused(); };
+  upd();
+  try{ new MutationObserver(upd).observe(sec,{attributes:true, attributeFilter:['class']}); }catch(e){}
+}
+
+/* ─────────── البيانات ─────────── */
+var _meta=null, _online=false, _seq=0, _lastUser=null;
+
+function apply(meta, authoritative){
+  _meta = meta||{};
+  var seq=++_seq, u=me(), t=now(), db=fb();
+  var ids=Object.keys(_meta);
+
+  var visible=ids.map(function(id){ return {id:id, ad:_meta[id]}; })
+    .filter(function(x){ return x.ad && PZ.status(x.ad,t)==='live' && targetsMe(x.ad,u); })
+    .sort(function(a,b){ return ((a.ad.order||0)-(b.ad.order||0)) || ((b.ad.ts||0)-(a.ad.ts||0)); });
+
+  return Promise.all(visible.map(function(x){
+    if(!x.ad.hasImg || x.ad.type==='text') return Promise.resolve(x);
+    var key='img:'+x.id;
+    return kvGet(key).then(function(c){
+      if(c && c.v===x.ad.imgVer && c.d){ x.img=c.d; return x; }
+      if(db && _online){
+        var timedOut=false;
+        var fetchP=db.ref('promos/img/'+x.id).once('value').then(function(s){
+          var d=s.val();
+          if(typeof d==='string' && d.indexOf('data:image/')===0){
+            x.img=d;
+            return kvSet(key,{v:x.ad.imgVer,d:d}).then(function(){
+              if(timedOut && _meta) apply(_meta,false);   // وصلت متأخرة ← أعد العرض
+              return x;
+            });
+          }
+          if(c && c.d) x.img=c.d;
+          return x;
+        }).catch(function(){ if(c&&c.d) x.img=c.d; return x; });
+        var waitP=new Promise(function(res){ setTimeout(function(){ timedOut=true; if(c&&c.d) x.img=c.d; res(x); }, 12000); });
+        return Promise.race([fetchP, waitP]);
+      }
+      if(c && c.d) x.img=c.d;   // بدون إنترنت: آخر نسخة محفوظة
+      return x;
+    });
+  })).then(function(list){
+    if(seq!==_seq) return;
+    render(list);
+
+    if(authoritative){
+      // احفظ فقط غير المنتهية — والمنتهية/المحذوفة تُمسح صورها من الجهاز
+      var keep={}, imgKeep={};
+      ids.forEach(function(id){
+        var ad=_meta[id]; if(!ad) return;
+        if(ad.end && t>ad.end) return;
+        keep[id]=ad;
+        if(ad.hasImg && ad.type!=='text' && targetsMe(ad,u)) imgKeep['img:'+id]=1;
+      });
+      kvSet('meta', keep);
+      kvKeys().then(function(keys){
+        keys.forEach(function(k){ if(String(k).indexOf('img:')===0 && !imgKeep[k]) kvDel(k); });
+      });
+    }
+  });
+}
+
+var _ref=null, _attaching=false, _connBound=false;
+function tryAttach(){
+  var db=fb();
+  if(_ref || _attaching || !db || !authed() || !me()) return;
+  _attaching=true;
+  try{
+    _ref=db.ref('promos/meta');
+    if(!_connBound){
+      _connBound=true;
+      try{ db.ref('.info/connected').on('value', function(s){ _online=!!s.val() && !!_ref; }); }catch(_){}
+    }
+    _ref.on('value', function(snap){
+      _attaching=false; _online=true;
+      apply(snap.val()||{}, true);
+    }, function(err){
+      console.warn('[promos] listener:', err && err.message);
+      _attaching=false; _online=false;
+      try{ _ref.off(); }catch(_){}
+      _ref=null;
+    });
+  }catch(e){ _attaching=false; _ref=null; }
+}
+
+function tick(){
+  if(!mount()) return;
+  var u=me();
+  if(u!==_lastUser){ _lastUser=u; if(_meta) apply(_meta,false); }
+  tryAttach();
+}
+
+function boot(){
+  if(!window.PZ){ setTimeout(boot,400); return; }
+  if(!mount()){ setTimeout(boot,500); return; }
+  kvGet('meta').then(function(m){ if(m && !_online) apply(m,false); });
+  tick();
+  setInterval(tick, 4000);
+  // إعادة فحص مواعيد البدء/الانتهاء كل دقيقة بدون أي طلب شبكة
+  setInterval(function(){ if(_meta) apply(_meta,false); }, 60000);
+}
+
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(boot,300); });
+else setTimeout(boot,300);
+})();
+</script>
