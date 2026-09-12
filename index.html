@@ -3607,6 +3607,18 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="display:flex;flex-direction:column;gap:14px">
               <div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:600">إبراز القيم الشاذة</div></div><div class="tog on" id="tog-highlight" onclick="this.classList.toggle('on')"><div class="tog-t"></div></div></div>
               <div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:600">إظهار النتائج السابقة</div></div><div class="tog on" id="tog-prev" onclick="this.classList.toggle('on')"><div class="tog-t"></div></div></div>
+              <!-- 🔢 عدّاد عدد النتائج السابقة التي تُطبع في ورقة التقرير (١ / ٢ / ٣) -->
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.25);border-radius:9px;padding:10px 12px">
+                <div style="flex:1">
+                  <div style="font-size:12px;font-weight:700">🔢 عدد النتائج السابقة في ورقة التقرير</div>
+                  <div style="font-size:10px;color:var(--text2);margin-top:3px;line-height:1.65">١ = آخر نتيجة فقط · ٢ = آخر نتيجتين · ٣ = آخر ٣ نتائج.<br>💡 لا يؤثر على واجهة إدخال النتائج — تبقى تعرض كل النتائج المتوفرة كما هي.</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+                  <button class="btn btn-s btn-sm" style="min-width:32px;padding:4px 9px;font-size:16px;font-weight:900;line-height:1" onclick="_stepPrevCount(-1)" title="إنقاص">−</button>
+                  <span id="prev-count-val" style="min-width:30px;text-align:center;font-size:18px;font-weight:900;color:var(--primary)">3</span>
+                  <button class="btn btn-s btn-sm" style="min-width:32px;padding:4px 9px;font-size:16px;font-weight:900;line-height:1" onclick="_stepPrevCount(1)" title="زيادة">+</button>
+                </div>
+              </div>
               <div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:600">توقيع الأخصائي</div></div><div class="tog on" id="tog-sig" onclick="this.classList.toggle('on')"><div class="tog-t"></div></div></div>
               <div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:12px;font-weight:600">ترويسة المختبر</div></div><div class="tog on" id="tog-hdr" onclick="this.classList.toggle('on')"><div class="tog-t"></div></div></div>
             </div>
@@ -9998,6 +10010,11 @@ let wizStep=1;
 let wizPatient={};
 let wizSelectedTests=[];
 let _wizEditPatientOnly=false;
+/* 🆔 عند فتح «تعديل بيانات المريض» من واجهة إدخال النتائج نحفظ هوية
+   المريض والطلب الأصليين، كي نكتشف لاحقاً أن المستخدم اختار من قائمة
+   الاقتراحات ملفاً سابقاً لنفس المريض فنقوم بدمج السجلين بدل الفشل. */
+let _wizEditOrigPatientId=null;
+let _wizEditOrigReqId=null;
 let currentReqId=null;
 let editTestId=null;
 
@@ -11182,7 +11199,7 @@ function nav(p){
       requestAnimationFrame(function(){ setTimeout(function(){ try{ loadResultsDropdown(); }catch(e){} }, 0); });
     }
   }
-  if(p==='print') loadPrintDropdown();
+  if(p==='print'){ loadPrintDropdown(); try{ _renderPrevCount(); }catch(e){} }
   if(p==='reports'){renderReports();if(typeof phcInit==='function')phcInit();}
   if(p==='dashboard') updateDashboard(true);
   if(p==='billing'){renderBillingTests();loadBillingPtDropdown();renderBillingHistory();_syncCurrencySelectors();}
@@ -11873,7 +11890,7 @@ function markWpNameEnManual(){
 // ============================================================
 // WIZARD - NEW PATIENT WITH AUTOCOMPLETE
 // ============================================================
-function startNewPatient(){wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;renderWizStep();openModal('m-wizard');}
+function startNewPatient(){wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;renderWizStep();openModal('m-wizard');}
 
 function renderWizStep(){
   const body=document.getElementById('wiz-body');
@@ -12796,6 +12813,27 @@ function wizNext(){
 
   // إذا كان وضع تعديل بيانات المريض فقط — احفظ مباشرةً بدون الانتقال لاختيار التحاليل
   if(_wizEditPatientOnly){
+    /* 🔗 هل اختار المستخدم من قائمة الاقتراحات ملفاً سابقاً لنفس المريض؟
+       عندها يختلف wizPatient.id عن هوية المريض الذي فُتح التعديل عليه،
+       وبدون دمج الملفين يبدو الحفظ وكأنه لم يحصل ولا تظهر تحاليله السابقة. */
+    const _origPid = _wizEditOrigPatientId;
+    const _isMerge = !!(_origPid && wizPatient.id && String(_origPid)!==String(wizPatient.id)
+                        && patients.some(p=>String(p.id)===String(wizPatient.id)));
+    if(_isMerge){
+      const _target = patients.find(p=>String(p.id)===String(wizPatient.id));
+      const _movedN = requests.filter(r=>String(r.patientId)===String(_origPid)).length;
+      const _ok = confirm(
+        'هذا المريض له ملف سابق في المختبر:\n\n'
+        + '👤 ' + (_target.name||'-') + '\n'
+        + '🆔 رقم الملف: ' + _target.id + '\n\n'
+        + 'سيتم نقل الطلب الحالي (' + _movedN + ' طلب) إلى ملفه السابق '
+        + 'وتظهر عندها نتائجه السابقة.\n\nهل تريد المتابعة؟');
+      if(!_ok){
+        // إلغاء — لا نحفظ أي شيء ونُبقي النافذة مفتوحة لتصحيح الاختيار
+        try{ showNotif('تم الإلغاء','لم يُحفظ أي تغيير — يمكنك تعديل الاسم من جديد','warning'); }catch(e){}
+        return;
+      }
+    }
     _wizEditPatientOnly=false;
     const pt=patients.find(p=>p.id===wizPatient.id);
     if(pt){
@@ -12805,6 +12843,13 @@ function wizNext(){
       if(!wizPatient.chronic||wizPatient.chronic.length===0) pt.chronic=oldChron;
       saveOne('patients',patients,pt);
       if(pt.phone) addToPhoneBook(pt.name, pt.phone);
+      /* 🔗 دمج الملف المكرّر داخل الملف السابق (إن اختير مريض موجود مسبقاً) —
+         ينقل الطلب الحالي وكل سجلاته إلى الملف القديم فتظهر نتائجه السابقة */
+      let _mergedN=0;
+      if(_isMerge && _origPid){
+        _mergedN=_mergePatientIntoExisting(_origPid, pt);
+        _wizEditOrigPatientId=null; _wizEditOrigReqId=null;
+      }
       // ── تحديث اسم المريض في جميع طلباته ──────────────────────────
       if(pt.name && pt.name!==oldName){
         requests.forEach(function(r){
@@ -12819,14 +12864,31 @@ function wizNext(){
         save('requests',requests);
       }
       renderRequests(); updateDashboard();
+      // بعد الدمج: أعِد بناء القوائم كي تعكس رقم الملف الجديد للطلب
+      if(_mergedN){
+        try{ updateBadges(); }catch(e){}
+        try{ loadResultsDropdown(); }catch(e){}
+        try{ loadPrintDropdown(); }catch(e){}
+        try{
+          const _tab=document.querySelector('#sec-patients .tabs .tab.active');
+          const _f=(_tab&&_tab.textContent.trim()==='اليوم')?'today':'all';
+          const _si=document.getElementById('pts-srch-inp');
+          renderPatients(_f,(_si&&_si.value)||'');
+        }catch(e){}
+      }
       // تحديث شريط بيانات المريض في واجهة إدخال النتائج إن كانت مفتوحة
       const resSelId=document.getElementById('res-req-sel')?.value;
       if(resSelId){
         const openReq=requests.find(r=>r.id===resSelId);
-        if(openReq&&openReq.patientId===pt.id) loadResultEntry();
+        if(openReq&&String(openReq.patientId)===String(pt.id)) loadResultEntry();
       }
-      showNotif('تم','تم تعديل بيانات المريض ✅','success');
+      if(_mergedN){
+        showNotif('تم الدمج ✅','نُقل الطلب إلى ملف المريض السابق ('+pt.id+') — نتائجه السابقة صارت متاحة','success');
+      } else {
+        showNotif('تم','تم تعديل بيانات المريض ✅','success');
+      }
     }
+    _wizEditOrigPatientId=null; _wizEditOrigReqId=null;
     closeModal('m-wizard');
     return;
   }
@@ -13083,7 +13145,7 @@ function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا
   // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
   setTimeout(_restoreAppFocus,0);
 }}
-function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;renderWizStep();openModal('m-wizard');}
+function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;renderWizStep();openModal('m-wizard');}
 
 // ── دوال التقويم ────────────────────────────────────────────
 function toggleCalendar(e){
@@ -14056,6 +14118,7 @@ function _reqDateKey(r){
   try{
     var d = r && (r.date || r.createdAt || r.created || r.datetime);
     if(d == null || d === '') return '';
+    if(typeof d === 'string' && d.length >= 10 && d.charCodeAt(4) === 45 && d.charCodeAt(7) === 45) return d.slice(0,10);   // ⚡ YYYY-MM-DD
     if(typeof d === 'number') return new Date(d).toISOString().split('T')[0];
     d = String(d).trim();
     if(/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0,10);
@@ -14080,7 +14143,8 @@ function renderRequestsFiltered(filter='today',srch=''){
      يُطبَّق الفلتر الزمني أولاً على القائمة كاملة قبل أي فلتر حالة أو بحث،
      فلا يظهر — ولا يبقى في الذاكرة معروضاً — أي طلب من يوم آخر مهما كان
      الزر المفعّل (اليوم · معلقة · جارية · مكتملة · نتائج الأجهزة) أو نص البحث. */
-  let list=[...requests].reverse().filter(r=>_isTodayReq(r,today));
+  let list=[];   // ⚡ مرور واحد من الأحدث بلا نسخ المصفوفة كاملة
+  for(let _i=requests.length-1;_i>=0;_i--){ const _r=requests[_i]; if(_r && _isTodayReq(_r,today)) list.push(_r); }
   if(filter==='pending') list=list.filter(r=>r.status==='pending');
   else if(filter==='inprogress') list=list.filter(r=>r.status==='inprogress');
   else if(filter==='done') list=list.filter(r=>r.status==='done');
@@ -14742,8 +14806,8 @@ function loadResultsDropdown(){
     return;
   }
   // طلبات قيد التنفيذ + طلبات CBC المحفوظة من الجهاز
-  const _cbcDoneReqs=requests.filter(r=>r.status==='done'&&(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams)));
-  const _pendingReqs=requests.filter(r=>r.status!=='done');
+  const _cbcDoneReqs=requests.filter(r=>r.status==='done'&&!r.glKey&&(r.cbcData||(r.resultDetails&&r.resultDetails.CBC&&r.resultDetails.CBC.cbcParams)));
+  const _pendingReqs=requests.filter(r=>r.status!=='done'&&!r.glKey);   // ⚡ الطلبات التاريخية المستوردة لا تُحمَّل في القائمة
   const _combined=[..._pendingReqs,..._cbcDoneReqs];
   // ⭐ أبقِ الطلب المعروض حالياً في القائمة مهما كانت حالته — وإلا اختفى
   //    من القائمة لحظة اكتماله (بعد طباعة إدرار/خروج) وفرغت الشاشة.
@@ -15585,6 +15649,112 @@ function resUpdateDoctorManual(inp){
   showNotif('تم', nm?'تم تحديث الطبيب ✅':'تم حذف الطبيب من الطلب ✅','success');
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   🔗 دمج ملف مريض مكرّر داخل ملفه السابق
+   ────────────────────────────────────────────────────────────────
+   الحالة: سُجّل المريض باسم خاطئ ثم صُحّح الاسم من «تعديل بيانات
+   المريض»، فظهر في الاقتراحات ملفه القديم (لأنه زارنا سابقاً)
+   واختاره المستخدم. عندها يجب نقل كل طلباته وسجلاته من الملف
+   الجديد (oldId) إلى ملفه القديم (newPt) ليظهر سجل تحاليله السابقة.
+   ترجع الدالة عدد الطلبات المنقولة.
+   ═══════════════════════════════════════════════════════════════ */
+function _mergePatientIntoExisting(oldId, newPt){
+  if(!oldId || !newPt || !newPt.id) return 0;
+  if(String(oldId)===String(newPt.id)) return 0;
+  var moved=0;
+  try{
+    // ① نقل كل الطلبات من الملف المكرّر إلى الملف القديم
+    requests.forEach(function(r){
+      if(r && String(r.patientId)===String(oldId)){
+        r.patientId   = newPt.id;
+        r.patientName = newPt.name || r.patientName;
+        if(newPt.doctorName){
+          r.doctorName = newPt.doctorName;
+          if(newPt.doctorId) r.doctorId = newPt.doctorId;
+        }
+        try{ if(typeof _stamp==='function') _stamp(r); }catch(e){}
+        moved++;
+      }
+    });
+    if(moved) save('requests',requests);
+
+    // ② نقل السجلات المرتبطة بالمريض (نفس المجموعات المعتمدة في إعادة الترقيم)
+    var _rel=[
+      ['invoices',        (typeof invoices!=='undefined')?invoices:null],
+      ['billingRecords',  (typeof billingRecords!=='undefined')?billingRecords:null],
+      ['cultureRecords',  (typeof cultureRecords!=='undefined')?cultureRecords:null],
+      ['uaRecords',       (typeof uaRecords!=='undefined')?uaRecords:null],
+      ['stoolExamRecords',(typeof stoolExamRecords!=='undefined')?stoolExamRecords:null],
+      ['semenRecords',    (typeof semenRecords!=='undefined')?semenRecords:null]
+    ];
+    _rel.forEach(function(pair){
+      var key=pair[0], list=pair[1], ch=0;
+      if(!Array.isArray(list)) return;
+      list.forEach(function(rec){
+        if(rec && rec.patientId!=null && String(rec.patientId)===String(oldId)){
+          rec.patientId=newPt.id;
+          if(rec.patientName!=null) rec.patientName=newPt.name||rec.patientName;
+          ch++;
+        }
+      });
+      if(ch){ try{ save(key,list); }catch(e){} }
+    });
+
+    // ③ الملف المكرّر أصبح فارغاً تماماً — ندمج عدّاد زياراته ثم نحذفه
+    var oldPt=patients.find(function(p){ return String(p.id)===String(oldId); });
+    if(oldPt){
+      newPt.visits=(parseInt(newPt.visits)||0)+(parseInt(oldPt.visits)||0);
+      var _ov=oldPt.lastVisit||'', _nv=newPt.lastVisit||'';
+      if(_ov && _ov>_nv) newPt.lastVisit=_ov;
+      // حافظ على أي بيانات اتصال أُدخلت حديثاً ولم تكن موجودة في الملف القديم
+      if(!newPt.phone && oldPt.phone) newPt.phone=oldPt.phone;
+      if(!newPt.addr  && oldPt.addr)  newPt.addr =oldPt.addr;
+      patients=patients.filter(function(p){ return String(p.id)!==String(oldId); });
+      save('patients',patients);
+      saveOne('patients',patients,newPt);
+    }
+  }catch(e){ console.error('[mergePatient]',e); }
+  return moved;
+}
+window._mergePatientIntoExisting=_mergePatientIntoExisting;
+
+/* ═══════════════════════════════════════════════════════════════
+   🔢 عدّاد النتائج السابقة في ورقة التقرير (١ / ٢ / ٣)
+   يُخزَّن في settings.prevPrintCount ويؤثر فقط على ورقة الطباعة —
+   واجهة إدخال النتائج تبقى كما هي تعرض كل النتائج المتوفرة.
+   ═══════════════════════════════════════════════════════════════ */
+function _getPrevPrintCount(){
+  var n=3;
+  try{ n=parseInt(settings&&settings.prevPrintCount); }catch(e){ n=3; }
+  if(!n||isNaN(n)||n<1) n=3;
+  if(n>3) n=3;
+  return n;
+}
+function _renderPrevCount(){
+  var el=document.getElementById('prev-count-val');
+  if(el) el.textContent=_getPrevPrintCount();
+}
+function _stepPrevCount(d){
+  var n=_getPrevPrintCount()+(parseInt(d)||0);
+  if(n<1) n=1;
+  if(n>3) n=3;
+  try{
+    if(typeof settings==='object'&&settings){
+      settings.prevPrintCount=n;
+      if(typeof save==='function') save('settings',settings);
+    }
+  }catch(e){}
+  _renderPrevCount();
+  try{
+    showNotif('تم', n===1?'📄 ستُطبع آخر نتيجة فقط في ورقة التقرير'
+                  :(n===2?'📄 ستُطبع آخر نتيجتين في ورقة التقرير'
+                        :'📄 ستُطبع آخر ٣ نتائج في ورقة التقرير'),'success');
+  }catch(e){}
+}
+window._getPrevPrintCount=_getPrevPrintCount;
+window._renderPrevCount=_renderPrevCount;
+window._stepPrevCount=_stepPrevCount;
+
 function editPatientFromResults(){
   const id=document.getElementById('res-req-sel').value; if(!id){showNotif('تنبيه','اختر طلباً أولاً','warning');return;}
   const req=requests.find(r=>r.id===id); if(!req){showNotif('خطأ','الطلب غير موجود','error');return;}
@@ -15594,6 +15764,9 @@ function editPatientFromResults(){
   wizPatient={...pt}; wizSelectedTests=[]; wizStep=1;
   // تعديل زر "التالي" ليحفظ مباشرةً بدون الانتقال لاختيار التحاليل
   _wizEditPatientOnly=true;
+  // 🆔 هوية المريض/الطلب الأصليين — لازمة لدمج الملفات إن اختير مريض سابق
+  _wizEditOrigPatientId=pt.id;
+  _wizEditOrigReqId=req.id;
   renderWizStep(); openModal('m-wizard');
 }
 
@@ -16969,6 +17142,8 @@ function buildPrintHTML(req, opts){
   const showPrev = document.getElementById('tog-prev')?.classList.contains('on');
   const showSig  = document.getElementById('tog-sig')?.classList.contains('on');
   const showHdr  = document.getElementById('tog-hdr')?.classList.contains('on');
+  // 🔢 كم نتيجة سابقة تُطبع في الورقة (١ / ٢ / ٣) — من إعدادات الطباعة
+  const _prevPrintN = (typeof _getPrevPrintCount==='function') ? _getPrevPrintCount() : 3;
 
   const grouped={};
   reqTests.forEach(t=>{
@@ -17750,7 +17925,7 @@ function buildPrintHTML(req, opts){
       // Fix 2: Previous results — عمود Last Result مستقل
       let prevHtml='';
       if(showPrev){
-        const pf=prevReqs.filter(pr=>pr.results&&pr.results[t.id]!==undefined&&pr.results[t.id]!=='').slice(0,3);
+        const pf=prevReqs.filter(pr=>pr.results&&pr.results[t.id]!==undefined&&pr.results[t.id]!=='').slice(0,_prevPrintN);
         if(pf.length){
           const rows=pf.map(pr=>{
             const rawDate=pr.resultDate||pr.date||'';
@@ -18744,7 +18919,7 @@ function _doPrintFallback(html, afterCB){
     try{
       iframe.contentWindow.focus();
       iframe.contentWindow.addEventListener('afterprint', function(){ if(afterCB) afterCB(); });
-      setTimeout(function(){ try{ iframe.contentWindow.print(); }catch(e){} }, 50);
+      setTimeout(function(){ try{ iframe.contentWindow.print(); }catch(e){} window._afterPrintSoon(); }, 50);
     }catch(e){
       const w=window.open('','_blank','width=900,height=700');
       w.document.open(); w.document.write(html); w.document.close();
@@ -18897,7 +19072,7 @@ function doPrint(reqId){
     const _printerName = settings.printerMain||'';
     if(window.electronAPI && window.electronAPI.printContent && _printerName){
       window.electronAPI.printContent({html: content, printer: _printerName, silent: true})
-        .then(function(r){ afterRegularPrint(); })
+        .then(function(r){ window._afterPrintSoon(100); afterRegularPrint(); })
         .catch(function(){ _doPrintFallback(content, afterRegularPrint); });
     } else {
       _doPrintFallback(content, afterRegularPrint);
@@ -18926,17 +19101,19 @@ function doPrint(reqId){
   }
   req.printed=true;
   req._updatedAt=Date.now(); // وقت التعديل — يُستخدم في المزامنة الذكية
-  saveOne('requests',requests,req);
-  // ⭐ طباعة كاملة ⇒ الطلب جاهز على شاشة الانتظار (يُلغي أثر طباعة CBC التلقائية)
-  try{ if(typeof _wsFlagPrinted==='function') _wsFlagPrinted(req.id); }catch(_){}
-  // ⭐ النداء يبدأ فور الطباعة (لا بعد 5 ثوانٍ من التحديث الدوري)
-  try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
-  try{ if(typeof _wsCallPatient==='function') _wsCallPatient(req.id); }catch(_){}
-  if(regularTests.length>0) deductInventoryOnPrint(req);
-  renderRequests();
   showNotif('🖨️ طباعة','جاري الطباعة...','success');
-  // العودة فوراً لقسم الطلبات بعد الطباعة
-  nav('requests');
+  // ⚡ الحفظ والنداء وخصم المخزون وإعادة الرسم — بعد إرسال الطباعة لا قبلها
+  window._afterPrint(function(){
+    saveOne('requests',requests,req);
+    // ⭐ طباعة كاملة ⇒ الطلب جاهز على شاشة الانتظار (يُلغي أثر طباعة CBC التلقائية)
+    try{ if(typeof _wsFlagPrinted==='function') _wsFlagPrinted(req.id); }catch(_){}
+    // ⭐ النداء يبدأ فور الطباعة
+    try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+    try{ if(typeof _wsCallPatient==='function') _wsCallPatient(req.id); }catch(_){}
+    if(regularTests.length>0) deductInventoryOnPrint(req);
+    // العودة لقسم الطلبات بعد الطباعة (nav يرسم القائمة)
+    nav('requests');
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -20979,7 +21156,7 @@ function updateDashboard(force){
   // ⭐ فهرسة التحاليل مرة واحدة (Map) بدل tests.find() لكل نتيجة — تسريع كبير
   const _testMap=new Map();
   for(let _i=0;_i<tests.length;_i++){ _testMap.set(tests[_i].id, tests[_i]); }
-  requests.filter(r=>r.status==='done').forEach(r=>{
+  requests.filter(r=>r.status==='done'&&!r.glKey).forEach(r=>{   // ⚡ بدون الطلبات التاريخية المستوردة
     r.tests.forEach(tid=>{const t=_testMap.get(tid);const val=r.results[tid];
       if(t&&val&&t.minVal!==null){const _vR=(typeof val==='string'&&(val.charAt(0)==='<'||val.charAt(0)==='>'))?parseFloat(val.substring(1).trim()):parseFloat(val); const v=_vR; if(v>t.maxVal*1.2||v<t.minVal*0.8)criticals.push({req:r,test:t,val});}
     });
@@ -29133,15 +29310,40 @@ const UA_FIELDS = {
   }
 };
 
+/* ══════════════════════════════════════════════════════════════════
+   ⚡ قوائم الفحوص الخاصة الكبيرة (بعد استيراد سنوات من البيانات)
+   • تُرتَّب بالأحدث فعلياً (تاريخ الإنشاء) لا بترتيب التخزين
+   • تُرسم أول 150 سجلاً فقط + زر «عرض المزيد» — البحث يشمل كل السجلات
+   • لا تُرسم إن كان القسم مخفياً (تُرسم تلقائياً عند فتحه)
+   ══════════════════════════════════════════════════════════════════ */
+function _spListVisible(secId){
+  var s=document.getElementById(secId);
+  return !!(s && s.classList.contains('active'));
+}
+function _spSortRecent(arr){
+  var a=(arr||[]).slice();
+  var ts=function(r){ var n=Number(r&&r.createdAt); if(n>0) return n; var t=Date.parse((r&&r.date)||''); return isNaN(t)?0:t; };
+  a.sort(function(x,y){ return ts(y)-ts(x); });
+  return a;
+}
+window._spListLimits = window._spListLimits || {};
+function _spListLimit(k){ return window._spListLimits[k] || 150; }
+function _spMoreBtn(k, shown, total, fnName){
+  if(shown>=total) return '';
+  return '<div style="text-align:center;margin:12px 0"><button class="btn btn-p" onclick="window._spListLimits[\''+k+'\']=(window._spListLimits[\''+k+'\']||150)+300;'+fnName+'()">⬇️ عرض المزيد ('+shown.toLocaleString('en-US')+' من '+total.toLocaleString('en-US')+')</button></div>';
+}
+
 function renderUAList(){
   loadUARecords();
-  const srch=(document.getElementById('ua-srch')||{}).value||'';
   const body=document.getElementById('ua-list-body'); if(!body) return;
-  let list=[...uaRecords].reverse();
+  // ⚡ لا ترسم القائمة إن لم يكن قسمها ظاهراً (يُرسم عند فتحه)
+  if(!_spListVisible('sec-ua')) return;
+  const srch=(document.getElementById('ua-srch')||{}).value||'';
+  let list=_spSortRecent(uaRecords);
   if(srch) list=list.filter(r=>(r.patientName+r.patientId).toLowerCase().includes(srch.toLowerCase()));
   if(!list.length){body.innerHTML='<div class="empty"><div class="empty-ic">💧</div><p>لا توجد نتائج</p></div>';return;}
+  const _total=list.length; list=list.slice(0,_spListLimit('ua'));
   body.innerHTML=list.map(r=>{
-    const pt=patients.find(p=>p.id===r.patientId)||{};
     const abnCount=_countUAAbn(r);
     return `<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:10px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
       <div style="font-size:24px">💧</div>
@@ -29157,7 +29359,7 @@ function renderUAList(){
         <button class="btn btn-sm btn-d" onclick="deleteUARecord('${r.id}')">🗑️</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+_spMoreBtn('ua',list.length,_total,'renderUAList');
 }
 
 function _countUAAbn(r){
@@ -29321,7 +29523,7 @@ function saveUAEntry(){
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
   else uaRecords.push(rec);
-  saveUARecords();
+  saveOne('uaRecords', uaRecords, rec);   // ⚡ حفظ هذا السجل فقط
   // Mark linked request as done
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
@@ -29364,7 +29566,7 @@ function saveAndPrintUA(){
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
   else uaRecords.push(rec);
-  saveUARecords();
+  saveOne('uaRecords', uaRecords, rec);   // ⚡ حفظ هذا السجل فقط
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
@@ -29375,8 +29577,8 @@ function saveAndPrintUA(){
   showNotif('تم','جاري الطباعة 🖨️','success');
   // طباعة فورية بالتوازي مع الحفظ — لا حاجة لانتظار setTimeout
   printUAReport(rec.id);
-  // تحديث القائمة في الخلفية بعد الطباعة
-  requestAnimationFrame(function(){
+  // تحديث القائمة والرجوع لواجهة النتائج — بعد إرسال الطباعة
+  window._afterPrint(function(){
     renderUAList();
     // ⭐ ابقَ في واجهة إدخال نتائج نفس المريض بعد الطباعة
     _spReturnToResultEntry(_spBackReqId);
@@ -29748,8 +29950,11 @@ function printUAReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
-  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'ua'); }catch(_){}
+  var _mpReq=r.reqId;
+  window._afterPrint(function(){
+    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq); }catch(_){}
+    try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(_mpReq,'ua'); }catch(_){}
+  });
   showNotif('طباعة','تم إرسال تقرير البول للطابعة 🖨️','success');
 }
 
@@ -29868,11 +30073,13 @@ const STOOL_FIELDS = {
 
 function renderStoolList(){
   loadStoolExamRecords();
-  const srch=(document.getElementById('stool-srch')||{}).value||'';
   const body=document.getElementById('stool-list-body'); if(!body) return;
-  let list=[...stoolExamRecords].reverse();
+  if(!_spListVisible('sec-stool-exam')) return;   // ⚡ يُرسم عند فتح القسم
+  const srch=(document.getElementById('stool-srch')||{}).value||'';
+  let list=_spSortRecent(stoolExamRecords);
   if(srch) list=list.filter(r=>(r.patientName+r.patientId).toLowerCase().includes(srch.toLowerCase()));
   if(!list.length){body.innerHTML='<div class="empty"><div class="empty-ic">🧫</div><p>لا توجد نتائج</p></div>';return;}
+  const _total=list.length; list=list.slice(0,_spListLimit('stool'));
   body.innerHTML=list.map(r=>{
     const parasites=['s_ova','s_cysts','s_trophozoites','s_larvae','s_adults'].some(k=>r[k]&&!r[k].includes('Not detected')&&!r[k].includes('Normal'));
     const abnCount=Object.values(STOOL_FIELDS).reduce((s,sec)=>s+sec.fields.filter(f=>f.normal&&r[f.id]&&r[f.id]!==f.normal&&r[f.id]!==EMPTY_VAL).length,0);
@@ -29890,7 +30097,7 @@ function renderStoolList(){
         <button class="btn btn-sm btn-d" onclick="deleteStoolRecord('${r.id}')">🗑️</button>
       </div>
     </div>`;
-  }).join('');
+  }).join('')+_spMoreBtn('stool',list.length,_total,'renderStoolList');
 }
 
 function openNewStoolModal(){
@@ -30075,7 +30282,7 @@ function saveStoolEntry(){
   loadStoolExamRecords();
   if(window._editStoolId){ const idx=stoolExamRecords.findIndex(x=>x.id===window._editStoolId); if(idx>-1)stoolExamRecords[idx]=rec; else stoolExamRecords.push(rec); }
   else stoolExamRecords.push(rec);
-  saveStoolExamRecords();
+  saveOne('stoolExamRecords', stoolExamRecords, rec);   // ⚡ حفظ هذا السجل فقط
   // Mark linked request as done
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
@@ -30122,7 +30329,7 @@ function saveAndPrintStool(){
   loadStoolExamRecords();
   if(window._editStoolId){ const idx=stoolExamRecords.findIndex(x=>x.id===window._editStoolId); if(idx>-1)stoolExamRecords[idx]=rec; else stoolExamRecords.push(rec); }
   else stoolExamRecords.push(rec);
-  saveStoolExamRecords();
+  saveOne('stoolExamRecords', stoolExamRecords, rec);   // ⚡ حفظ هذا السجل فقط
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
@@ -30130,11 +30337,13 @@ function saveAndPrintStool(){
     window._stoolReqId=null;
   }
   closeModal('m-stool-exam');
-  renderStoolList();
-  _spReturnToResultEntry(_spBackReqId);   // ⭐ ابقَ في واجهة نتائج نفس المريض
   window._specialExamInlineMode=false;
   showNotif('تم','جاري الطباعة 🖨️','success');
-  setTimeout(()=>printStoolReport(rec.id), 50);
+  printStoolReport(rec.id);   // ⚡ الطباعة أولاً
+  window._afterPrint(function(){
+    renderStoolList();
+    _spReturnToResultEntry(_spBackReqId);   // ⭐ ابقَ في واجهة نتائج نفس المريض
+  });
 }
 
 function deleteStoolRecord(id){
@@ -30345,8 +30554,11 @@ function printStoolReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
-  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'stool'); }catch(_){}
+  var _mpReq=r.reqId;
+  window._afterPrint(function(){
+    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq); }catch(_){}
+    try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(_mpReq,'stool'); }catch(_){}
+  });
   showNotif('طباعة','تم إرسال تقرير البراز للطابعة 🖨️','success');
 }
 
@@ -30465,7 +30677,7 @@ function saveAndShareUAWhatsApp(){
   loadUARecords();
   if(window._editUAId){ const idx=uaRecords.findIndex(x=>x.id===window._editUAId); if(idx>-1)uaRecords[idx]=rec; else uaRecords.push(rec); }
   else uaRecords.push(rec);
-  saveUARecords();
+  saveOne('uaRecords', uaRecords, rec);   // ⚡ حفظ هذا السجل فقط
   const _spBackReqId = window._uaReqId || window._specialExamInlineReqId || null;
   if(window._uaReqId){
     const req=requests.find(r=>r.id===window._uaReqId);
@@ -30513,7 +30725,7 @@ function saveAndShareStoolWhatsApp(){
   loadStoolExamRecords();
   if(window._editStoolId){ const idx=stoolExamRecords.findIndex(x=>x.id===window._editStoolId); if(idx>-1)stoolExamRecords[idx]=rec; else stoolExamRecords.push(rec); }
   else stoolExamRecords.push(rec);
-  saveStoolExamRecords();
+  saveOne('stoolExamRecords', stoolExamRecords, rec);   // ⚡ حفظ هذا السجل فقط
   const _spBackReqId = window._stoolReqId || window._specialExamInlineReqId || null;
   if(window._stoolReqId){
     const req=requests.find(r=>r.id===window._stoolReqId);
@@ -33777,7 +33989,7 @@ function saveSemenEntry(){
   loadSemenRecords();
   if(window._semenEditId){ const idx=semenRecords.findIndex(x=>x.id===window._semenEditId); if(idx>-1)semenRecords[idx]=rec; else semenRecords.push(rec); }
   else semenRecords.push(rec);
-  saveSemenRecords();
+  saveOne('semenRecords', semenRecords, rec);   // ⚡ حفظ هذا السجل فقط
   const _spBackReqId = window._semenReqId || window._specialExamInlineReqId || null;
   if(window._semenReqId){
     const req=requests.find(r=>r.id===window._semenReqId);
@@ -33800,12 +34012,13 @@ function renderSemenList(){
   loadSemenRecords();
   const srch=(document.getElementById('semen-srch')||{}).value||'';
   const body=document.getElementById('semen-list-body'); if(!body)return;
-  let list=[...semenRecords].reverse();
+  let list=_spSortRecent(semenRecords);
   if(srch) list=list.filter(r=>(r.patientName||'').includes(srch)||(r.patientId||'').includes(srch));
   if(!list.length){
     body.innerHTML='<div class="empty"><div class="empty-ic">🔬</div><p>لا توجد نتائج بعد</p></div>';
     return;
   }
+  const _total=list.length; list=list.slice(0,_spListLimit('semen'));
   body.innerHTML=`<div class="semen-tbl-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%"><table class="tbl" style="min-width:max-content"><thead><tr>
     <th>المريض</th><th>التاريخ</th><th>التشخيص</th><th>التركيز</th><th>الحركة PR</th><th>الأشكال الطبيعية</th><th>الإجراءات</th>
   </tr></thead><tbody>${list.map(r=>`<tr>
@@ -33821,7 +34034,7 @@ function renderSemenList(){
       <button class="btn btn-sm btn-w" onclick="shareSemenPDFWhatsApp('${r.id}')" title="مشاركة رابط PDF عبر واتساب">📱 PDF</button>
       <button class="btn btn-sm btn-d" onclick="deleteSemenRecord('${r.id}')">🗑️</button>
     </td>
-  </tr>`).join('')}</tbody></table></div>`;
+  </tr>`).join('')}</tbody></table></div>`+_spMoreBtn('semen',list.length,_total,'renderSemenList');
 }
 
 // mode='sheets' ⇒ تُرجع مصفوفة: مستند HTML كامل ومستقل لكل ورقة (للـ PDF)
@@ -34252,8 +34465,11 @@ function printSemenReport(id){
   window._medlabPrinting=true;
   setTimeout(function(){window._medlabPrinting=false;},4000);
   _printViaIframe(html);
-  try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(r.reqId); }catch(_){}
-  try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(r.reqId,'semen'); }catch(_){}
+  var _mpReq=r.reqId;
+  window._afterPrint(function(){
+    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq); }catch(_){}
+    try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(_mpReq,'semen'); }catch(_){}
+  });
   showNotif('طباعة','تم إرسال تقرير السائل المنوي للطابعة 🖨️','success');
 }
 
@@ -34351,12 +34567,37 @@ function shareSemenPDFWhatsApp(id){
 // ============================================================
 // PRINT VIA IFRAME — fallback for mobile browsers
 // ============================================================
+/* ══════════════════════════════════════════════════════════════════
+   🖨️⚡ «الطباعة أولاً» — طابور أعمال ما بعد الطباعة
+   ------------------------------------------------------------------
+   الطباعة عبر iframe تُنفَّذ في setTimeout، فأي عمل متزامن بعد استدعائها
+   (تعليم «مطبوع»، حفظ، إعادة رسم القوائم، الرجوع لواجهة النتائج…) كان
+   يُؤخّر ظهور الطباعة. الآن تُؤجَّل هذه الأعمال حتى تُرسَل الطباعة فعلاً،
+   مع مؤقّت أمان يضمن تنفيذها حتى لو لم يمرّ مسار الطباعة بالطابور.
+   ══════════════════════════════════════════════════════════════════ */
+window._afterPrintQ = window._afterPrintQ || [];
+window._afterPrintT = null;
+window._flushAfterPrint = function(){
+  if(window._afterPrintT){ clearTimeout(window._afterPrintT); window._afterPrintT=null; }
+  var q = window._afterPrintQ.splice(0);
+  for(var i=0;i<q.length;i++){ try{ q[i](); }catch(e){ console.warn('[afterPrint]', e); } }
+};
+window._afterPrint = function(fn){
+  if(typeof fn!=='function') return;
+  window._afterPrintQ.push(fn);
+  if(!window._afterPrintT) window._afterPrintT = setTimeout(window._flushAfterPrint, 2500);
+};
+window._afterPrintSoon = function(ms){
+  if(window._afterPrintT) clearTimeout(window._afterPrintT);
+  window._afterPrintT = setTimeout(window._flushAfterPrint, ms==null?300:ms);
+};
+
 function _printViaIframe(html, isBarcode){
   // طباعة صامتة عبر Electron (بدون واجهة اختيار طابعة)
   const printerName = isBarcode ? (settings.printerBarcode||'') : (settings.printerMain||'');
   if(window.electronAPI && window.electronAPI.printContent && printerName){
     window.electronAPI.printContent({html: html, printer: printerName, silent: true})
-      .then(function(r){ if(r&&!r.ok) console.warn('print error:',r.error); })
+      .then(function(r){ if(r&&!r.ok) console.warn('print error:',r.error); window._afterPrintSoon(100); })
       .catch(function(e){ console.warn('printContent err:',e); });
     return;
   }
@@ -34373,6 +34614,7 @@ function _printViaIframe(html, isBarcode){
     try{
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
+      window._afterPrintSoon();   // ⚡ أعمال ما بعد الطباعة تبدأ بعد إرسالها
     }catch(e){
       const w=window.open('','_blank','width=900,height=700');
       if(w){ w.document.open(); w.document.write(html); w.document.close();
@@ -36031,9 +36273,10 @@ function _spMarkPrinted(reqId, kind){
     try{ if(typeof _reqFinalizeStatus === 'function') _reqFinalizeStatus(r); }catch(e){}
     saveOne('requests', requests, r);
 
-    try{ if(typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
-    try{ if(typeof renderRequests === 'function') renderRequests(); }catch(e){}
-    try{ if(typeof loadResultsDropdown === 'function') loadResultsDropdown(); }catch(e){}
+    var _vis=function(id){ var el=document.getElementById(id); return !!(el&&el.classList.contains('active')); };
+    try{ if(_vis('sec-print') && typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
+    try{ if(_vis('sec-requests') && typeof renderRequests === 'function') renderRequests(); }catch(e){}
+    try{ if(_vis('sec-results') && typeof loadResultsDropdown === 'function') loadResultsDropdown(); }catch(e){}
     try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(e){}
   }catch(e){ console.warn('[spPrint]', e); }
 }
@@ -36074,9 +36317,10 @@ function _cbcMarkPrinted(reqId){
     try{ if(typeof _reqFinalizeStatus === 'function') _reqFinalizeStatus(r); }catch(e){}
     saveOne('requests', requests, r);
 
-    try{ if(typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
-    try{ if(typeof renderRequests === 'function') renderRequests(); }catch(e){}
-    try{ if(typeof loadResultsDropdown === 'function') loadResultsDropdown(); }catch(e){}
+    var _vis=function(id){ var el=document.getElementById(id); return !!(el&&el.classList.contains('active')); };
+    try{ if(_vis('sec-print') && typeof loadPrintDropdown === 'function') loadPrintDropdown(); }catch(e){}
+    try{ if(_vis('sec-requests') && typeof renderRequests === 'function') renderRequests(); }catch(e){}
+    try{ if(_vis('sec-results') && typeof loadResultsDropdown === 'function') loadResultsDropdown(); }catch(e){}
     try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(e){}
     try{ if(typeof updateBadges === 'function') updateBadges(); }catch(e){}
   }catch(e){ console.warn('[cbcPrint]', e); }
@@ -50452,7 +50696,8 @@ window._lanEmit = function(key, data){
       if(!(id in b) || b[id] !== t) delta.push(o);
     }
   }
-  _base[key] = _baseline(data);
+  if(!b || data.length < 2000){ _base[key] = _baseline(data); }
+  else { for(i=0;i<delta.length;i++){ id=_idOf(delta[i]); if(id) b[id]=_tsOf(delta[i]); } }   // ⚡ تحديث تدريجي
   if(delta.length) _sendRows(key, delta);
 };
 
