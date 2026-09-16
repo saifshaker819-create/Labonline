@@ -11546,8 +11546,8 @@ function openPatientQuickPanel(pid){
   const _doOpen = function(){
     const ptReqs=requests.filter(r=>r.patientId===pid).reverse();
   const doneReqs=ptReqs.filter(r=>r.status==='done');
-  // Show last 4 results only
-  const last4=doneReqs.slice(0,4);
+  // عرض كل النتائج (بدون تحديد)
+  const last4=doneReqs;
   const modal=document.createElement('div');
   modal.className='moverlay open';modal.id='m-pt-quick';
   let reqRows=last4.map(r=>{
@@ -11596,7 +11596,7 @@ function openPatientQuickPanel(pid){
         <div class="pt-bar-item"><label>الهاتف</label><span>${p.phone||'-'}</span></div>
         <div class="pt-bar-item"><label>إجمالي الزيارات</label><span>${ptReqs.length} طلب</span></div>
       </div>
-      <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--primary)">📋 آخر 4 نتائج</div>
+      <div style="font-size:12px;font-weight:700;margin-bottom:10px;color:var(--primary)">📋 كل النتائج (${doneReqs.length})</div>
       ${reqRows}
     </div>
     <div class="mftr">
@@ -13186,7 +13186,7 @@ function clearDateFilter(){
 function viewPatientFullModal(pid){
   const p=patients.find(x=>x.id===pid);if(!p)return;
   const allPtReqs=requests.filter(r=>r.patientId===pid).reverse();
-  const ptReqs=allPtReqs.slice(0,4); // show last 4 only
+  const ptReqs=allPtReqs; // عرض كل الزيارات
   const title=document.getElementById('pr-title');
   title.innerHTML=`📊 ملف المريض: ${p.name}`;
   document.getElementById('pr-body').innerHTML=`
@@ -13196,7 +13196,7 @@ function viewPatientFullModal(pid){
     <div class="pt-bar-item"><label>الهاتف</label><span>${p.phone||'-'}</span></div>
     <div class="pt-bar-item"><label>رقم الملف</label><span>${p.id}</span></div>
   </div>
-  <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--primary)">📋 سجل الزيارات (${allPtReqs.length} طلب - عرض آخر 4)</div>
+  <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--primary)">📋 سجل الزيارات (${allPtReqs.length} طلب - عرض الكل)</div>
   ${ptReqs.length===0?'<div class="empty"><p>لا توجد زيارات سابقة</p></div>':ptReqs.map(r=>{
     const reqTests=r.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean);
     const testRows=reqTests.map(t=>{
