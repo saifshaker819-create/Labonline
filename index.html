@@ -6383,6 +6383,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <option value="mindray_bc30s">Mindray BC-30s (CBC)</option>
             <option value="mindray_bc6000">Mindray BC-6000 Series (CBC)</option>
             <option value="zybio">Zybio (Z60 / Z3)</option>
+            <option value="zybio_z50">Zybio Z50 (5-Diff)</option>
             <option value="nano">Nano 3001 (Nanomax CBC)</option>
             <option value="fuji_nx600">FUJIFILM DRI-CHEM NX600</option>
             <option value="biobase">Biobase</option>
@@ -6587,6 +6588,10 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div class="wiz-card" onclick="lisWizSelectVendor('zybio','Zybio Z60','hl7')" data-v="zybio">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z60 / Z3</div>
               <div style="font-size:10px;color:var(--text2)">CBC — HL7 عبر الشبكة</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('zybio_z50','Zybio Z50','hl7')" data-v="zybio_z50">
+              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Zybio Z50</div>
+              <div style="font-size:10px;color:var(--text2)">CBC 5-Diff — HL7 + رسومات</div>
             </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('biobase','Biobase','astm')" data-v="biobase">
               <div style="font-size:22px">🔭</div><div style="font-weight:800;font-size:12px">Biobase</div>
@@ -7476,7 +7481,7 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
         <div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:10px">🧮 تحليل محسوب — Calculated Test</div>
         <div class="fg" style="margin-bottom:10px">
           <label class="fl" style="font-size:11px">كود المعادلة (calcFormula)</label>
-          <input class="fc" id="et-calc-formula" placeholder="e.g. homa_ir" style="direction:ltr;font-family:monospace" oninput="renderCalcInputSettings()">
+          <input class="fc" id="et-calc-formula" placeholder="e.g. homa_ir" style="direction:ltr;font-family:monospace" oninput="onCalcFormulaInput()">
         </div>
         <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.7">
           الأكواد: <span style="color:#a78bfa;font-family:monospace;font-size:9px">homa_ir | homa_b | egfr_ckd | egfr_mdrd | ldl_friedewald | non_hdl | chol_ratio | trig_hdl | bmi | ag_ratio | tbil_ratio | quicki | map | sodium_corr | anion_gap | uacr | ft3_ft4 | meld | fib4 | mchr</span>
@@ -10405,6 +10410,82 @@ async function _migrateLegacyLS(){
 }
 
 // يقرأ البيانات الكبيرة من IDB ويحدّث المتغيرات والكاش
+/* ════════════════════════════════════════════════════════════
+   ⭐ ترحيل إجباري عند تنزيل التحديث — توحيد اسم سكر الصيام إلى FBG
+   • يُجبر تحليل سكر الصيام في قاعدة البيانات على الاسم FBG (مرة واحدة).
+   • يمسح أي اسم عربي («سكر الصيام / السكر الصيامي / سكر صائم») من:
+       - قاعدة بيانات التحاليل (nameEn / nameShort)
+       - إعدادات مدخلات التحاليل المحسوبة (calcInputSettings) — HOMA-IR وغيره
+       - المدخلات المحفوظة داخل الطلبات القديمة (req.calcInputs)
+   • يُحفظ في localStorage وIndexedDB معاً حتى لا يعود الاسم القديم.
+   ════════════════════════════════════════════════════════════ */
+const FBG_FORCE_FLAG = 'medlab_fbg_force_name_v1';
+function _applyFbgNamingMigration(finalize){
+  let force=false;
+  try{ force = (localStorage.getItem(FBG_FORCE_FLAG)!=='1'); }catch(e){ force=false; }
+  let dirty=false;
+  try{
+    if(Array.isArray(tests)){
+      tests.forEach(function(t){
+        if(!t) return;
+        // ① تحليل سكر الصيام نفسه في قاعدة التحاليل
+        if(_isGlucoseCode(t.code) && String(t.code||'').toUpperCase()!=='GLU' && String(t.code||'').toUpperCase()!=='GLUCOSE'){
+          if(force || _isArabicFbsName(t.nameEn) || _isArabicFbsName(t.nameShort) || !t.nameShort || !String(t.nameShort).trim()){
+            if(t.nameEn!==FBG_CANON_NAME){ t.nameEn=FBG_CANON_NAME; dirty=true; }
+            if(t.nameShort!==FBG_CANON_NAME){ t.nameShort=FBG_CANON_NAME; dirty=true; }
+          }
+        } else {
+          if(_isArabicFbsName(t.nameEn)){ t.nameEn=FBG_CANON_NAME; dirty=true; }
+          if(_isArabicFbsName(t.nameShort)){ t.nameShort=FBG_CANON_NAME; dirty=true; }
+        }
+        // ② إعدادات مدخلات التحاليل المحسوبة
+        if(t.calcInputSettings && typeof t.calcInputSettings==='object'){
+          Object.keys(t.calcInputSettings).forEach(function(code){
+            const cs=t.calcInputSettings[code];
+            if(!cs||typeof cs!=='object') return;
+            if(_isGlucoseCode(code)){
+              if(force || !cs.nameEn || !String(cs.nameEn).trim() || _isArabicFbsName(cs.nameEn)){
+                if(cs.nameEn!==FBG_CANON_NAME){ cs.nameEn=FBG_CANON_NAME; dirty=true; }
+              }
+            } else if(_isArabicFbsName(cs.nameEn)){
+              cs.nameEn=FBG_CANON_NAME; dirty=true;
+            }
+          });
+        }
+      });
+    }
+    if(dirty){
+      try{ save('tests',tests); }catch(e){}
+      try{ IDB.set(DB._pfx()+'tests',tests).catch(function(){}); }catch(e){}
+      try{ if(typeof renderTestsDB==='function') renderTestsDB(); }catch(e){}
+    }
+    // ③ المدخلات المحفوظة داخل الطلبات القديمة
+    if(Array.isArray(requests)){
+      let rdirty=false;
+      requests.forEach(function(r){
+        if(!r||!r.calcInputs||typeof r.calcInputs!=='object') return;
+        Object.keys(r.calcInputs).forEach(function(tid){
+          const m=r.calcInputs[tid];
+          if(!m||typeof m!=='object') return;
+          Object.keys(m).forEach(function(code){
+            const e=m[code];
+            if(!e||typeof e!=='object') return;
+            if(_isGlucoseCode(code)){
+              if(!e.label || _isArabicFbsName(e.label)){ e.label=FBG_CANON_NAME+' (mg/dL)'; rdirty=true; }
+            } else if(_isArabicFbsName(e.label)){ e.label=FBG_CANON_NAME; rdirty=true; }
+          });
+        });
+      });
+      if(rdirty){
+        try{ save('requests',requests); }catch(e){}
+        try{ IDB.set(DB._pfx()+'requests',requests).catch(function(){}); }catch(e){}
+      }
+    }
+  }catch(e){ console.warn('[MedLab] FBG naming migration error',e); }
+  if(finalize && force){ try{ localStorage.setItem(FBG_FORCE_FLAG,'1'); }catch(e){} }
+  return dirty;
+}
+
 async function _mergeIDBInBackground(){
   try{
     const pfx=DB._pfx();
@@ -10558,11 +10639,18 @@ async function _mergeIDBInBackground(){
         _MC[pfx+'tests']=tests;
       }
     }
+    // ⭐ بعد اكتمال تحميل التحاليل من IDB — طبّق ترحيل اسم FBG إجبارياً
+    try{ _applyFbgNamingMigration(true); }catch(e){}
+    // 🩸 تحليل CBC لا يُحذف — أعِده إن كان محذوفاً سابقاً
+    try{ if(typeof _cbcEnsureTest==='function') _cbcEnsureTest(); }catch(e){}
     if(changed){
       renderAll(); updateDashboard(); updateBadges();
       try{updateDbStats();}catch{}
     }
-  }catch(e){console.error('[MedLab] merge error',e);}
+  }catch(e){
+    console.error('[MedLab] merge error',e);
+    try{ _applyFbgNamingMigration(true); }catch(e2){}
+  }
 }
 
 // ============================================================
@@ -10586,6 +10674,8 @@ window.onload=()=>{
 
 function startApp(){
   initTheme();
+  // ⭐ توحيد اسم سكر الصيام (FBG) على البيانات المحمّلة فوراً — قبل أي رسم أو طباعة
+  try{ _applyFbgNamingMigration(false); }catch(e){}
   loadSettings();   // أولاً: ضع القيم المحفوظة في settings object والـ DOM
   applyFontCustom(); // ثانياً: طبّق الكل على CSS
   applyCustomExamFields();
@@ -16415,28 +16505,102 @@ function getInterp(t,val,gender,age,localRef){
 // ============================================================
 // CALCULATED TEST FORMULAS
 // ============================================================
+/* ════════════════════════════════════════════════════════════
+   ⭐ توحيد اسم سكر الصيام في التحاليل المحسوبة — FBG دائماً
+   لا يُسمح بأي اسم عربي («سكر الصيام / السكر الصيامي / سكر صائم»)
+   والاسم يُؤخذ دائماً من حقل الاسم في قاعدة بيانات التحاليل.
+   ════════════════════════════════════════════════════════════ */
+const FBG_CANON_NAME = 'FBG';
+const _GLUCOSE_CODES = ['FBS','FBG','FPG','GLU','GLUCOSE','SUGAR-F'];
+const _AR_FBS_RE = /(?:سكر|السكر|الجلوكوز|جلوكوز)\s*(?:ال)?(?:صيام|صائم|صيامي|صومي|صوم)/;
+function _isArabicFbsName(s){
+  if(s===null||s===undefined) return false;
+  s=String(s).trim();
+  if(!s) return false;
+  try{ return _AR_FBS_RE.test(s); }catch(e){ return false; }
+}
+function _isGlucoseCode(code){
+  return _GLUCOSE_CODES.indexOf(String(code||'').toUpperCase())>-1;
+}
+/* يُنظّف أي اسم مدخل في تحليل محسوب: يمنع الاسم العربي لسكر الصيام نهائياً */
+function _sanitizeCalcInputName(code, name){
+  if(_isGlucoseCode(code)){
+    if(!name || !String(name).trim() || _isArabicFbsName(name)) return FBG_CANON_NAME;
+    return String(name).trim();
+  }
+  if(_isArabicFbsName(name)) return FBG_CANON_NAME;
+  return name;
+}
+/* إيجاد التحليل المقابل لمدخل معادلة — مع دعم مرادفات سكر الصيام (FBS/FBG/FPG) */
+function _findTestForCalcCode(code){
+  try{
+    if(typeof tests==='undefined' || !Array.isArray(tests)) return null;
+    let mt = tests.find(function(x){ return x && x.code===code; });
+    if(mt) return mt;
+    if(_isGlucoseCode(code)){
+      const prefer=['FBS','FBG','FPG','SUGAR-F','GLU','GLUCOSE'];
+      for(let i=0;i<prefer.length;i++){
+        mt = tests.find(function(x){ return x && String(x.code||'').toUpperCase()===prefer[i]; });
+        if(mt) return mt;
+      }
+    }
+  }catch(e){}
+  return null;
+}
+/* اسم المدخل من قاعدة البيانات (nameShort ← nameEn) مع تنظيفه */
+function _calcInputDbName(code, fallbackName){
+  try{
+    if(typeof tests!=='undefined' && Array.isArray(tests)){
+      const mt = _findTestForCalcCode(code);
+      if(mt){
+        let n = (mt.nameShort && String(mt.nameShort).trim()) ? String(mt.nameShort).trim() : (mt.nameEn||'');
+        n = _sanitizeCalcInputName(code, n);
+        if(n && String(n).trim()) return String(n).trim();
+      }
+    }
+  }catch(e){}
+  return _sanitizeCalcInputName(code, fallbackName);
+}
+function _calcInputDbUnit(code, fallbackUnit){
+  try{
+    if(typeof tests!=='undefined' && Array.isArray(tests)){
+      const mt = _findTestForCalcCode(code);
+      if(mt && mt.unit && mt.unit!=='qualitative') return mt.unit;
+    }
+  }catch(e){}
+  return fallbackUnit||'';
+}
+/* يبني تعريف مدخل ديناميكي: name = من قاعدة البيانات، label = الاسم + الوحدة */
+function _mkCalcInput(code, fallbackName, fallbackUnit){
+  const n = _calcInputDbName(code, fallbackName);
+  const u = _calcInputDbUnit(code, fallbackUnit);
+  return { code:code, name:n, unit:u, label: u ? (n+' ('+u+')') : n };
+}
 function getCalcFormulaInputs(formula){
+  // ⭐ تُبنى في كل استدعاء لتأخذ الأسماء الحالية من قاعدة بيانات التحاليل
+  const INS = function(){ return _mkCalcInput('INSU-F','Insulin','μIU/mL'); };
+  const FBG = function(){ return _mkCalcInput('FBS', FBG_CANON_NAME, 'mg/dL'); };
   const inputs={
-    homa_ir:[{code:'INSU-F',label:'الأنسولين الصيامي (μIU/mL)'},{code:'FBS',label:'سكر الصيام (mg/dL)'}],
-    homa_b:[{code:'INSU-F',label:'الأنسولين الصيامي (μIU/mL)'},{code:'FBS',label:'سكر الصيام (mg/dL)'}],
-    egfr_ckd:[{code:'CREAT',label:'الكرياتينين (mg/dL)'},{code:'AGE_INPUT',label:'العمر (سنة)'},{code:'GENDER_INPUT',label:'الجنس (1=ذكر, 0=أنثى)'}],
-    egfr_mdrd:[{code:'CREAT',label:'الكرياتينين (mg/dL)'},{code:'AGE_INPUT',label:'العمر (سنة)'},{code:'GENDER_INPUT',label:'الجنس (1=ذكر, 0=أنثى)'}],
-    ldl_friedewald:[{code:'CHOL',label:'الكوليسترول الكلي (mg/dL)'},{code:'HDL',label:'HDL (mg/dL)'},{code:'TG',label:'الدهون الثلاثية (mg/dL)'}],
-    non_hdl:[{code:'CHOL',label:'الكوليسترول الكلي (mg/dL)'},{code:'HDL',label:'HDL (mg/dL)'}],
-    chol_ratio:[{code:'CHOL',label:'الكوليسترول الكلي (mg/dL)'},{code:'HDL',label:'HDL (mg/dL)'}],
-    bmi:[{code:'WEIGHT',label:'الوزن (كغ)'},{code:'HEIGHT',label:'الطول (م)'}],
-    ag_ratio:[{code:'ALB',label:'الألبومين (g/dL)'},{code:'TP',label:'البروتين الكلي (g/dL)'}],
-    tbil_ratio:[{code:'DBIL',label:'البيليروبين المباشر (mg/dL)'},{code:'TBIL',label:'البيليروبين الكلي (mg/dL)'}],
-    quicki:[{code:'INSU-F',label:'الأنسولين الصيامي (μIU/mL)'},{code:'FBS',label:'سكر الصيام (mg/dL)'}],
-    map:[{code:'SBP',label:'ضغط الدم الانقباضي (mmHg)'},{code:'DBP',label:'ضغط الدم الانبساطي (mmHg)'}],
-    sodium_corr:[{code:'Na',label:'الصوديوم المقاس (mEq/L)'},{code:'FBS',label:'الجلوكوز (mg/dL)'}],
-    anion_gap:[{code:'Na',label:'الصوديوم (mEq/L)'},{code:'Cl',label:'الكلوريد (mEq/L)'},{code:'BICARB',label:'البيكربونات (mEq/L)'}],
-    trig_hdl:[{code:'TG',label:'الدهون الثلاثية (mg/dL)'},{code:'HDL',label:'HDL (mg/dL)'}],
-    ft3_ft4:[{code:'FT3',label:'FT3 (pg/mL)'},{code:'FT4',label:'FT4 (ng/dL)'}],
-    uacr:[{code:'MICROALB',label:'الميكروألبومين البولي (mg/L)'},{code:'U-CR',label:'الكرياتينين البولي (g/L)'}],
-    meld:[{code:'TBIL',label:'البيليروبين الكلي (mg/dL)'},{code:'INR',label:'INR'},{code:'CREAT',label:'الكرياتينين (mg/dL)'}],
-    fib4:[{code:'AGE_INPUT',label:'العمر (سنة)'},{code:'AST',label:'AST (U/L)'},{code:'PLT',label:'الصفائح الدموية (×10³/μL)'},{code:'ALT',label:'ALT (U/L)'}],
-    mchr:[{code:'MCH',label:'MCH (pg)'},{code:'MCHC',label:'MCHC (g/dL)'}],
+    homa_ir:[INS(),FBG()],
+    homa_b:[INS(),FBG()],
+    egfr_ckd:[_mkCalcInput('CREAT','Creatinine','mg/dL'),{code:'AGE_INPUT',name:'العمر',unit:'سنة',label:'العمر (سنة)'},{code:'GENDER_INPUT',name:'الجنس',unit:'',label:'الجنس (1=ذكر, 0=أنثى)'}],
+    egfr_mdrd:[_mkCalcInput('CREAT','Creatinine','mg/dL'),{code:'AGE_INPUT',name:'العمر',unit:'سنة',label:'العمر (سنة)'},{code:'GENDER_INPUT',name:'الجنس',unit:'',label:'الجنس (1=ذكر, 0=أنثى)'}],
+    ldl_friedewald:[_mkCalcInput('CHOL','Cholesterol','mg/dL'),_mkCalcInput('HDL','HDL','mg/dL'),_mkCalcInput('TG','Triglycerides','mg/dL')],
+    non_hdl:[_mkCalcInput('CHOL','Cholesterol','mg/dL'),_mkCalcInput('HDL','HDL','mg/dL')],
+    chol_ratio:[_mkCalcInput('CHOL','Cholesterol','mg/dL'),_mkCalcInput('HDL','HDL','mg/dL')],
+    bmi:[{code:'WEIGHT',name:'الوزن',unit:'كغ',label:'الوزن (كغ)'},{code:'HEIGHT',name:'الطول',unit:'م',label:'الطول (م)'}],
+    ag_ratio:[_mkCalcInput('ALB','Albumin','g/dL'),_mkCalcInput('TP','Total Protein','g/dL')],
+    tbil_ratio:[_mkCalcInput('DBIL','Direct Bilirubin','mg/dL'),_mkCalcInput('TBIL','Total Bilirubin','mg/dL')],
+    quicki:[INS(),FBG()],
+    map:[{code:'SBP',name:'SBP',unit:'mmHg',label:'ضغط الدم الانقباضي (mmHg)'},{code:'DBP',name:'DBP',unit:'mmHg',label:'ضغط الدم الانبساطي (mmHg)'}],
+    sodium_corr:[_mkCalcInput('Na','Sodium','mEq/L'),FBG()],
+    anion_gap:[_mkCalcInput('Na','Sodium','mEq/L'),_mkCalcInput('Cl','Chloride','mEq/L'),_mkCalcInput('BICARB','Bicarbonate','mEq/L')],
+    trig_hdl:[_mkCalcInput('TG','Triglycerides','mg/dL'),_mkCalcInput('HDL','HDL','mg/dL')],
+    ft3_ft4:[_mkCalcInput('FT3','FT3','pg/mL'),_mkCalcInput('FT4','FT4','ng/dL')],
+    uacr:[_mkCalcInput('MICROALB','Microalbumin','mg/L'),_mkCalcInput('U-CR','Urine Creatinine','g/L')],
+    meld:[_mkCalcInput('TBIL','Total Bilirubin','mg/dL'),_mkCalcInput('INR','INR',''),_mkCalcInput('CREAT','Creatinine','mg/dL')],
+    fib4:[{code:'AGE_INPUT',name:'العمر',unit:'سنة',label:'العمر (سنة)'},_mkCalcInput('AST','AST','U/L'),_mkCalcInput('PLT','Platelets','×10³/μL'),_mkCalcInput('ALT','ALT','U/L')],
+    mchr:[_mkCalcInput('MCH','MCH','pg'),_mkCalcInput('MCHC','MCHC','g/dL')],
   };
   return inputs[formula]||[];
 }
@@ -16519,7 +16683,7 @@ function runCalcFormula(formula,testId,reqId){
     const req=requests.find(r=>r.id===reqId);
     if(req&&req.results){
       inputs.forEach(inp=>{
-        const matchTest=tests.find(t=>t.code===inp.code);
+        const matchTest=_findTestForCalcCode(inp.code);
         if(matchTest&&req.results[matchTest.id]){
           vals[inp.code]=parseFloat(req.results[matchTest.id])||vals[inp.code];
           // أيضاً أعبئ حقل الإدخال بالقيمة الموجودة في الطلب
@@ -17792,7 +17956,7 @@ function buildPrintHTML(req, opts){
         const customSettings = t.calcInputSettings || {};
         calcInputDefs.forEach(function(inp){
           if(inp.code==='AGE_INPUT'||inp.code==='GENDER_INPUT') return;
-          const matchTest = tests.find(function(x){ return x.code===inp.code; });
+          const matchTest = _findTestForCalcCode(inp.code);
           const cs = customSettings[inp.code] || {};
           let inpVal=null, inpName='', inpUnit='', inpRefTxt='—', inpMin=null, inpMax=null;
           if(matchTest){
@@ -17802,7 +17966,8 @@ function buildPrintHTML(req, opts){
               inpVal=String(savedCalcInputs[inp.code].value);
             }
             if(!inpVal && inpVal!==0) return;
-            inpName = (cs.nameEn) || (matchTest.nameShort&&matchTest.nameShort.trim()?matchTest.nameShort.trim():matchTest.nameEn);
+            // ⭐ الاسم يُؤخذ من قاعدة البيانات (nameShort ← nameEn) ثم يُنظّف من أي اسم عربي لسكر الصيام
+            inpName = _sanitizeCalcInputName(inp.code, (cs.nameEn) || (matchTest.nameShort&&matchTest.nameShort.trim()?matchTest.nameShort.trim():matchTest.nameEn));
             inpUnit = (cs.unit!==undefined&&cs.unit!=='') ? cs.unit : (matchTest.unit||'');
             const inpRef = getPatientRef(matchTest, ptGender, ptAge);
             inpMin = (cs.minVal!==null&&cs.minVal!==undefined) ? cs.minVal : inpRef.min;
@@ -17811,7 +17976,13 @@ function buildPrintHTML(req, opts){
             else inpRefTxt=getRefText(matchTest,ptGender,ptAge,null);
           } else if(savedCalcInputs[inp.code]){
             inpVal=String(savedCalcInputs[inp.code].value);
-            inpName=inp.label; if(!inpVal && inpVal!==0) return;
+            // ⭐ لا يوجد تحليل مطابق في القاعدة — نستخدم الاسم القياسي (FBG لسكر الصيام) لا الاسم العربي
+            inpName=_sanitizeCalcInputName(inp.code, (cs.nameEn||inp.name||inp.label));
+            inpUnit=(cs.unit!==undefined&&cs.unit!=='')?cs.unit:(inp.unit||'');
+            if(cs.ref) inpRefTxt=cs.ref;
+            if(cs.minVal!==null&&cs.minVal!==undefined) inpMin=cs.minVal;
+            if(cs.maxVal!==null&&cs.maxVal!==undefined) inpMax=cs.maxVal;
+            if(!inpVal && inpVal!==0) return;
           } else { return; }
           // تحديد H/L/Normal
           const inpV=parseFloat(inpVal);
@@ -18600,7 +18771,7 @@ function buildCalcTestPrintHTML(req, calcTest){
   const rowsToPrint = [];
   calcInputDefs.forEach(function(inp){
     if(inp.code==='AGE_INPUT'||inp.code==='GENDER_INPUT') return;
-    const matchTest = tests.find(function(x){ return x.code===inp.code; });
+    const matchTest = _findTestForCalcCode(inp.code);
     let inpVal=null, inpName='', inpUnit='', inpRefTxt='—', inpMin=null, inpMax=null;
     if(matchTest){
       if(req.results && req.results[matchTest.id]!==undefined && req.results[matchTest.id]!==''){
@@ -18611,7 +18782,7 @@ function buildCalcTestPrintHTML(req, calcTest){
       if(!inpVal) return;
       // استخدم الإعدادات المخصصة من calcTest.calcInputSettings إن وُجدت
       const customInp = calcTest.calcInputSettings && calcTest.calcInputSettings[inp.code];
-      inpName = (customInp&&customInp.nameEn) || (matchTest.nameShort&&matchTest.nameShort.trim()?matchTest.nameShort.trim():matchTest.nameEn);
+      inpName = _sanitizeCalcInputName(inp.code, (customInp&&customInp.nameEn) || (matchTest.nameShort&&matchTest.nameShort.trim()?matchTest.nameShort.trim():matchTest.nameEn));
       inpUnit = (customInp&&customInp.unit) || matchTest.unit||'';
       const inpRef = getPatientRef(matchTest, ptGender, ptAge);
       inpMin = (customInp&&customInp.minVal!==undefined) ? customInp.minVal : inpRef.min;
@@ -18619,8 +18790,14 @@ function buildCalcTestPrintHTML(req, calcTest){
       if(customInp&&customInp.ref) inpRefTxt=customInp.ref;
       else inpRefTxt=getRefText(matchTest,ptGender,ptAge,null);
     } else if(savedCalcInputs[inp.code]){
+      const _cI = calcTest.calcInputSettings && calcTest.calcInputSettings[inp.code];
       inpVal=String(savedCalcInputs[inp.code].value);
-      inpName=inp.label; if(!inpVal) return;
+      inpName=_sanitizeCalcInputName(inp.code, ((_cI&&_cI.nameEn)||inp.name||inp.label));
+      inpUnit=(_cI&&_cI.unit)||inp.unit||'';
+      if(_cI&&_cI.ref) inpRefTxt=_cI.ref;
+      if(_cI&&_cI.minVal!==null&&_cI.minVal!==undefined) inpMin=_cI.minVal;
+      if(_cI&&_cI.maxVal!==null&&_cI.maxVal!==undefined) inpMax=_cI.maxVal;
+      if(!inpVal) return;
     } else return;
     rowsToPrint.push({inpName,inpVal,inpUnit,inpRefTxt,inpMin,inpMax});
   });
@@ -19935,6 +20112,7 @@ function buildTestCatTabs(){
 }
 function setTestCat(cat,el){currentTestCat=cat;document.querySelectorAll('#test-cat-tabs .tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');renderTestsDB();}
 function renderTestsDB(){
+  try{ if(typeof _cbcEnsureTest==='function') _cbcEnsureTest(); }catch(e){}
   const srch=(document.getElementById('tests-srch')||{}).value||'';
   let list=tests.filter(t=>{
     const catOk=currentTestCat==='All'||t.cat===currentTestCat;
@@ -19947,15 +20125,23 @@ function renderTestsDB(){
     <td style="font-weight:600">${t.nameEn}${t.nameShort?`<br><span style="font-size:10px;color:var(--text2);font-weight:400">✂️ ${t.nameShort}</span>`:''}</td>
     <td><span class="bdg bdg-p">${t.cat}</span>${t.subCat&&t.subCat!==t.cat?`<br><span class="bdg" style="background:rgba(0,255,157,0.1);border:1px solid rgba(0,255,157,0.3);color:var(--accent);font-size:9px;margin-top:2px">${t.subCat}</span>`:''}</td>
     <td>${t.unit}</td>
-    <td style="font-size:11px;line-height:1.6">${getRefSummary(t).map(function(_l){return `<div>${_l}</div>`;}).join('')}</td>
+    <td style="font-size:11px;line-height:1.6">${(typeof _cbcIsCbcTest==='function'&&_cbcIsCbcTest(t))?`<div style="font-weight:700;color:${(_cbcRangeCfg()&&_cbcRangeCfg().enabled)?'#00c46a':'var(--text2)'}">${(_cbcRangeCfg()&&_cbcRangeCfg().enabled)?'📊 من البرنامج (حسب العمر والجنس)':'📟 من الجهاز'}</div>`:getRefSummary(t).map(function(_l){return `<div>${_l}</div>`;}).join('')}</td>
     <td style="font-size:11px">${t.time}</td>
     <td style="color:var(--primary);font-weight:700">${t.price} ${settings.currency}</td>
     <td><div style="display:flex;gap:5px">
-      ${t.isSpecialExam?`<span style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">${t.isSpecialExam==='ua'?'💧':'🧫'} تقرير خاص</span><button class="btn btn-sm btn-s" onclick="nav('settings');setTimeout(()=>{document.getElementById('stc-ua-stool')&&toggleStCard('stc-ua-stool');},400)" title="إعدادات الفحص">⚙️</button>`:`<button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')">✏️</button><button class="btn btn-sm btn-d" onclick="deleteTest('${t.id}')">🗑️</button>`}
+      ${t.isSpecialExam?`<span style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">${t.isSpecialExam==='ua'?'💧':'🧫'} تقرير خاص</span><button class="btn btn-sm btn-s" onclick="nav('settings');setTimeout(()=>{document.getElementById('stc-ua-stool')&&toggleStCard('stc-ua-stool');},400)" title="إعدادات الفحص">⚙️</button>`:`<button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')">✏️</button>${(typeof _cbcIsCbcTest==='function'&&_cbcIsCbcTest(t))?`<span title="تحليل أساسي — لا يمكن حذفه" style="display:inline-flex;align-items:center;padding:3px 8px;font-size:12px;opacity:0.7">🔒</span>`:`<button class="btn btn-sm btn-d" onclick="deleteTest('${t.id}')">🗑️</button>`}`}
     </div></td>
   </tr>`).join('');
 }
 function openEditTest(id){
+  // 🩸 CBC: التعديل يفتح واجهة القيم الطبيعية حسب العمر والجنس
+  //    (الاسم والسعر من زر «⚙️ الاسم والسعر» داخلها)
+  try{
+    if(id && !window._cbcGenericEdit && typeof CBCRanges!=='undefined' && typeof _cbcIsCbcTest==='function'){
+      const _ct=tests.find(x=>x.id===id);
+      if(_cbcIsCbcTest(_ct)){ CBCRanges.open(); return; }
+    }
+  }catch(e){ console.warn('[CBC ranges] open', e); }
   // تحليل الأدرار والخروج لا يُعدَّل من قاعدة التحاليل — إعداداته في قسم الإعدادات فقط
   const _protectedSpecial=tests.find(x=>x.id===id&&x.isSpecialExam);
   if(_protectedSpecial){
@@ -20049,10 +20235,11 @@ function openEditTest(id){
     const cfEl=document.getElementById('et-calc-formula');
     if(t.isCalc){
       if(calcBlock)calcBlock.style.display='block';
-      if(cfEl){ cfEl.value=t.calcFormula||''; renderCalcInputSettings(t.calcInputSettings||{}); }
+      if(cfEl){ cfEl.value=t.calcFormula||''; window._etCalcInputSettings=Object.assign({}, t.calcInputSettings||{}); renderCalcInputSettings(window._etCalcInputSettings); }
     } else {
       if(calcBlock)calcBlock.style.display='none';
       if(cfEl)cfEl.value='';
+      window._etCalcInputSettings={};
     }
   } else {
     ['et-id','et-name-en','et-name-short','et-unit','et-min','et-max','et-min-f','et-max-f','et-ref','et-ref-m','et-ref-f','et-price','et-code','et-notes'].forEach(eid=>{const el=document.getElementById(eid);if(el)el.value='';});
@@ -20064,6 +20251,7 @@ function openEditTest(id){
     const cfElNew=document.getElementById('et-calc-formula');
     if(calcBlockNew)calcBlockNew.style.display='none';
     if(cfElNew)cfElNew.value='';
+    window._etCalcInputSettings={};
   }
   openModal('m-edit-test');
 }
@@ -20155,7 +20343,11 @@ function saveTest(){
       t.calcInputSettings=collectCalcInputSettings();
     }
   }
-  if(editTestId){const idx=tests.findIndex(x=>x.id===editTestId);if(idx>-1)tests[idx]=t;}
+  if(editTestId){const idx=tests.findIndex(x=>x.id===editTestId);if(idx>-1){
+    // 🩸 CBC: الحفاظ على جدول القيم الطبيعية عند تعديل الاسم/السعر
+    if(tests[idx]&&tests[idx].cbcRanges&&!t.cbcRanges) t.cbcRanges=tests[idx].cbcRanges;
+    tests[idx]=t;
+  }}
   else tests.push(t);
   save('tests',tests);
   IDB.set(DB._pfx()+'tests', tests).catch(e=>console.warn('[MedLab] IDB tests save error',e));
@@ -20163,6 +20355,14 @@ function saveTest(){
   showNotif('Saved',`Test saved: ${t.nameEn} ✅`,'success');
 }
 function deleteTest(id){
+  // 🩸 تحليل CBC أساسي — لا يمكن حذفه
+  try{
+    const _cbcT=tests.find(x=>x.id===id);
+    if(typeof _cbcIsCbcTest==='function' && _cbcIsCbcTest(_cbcT)){
+      showNotif('محمي','تحليل CBC أساسي ولا يمكن حذفه','error');
+      return;
+    }
+  }catch(e){}
   // منع حذف تحاليل الأدرار والخروج الخاصة
   const _prot=tests.find(x=>x.id===id&&x.isSpecialExam);
   if(_prot){
@@ -20200,16 +20400,18 @@ function renderCalcInputSettings(existingSettings){
   if(!realInputs.length){ listDiv.style.display='none'; return; }
   listDiv.style.display='block';
   rowsDiv.innerHTML = realInputs.map(function(inp){
-    const matchTest = tests.find(function(x){ return x.code===inp.code; });
+    const matchTest = _findTestForCalcCode(inp.code);
     const cs = existingSettings[inp.code]||{};
-    const defName = matchTest ? (matchTest.nameShort&&matchTest.nameShort.trim()?matchTest.nameShort.trim():matchTest.nameEn) : inp.label;
-    const defUnit = matchTest ? matchTest.unit||'' : '';
+    // ⭐ الاسم الافتراضي يُؤخذ من قاعدة البيانات دائماً، ويُمنع أي اسم عربي لسكر الصيام
+    const defName = _sanitizeCalcInputName(inp.code, matchTest ? (matchTest.nameShort&&matchTest.nameShort.trim()?matchTest.nameShort.trim():matchTest.nameEn) : (inp.name||inp.label));
+    const defUnit = matchTest ? matchTest.unit||'' : (inp.unit||'');
     const defRef  = matchTest ? matchTest.ref||'' : '';
+    const curName = _sanitizeCalcInputName(inp.code, cs.nameEn||defName);
     return `<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(139,63,255,0.2);border-radius:8px;padding:10px 12px;margin-bottom:8px">
       <div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:7px">📌 ${inp.code} — ${inp.label}</div>
       <div class="fr2" style="gap:8px">
         <div class="fg" style="margin-bottom:6px"><label class="fl" style="font-size:10px">الاسم في التقرير</label>
-          <input class="fc" id="ci-set-name-${inp.code}" value="${cs.nameEn||defName}" placeholder="${defName}" style="font-size:11px;padding:5px 8px">
+          <input class="fc" id="ci-set-name-${inp.code}" value="${curName}" placeholder="${defName}" style="font-size:11px;padding:5px 8px">
         </div>
         <div class="fg" style="margin-bottom:6px"><label class="fl" style="font-size:10px">الوحدة</label>
           <input class="fc" id="ci-set-unit-${inp.code}" value="${cs.unit!==undefined?cs.unit:defUnit}" placeholder="${defUnit}" style="font-size:11px;padding:5px 8px;direction:ltr">
@@ -20230,6 +20432,34 @@ function renderCalcInputSettings(existingSettings){
   }).join('');
 }
 
+/* ⭐ عند تغيير كود المعادلة: نحافظ على ما كتبه المستخدم في حقول الأسماء/الوحدات
+   بدل إعادة بنائها من الصفر (كان هذا سبب عودة الاسم العربي «سكر الصيام»). */
+function _readCalcInputRowsFromDOM(){
+  const res={};
+  try{
+    const rowsDiv=document.getElementById('et-calc-inputs-rows');
+    if(!rowsDiv) return res;
+    rowsDiv.querySelectorAll('[id^="ci-set-name-"]').forEach(function(el){
+      const code=el.id.replace('ci-set-name-','');
+      const gv=function(pfx){ const e=document.getElementById('ci-set-'+pfx+'-'+code); return e?e.value.trim():''; };
+      const mn=gv('min'), mx=gv('max');
+      res[code]={
+        nameEn:_sanitizeCalcInputName(code, el.value.trim()),
+        unit:  gv('unit'),
+        ref:   gv('ref'),
+        minVal: mn!==''?parseFloat(mn):null,
+        maxVal: mx!==''?parseFloat(mx):null
+      };
+    });
+  }catch(e){}
+  return res;
+}
+function onCalcFormulaInput(){
+  const kept=_readCalcInputRowsFromDOM();
+  window._etCalcInputSettings=Object.assign({}, (window._etCalcInputSettings||{}), kept);
+  renderCalcInputSettings(window._etCalcInputSettings);
+}
+
 function collectCalcInputSettings(){
   const formulaEl = document.getElementById('et-calc-formula');
   const formula = formulaEl ? formulaEl.value.trim() : '';
@@ -20244,7 +20474,8 @@ function collectCalcInputSettings(){
     const maxEl  = document.getElementById('ci-set-max-'+inp.code);
     if(!nameEl) return;
     result[inp.code] = {
-      nameEn: nameEl.value.trim()||'',
+      // ⭐ يُمنع حفظ أي اسم عربي لسكر الصيام — يُحوَّل إلى FBG
+      nameEn: _sanitizeCalcInputName(inp.code, nameEl.value.trim()||''),
       unit:   unitEl ? unitEl.value.trim() : '',
       ref:    refEl  ? refEl.value.trim()  : '',
       minVal: minEl&&minEl.value!=='' ? parseFloat(minEl.value) : null,
@@ -23856,7 +24087,10 @@ function _buildWatermarkHTML(posMode){
   //   وإلا: position:fixed لتتمركز في وسط الورقة في المستندات ذات التدفق الواحد.
   var isAbs = (posMode==='absolute' || posMode===true);
   var pos = isAbs ? 'absolute' : 'fixed';
-  var style='position:'+pos+';top:50%;left:50%;transform:translate(-50%,-50%);width:'+ww+'px;height:'+wh+'px;'
+  // ⭐ إنزال العلامة المائية قليلاً جداً عن منتصف الورقة (قابل للضبط من الإعدادات)
+  var wmDown = (typeof settings.wmOffsetY==='number' ? settings.wmOffsetY : 26);
+  var topCss = wmDown ? ('calc(50% + '+wmDown+'px)') : '50%';
+  var style='position:'+pos+';top:'+topCss+';left:50%;transform:translate(-50%,-50%);width:'+ww+'px;height:'+wh+'px;'
     +'z-index:0;pointer-events:none;'
     +'-webkit-print-color-adjust:exact;print-color-adjust:exact;'
     +'mix-blend-mode:multiply;';
@@ -31917,7 +32151,9 @@ function cbcGraphicByChannel(req, ch){
   var g=(req&&req.cbcGraphics)||[];
   for(var i=0;i<g.length;i++){
     var c=String(g[i].code||'').trim();
-    if(CBC_IMG_CHANNEL[c]===ch && g[i].b64 && _cbcImgValid(g[i].b64)) return g[i];
+    // 🩸 g[i].ch: قناة صريحة يضعها درايفر Zybio Z50 وحده (Scattergram WBC) —
+    //    بقية الأجهزة لا تضع ch فيبقى سلوكها كما هو حرفياً.
+    if((CBC_IMG_CHANNEL[c]===ch || g[i].ch===ch) && g[i].b64 && _cbcImgValid(g[i].b64)) return g[i];
   }
   return null;
 }
@@ -32187,6 +32423,9 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     if(isNaN(granAbs)===false && !_has('GRAN#')) cbcParams['GRAN#']={value:String(granAbs),unit:'10^9/L',refRange:'2.0-7.0',flag:''};
     if(isNaN(granPct)===false && !_has('GRAN%')) cbcParams['GRAN%']={value:String(granPct),unit:'%',refRange:'50-70',flag:''};
   }
+  // 🩸 القيم الطبيعية من البرنامج حسب العمر والجنس (إن كان المفتاح مُشغَّلاً)
+  //    نسخة معزولة — مطفأ ⇒ نفس الكائن تماماً (سلوك الجهاز كما كان).
+  try{ if(typeof _cbcApplyProgramRanges==='function') cbcParams=_cbcApplyProgramRanges(cbcParams, pt, req); }catch(e){}
 
   // هل أرسل الجهاز مجموعة Mid المتوسطة؟ (يحدّد الترتيب: ثلاثي كامل أم مبسّط)
   const _midShown = is3Diff && (_has('MID%')||_has('MID#'));
@@ -37251,7 +37490,7 @@ function lisWizShowConnFields(){
   });
   // 🩸 Zybio: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
   const zHint=document.getElementById('wiz-zybio-hint');
-  if(zHint) zHint.style.display=(_wizVendor==='zybio'&&_wizConn==='tcpserver')?'block':'none';
+  if(zHint) zHint.style.display=((_wizVendor==='zybio'||_wizVendor==='zybio_z50')&&_wizConn==='tcpserver')?'block':'none';
   // 🧫 BS-230: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
   const bHint=document.getElementById('wiz-bs230-hint');
   if(bHint) bHint.style.display=(_wizVendor==='mindray_bs230'&&_wizConn==='tcpserver')?'block':'none';
@@ -37347,7 +37586,7 @@ async function lisWizFinish(){
     // 🧫 BS-230 جهاز كيمياء (chemistry) حسب دليل الشركة
     // 🩸 BC-30s جهاز دم (CBC) حسب دليل الشركة (OBR-24 = HM)
     // 🩸 BC-6000 جهاز دم (CBC) حسب دليل الشركة (OBR-24 = HM — جدول 7)
-    type:((_wizVendor==='zybio'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000')?'hematology':'chemistry'),
+    type:((_wizVendor==='zybio'||_wizVendor==='zybio_z50'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000')?'hematology':'chemistry'),
     conn:connMap[_wizConn],
     protocol:_wizProtocol,
     baud,
@@ -37361,7 +37600,7 @@ async function lisWizFinish(){
     // 🧫 BS-230: الرد ACK^R01 إلزامي أيضاً + يدعم استعلام QRY^Q02
     // 🩸 BC-30s: الرد ACK^R01 إلزامي حسب الدليل (1.1.1 و 4.6.2)
     // 🩸 BC-6000: الرد ACK^R01 إلزامي حسب الدليل (1.2.4 و 1.2.6.2)
-    sendAck:(_wizVendor==='zybio'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'||_wizVendor==='nano'),
+    sendAck:(_wizVendor==='zybio'||_wizVendor==='zybio_z50'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'||_wizVendor==='nano'),
     // 🧪 cobas e 411: صيغة البروتوكول المختارة على شاشة الجهاز (cobas/elecsys)
     e411Type:(_wizVendor==='roche_e411'
       ? ((document.getElementById('wiz-e411-type')?.value)||'cobas')
@@ -37955,6 +38194,8 @@ function lisAutoFillDevice(){
     snibe:   {name:'MAGLUMI 600',        proto:'astm', conn:'serial',   baud:'9600'},
     // 🩸 Zybio Z60/Z3: الجهاز هو من يتصل بالبرنامج (LIS Server) — دليل الشركة 2.1
     zybio:   {name:'Zybio Z60',          proto:'hl7',  conn:'tcpserver', port:'5100'},
+    // 🩸 Zybio Z50 (5-Diff): درايفر مستقل — الجهاز يتصل بالبرنامج (LIS Server)
+    zybio_z50:{name:'Zybio Z50',         proto:'hl7',  conn:'tcpserver', port:'5100'},
     // 🩸 Nano 3001 (Nanomax): عدّاد دم ثلاثي — الجهاز يتصل بالبرنامج
     //    (LIS Server) عبر HL7 v2.3.1 فوق MLLP. البورت المضبوط في الجهاز 5150.
     nano:    {name:'Nano 3001',          proto:'hl7',  conn:'tcpserver', port:'5150'},
@@ -38541,6 +38782,46 @@ function _lisPickOpenRequest(sid, pt){
   return null;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// 🩸 Zybio Z3 / Z60 — تجهيز العمر والجنس للإرسال (ORR^O02)
+// ─────────────────────────────────────────────────────────────
+// العمر بالسنوات فقط (رقم صحيح) — الوحدة دائماً yr حسب جدول وحدات الدليل.
+// المصدر بالترتيب: ageY ← age ← ageVal ← تاريخ الميلاد (إن وُجد)
+// يُعيد: { name, sex:'M'|'F'|'', dob:'YYYYMMDD'|'', ageValue:number|'', ageUnit:'yr'|'' }
+// ═══════════════════════════════════════════════════════════════
+function _lisZybioPatientInfo(pt){
+  pt = pt || {};
+  const g = String(pt.gender||'');
+  const sex = (g==='أنثى'||/^f/i.test(g)) ? 'F' : ((g==='ذكر'||/^m/i.test(g)) ? 'M' : '');
+
+  let dob = String(pt.birthDate||pt.dob||'').replace(/[^0-9]/g,'');
+  if(!/^\d{8}$/.test(dob)) dob = '';
+
+  // أول قيمة رقمية صالحة (≥ 0) — parseFloat يقبل "35" و "35 سنة"
+  const _num = (v) => {
+    if(v===undefined||v===null||v==='') return null;
+    const n = parseFloat(String(v).replace(',', '.'));
+    return (isFinite(n) && n >= 0) ? n : null;
+  };
+  let years = null;
+  const _y = _num(pt.ageY);
+  if(_y !== null && _y > 0) years = _y;
+  if(years === null) years = _num(pt.age);
+  if(years === null) years = _num(pt.ageVal);
+  if(years === null && dob){
+    const d = new Date(dob.slice(0,4)+'-'+dob.slice(4,6)+'-'+dob.slice(6,8)+'T00:00:00');
+    const y = (Date.now()-d.getTime())/31557600000;
+    if(!isNaN(y) && y >= 0) years = y;
+  }
+
+  return {
+    name: (typeof _ptDeviceName==='function') ? _ptDeviceName(pt) : '',
+    sex, dob,
+    ageValue: years === null ? '' : Math.floor(years),
+    ageUnit:  years === null ? '' : 'yr'
+  };
+}
+
 async function lisHandleHl7Query(info){
   const sidRaw = String(info.sampleId||'').trim();
   // ── 🧫 BS-230 فقط: كشف تيوب التراكمي (HbA1c) بالبادئة 9 (نفس نظام c111) ──
@@ -38557,6 +38838,8 @@ async function lisHandleHl7Query(info){
   lisAddLog('astm','🔍 طلب تحاليل من '+info.name+' — SID:'+sid);
 
   let testsToSend = [];
+  // 🩸 Zybio فقط: العمر والجنس يُرسلان للجهاز في رد ORR^O02 (يبقى null لغيره)
+  let _zyPatient = null;
   try {
     // تشخيص: كم عدد المرضى والطلبات المحمّلة في الذاكرة
     const _np=(typeof patients!=='undefined'?patients.length:0);
@@ -38624,6 +38907,15 @@ async function lisHandleHl7Query(info){
       // باسم A1C (channel 43) وتُستلَم صحيحة كما هي — لا نمسّ مسار الاستلام.
       // معزول تماماً: يُفعَّل فقط عندما الجهاز الطالِب vendor='mindray_bs230'.
       const _isBS230Req = _reqDev && String(_reqDev.vendor||'').toLowerCase()==='mindray_bs230';
+      // ── 🩸 Zybio فقط: العمر والجنس وتاريخ الميلاد (دليل الشركة 3.3 + 4.2) ──
+      //   يُحسب فقط إن كان الجهاز الطالِب Zybio ويوجد طلب مفتوح (نفس قاعدة
+      //   "آخر طلب مفتوح فقط"). لا يمسّ _pid ولا مسار أي جهاز آخر.
+      if(_reqDev && /^zybio(_z50)?$/.test(String(_reqDev.vendor||'').toLowerCase()) && pt){
+        _zyPatient = _lisZybioPatientInfo(pt);
+        lisAddLog('info','🩸 Zybio: الجنس='+(_zyPatient.sex||'-')+
+          ' · العمر='+(_zyPatient.ageValue!==''?_zyPatient.ageValue+' '+_zyPatient.ageUnit:'-')+
+          ' · الميلاد='+(_zyPatient.dob||'-'));
+      }
       // هل يوجد أصلاً أي تحليل مُعيَّن لهذا الجهاز؟ (لتقرير تطبيق الفلترة)
       const _hasAssigned = (typeof lisMappings!=='undefined'?lisMappings:[])
         .some(m => m && m.pushDevice===_reqDevId);
@@ -38716,10 +39008,9 @@ async function lisHandleHl7Query(info){
 
   // رد على الجهاز (حتى لو فارغ → الجهاز يفهم NF)
   if(window.electronAPI.hl7QueryResponse){
-    const res = await window.electronAPI.hl7QueryResponse({
-      queryId: info.queryId,
-      tests:   testsToSend,
-    });
+    const _qrOpts = { queryId: info.queryId, tests: testsToSend };
+    if(_zyPatient) _qrOpts.zybioPatient = _zyPatient;   // 🩸 Zybio فقط
+    const res = await window.electronAPI.hl7QueryResponse(_qrOpts);
     if(testsToSend.length){
       lisAddLog('ok','✅ أُرسلت '+testsToSend.length+' تحاليل — SID:'+sid+' ('+testsToSend.map(t=>t.code).join(', ')+')');
     } else {
@@ -46020,7 +46311,7 @@ function _pmBuildData(patientId) {
   const ptReqs = requests.filter(r => r.patientId === patientId).map(r => {
     const groups = _generalGroups(r);
     const cp     = _cbcParamsOf(r);
-    const cbc    = _cbcRows(cp);
+    const cbc    = _cbcRows((typeof _cbcApplyProgramRanges === 'function') ? _cbcApplyProgramRanges(cp, pt, r) : cp);
     const uaRec  = _pick(_uaAll, _usedUA, r);
     const stRec  = _pick(_stAll, _usedST, r);
     const ua     = uaRec ? _examSecs(uaRec, UA_FIELDS)    : null;
@@ -52203,6 +52494,502 @@ window.MLCP = {
 
 <script>
 /* ══════════════════════════════════════════════════════════════════════
+   🩸 القيم الطبيعية لتحليل CBC حسب العمر والجنس (من البرنامج)
+   ──────────────────────────────────────────────────────────────────────
+   • الإعداد محفوظ داخل تحليل CBC نفسه في قاعدة التحاليل (h001.cbcRanges)
+     فيُحفظ ويُزامَن ويُنسخ احتياطياً مع التحاليل.
+   • مفتاح تشغيل/إطفاء:
+       مطفأ (الافتراضي) → المدى والراية من الجهاز كما هو الحال سابقاً حرفياً.
+       مُشغَّل          → المدى والراية يُحسبان من جدول البرنامج حسب عمر
+                          المريض وجنسه — لكل أجهزة CBC.
+   • يُطبَّق وقت العرض والطباعة فقط (نسخة معزولة) — بيانات الجهاز الأصلية
+     في الطلب لا تتغيّر، فالإطفاء يعيد كل شيء كما كان فوراً.
+   • أمان: لا يُستبدل مدى أي معامل إلا إذا:
+       - عُرف عمر المريض، ووُجد نطاق عمري/جنس مطابق له قيم لهذا المعامل،
+       - ووحدة الجهاز معروفة ومتوافقة (مع تحويل g/L↔g/dL، L/L↔%، mL/L↔%).
+     غير ذلك → يبقى مدى الجهاز كما هو.
+   • المدى المُعدَّل يدوياً من محرّر نتيجة CBC لعينة معيّنة يُحترم دائماً.
+   ══════════════════════════════════════════════════════════════════════ */
+var CBC_RANGE_PARAMS = [
+  // key,      label,     unit,      decimals
+  ['WBC',   'WBC',    '10^9/L',  2], ['NEU#',  'Neu#',  '10^9/L', 2], ['LYM#', 'Lym#', '10^9/L', 2],
+  ['MON#',  'Mon#',   '10^9/L',  2], ['EOS#',  'Eos#',  '10^9/L', 2], ['BAS#', 'Bas#', '10^9/L', 2],
+  ['NEU%',  'Neu%',   '%',       1], ['LYM%',  'Lym%',  '%',      1], ['MON%', 'Mon%', '%',      1],
+  ['EOS%',  'Eos%',   '%',       1], ['BAS%',  'Bas%',  '%',      1],
+  ['GRAN#', 'Gran#',  '10^9/L',  2], ['MID#',  'Mid#',  '10^9/L', 2],
+  ['GRAN%', 'Gran%',  '%',       1], ['MID%',  'Mid%',  '%',      1],
+  ['RBC',   'RBC',    '10^12/L', 2], ['HGB',   'HGB',   'g/dL',   1], ['HCT',  'HCT',  '%',      1],
+  ['MCV',   'MCV',    'fL',      1], ['MCH',   'MCH',   'pg',     1], ['MCHC', 'MCHC', 'g/dL',   1],
+  ['RDW-CV','RDW-CV', '%',       1], ['RDW-SD','RDW-SD','fL',     1],
+  ['PLT',   'PLT',    '10^9/L',  0], ['MPV',   'MPV',   'fL',     1], ['PDW',  'PDW',  'fL',     1],
+  ['PCT',   'PCT',    '%',       3], ['P-LCR', 'P-LCR', '%',      1], ['P-LCC','P-LCC','10^9/L', 0]
+];
+
+/* النطاقات العمرية الافتراضية.
+   المصادر: جداول المراجع الشائعة في طب الأطفال وأمراض الدم
+   (Harriet Lane Handbook / Nathan & Oski / Dacie & Lewis).
+   للفترات الانتقالية عند الرضّع (بين نقطتين منشورتين) يُستخدم الغلاف
+   الجامع للنقطتين حتى لا تظهر رايات H/L خاطئة. المختبر يراجعها ويعدّلها. */
+var CBC_RANGE_DEFAULT_GROUPS = [
+  { id:'g01', name:'حديث الولادة 0–3 أيام', sex:'both',   from:0,  fromUnit:'day',   to:4,   toUnit:'day'   },
+  { id:'g02', name:'4 أيام – شهر',          sex:'both',   from:4,  fromUnit:'day',   to:1,   toUnit:'month' },
+  { id:'g03', name:'1 – 2 شهر',             sex:'both',   from:1,  fromUnit:'month', to:2,   toUnit:'month' },
+  { id:'g04', name:'2 – 6 أشهر',            sex:'both',   from:2,  fromUnit:'month', to:6,   toUnit:'month' },
+  { id:'g05', name:'6 أشهر – سنتان',        sex:'both',   from:6,  fromUnit:'month', to:2,   toUnit:'year'  },
+  { id:'g06', name:'2 – 6 سنوات',           sex:'both',   from:2,  fromUnit:'year',  to:6,   toUnit:'year'  },
+  { id:'g07', name:'6 – 12 سنة',            sex:'both',   from:6,  fromUnit:'year',  to:12,  toUnit:'year'  },
+  { id:'g08', name:'12 – 18 سنة ذكور',      sex:'male',   from:12, fromUnit:'year',  to:18,  toUnit:'year'  },
+  { id:'g09', name:'12 – 18 سنة إناث',      sex:'female', from:12, fromUnit:'year',  to:18,  toUnit:'year'  },
+  { id:'g10', name:'بالغ ذكر 18+',          sex:'male',   from:18, fromUnit:'year',  to:150, toUnit:'year'  },
+  { id:'g11', name:'بالغة أنثى 18+',        sex:'female', from:18, fromUnit:'year',  to:150, toUnit:'year'  }
+];
+/* القيم: لكل معامل 11 زوج [min,max] بترتيب النطاقات أعلاه (g01..g11) */
+var CBC_RANGE_DEFAULT_VALUES = {
+  'WBC':   [[9.4,34.0],[5.0,21.0],[5.0,19.5],[5.0,17.5],[6.0,17.0],[5.0,15.5],[4.5,13.5],[4.5,13.0],[4.5,13.0],[4.0,11.0],[4.0,11.0]],
+  'NEU#':  [[6.0,26.0],[1.5,10.0],[1.0,9.0],[1.0,8.5],[1.5,8.5],[1.5,8.5],[1.8,8.0],[1.8,8.0],[1.8,8.0],[2.0,7.5],[2.0,7.5]],
+  'LYM#':  [[2.0,11.0],[2.0,17.0],[2.5,16.5],[4.0,13.5],[3.0,10.5],[2.0,8.0],[1.5,6.5],[1.2,5.2],[1.2,5.2],[1.0,4.0],[1.0,4.0]],
+  'MON#':  [[0.4,3.1],[0.3,2.7],[0.2,1.9],[0.2,1.2],[0.1,1.1],[0.1,1.0],[0.1,1.0],[0.1,1.0],[0.1,1.0],[0.2,1.0],[0.2,1.0]],
+  'EOS#':  [[0.1,2.0],[0.1,2.0],[0.1,1.2],[0.1,1.0],[0.05,0.7],[0.05,0.7],[0.05,0.6],[0.02,0.5],[0.02,0.5],[0.02,0.5],[0.02,0.5]],
+  'BAS#':  [[0.0,0.6],[0.0,0.2],[0.0,0.2],[0.0,0.2],[0.0,0.2],[0.0,0.2],[0.0,0.2],[0.0,0.2],[0.0,0.2],[0.0,0.1],[0.0,0.1]],
+  'NEU%':  [[40,80],[20,60],[15,45],[15,45],[20,50],[30,60],[40,70],[40,70],[40,70],[40,75],[40,75]],
+  'LYM%':  [[15,45],[25,65],[40,75],[45,75],[40,70],[30,60],[25,50],[20,45],[20,45],[20,45],[20,45]],
+  'MON%':  [[3,12],[3,15],[3,12],[3,10],[3,10],[3,10],[3,10],[3,10],[3,10],[2,10],[2,10]],
+  'EOS%':  [[1,8],[1,8],[1,8],[1,6],[1,6],[1,6],[1,6],[1,6],[1,6],[1,6],[1,6]],
+  'BAS%':  [[0,1],[0,1],[0,1],[0,1],[0,1],[0,1],[0,1],[0,1],[0,1],[0,1],[0,1]],
+  'GRAN#': [[6.0,26.0],[1.5,10.0],[1.0,9.0],[1.0,8.5],[1.5,8.5],[1.5,8.5],[1.8,8.0],[1.8,8.0],[1.8,8.0],[2.0,7.5],[2.0,7.5]],
+  'MID#':  [[0.5,3.5],[0.4,3.0],[0.3,2.0],[0.2,1.5],[0.2,1.5],[0.2,1.5],[0.2,1.5],[0.1,1.5],[0.1,1.5],[0.1,1.5],[0.1,1.5]],
+  'GRAN%': [[40,80],[20,60],[15,45],[15,45],[20,50],[30,60],[40,70],[40,70],[40,70],[50,70],[50,70]],
+  'MID%':  [[3,15],[3,15],[3,15],[3,15],[3,15],[3,15],[3,15],[3,15],[3,15],[3,15],[3,15]],
+  'RBC':   [[4.0,6.6],[3.0,6.3],[3.0,5.4],[3.1,5.5],[3.7,5.3],[3.9,5.3],[4.0,5.2],[4.5,5.3],[4.1,5.1],[4.5,5.9],[4.0,5.2]],
+  'HGB':   [[14.5,22.5],[10.7,19.8],[9.4,17.1],[9.4,14.1],[10.5,13.5],[11.5,13.5],[11.5,15.5],[13.0,16.0],[12.0,16.0],[13.5,17.5],[12.0,16.0]],
+  'HCT':   [[45,67],[33,65],[28,55],[28,42],[33,39],[34,40],[35,45],[37,49],[36,46],[41,53],[36,46]],
+  'MCV':   [[95,121],[88,126],[84,112],[68,106],[70,86],[75,87],[77,95],[78,98],[78,102],[80,100],[80,100]],
+  'MCH':   [[31,37],[28,40],[26,40],[25,35],[23,31],[24,30],[25,33],[25,35],[25,35],[26,34],[26,34]],
+  'MCHC':  [[29,37],[28,38],[28,36],[28,36],[30,36],[31,37],[31,37],[31,37],[31,37],[32,36],[32,36]],
+  'RDW-CV':[[13.0,18.0],[13.0,18.0],[13.0,18.0],[12.0,16.5],[11.5,16.0],[11.5,14.5],[11.5,14.5],[11.5,14.5],[11.5,14.5],[11.5,14.5],[11.5,14.5]],
+  'RDW-SD':[[40,65],[40,65],[40,65],[37,56],[37,54],[37,54],[37,54],[37,54],[37,54],[37,54],[37,54]],
+  'PLT':   [[150,450],[150,450],[150,450],[150,450],[150,450],[150,450],[150,450],[150,450],[150,450],[150,450],[150,450]],
+  'MPV':   [[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0],[7.0,11.0]],
+  'PDW':   [[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0],[9.0,17.0]],
+  'PCT':   [[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282],[0.108,0.282]],
+  'P-LCR': [[11,45],[11,45],[11,45],[11,45],[11,45],[11,45],[11,45],[11,45],[11,45],[11,45],[11,45]],
+  'P-LCC': [[30,90],[30,90],[30,90],[30,90],[30,90],[30,90],[30,90],[30,90],[30,90],[30,90],[30,90]]
+};
+
+function _cbcIsCbcTest(t){
+  return !!t && (t.id === 'h001' || String(t.code || '').trim().toUpperCase() === 'CBC');
+}
+function _cbcTestObj(){
+  try{
+    if (typeof tests === 'undefined' || !Array.isArray(tests)) return null;
+    return tests.find(function(t){ return t && t.id === 'h001'; })
+        || tests.find(function(t){ return _cbcIsCbcTest(t); }) || null;
+  }catch(e){ return null; }
+}
+function _cbcDefaultRangeCfg(){
+  return {
+    enabled: false,
+    groups: CBC_RANGE_DEFAULT_GROUPS.map(function(g, gi){
+      var vals = {};
+      Object.keys(CBC_RANGE_DEFAULT_VALUES).forEach(function(k){
+        var p = CBC_RANGE_DEFAULT_VALUES[k][gi];
+        if (p) vals[k] = { min: p[0], max: p[1] };
+      });
+      return Object.assign({}, g, { vals: vals });
+    })
+  };
+}
+function _cbcRangeCfg(){
+  var t = _cbcTestObj();
+  if (t && t.cbcRanges && Array.isArray(t.cbcRanges.groups)) return t.cbcRanges;
+  return null;   // لا إعداد محفوظ ⇒ الإطفاء (سلوك الجهاز)
+}
+
+/* ضمان وجود تحليل CBC دائماً (لا يُحذف) */
+function _cbcEnsureTest(){
+  try{
+    if (typeof tests === 'undefined' || !Array.isArray(tests)) return;
+    if (!tests.some(function(t){ return t && t.id === 'h001'; })){
+      var orig = (typeof ALL_TESTS !== 'undefined' && Array.isArray(ALL_TESTS))
+        ? ALL_TESTS.find(function(t){ return t.id === 'h001'; }) : null;
+      if (orig){
+        tests.push(Object.assign({}, orig));
+        try{ save('tests', tests); }catch(e){}
+        try{ IDB.set(DB._pfx() + 'tests', tests).catch(function(){}); }catch(e){}
+      }
+    }
+    var del = [];
+    try{ del = load('deletedTestIds', []) || []; }catch(e){}
+    if (Array.isArray(del) && del.indexOf('h001') >= 0){
+      del = del.filter(function(x){ return x !== 'h001'; });
+      try{ save('deletedTestIds', del); }catch(e){}
+      try{ IDB.set(DB._pfx() + 'deletedTestIds', del).catch(function(){}); }catch(e){}
+    }
+  }catch(e){ console.warn('[CBC ranges] ensure', e); }
+}
+
+/* ── عمر المريض بالأيام (عند تاريخ الطلب إن توفّر) ── */
+function _cbcPtAgeDays(pt, refTime){
+  pt = pt || {};
+  var now = (refTime && isFinite(refTime)) ? refTime : Date.now();
+  var dob = String(pt.birthDate || pt.dob || '').replace(/[^0-9]/g, '');
+  // DD/MM/YYYY → YYYYMMDD
+  if (dob.length === 8 && !(+dob.slice(0,4) >= 1900 && +dob.slice(0,4) <= 2100) &&
+      (+dob.slice(4,8) >= 1900 && +dob.slice(4,8) <= 2100)) dob = dob.slice(4,8) + dob.slice(2,4) + dob.slice(0,2);
+  if (dob.length === 8){
+    var d = new Date(+dob.slice(0,4), +dob.slice(4,6) - 1, +dob.slice(6,8));
+    var ms = now - d.getTime();
+    if (isFinite(ms) && ms >= 0) return ms / 86400000;
+  }
+  var y = parseFloat(pt.ageY) || 0, m = parseFloat(pt.ageM) || 0, dd = parseFloat(pt.ageD) || 0;
+  if (y > 0 || m > 0 || dd > 0) return y * 365.25 + m * 30.4375 + dd;
+  var has = function(v){ return v !== undefined && v !== null && String(v).trim() !== ''; };
+  if (has(pt.ageVal)){ var v = parseFloat(pt.ageVal); if (isFinite(v) && v >= 0) return v * 365.25; }
+  if (has(pt.age)){ var a = parseFloat(pt.age); if (isFinite(a) && a >= 0) return a * 365.25; }
+  return null;
+}
+function _cbcPtSex(pt){
+  var g = String((pt && pt.gender) || '').trim();
+  if (g === 'أنثى' || /^f/i.test(g)) return 'female';
+  if (g === 'ذكر'  || /^m/i.test(g)) return 'male';
+  return '';
+}
+function _cbcToDays(v, unit){
+  var n = parseFloat(v); if (!isFinite(n)) return null;
+  if (unit === 'day') return n;
+  if (unit === 'month') return n * 30.4375;
+  return n * 365.25;
+}
+var _CBC_KEY_ALIAS = { 'PLCR':'P-LCR', 'PLCC':'P-LCC', 'RDW':'RDW-CV', 'RDWCV':'RDW-CV', 'RDWSD':'RDW-SD',
+                       'HB':'HGB', 'GRA#':'GRAN#', 'GRA%':'GRAN%', 'GRAN %':'GRAN%' };
+function _cbcNormKey(k){
+  var u = String(k || '').toUpperCase().trim();
+  return _CBC_KEY_ALIAS[u] || _CBC_KEY_ALIAS[u.replace(/\s+/g,'')] || u.replace(/\s+/g,'');
+}
+/* المدى المطابق: الأفضلية للنطاق الخاص بالجنس ثم «الجنسين» */
+function _cbcFindRange(cfg, key, ageDays, sex){
+  if (!cfg || !Array.isArray(cfg.groups) || ageDays == null) return null;
+  var ok = function(r){ return r && isFinite(parseFloat(r.min)) && isFinite(parseFloat(r.max)); };
+  var bySex = null, both = null, m = null, fe = null;
+  for (var i = 0; i < cfg.groups.length; i++){
+    var g = cfg.groups[i]; if (!g || !g.vals) continue;
+    var f = _cbcToDays(g.from, g.fromUnit), t = _cbcToDays(g.to, g.toUnit);
+    if (f == null || t == null || !(ageDays >= f && ageDays < t)) continue;
+    var r = g.vals[key]; if (!ok(r)) continue;
+    if (g.sex === 'both'){ if (!both) both = r; }
+    else {
+      if (sex && g.sex === sex && !bySex) bySex = r;
+      if (g.sex === 'male' && !m) m = r;
+      if (g.sex === 'female' && !fe) fe = r;
+    }
+  }
+  // الجنس غير معروف: نستخدم نطاق الجنسين، أو قيمة الذكور/الإناث إن كانت متطابقة
+  if (!sex && !both && m && fe && parseFloat(m.min) === parseFloat(fe.min) && parseFloat(m.max) === parseFloat(fe.max)) both = m;
+  var r2 = bySex || both;
+  return r2 ? { min: parseFloat(r2.min), max: parseFloat(r2.max) } : null;
+}
+/* معامل التحويل: مدى_الجهاز = مدى_البرنامج × f  (null = غير متوافق ⇒ لا استبدال) */
+function _cbcUnitFactor(key, devUnit, value){
+  var def = null;
+  for (var i = 0; i < CBC_RANGE_PARAMS.length; i++) if (CBC_RANGE_PARAMS[i][0] === key){ def = CBC_RANGE_PARAMS[i]; break; }
+  if (!def) return null;
+  var u = String(devUnit || '').toLowerCase().replace(/\s+/g,'').replace(/\*/g,'^')
+            .replace(/[µμ]/g,'u').replace(/×/g,'x');
+  var cu = def[2];
+  var isCnt9  = function(x){ return /^(10\^?9\/l|9\/l|10\^?3\/ul|10e9\/l|10\^?3\/mm3|k\/ul|x10\^?9\/l|x10\^?3\/ul)$/.test(x); };
+  var isCnt12 = function(x){ return /^(10\^?12\/l|12\/l|10\^?6\/ul|10e12\/l|m\/ul|x10\^?12\/l|x10\^?6\/ul|10\^?6\/mm3)$/.test(x); };
+  var v = parseFloat(value);
+  if (cu === '10^9/L')  return (u === '' || isCnt9(u)) ? 1 : null;
+  if (cu === '10^12/L') return (u === '' || isCnt12(u)) ? 1 : null;
+  if (cu === 'fL')      return (u === '' || u === 'fl' || u === 'um3' || u === 'um^3' || u === 'µm3') ? 1 : null;
+  if (cu === 'pg')      return (u === '' || u === 'pg') ? 1 : null;
+  if (key === 'HGB' || key === 'MCHC'){
+    if (u === 'g/dl') return 1;
+    if (u === 'g/l')  return 10;
+    if (u === '' && isFinite(v)) return (key === 'HGB' ? (v > 30 ? 10 : 1) : (v > 60 ? 10 : 1));
+    return null;
+  }
+  if (key === 'HCT'){
+    if (u === '%') return 1;
+    if (u === 'l/l') return 0.01;
+    if (u === '' && isFinite(v)) return v < 1.5 ? 0.01 : 1;
+    return null;
+  }
+  if (key === 'PCT'){
+    if (u === '%') return 1;
+    if (u === 'ml/l') return 10;
+    return null;      // بلا وحدة: غامض ⇒ نترك مدى الجهاز
+  }
+  if (cu === '%') return (u === '' || u === '%') ? 1 : null;
+  return null;
+}
+function _cbcFmtNum(n, key, f){
+  var dp = 1;
+  for (var i = 0; i < CBC_RANGE_PARAMS.length; i++) if (CBC_RANGE_PARAMS[i][0] === key){ dp = CBC_RANGE_PARAMS[i][3]; break; }
+  if (f === 10) dp = Math.max(0, dp - 1);
+  else if (f === 0.01) dp = dp + 2;
+  var s = (Math.round(n * Math.pow(10, dp)) / Math.pow(10, dp)).toFixed(dp);
+  return s;
+}
+/* تنسيق المدى بعدد خانات عشرية موحّد للحدّين (مثل 13.5-17.5 ، 0.02-0.50 ، 4-11) */
+function _cbcFmtPair(lo, hi){
+  var clean = function(n){ return String(+(+n).toFixed(4)); };
+  var a = clean(lo), b = clean(hi);
+  var dec = function(s){ var i = s.indexOf('.'); return i < 0 ? 0 : s.length - i - 1; };
+  var d = Math.max(dec(a), dec(b));
+  return (+a).toFixed(d) + '-' + (+b).toFixed(d);
+}
+/* المدى الفعّال لمعامل واحد (للعرض في المحرّر) */
+function _cbcEffRef(key, p, pt, refTime){
+  try{
+    var cfg = _cbcRangeCfg();
+    if (!cfg || !cfg.enabled || !p || p._refManual) return null;
+    var nk = _cbcNormKey(key);
+    var r = _cbcFindRange(cfg, nk, _cbcPtAgeDays(pt, refTime), _cbcPtSex(pt));
+    if (!r) return null;
+    var v = parseFloat(String(p.value == null ? '' : p.value).replace(/[<>]/g,''));
+    var f = _cbcUnitFactor(nk, p.unit, v);
+    if (f == null) return null;
+    var lo = r.min * f, hi = r.max * f;
+    return {
+      ref: _cbcFmtPair(lo, hi),
+      flag: isNaN(v) ? '' : (v < lo ? 'L' : (v > hi ? 'H' : ''))
+    };
+  }catch(e){ return null; }
+}
+/* يُعيد نسخة من معاملات CBC بمدى وراية البرنامج (أو نفس الكائن إن كان مطفأً) */
+function _cbcApplyProgramRanges(params, pt, req){
+  try{
+    if (!params || typeof params !== 'object') return params;
+    var cfg = _cbcRangeCfg();
+    if (!cfg || !cfg.enabled) return params;
+    var refTime = null;
+    if (req){ var ts = Date.parse(req.resultDate || req.date || ''); if (isFinite(ts)) refTime = ts; }
+    var out = null;
+    Object.keys(params).forEach(function(k){
+      if (k.indexOf('HIST_') === 0) return;
+      var p = params[k];
+      if (!p || typeof p !== 'object') return;
+      var e = _cbcEffRef(k, p, pt, refTime);
+      if (!e) return;
+      if (!out) out = Object.assign({}, params);
+      var np = Object.assign({}, p);
+      np.refRange = e.ref;
+      np.flag = e.flag;
+      np._progRef = true;
+      out[k] = np;
+    });
+    return out || params;
+  }catch(e){ console.warn('[CBC ranges] apply', e); return params; }
+}
+
+/* ═══════════════════════ واجهة التعديل ═══════════════════════ */
+var CBCRanges = (function(){
+  var W = null;          // نسخة العمل
+  var sel = 0;           // النطاق المختار
+  var UNITS = { day:'يوم', month:'شهر', year:'سنة' };
+  var SEX = { both:'الجنسين', male:'ذكور ♂', female:'إناث ♀' };
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+  function ensureModal(){
+    var m = document.getElementById('m-cbc-ranges');
+    if (m) return m;
+    m = document.createElement('div');
+    m.className = 'moverlay'; m.id = 'm-cbc-ranges';
+    m.innerHTML =
+      '<div class="modal wide" style="max-width:1100px">'
+      + '<div class="mhdr"><div class="mtitle">🩸 CBC — القيم الطبيعية حسب العمر والجنس</div>'
+      + '<button class="mclose" onclick="CBCRanges.close()">×</button></div>'
+      + '<div class="mbody" id="cbcR-body"></div>'
+      + '<div class="mftr" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+      +   '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+      +     '<button class="btn btn-w" onclick="CBCRanges.resetDefaults()">↺ استعادة القيم الافتراضية</button>'
+      +     '<button class="btn btn-s" onclick="CBCRanges.openGeneric()">⚙️ الاسم والسعر</button>'
+      +   '</div>'
+      +   '<div style="display:flex;gap:8px">'
+      +     '<button class="btn btn-s" onclick="CBCRanges.close()">إلغاء</button>'
+      +     '<button class="btn btn-ok" onclick="CBCRanges.save()">💾 حفظ</button>'
+      +   '</div>'
+      + '</div></div>';
+    document.body.appendChild(m);
+    return m;
+  }
+
+  function render(){
+    var body = document.getElementById('cbcR-body'); if (!body || !W) return;
+    if (sel >= W.groups.length) sel = Math.max(0, W.groups.length - 1);
+    var g = W.groups[sel] || null;
+    var h = '';
+    // ── مفتاح التشغيل ──
+    h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;background:'
+      + (W.enabled ? 'rgba(0,196,106,0.08)' : 'rgba(255,255,255,0.03)') + '">'
+      + '<div><div style="font-weight:800;font-size:13px">' + (W.enabled ? '✅ القيم الطبيعية من البرنامج (حسب العمر والجنس)' : '📟 القيم الطبيعية من الجهاز (كما هو الحال سابقاً)') + '</div>'
+      + '<div style="font-size:11px;color:var(--text2);margin-top:3px">'
+      + (W.enabled
+          ? 'يُطبَّق على كل أجهزة CBC. عند غياب عمر المريض أو عدم توافق الوحدة لمعامل ما، يبقى مدى الجهاز لذلك المعامل.'
+          : 'المدى والراية H/L يؤخذان من الجهاز كما هما. شغّل المفتاح لاستخدام الجدول أدناه.')
+      + '</div></div>'
+      + '<div class="tog' + (W.enabled ? ' on' : '') + '" onclick="CBCRanges.toggle()"><div class="tog-t"></div></div></div>';
+
+    // ── النطاقات العمرية ──
+    h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">';
+    W.groups.forEach(function(gr, i){
+      var on = i === sel;
+      h += '<button class="btn btn-sm" style="border-radius:10px;padding:6px 10px;font-size:11px;font-weight:700;'
+        + (on ? 'background:var(--primary);color:#fff;border:1px solid var(--primary)' : 'background:rgba(255,255,255,0.04);border:1px solid var(--border)')
+        + '" onclick="CBCRanges.pick(' + i + ')">' + esc(gr.name || ('نطاق ' + (i + 1))) + '</button>';
+    });
+    h += '<button class="btn btn-sm btn-s" style="border-radius:10px;font-size:11px" onclick="CBCRanges.addGroup()">➕ إضافة نطاق عمري</button></div>';
+
+    if (!g){ body.innerHTML = h + '<div style="padding:20px;text-align:center;color:var(--text2)">لا توجد نطاقات — أضف نطاقاً عمرياً</div>'; return; }
+
+    // ── تعريف النطاق المختار ──
+    var uOpt = function(v){ return Object.keys(UNITS).map(function(u){ return '<option value="' + u + '"' + (u === v ? ' selected' : '') + '>' + UNITS[u] + '</option>'; }).join(''); };
+    var sOpt = Object.keys(SEX).map(function(s){ return '<option value="' + s + '"' + (s === g.sex ? ' selected' : '') + '>' + SEX[s] + '</option>'; }).join('');
+    h += '<div style="display:grid;grid-template-columns:2fr 1fr 1.4fr 1.4fr auto;gap:8px;align-items:end;margin-bottom:12px">'
+      + '<div class="fg" style="margin:0"><label class="fl">اسم النطاق</label><input class="fc" value="' + esc(g.name) + '" oninput="CBCRanges.setG(\'name\',this.value)"></div>'
+      + '<div class="fg" style="margin:0"><label class="fl">الجنس</label><select class="fc" onchange="CBCRanges.setG(\'sex\',this.value)">' + sOpt + '</select></div>'
+      + '<div class="fg" style="margin:0"><label class="fl">من (يشمل)</label><div style="display:flex;gap:4px"><input class="fc" lang="en" dir="ltr" inputmode="decimal" style="width:70px" value="' + esc(g.from) + '" oninput="CBCRanges.setG(\'from\',this.value)"><select class="fc" onchange="CBCRanges.setG(\'fromUnit\',this.value)">' + uOpt(g.fromUnit) + '</select></div></div>'
+      + '<div class="fg" style="margin:0"><label class="fl">إلى (لا يشمل)</label><div style="display:flex;gap:4px"><input class="fc" lang="en" dir="ltr" inputmode="decimal" style="width:70px" value="' + esc(g.to) + '" oninput="CBCRanges.setG(\'to\',this.value)"><select class="fc" onchange="CBCRanges.setG(\'toUnit\',this.value)">' + uOpt(g.toUnit) + '</select></div></div>'
+      + '<button class="btn btn-sm btn-d" title="حذف هذا النطاق" onclick="CBCRanges.delGroup()">🗑️</button>'
+      + '</div>';
+
+    // ── جدول المعاملات ──
+    h += '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'
+      + '<thead><tr style="background:rgba(255,255,255,0.05)">'
+      + '<th style="padding:7px;text-align:right">المعامل</th><th style="padding:7px">الوحدة</th>'
+      + '<th style="padding:7px">الحد الأدنى</th><th style="padding:7px">الحد الأعلى</th></tr></thead><tbody>';
+    CBC_RANGE_PARAMS.forEach(function(d){
+      var r = (g.vals && g.vals[d[0]]) || {};
+      h += '<tr style="border-bottom:1px solid var(--border);background:transparent">'
+        + '<td style="padding:5px 7px;font-weight:700" dir="ltr">' + esc(d[1]) + '</td>'
+        + '<td style="padding:5px 7px;text-align:center;color:var(--text2)" dir="ltr">' + esc(d[2]) + '</td>'
+        + '<td style="padding:4px"><input class="fc" lang="en" dir="ltr" inputmode="decimal" style="text-align:center" value="' + esc(r.min == null ? '' : r.min) + '" oninput="CBCRanges.setV(\'' + d[0] + '\',\'min\',this.value)"></td>'
+        + '<td style="padding:4px"><input class="fc" lang="en" dir="ltr" inputmode="decimal" style="text-align:center" value="' + esc(r.max == null ? '' : r.max) + '" oninput="CBCRanges.setV(\'' + d[0] + '\',\'max\',this.value)"></td>'
+        + '</tr>';
+    });
+    h += '</tbody></table></div>'
+      + '<div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.7">'
+      + '• الوحدات أعلاه هي وحدات الجدول؛ يُحوَّل المدى تلقائياً إذا أرسل الجهاز g/L بدل g/dL، أو L/L بدل %، أو mL/L للـ PCT.<br>'
+      + '• اترك الحقلين فارغين لمعامل ما ليُستخدم مدى الجهاز له.<br>'
+      + '• القيم الافتراضية من مراجع طب الأطفال وأمراض الدم الشائعة — راجعها واعتمدها حسب مختبرك.'
+      + '</div>';
+    body.innerHTML = h;
+  }
+
+  function open(){
+    try{ _cbcEnsureTest(); }catch(e){}
+    var cur = _cbcRangeCfg();
+    W = cur ? clone(cur) : _cbcDefaultRangeCfg();
+    sel = 0;
+    ensureModal();
+    render();
+    if (typeof openModal === 'function') openModal('m-cbc-ranges');
+    else document.getElementById('m-cbc-ranges').classList.add('open');
+  }
+  function close(){
+    if (typeof closeModal === 'function') closeModal('m-cbc-ranges');
+    else { var m = document.getElementById('m-cbc-ranges'); if (m) m.classList.remove('open'); }
+  }
+  function toggle(){ if (!W) return; W.enabled = !W.enabled; render(); }
+  function pick(i){ sel = i; render(); }
+  function setG(f, v){
+    var g = W && W.groups[sel]; if (!g) return;
+    if (f === 'from' || f === 'to') g[f] = v;
+    else g[f] = v;
+    if (f === 'sex' || f === 'fromUnit' || f === 'toUnit') render();
+    else if (f === 'name'){
+      // تحديث زر النطاق دون إعادة البناء (حفاظاً على التركيز)
+    }
+  }
+  function setV(key, f, v){
+    var g = W && W.groups[sel]; if (!g) return;
+    if (!g.vals) g.vals = {};
+    if (!g.vals[key]) g.vals[key] = { min: null, max: null };
+    var s = String(v).trim().replace(',', '.');
+    g.vals[key][f] = s === '' ? null : s;
+  }
+  function addGroup(){
+    if (!W) return;
+    var base = W.groups[sel];
+    var ng = { id: 'g' + Date.now(), name: 'نطاق جديد', sex: 'both', from: 0, fromUnit: 'year', to: 1, toUnit: 'year',
+               vals: base && base.vals ? clone(base.vals) : {} };
+    W.groups.push(ng);
+    sel = W.groups.length - 1;
+    render();
+  }
+  function delGroup(){
+    if (!W || !W.groups[sel]) return;
+    if (!confirm('حذف النطاق «' + (W.groups[sel].name || '') + '»؟')) return;
+    W.groups.splice(sel, 1);
+    sel = Math.max(0, sel - 1);
+    render();
+  }
+  function resetDefaults(){
+    if (!confirm('استعادة كل النطاقات والقيم الافتراضية؟ ستُفقد تعديلاتك الحالية (حالة المفتاح تبقى كما هي).')) return;
+    var en = W ? !!W.enabled : false;
+    W = _cbcDefaultRangeCfg(); W.enabled = en; sel = 0; render();
+  }
+  function validate(){
+    for (var i = 0; i < W.groups.length; i++){
+      var g = W.groups[i];
+      var f = _cbcToDays(g.from, g.fromUnit), t = _cbcToDays(g.to, g.toUnit);
+      if (f == null || t == null || !(t > f)){
+        sel = i; render();
+        return 'النطاق «' + (g.name || (i + 1)) + '»: بداية العمر يجب أن تكون أصغر من نهايته';
+      }
+      var vk = Object.keys(g.vals || {});
+      for (var j = 0; j < vk.length; j++){
+        var r = g.vals[vk[j]]; if (!r) continue;
+        var a = r.min, b = r.max;
+        var ha = a !== null && a !== undefined && String(a) !== '', hb = b !== null && b !== undefined && String(b) !== '';
+        if (ha !== hb){ sel = i; render(); return 'النطاق «' + g.name + '» — ' + vk[j] + ': أدخل الحدّين معاً أو اتركهما فارغين'; }
+        if (ha && (!isFinite(parseFloat(a)) || !isFinite(parseFloat(b)) || parseFloat(a) > parseFloat(b))){
+          sel = i; render(); return 'النطاق «' + g.name + '» — ' + vk[j] + ': قيم غير صحيحة';
+        }
+      }
+    }
+    return '';
+  }
+  function saveCfg(){   // ⚠️ اسم مختلف عن save() العامة للتطبيق (منع التظليل)
+    if (!W) return;
+    var err = validate();
+    if (err){ if (typeof showNotif === 'function') showNotif('تنبيه', err, 'warning'); else alert(err); return; }
+    // تحويل القيم إلى أرقام
+    W.groups.forEach(function(g){
+      g.from = parseFloat(g.from); g.to = parseFloat(g.to);
+      Object.keys(g.vals || {}).forEach(function(k){
+        var r = g.vals[k];
+        if (!r || r.min === null || r.min === undefined || String(r.min) === ''){ delete g.vals[k]; return; }
+        r.min = parseFloat(r.min); r.max = parseFloat(r.max);
+      });
+    });
+    try{ _cbcEnsureTest(); }catch(e){}
+    var t = _cbcTestObj();
+    if (!t){ if (typeof showNotif === 'function') showNotif('خطأ', 'تحليل CBC غير موجود في قاعدة التحاليل', 'error'); return; }
+    t.cbcRanges = clone(W);
+    t._updatedAt = Date.now();
+    try{ save('tests', tests); }catch(e){}
+    try{ IDB.set(DB._pfx() + 'tests', tests).catch(function(e){ console.warn('[CBC ranges] IDB', e); }); }catch(e){}
+    try{ if (typeof renderTestsDB === 'function') renderTestsDB(); }catch(e){}
+    try{ if (window.CBCEdit && typeof CBCEdit.render === 'function') CBCEdit.render(); }catch(e){}
+    close();
+    if (typeof showNotif === 'function')
+      showNotif('تم الحفظ', W.enabled ? 'CBC: القيم الطبيعية من البرنامج حسب العمر والجنس ✅' : 'CBC: القيم الطبيعية من الجهاز 📟', 'success');
+  }
+  function openGeneric(){
+    close();
+    window._cbcGenericEdit = true;
+    try{ openEditTest('h001'); } finally { window._cbcGenericEdit = false; }
+  }
+  return { open: open, close: close, toggle: toggle, pick: pick, setG: setG, setV: setV,
+           addGroup: addGroup, delGroup: delGroup, resetDefaults: resetDefaults, save: saveCfg,
+           openGeneric: openGeneric };
+})();
+
+
+/* ══════════════════════════════════════════════════════════════════════
    🔬 محرّر نتائج CBC داخل واجهة «إدخال نتائج التحاليل»
    ──────────────────────────────────────────────────────────────────────
    المشكلة السابقة:
@@ -52451,6 +53238,7 @@ window.MLCP = {
 
   /* ═══════════════════════════ البناء ═══════════════════════════ */
   var _showAll = false;
+  var _ptCur = null, _refT = null;   // 🩸 للمدى الطبيعي من البرنامج
   var _saveT = null;
   var _lastReq = '';
   /* 🔽 حالة الفتح/الإغلاق لكل طلب — القائمة المنسدلة لنتيجة CBC.
@@ -52470,6 +53258,12 @@ window.MLCP = {
     var req = id ? _req(id) : null;
 
     if (!req) { panel.style.display = 'none'; panel.innerHTML = ''; _lastReq = ''; return; }
+    try {
+      _ptCur = (typeof patients !== 'undefined' && patients ? patients.find(function (x) { return x.id === req.patientId; }) : null)
+               || { gender: req.gender, age: req.age };
+      var _ts = Date.parse(req.resultDate || req.date || '');
+      _refT = isFinite(_ts) ? _ts : null;
+    } catch (e) { _ptCur = null; _refT = null; }
 
     var params = _cur(req);
     var hasCbcTest = (req.tests || []).some(function (t) { return t === 'CBC' || t === 'h001'; });
@@ -52519,8 +53313,9 @@ window.MLCP = {
       var info = _map(key);
       var val = (p && p.value != null) ? String(p.value) : '';
       var unit = (p && p.unit) || info.unit || '';
-      var ref = (p && p.refRange) || info.refM || '';
-      var f = _flag(val, ref, p && p.flag);
+      var _eff = (typeof _cbcEffRef === 'function') ? _cbcEffRef(key, p, _ptCur, _refT) : null;
+      var ref = _eff ? _eff.ref : ((p && p.refRange) || info.refM || '');
+      var f = _eff ? _flag(val, ref, '') : _flag(val, ref, p && p.flag);
       var hasV = String(val).trim() !== '';
       var edited = !!(p && p._orig !== undefined && String(p._orig) !== String(val));
       return '<tr class="cbcE-row" data-k="' + _esc(key) + '">'
@@ -52640,11 +53435,12 @@ window.MLCP = {
     var v = el.value;
     if (fld === 'value') p.value = v;
     else if (fld === 'unit') p.unit = v;
-    else if (fld === 'ref') p.refRange = v;
+    else if (fld === 'ref') { p.refRange = v; p._refManual = true; }
 
     /* إعادة حساب الراية فوراً من المدى الطبيعي */
     var info2 = _map(key);
-    var refNow = p.refRange || info2.refM || '';
+    var _eff2 = (typeof _cbcEffRef === 'function') ? _cbcEffRef(key, p, _ptCur, _refT) : null;
+    var refNow = _eff2 ? _eff2.ref : (p.refRange || info2.refM || '');
     var f = _flag(p.value, refNow, '');
     p.flag = f;
 
