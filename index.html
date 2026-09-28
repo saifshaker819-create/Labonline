@@ -3229,6 +3229,15 @@ body.light-mode .dp-viewer{background:#d8dde3;}
 })();
 </script>
 
+<style>
+/* 📂 أقسام التقارير المنسدلة */
+.rp-acc>.rp-acc-hdr{cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.rp-acc>.rp-acc-hdr:hover{background:rgba(0,212,255,0.05)}
+.rp-acc .rp-acc-sub{display:block;font-size:11px;font-weight:600;color:var(--text2);margin-top:3px}
+.rp-acc .rp-acc-chev{font-size:16px;color:var(--text2);transition:transform .2s;flex-shrink:0}
+.rp-acc.open .rp-acc-chev{transform:rotate(180deg)}
+.rp-acc:not(.open)>.gc-body{display:none}
+</style>
 </head>
 <body>
 <div class="layout">
@@ -3851,23 +3860,27 @@ body.light-mode .dp-viewer{background:#d8dde3;}
         <div class="scard" style="--cc:rgba(255,214,10,0.15);cursor:pointer" onclick="showMonthDetailModal('revenue')"><div class="scard-lbl" id="rp-month-rev-lbl">إيرادات الشهر</div><div class="scard-val" id="rp-month-rev" style="color:var(--warning)">0</div><div class="scard-ic">💰</div></div>
         <div class="scard" style="--cc:rgba(123,47,255,0.15)"><div class="scard-lbl">إجمالي المرضى</div><div class="scard-val" id="rp-total-pts" style="color:#a78bfa">0</div><div class="scard-ic">📊</div></div>
       </div>
-      <div class="g2">
-        <div class="gc"><div class="gc-hdr"><div class="gc-title">📊 أكثر التحاليل طلباً</div></div><div class="gc-body" id="rp-top-tests"></div></div>
-        <div class="gc"><div class="gc-hdr"><div class="gc-title">📅 تقارير متاحة</div></div>
-          <div class="gc-body">
-            <div style="display:flex;flex-direction:column;gap:9px">
-              <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('patients')">📥 تقرير المرضى</button>
-              <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('revenue')">💰 تقرير الإيرادات</button>
-              <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('tests')">🧪 تقرير التحاليل</button>
-              <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('critical')">⚠️ النتائج الحرجة</button>
-            </div>
+      <!-- 📂 أقسام التقارير (قوائم منسدلة) -->
+      <div class="gc rp-acc" data-acc="reports" style="margin-top:18px">
+        <div class="gc-hdr rp-acc-hdr" onclick="RpAcc.toggle('reports')"><div class="gc-title">📥 التقارير الجاهزة<span class="rp-acc-sub">المرضى · الإيرادات · التحاليل · الحرجة</span></div><span class="rp-acc-chev">▾</span></div>
+        <div class="gc-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:9px">
+            <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('patients')">📥 تقرير المرضى</button>
+            <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('revenue')">💰 تقرير الإيرادات</button>
+            <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('tests')">🧪 تقرير التحاليل</button>
+            <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('critical')">⚠️ النتائج الحرجة</button>
           </div>
         </div>
       </div>
 
+      <div class="gc rp-acc" data-acc="top" style="margin-top:12px">
+        <div class="gc-hdr rp-acc-hdr" onclick="RpAcc.toggle('top')"><div class="gc-title">📊 أكثر التحاليل طلباً<span class="rp-acc-sub">ضمن الفترة المختارة أعلاه</span></div><span class="rp-acc-chev">▾</span></div>
+        <div class="gc-body" id="rp-top-tests"></div>
+      </div>
+
       <!-- ── 👨‍⚕️ مراجعو طبيب معيّن ── -->
-      <div class="gc" style="margin-top:20px" id="doc-visits-card">
-        <div class="gc-hdr"><div class="gc-title">👨‍⚕️ مراجعو الطبيب</div></div>
+      <div class="gc rp-acc" data-acc="doctor" style="margin-top:12px" id="doc-visits-card">
+        <div class="gc-hdr rp-acc-hdr" onclick="RpAcc.toggle('doctor')"><div class="gc-title">👨‍⚕️ مراجعو الطبيب<span class="rp-acc-sub">حسب الطبيب والفترة + PDF</span></div><span class="rp-acc-chev">▾</span></div>
         <div class="gc-body">
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
             <div class="fg" style="margin-bottom:0;flex:1;min-width:200px">
@@ -3899,10 +3912,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       </div>
 
       <!-- ── بحث المرضى غير الطبيعيين ── -->
-      <div class="gc" style="margin-top:20px" id="abnormal-search-card">
-        <div class="gc-hdr">
-          <div class="gc-title">🔴 البحث عن المرضى Abnormal</div>
-        </div>
+      <div class="gc rp-acc" data-acc="abnormal" style="margin-top:12px" id="abnormal-search-card">
+        <div class="gc-hdr rp-acc-hdr" onclick="RpAcc.toggle('abnormal')"><div class="gc-title">🔴 البحث عن المرضى Abnormal<span class="rp-acc-sub">النتائج العالية والناقصة لتحليل معيّن</span></div><span class="rp-acc-chev">▾</span></div>
         <div class="gc-body">
           <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end">
             <div class="fg" style="margin-bottom:0;flex:1;min-width:200px">
@@ -3956,10 +3967,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
       </div>
 
       <!-- ── مخطط تاريخ المريض ── -->
-      <div class="gc" style="margin-top:20px">
-        <div class="gc-hdr">
-          <div class="gc-title">📈 مخطط تاريخ نتائج المريض</div>
-        </div>
+      <div class="gc rp-acc" data-acc="history" style="margin-top:12px">
+        <div class="gc-hdr rp-acc-hdr" onclick="RpAcc.toggle('history')"><div class="gc-title">📈 مخطط تاريخ نتائج المريض<span class="rp-acc-sub">تطوّر نتيجة تحليل عبر الزمن</span></div><span class="rp-acc-chev">▾</span></div>
         <div class="gc-body">
           <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap;align-items:flex-end">
             <div class="fg" style="margin-bottom:0;flex:1;min-width:200px;position:relative">
@@ -14736,7 +14745,9 @@ function vrCheckResult(tid,val){
 function vrRemoveTest(tid){
   if(!confirm('حذف هذا التحليل من الطلب؟'))return;
   const r=requests.find(x=>x.id===currentReqId);if(!r)return;
+  const _hadT=r.tests.includes(tid);
   r.tests=r.tests.filter(x=>x!==tid);
+  if(_hadT) _invAdjustForTest(r, tid, -1);   // 💵 الفاتورة والإيراد
   r.testNames=(r.testNames||[]).filter(n=>{const t=tests.find(x=>x.id===tid);return n!==(t?t.nameEn:'');});
   if(r.results)delete r.results[tid];
   saveOne('requests',requests,r);
@@ -14801,6 +14812,7 @@ function vrSelectAddTest(tid){
     if(!r.testNames)r.testNames=[];
     if(!r.testNames.includes(t.nameEn))r.testNames.push(t.nameEn);
     saveOne('requests',requests,r);
+    _invAdjustForTest(r, t.id, +1);   // 💵 الفاتورة والإيراد
   }
 
   // أعد رسم النافذة لتظهر الحقل فوراً
@@ -21044,6 +21056,24 @@ function _rpResetMonth(){
 window._rpResetMonth=_rpResetMonth;
 
 
+/* 📂 أقسام التقارير المنسدلة — تُحفظ حالة كل قسم (مفتوح/مغلق) */
+var RpAcc = (function(){
+  var KEY='medlab_rp_acc', DEF={reports:true};
+  function st(){ try{ return Object.assign({}, DEF, JSON.parse(localStorage.getItem(KEY)||'{}')); }catch(e){ return Object.assign({},DEF); } }
+  function apply(){
+    var s=st();
+    document.querySelectorAll('.rp-acc[data-acc]').forEach(function(el){ el.classList.toggle('open', !!s[el.getAttribute('data-acc')]); });
+  }
+  function toggle(k){
+    var s=st(); s[k]=!s[k];
+    try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){}
+    apply();
+  }
+  function open(k){ var s=st(); if(!s[k]){ s[k]=true; try{ localStorage.setItem(KEY, JSON.stringify(s)); }catch(e){} } apply(); }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+  return { toggle: toggle, open: open, apply: apply };
+})();
+
 /* ══════════════════════════════════════════════════════════════════════
    👨‍⚕️ تقرير مراجعي طبيب معيّن (قسم التقارير)
    • الطبيب: من قائمة الأطباء + أي اسم طبيب مسجّل على الطلبات.
@@ -21252,6 +21282,7 @@ function renderReports(){
   const revVal=invoices.filter(i=>S.has(i.date)).reduce((s,i)=>s+(parseFloat(i.total)||0),0);
   document.getElementById('rp-month-rev').textContent=revVal.toLocaleString('ar')+(settings.currency?' '+(settings.currency||'IQD'):'');
   try{ if(typeof DocVisits!=='undefined'){ DocVisits.fillDoctors(); DocVisits.run(); } }catch(e){ console.warn('[DocVisits]', e); }
+  try{ if(typeof RpAcc!=='undefined') RpAcc.apply(); }catch(e){}
   /* أكثر التحاليل طلباً — ضمن النطاق المختار أيضاً */
   const cnt={};rqs.forEach(r=>(r.tests||[]).forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
   const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -21377,8 +21408,8 @@ function exportReport(type){
     title='💰 تقرير الإيرادات — '+perLbl;
     const list=invoices.filter(i=>S.has(i.date)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     const total=list.reduce((s,i)=>s+(parseFloat(i.total)||0),0);
-    const paid=list.filter(i=>i.status==='paid').reduce((s,i)=>s+(parseFloat(i.total)||0),0);
-    const unpaid=list.filter(i=>i.status!=='paid').reduce((s,i)=>s+(parseFloat(i.total)||0),0);
+    const paid=list.filter(i=>_invIsPaid(i)).reduce((s,i)=>s+(parseFloat(i.total)||0),0);
+    const unpaid=list.filter(i=>!_invIsPaid(i)).reduce((s,i)=>s+(parseFloat(i.total)||0),0);
     // إيرادات شهرية
     const byMonth={};
     list.forEach(i=>{const m=i.date.slice(0,7);byMonth[m]=(byMonth[m]||0)+(parseFloat(i.total)||0);});
@@ -21407,10 +21438,10 @@ function exportReport(type){
     </div>`;
     csvRows.push(['#','المريض','التاريخ','الإجمالي قبل الخصم','الخصم','الصافي','الحالة']);
     list.forEach((inv,i)=>{
-      csvRows.push([i+1, inv.patientName||'-', inv.date, inv.rawTotal||inv.subtotal||inv.total, (inv.discountAmt!=null?inv.discountAmt:(inv.discount?inv.discount+'%':0)), inv.total, inv.status==='paid'?'مدفوع':'غير مدفوع']);
+      csvRows.push([i+1, inv.patientName||'-', inv.date, inv.rawTotal||inv.subtotal||inv.total, (inv.discountAmt!=null?inv.discountAmt:(inv.discount?inv.discount+'%':0)), inv.total, _invIsPaid(inv)?'مدفوع':'غير مدفوع']);
     });
     tableHTML=`<table class="tbl" id="exp-tbl"><thead><tr><th>#</th><th>المريض</th><th>التاريخ</th><th>الإجمالي</th><th>الخصم</th><th>الصافي</th><th>الحالة</th></tr></thead><tbody>`+
-      list.map((inv,i)=>`<tr><td>${i+1}</td><td><b>${inv.patientName||'-'}</b></td><td>${inv.date}</td><td>${inv.rawTotal||inv.subtotal||inv.total}</td><td>${inv.discountAmt!=null?inv.discountAmt:(inv.discount?inv.discount+'%':0)}</td><td style="font-weight:800;color:var(--success)">${inv.total} ${curr}</td><td>${inv.status==='paid'?'<span class="bdg bdg-ok">مدفوع</span>':'<span class="bdg bdg-d">غير مدفوع</span>'}</td></tr>`).join('')+
+      list.map((inv,i)=>`<tr><td>${i+1}</td><td><b>${inv.patientName||'-'}</b></td><td>${inv.date}</td><td>${inv.rawTotal||inv.subtotal||inv.total}</td><td>${inv.discountAmt!=null?inv.discountAmt:(inv.discount?inv.discount+'%':0)}</td><td style="font-weight:800;color:var(--success)">${inv.total} ${curr}</td><td>${_invIsPaid(inv)?'<span class="bdg bdg-ok">مدفوع</span>':'<span class="bdg bdg-d">غير مدفوع</span>'}</td></tr>`).join('')+
       `</tbody></table>`;
 
   } else if(type==='tests'){
@@ -21709,11 +21740,34 @@ function loadBillReqs(){
   if(!pid)return;
   requests.filter(r=>r.patientId===pid).reverse().forEach(r=>{
     const opt=document.createElement('option');
-    opt.value=r.id;opt.textContent=`${_reqNoText(r)} (${r.date}) - ${getStatusText(r.status)}`;
+    const _iv=_billInvOf(r.id);
+    opt.value=r.id;opt.textContent=`${_reqNoText(r)} (${r.date}) - ${getStatusText(r.status)}`+(_iv?` — الصافي ${_iv.total} ${settings.currency||''}`:'');
     sel.appendChild(opt);
   });
   document.getElementById('bill-tests-breakdown').innerHTML='';
+  try{ document.getElementById('bill-discount').value=0; }catch(e){}
   calcBillFinal();
+}
+
+// 💵 حالة الدفع: الفواتير تُحفظ بالعربية («مدفوعة») وبعض القديمة 'paid'
+function _invIsPaid(i){ const s=String((i&&i.status)||'').trim(); return s==='مدفوعة'||s==='paid'||s==='مدفوع'; }
+// 💵 عند إضافة/حذف تحليل من طلب موجود: عدّل فاتورته (الخصم المبلغي يبقى كما هو)
+function _invAdjustForTest(req, tid, sign){
+  try{
+    if(!req||!tid) return;
+    const inv=_billInvOf(req.id); if(!inv) return;
+    const t=tests.find(x=>x.id===tid); const price=t?(parseFloat(t.price)||0):0;
+    if(!price) return;
+    const raw0=parseFloat(inv.rawTotal);
+    const raw=(isFinite(raw0)&&raw0>0?raw0:(parseFloat(inv.total)||0)+_invDiscAmt(inv));
+    const newRaw=Math.max(0, raw+sign*price);
+    const disc=Math.min(_invDiscAmt(inv), newRaw);
+    inv.rawTotal=newRaw; inv.discountAmt=disc;
+    inv.discount=newRaw?Math.round(disc/newRaw*1000)/10:0;
+    inv.total=newRaw-disc; inv._updatedAt=Date.now();
+    save('invoices',invoices);
+    try{ if(typeof updateDashboard==='function') updateDashboard(); }catch(e){}
+  }catch(e){ console.warn('[invoice adjust]', e); }
 }
 
 // 💵 فاتورة الطلب (آخر فاتورة مرتبطة به) — مصدر إيراد اليوم/الشهر
@@ -21747,10 +21801,23 @@ function calcBillTotal(){
   let html='<div style="margin-bottom:8px">';
   let sub=0;
   reqTests.forEach(t=>{sub+=t.price;html+=`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span>${tDisplayName(t)}</span><span style="color:var(--primary);font-weight:700">${t.price} ${settings.currency}</span></div>`;});
-  html+=`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:6px;color:var(--text)"><span>المجموع:</span><span style="color:var(--primary)">${sub} ${settings.currency}</span></div></div>`;
+  html+=`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:6px;color:var(--text)"><span>مجموع أسعار التحاليل:</span><span style="color:var(--primary)">${sub} ${settings.currency}</span></div></div>`;
   box.innerHTML=html;
   // 💵 عبّئ الخصم الحالي للفاتورة (مبلغ) حتى لا يُحتسب الخصم مرتين
-  try{ const _inv=_billInvOf(rid); document.getElementById('bill-discount').value=_inv?_invDiscAmt(_inv):0; }catch(e){}
+  try{
+    const _inv=_billInvOf(rid);
+    document.getElementById('bill-discount').value=_inv?_invDiscAmt(_inv):0;
+    const cur=settings.currency||'';
+    box.innerHTML+= _inv
+      ? `<div style="margin-top:8px;padding:9px 12px;border-radius:9px;background:rgba(0,196,106,0.08);border:1px solid rgba(0,196,106,0.35);font-size:12px;line-height:1.8">
+           <div style="font-weight:800;color:#00c46a">🧾 الفاتورة المسجّلة لهذا الطلب (المحتسبة في الإيرادات)</div>
+           <div style="display:flex;justify-content:space-between"><span>قبل الخصم</span><b>${_billSub(r)} ${cur}</b></div>
+           <div style="display:flex;justify-content:space-between"><span>الخصم</span><b style="color:var(--warning)">-${_invDiscAmt(_inv)} ${cur}</b></div>
+           <div style="display:flex;justify-content:space-between"><span>الصافي</span><b style="color:#00c46a">${_inv.total} ${cur}</b></div>
+           <div style="font-size:10.5px;color:var(--text2)">الخصم أدناه هو خصم هذه الفاتورة نفسه — عدّله ثم احفظ (لا يُضاف خصم فوقه).</div>
+         </div>`
+      : `<div style="margin-top:8px;padding:8px 12px;border-radius:9px;background:rgba(255,214,10,0.08);border:1px solid rgba(255,214,10,0.3);font-size:11.5px">⚠️ لا توجد فاتورة لهذا الطلب — ستُنشأ عند الحفظ.</div>`;
+  }catch(e){}
   document.getElementById('bill-subtotal').textContent=_billSub(r)+' '+settings.currency;
   calcBillFinal();
 }
@@ -21938,6 +22005,7 @@ function addTestToReq(tid){
   req.tests.push(tid);
   if(!req.results) req.results={};
   saveOne('requests',requests,req);
+  _invAdjustForTest(req, tid, +1);   // 💵 الفاتورة والإيراد
   document.getElementById('res-add-test-srch').value='';
   document.getElementById('res-add-test-results').style.display='none';
   // إذا كان التحليل خاصاً (أدرار / خروج / سائل منوي) — افتح واجهة الإدخال الخاصة به فوراً
@@ -21956,9 +22024,11 @@ function removeTestFromReq(tid, id){
   // يُسمح بالتعديل حتى بعد الطباعة (إزالة قفل الطباعة)
   if(req.tests.length<=1){ showNotif('خطأ','يجب أن يحتوي الطلب على تحليل واحد على الأقل','error'); return; }
   if(!confirm('حذف هذا التحليل من الطلب؟')) return;
+  const _hadT2=req.tests.includes(tid);
   req.tests = req.tests.filter(x=>x!==tid);
   if(req.results) delete req.results[tid];
   saveOne('requests',requests,req);
+  if(_hadT2) _invAdjustForTest(req, tid, -1);   // 💵 الفاتورة والإيراد
   loadResultEntry();
   showNotif('تم','تم حذف التحليل من الطلب','success');
 }
