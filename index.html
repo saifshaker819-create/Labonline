@@ -3429,10 +3429,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <button class="req-pill req-pill-done" data-filter="done" onclick="filterReq('done',this)"><span class="req-pill-ic">✅</span><span class="req-pill-lbl">مكتملة</span></button>
           <button id="req-devnew-btn" class="req-pill req-pill-inprogress" data-filter="devnew" onclick="filterReq('devnew',this)" title="مرضى وصلت نتائجهم من الأجهزة المرتبطة ولم تُطبع بعد"><span class="req-pill-ic">📥</span><span class="req-pill-lbl">نتائج الأجهزة</span><span id="req-devnew-badge" style="display:none;margin-right:5px;background:var(--danger,#ff2244);color:#fff;font-size:10px;font-weight:900;min-width:17px;height:17px;line-height:17px;border-radius:9px;padding:0 4px;text-align:center"></span></button>
           <!-- 👨‍⚕️ حسب الطبيب: يحصر كل الأزرار (اليوم/المعلقة/الجارية/المكتملة/الأجهزة) بمرضى طبيب واحد -->
-          <div id="req-doc-pill" class="req-pill req-pill-doctor" data-filter="doctor" title="حسب الطبيب — اختر طبيباً لعرض مرضاه فقط">
+          <div id="req-doc-pill" class="req-pill req-pill-doctor" data-filter="doctor" onclick="_reqDocOpen(event)" title="حسب الطبيب — اختر طبيباً لعرض مرضاه فقط">
             <span class="req-pill-ic">👨‍⚕️</span><span class="req-pill-lbl" id="req-doc-lbl">الطبيب</span>
-            <select id="req-doc-sel" onchange="reqDoctorChanged(this.value)" onmousedown="_reqDocFillOptions()" onfocus="_reqDocFillOptions()" aria-label="حسب الطبيب"
-              style="position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border-radius:50%;font-family:'Cairo',sans-serif"><option value="">الكل</option></select>
+            <select id="req-doc-sel" style="display:none" aria-hidden="true"><option value="">الكل</option></select>
           </div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
@@ -3746,7 +3745,17 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div class="gc-body">
             <div class="fg">
               <label class="fl">اختر المريض</label>
-              <select class="fc" id="bill-pt-sel" onchange="loadBillReqs()">
+              <!-- 🔍 بحث سريع بدل قائمة منسدلة ضخمة (كانت تعلق مع كثرة المرضى) -->
+              <div style="position:relative">
+                <input class="fc" id="bill-pt-search" lang="ar" dir="rtl" autocomplete="off"
+                  placeholder="🔍 ابحث باسم المريض أو رقم الملف أو الهاتف..."
+                  oninput="billPtSearch(this.value)" onfocus="billPtSearch(this.value)" onkeydown="billPtKey(event)"
+                  style="padding-left:34px">
+                <button type="button" id="bill-pt-clear" onclick="billPtClear()" title="مسح"
+                  style="display:none;position:absolute;left:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);font-size:16px;cursor:pointer;line-height:1">×</button>
+                <div id="bill-pt-suggest" style="display:none;position:absolute;top:calc(100% + 3px);right:0;left:0;z-index:600;background:var(--bg-modal,#080f20);border:1px solid var(--border);border-radius:10px;max-height:300px;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,0.5)"></div>
+              </div>
+              <select class="fc" id="bill-pt-sel" onchange="loadBillReqs()" style="display:none">
                 <option value="">-- اختر مريض --</option>
               </select>
             </div>
@@ -5007,6 +5016,26 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <span class="st-card-arrow" id="arr-stc-delta">▼</span>
           </div>
           <div class="st-card-body" id="body-stc-delta" style="display:none">
+
+            <!-- ▼▼ منسدلة: اقتراحات نتائج التحاليل المتكررة ▼▼ -->
+            <div class="smart-sub" style="border:1px solid var(--border);border-radius:11px;margin-bottom:12px;overflow:hidden">
+              <div onclick="toggleSmartSub('sf-defres');DefRes.render()" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;cursor:pointer;background:rgba(0,212,255,0.06)">
+                <div style="display:flex;align-items:center;gap:10px"><span style="font-size:18px">💡</span><div><div style="font-size:13px;font-weight:800">اقتراحات نتائج التحاليل المتكررة</div><div style="font-size:10px;color:var(--text2)">نتيجة جاهزة تظهر تلقائياً مع التحليل عند اختياره لأي مريض — قابلة للتعديل</div></div></div>
+                <span class="st-card-arrow" id="arr-sf-defres">▼</span>
+              </div>
+              <div id="body-sf-defres" style="display:none;padding:14px;border-top:1px solid var(--border)">
+                <div style="font-size:11px;color:var(--text2);margin-bottom:12px;background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:9px;padding:10px;line-height:1.8">
+                  💡 ابحث عن أي تحليل في قاعدة التحاليل، اكتب نتيجته المتكررة (رقم أو كلمة) واحفظ.
+                  عند اختيار هذا التحليل لمريض في واجهة اختيار التحاليل تظهر النتيجة معه جاهزة ويمكن تعديلها، وتُحفظ في الطلب فتظهر في إدخال النتائج كأي نتيجة.
+                  نتائج الأجهزة تستبدلها تلقائياً إذا وصلت.
+                </div>
+                <div style="position:relative;margin-bottom:12px">
+                  <input class="fc" id="defres-q" lang="ar" dir="rtl" autocomplete="off" placeholder="🔍 ابحث عن تحليل بالاسم أو الكود..." oninput="DefRes.search(this.value)" onfocus="DefRes.search(this.value)">
+                  <div id="defres-sug" style="display:none;position:absolute;top:calc(100% + 3px);right:0;left:0;z-index:700;background:var(--bg-modal,#080f20);border:1px solid var(--border);border-radius:10px;max-height:280px;overflow-y:auto;box-shadow:0 10px 30px rgba(0,0,0,0.5)"></div>
+                </div>
+                <div id="defres-list"></div>
+              </div>
+            </div>
 
             <!-- ▼▼ منسدلة (1): فحص دلتا الذكي ▼▼ -->
             <div class="smart-sub" style="border:1px solid var(--border);border-radius:11px;margin-bottom:12px;overflow:hidden">
@@ -12699,7 +12728,7 @@ function toggleWizTest(tid){
   const t=tests.find(x=>x.id===tid);if(!t)return;
   const idx=wizSelectedTests.findIndex(x=>x.id===tid);
   const nowSelected=idx===-1;
-  if(idx>-1) wizSelectedTests.splice(idx,1);
+  if(idx>-1){ wizSelectedTests.splice(idx,1); try{ delete _wizDefRes[tid]; }catch(e){} }
   else wizSelectedTests.push(t);
 
   // 1) تحديث test-item في القائمة اليسرى (checkbox + class)
@@ -12755,7 +12784,8 @@ function _wizRightPanelUpdateOne(t, tid, nowSelected){
     const div=document.createElement('div');
     div.className='wiz-sel-item';
     div.dataset.selId=tid;
-    div.innerHTML=`<div style="flex:1;min-width:0"><div class="wiz-sel-item-code">${t.code}</div><div class="wiz-sel-item-name">${tDisplayName(t)}</div></div><span style="font-size:10px;color:var(--text2);flex-shrink:0;margin-left:4px">${t.price||0}</span><button class="wiz-sel-rm" onclick="toggleWizTest('${tid}')" title="حذف">×</button>`;
+    if(typeof _defResOf==='function' && _defResOf(t)) div.style.flexWrap='wrap';
+    div.innerHTML=`<div style="flex:1;min-width:0"><div class="wiz-sel-item-code">${t.code}</div><div class="wiz-sel-item-name">${tDisplayName(t)}</div>${(typeof _wizDefResHTML==='function')?_wizDefResHTML(t):''}</div><span style="font-size:10px;color:var(--text2);flex-shrink:0;margin-left:4px">${t.price||0}</span><button class="wiz-sel-rm" onclick="toggleWizTest('${tid}')" title="حذف">×</button>`;
     list.appendChild(div);
   } else {
     // حذف العنصر من القائمة اليمنى
@@ -12764,8 +12794,149 @@ function _wizRightPanelUpdateOne(t, tid, nowSelected){
     // إذا أصبحت القائمة فارغة
     if(!wizSelectedTests.length){
       list.innerHTML=`<div class="wiz-sel-empty">لم يتم اختيار<br>أي تحليل بعد</div>`;
+      try{ _wizDefRes = {}; }catch(e){}
     }
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   💡 اقتراحات نتائج التحاليل المتكررة (الإعدادات ← المميزات الذكية)
+   • تُحفظ في التحليل نفسه: t.defaultResult (نص أو رقم) — تُزامَن مع التحاليل.
+   • واجهة اختيار التحاليل: تظهر النتيجة مع التحليل في حقل قابل للتعديل،
+     وتُكتب في الطلب عند إنشائه (req.results) فتظهر في إدخال النتائج.
+   • إضافة تحليل لطلب موجود: تُكتب فقط إن لم تكن له نتيجة.
+   • نتائج الأجهزة تستبدلها (الأجهزة تكتب دائماً فوق القيمة).
+   • مستثنى: الفحوصات الخاصة (بول/خروج/سائل منوي) و CBC — لها نماذجها.
+   ══════════════════════════════════════════════════════════════════════ */
+function _defResEligible(t){
+  if(!t) return false;
+  if(t.isSpecialExam) return false;
+  if(typeof _cbcIsCbcTest==='function' && _cbcIsCbcTest(t)) return false;
+  return true;
+}
+function _defResOf(t){
+  if(!_defResEligible(t)) return '';
+  const v=t.defaultResult; return (v===undefined||v===null)?'':String(v).trim();
+}
+var DefRes = (function(){
+  var pendingNew = {};   // تحاليل أُضيفت للقائمة ولم تُحفظ بعد
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function norm(s){ return (typeof _billNormAr==='function')?_billNormAr(s):String(s||'').toLowerCase().trim(); }
+  function nm(t){ try{ return (typeof tDisplayName==='function')?tDisplayName(t):(t.nameEn||t.code||t.id); }catch(e){ return t.nameEn||t.id; } }
+  function persist(){
+    try{ save('tests',tests); }catch(e){}
+    try{ IDB.set(DB._pfx()+'tests',tests).catch(function(){}); }catch(e){}
+  }
+  function optsFor(t){
+    return (Array.isArray(t.qualOptions)&&t.qualOptions.length)?t.qualOptions:[];
+  }
+  function search(q){
+    var box=document.getElementById('defres-sug'); if(!box) return;
+    var nq=norm(q);
+    if(!nq){ box.style.display='none'; box.innerHTML=''; return; }
+    var out=[];
+    for(var i=0;i<tests.length && out.length<30;i++){
+      var t=tests[i]; if(!_defResEligible(t)) continue;
+      var hay=norm((t.nameEn||'')+' '+(t.nameShort||'')+' '+(t.code||'')+' '+(t.nameAr||'')+' '+nm(t));
+      if(hay.indexOf(nq)>-1) out.push(t);
+    }
+    box.innerHTML = out.length ? out.map(function(t){
+      var has=_defResOf(t);
+      return '<div onmousedown="event.preventDefault();DefRes.add(\''+esc(t.id)+'\')" style="padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(255,255,255,0.04)" onmouseover="this.style.background=\'rgba(0,212,255,0.08)\'" onmouseout="this.style.background=\'\'">'
+        +'<div style="min-width:0"><div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(nm(t))+'</div>'
+        +'<div style="font-size:10.5px;color:var(--text2)" dir="ltr">'+esc(t.code||'')+(t.unit?' · '+esc(t.unit):'')+(t.cat?' · '+esc(t.cat):'')+'</div></div>'
+        +(has?'<span class="bdg bdg-ok" style="flex-shrink:0">✓ '+esc(has)+'</span>':'<span style="flex-shrink:0;font-size:11px;color:var(--primary);font-weight:800">＋ إضافة</span>')
+        +'</div>';
+    }).join('') : '<div style="padding:12px;text-align:center;font-size:12px;color:var(--text2)">لا يوجد تحليل مطابق</div>';
+    box.style.display='block';
+  }
+  function add(tid){
+    var t=tests.find(function(x){return x.id===tid;}); if(!t) return;
+    if(!_defResOf(t)) pendingNew[tid]=true;
+    var box=document.getElementById('defres-sug'); if(box) box.style.display='none';
+    var q=document.getElementById('defres-q'); if(q) q.value='';
+    render();
+    setTimeout(function(){ var el=document.getElementById('defres-in-'+tid); if(el){ el.focus(); try{ el.scrollIntoView({block:'nearest'}); }catch(_){} } },50);
+  }
+  function render(){
+    var list=document.getElementById('defres-list'); if(!list) return;
+    var rows=tests.filter(function(t){ return _defResEligible(t) && (_defResOf(t) || pendingNew[t.id]); });
+    if(!rows.length){
+      list.innerHTML='<div style="padding:16px;text-align:center;font-size:12px;color:var(--text2);border:1px dashed var(--border);border-radius:10px">لا توجد اقتراحات بعد — ابحث عن تحليل أعلاه وأضف نتيجته</div>';
+      return;
+    }
+    list.innerHTML='<div style="font-size:11px;font-weight:800;color:var(--text2);margin-bottom:6px">📋 التحاليل ذات النتيجة المقترحة ('+rows.filter(function(t){return _defResOf(t);}).length+')</div>'
+      + rows.map(function(t){
+        var v=_defResOf(t), opts=optsFor(t), isNew=!v;
+        var dl=opts.length?'<datalist id="defres-dl-'+esc(t.id)+'">'+opts.map(function(o){return '<option value="'+esc(o)+'">';}).join('')+'</datalist>':'';
+        return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px solid '+(isNew?'rgba(255,214,10,0.45)':'var(--border)')+';border-radius:10px;margin-bottom:7px;background:'+(isNew?'rgba(255,214,10,0.05)':'rgba(255,255,255,0.02)')+'">'
+          +'<div style="flex:1 1 180px;min-width:0"><div style="font-size:13px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(nm(t))+'</div>'
+          +'<div style="font-size:10.5px;color:var(--text2)" dir="ltr">'+esc(t.code||'')+(t.unit?' · '+esc(t.unit):'')+'</div></div>'
+          +'<input class="fc" id="defres-in-'+esc(t.id)+'" '+(opts.length?'list="defres-dl-'+esc(t.id)+'"':'')+' value="'+esc(v)+'" placeholder="النتيجة (رقم أو كلمة)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();DefRes.saveOne(\''+esc(t.id)+'\');}" style="flex:1 1 150px;min-width:120px;font-size:13px;padding:6px 10px">'+dl
+          +'<button class="btn btn-sm btn-ok" onclick="DefRes.saveOne(\''+esc(t.id)+'\')">💾 حفظ</button>'
+          +'<button class="btn btn-sm btn-d" onclick="DefRes.remove(\''+esc(t.id)+'\')" title="حذف">🗑️</button>'
+          +'</div>';
+      }).join('');
+  }
+  function saveOne(tid){
+    var t=tests.find(function(x){return x.id===tid;}); if(!t) return;
+    var el=document.getElementById('defres-in-'+tid); var v=el?String(el.value||'').trim():'';
+    if(!v){ showNotif('تنبيه','اكتب النتيجة أولاً (أو اضغط 🗑️ للحذف)','warning'); if(el) el.focus(); return; }
+    t.defaultResult=v; t._updatedAt=Date.now();
+    delete pendingNew[tid];
+    persist(); render();
+    showNotif('تم الحفظ','💡 '+nm(t)+' ← '+v,'success');
+  }
+  function remove(tid){
+    var t=tests.find(function(x){return x.id===tid;}); if(!t) return;
+    if(_defResOf(t) && !confirm('حذف النتيجة المقترحة لـ «'+nm(t)+'»؟')) return;
+    var had=_defResOf(t);
+    delete t.defaultResult; delete pendingNew[tid];
+    if(had){ t._updatedAt=Date.now(); persist(); }
+    render();
+  }
+  document.addEventListener('mousedown', function(e){
+    var box=document.getElementById('defres-sug'); if(!box||box.style.display==='none') return;
+    var q=document.getElementById('defres-q');
+    if(!box.contains(e.target) && e.target!==q) box.style.display='none';
+  });
+  return { search:search, add:add, render:render, saveOne:saveOne, remove:remove };
+})();
+
+/* ── واجهة اختيار التحاليل: قيمة النتيجة المقترحة لكل تحليل مختار (قابلة للتعديل) ── */
+var _wizDefRes = {};
+function _wizDefResVal(t){
+  if(!t) return '';
+  if(Object.prototype.hasOwnProperty.call(_wizDefRes, t.id)) return _wizDefRes[t.id];
+  return _defResOf(t);
+}
+function _wizDefResSet(tid, v){ _wizDefRes[tid]=String(v==null?'':v); }
+function _wizDefResHTML(t){
+  const d=_defResOf(t); if(!d) return '';
+  const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const opts=(Array.isArray(t.qualOptions)&&t.qualOptions.length)?t.qualOptions:[];
+  const dl=opts.length?`<datalist id="wiz-dr-dl-${esc(t.id)}">${opts.map(o=>`<option value="${esc(o)}">`).join('')}</datalist>`:'';
+  return `<div style="display:flex;align-items:center;gap:5px;margin-top:4px" onclick="event.stopPropagation()">
+      <span style="font-size:10px;color:var(--primary);font-weight:800;flex-shrink:0">💡 النتيجة:</span>
+      <input class="fc wiz-defres-in" ${opts.length?`list="wiz-dr-dl-${esc(t.id)}"`:''} value="${esc(_wizDefResVal(t))}" oninput="_wizDefResSet('${esc(t.id)}',this.value)"
+        style="flex:1;min-width:0;font-size:11.5px;padding:3px 7px;height:auto;border-color:rgba(0,212,255,0.4)" title="نتيجة مقترحة — عدّلها أو امسحها">${dl}
+    </div>`;
+}
+/* تُستدعى عند إنشاء الطلب/إضافة تحليل: تكتب النتيجة المقترحة (إن لم توجد نتيجة) */
+function _applyDefResults(req, tids, fromWizard){
+  try{
+    if(!req) return 0;
+    if(!req.results) req.results={};
+    let n=0;
+    (tids||[]).forEach(function(tid){
+      const t=tests.find(x=>x.id===tid); if(!t) return;
+      const cur=req.results[tid];
+      if(cur!==undefined && cur!==null && String(cur).trim()!=='') return;
+      const v = fromWizard ? String(_wizDefResVal(t)).trim() : _defResOf(t);
+      if(v){ req.results[tid]=v; n++; }
+    });
+    return n;
+  }catch(e){ console.warn('[DefRes] apply', e); return 0; }
 }
 
 function renderWizRightPanel(){
@@ -12774,15 +12945,17 @@ function renderWizRightPanel(){
   if(count) count.textContent=wizSelectedTests.length;
   if(!list) return;
   if(!wizSelectedTests.length){
+    _wizDefRes = {};   // جلسة جديدة/لا تحاليل ⇒ امسح التعديلات المؤقتة
     list.innerHTML=`<div class="wiz-sel-empty">لم يتم اختيار<br>أي تحليل بعد</div>`;
     updateWizTotal();
     return;
   }
   list.innerHTML=wizSelectedTests.map(t=>`
-    <div class="wiz-sel-item" data-sel-id="${t.id}">
+    <div class="wiz-sel-item" data-sel-id="${t.id}"${_defResOf(t)?' style="flex-wrap:wrap"':''}>
       <div style="flex:1;min-width:0">
         <div class="wiz-sel-item-code">${t.code}</div>
         <div class="wiz-sel-item-name">${tDisplayName(t)}</div>
+        ${_wizDefResHTML(t)}
       </div>
       <span style="font-size:10px;color:var(--text2);flex-shrink:0;margin-left:4px">${t.price||0}</span>
       <button class="wiz-sel-rm" onclick="toggleWizTest('${t.id}')" title="حذف">×</button>
@@ -13080,6 +13253,9 @@ function wizFinish(){
     status:'pending', results:{}, tech:'', resultDate:'', resultNotes:'',
     sideLab: !!pt.sideLab
   };
+  // 💡 النتائج المقترحة (كما ظهرت/عُدّلت في واجهة الاختيار)
+  try{ if(typeof _applyDefResults==='function') _applyDefResults(req, req.tests, true); }catch(e){}
+  _wizDefRes = {};
   _stamp(req);
   requests.push(req); saveOne('requests',requests,req);
 
@@ -14402,6 +14578,78 @@ function reqDoctorChanged(v){
   const s=document.getElementById('req-srch-inp');
   renderRequestsFiltered(f, s?s.value:'');
 }
+/* 🔍 قائمة الأطباء المنبثقة مع بحث (بدل القائمة المنسدلة العادية) */
+function _reqDocNames(){
+  const today=new Date().toISOString().split('T')[0];
+  const set={}, names=[];
+  const add=(n)=>{ n=_reqDocNorm(n); if(n && !set[n]){ set[n]=1; names.push(n); } };
+  try{ (doctors||[]).forEach(d=>add(d&&d.name)); }catch(e){}
+  try{ for(let i=requests.length-1;i>=0;i--){ const r=requests[i]; if(r && _isTodayReq(r,today)) add(r.doctorName); } }catch(e){}
+  names.sort((a,b)=>a.localeCompare(b,'ar'));
+  return names;
+}
+function _reqDocTodayCount(name){
+  const today=new Date().toISOString().split('T')[0]; let n=0;
+  for(let i=requests.length-1;i>=0;i--){ const r=requests[i]; if(r && _isTodayReq(r,today) && _reqDocMatch(r,name)) n++; }
+  return n;
+}
+function _reqDocOpen(e){
+  if(e) e.stopPropagation();
+  let pop=document.getElementById('req-doc-pop');
+  if(pop && pop.style.display==='block'){ pop.style.display='none'; return; }
+  if(!pop){
+    pop=document.createElement('div'); pop.id='req-doc-pop';
+    pop.style.cssText='display:none;position:fixed;z-index:99990;width:270px;max-width:92vw;background:var(--bg-modal,#080f20);border:1.5px solid rgba(255,140,66,0.5);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,0.55);overflow:hidden;direction:rtl;font-family:Cairo,sans-serif';
+    pop.innerHTML='<div style="padding:8px;border-bottom:1px solid var(--border)"><input id="req-doc-q" class="fc" lang="ar" dir="rtl" autocomplete="off" placeholder="🔍 ابحث عن طبيب..." oninput="_reqDocRenderList(this.value)" onkeydown="_reqDocKey(event)" style="font-size:12.5px;padding:7px 10px"></div>'
+      +'<div id="req-doc-list" style="max-height:300px;overflow-y:auto"></div>';
+    pop.addEventListener('mousedown', ev=>ev.stopPropagation());
+    document.body.appendChild(pop);
+    document.addEventListener('mousedown', function(){ const p=document.getElementById('req-doc-pop'); if(p) p.style.display='none'; });
+  }
+  const pill=document.getElementById('req-doc-pill'), rc=pill?pill.getBoundingClientRect():{left:20,bottom:120,right:80};
+  pop.style.display='block';
+  const w=pop.offsetWidth||270;
+  let left=rc.right-w; if(left<8) left=8; if(left+w>window.innerWidth-8) left=window.innerWidth-8-w;
+  pop.style.left=left+'px'; pop.style.top=(rc.bottom+8)+'px';
+  const q=document.getElementById('req-doc-q'); if(q){ q.value=''; }
+  _reqDocRenderList('');
+  setTimeout(()=>{ try{ q.focus(); }catch(_){} }, 30);
+}
+var _reqDocIdx=-1;
+function _reqDocRenderList(q){
+  const list=document.getElementById('req-doc-list'); if(!list) return;
+  const nq=(typeof _billNormAr==='function')?_billNormAr(q):String(q||'').toLowerCase().trim();
+  const cur=window._reqDoctorSel||'';
+  const names=_reqDocNames().filter(n=>!nq || ((typeof _billNormAr==='function')?_billNormAr(n):n.toLowerCase()).includes(nq));
+  const esc=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  const row=(val,label,cnt,active)=>`<div class="req-doc-opt" data-v="${esc(val)}" onmousedown="event.preventDefault();_reqDocPick(this.getAttribute('data-v'))"
+      style="padding:8px 12px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,0.04);${active?'background:rgba(255,140,66,0.14);':''}"
+      onmouseover="this.style.background='rgba(255,140,66,0.12)'" onmouseout="this.style.background='${active?'rgba(255,140,66,0.14)':''}'">
+      <span style="font-size:13px;font-weight:${active?'900':'700'};color:${active?'#ff8c42':'var(--text)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${active?'✓ ':''}${esc(label)}</span>
+      ${cnt!==null?`<span style="flex-shrink:0;font-size:10.5px;font-weight:800;color:var(--text2)">${cnt} اليوم</span>`:''}</div>`;
+  let html='';
+  if(!nq) html+=row('','الكل (إلغاء الحصر)',null,!cur);
+  html+=names.map(n=>row(n,n,_reqDocTodayCount(n),n===cur)).join('');
+  if(!names.length && nq) html+='<div style="padding:14px;text-align:center;font-size:12px;color:var(--text2)">لا يوجد طبيب بهذا الاسم</div>';
+  list.innerHTML=html; _reqDocIdx=-1;
+}
+function _reqDocKey(e){
+  const opts=document.querySelectorAll('#req-doc-list .req-doc-opt'); if(!opts.length) return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    _reqDocIdx = e.key==='ArrowDown' ? Math.min(opts.length-1,_reqDocIdx+1) : Math.max(0,_reqDocIdx-1);
+    opts.forEach((o,i)=>{ o.style.outline = i===_reqDocIdx ? '2px solid rgba(255,140,66,0.6)' : ''; });
+    try{ opts[_reqDocIdx].scrollIntoView({block:'nearest'}); }catch(_){}
+  } else if(e.key==='Enter'){
+    e.preventDefault(); const o=opts[_reqDocIdx>=0?_reqDocIdx:0]; if(o) _reqDocPick(o.getAttribute('data-v'));
+  } else if(e.key==='Escape'){ const p=document.getElementById('req-doc-pop'); if(p) p.style.display='none'; }
+}
+function _reqDocPick(v){
+  const p=document.getElementById('req-doc-pop'); if(p) p.style.display='none';
+  const sel=document.getElementById('req-doc-sel');
+  if(sel){ _reqDocFillOptions(); sel.value=v||''; }
+  reqDoctorChanged(v||'');
+}
 function _reqDocReset(){
   window._reqDoctorSel='';
   const sel=document.getElementById('req-doc-sel'); if(sel) sel.value='';
@@ -14889,6 +15137,7 @@ function vrSelectAddTest(tid){
     r.tests.push(t.id);
     if(!r.testNames)r.testNames=[];
     if(!r.testNames.includes(t.nameEn))r.testNames.push(t.nameEn);
+    try{ if(typeof _applyDefResults==='function') _applyDefResults(r, [t.id], false); }catch(e){}
     saveOne('requests',requests,r);
     _invAdjustForTest(r, t.id, +1);   // 💵 الفاتورة والإيراد
   }
@@ -20472,6 +20721,8 @@ function saveTest(){
   if(editTestId){const idx=tests.findIndex(x=>x.id===editTestId);if(idx>-1){
     // 🩸 CBC: الحفاظ على جدول القيم الطبيعية عند تعديل الاسم/السعر
     if(tests[idx]&&tests[idx].cbcRanges&&!t.cbcRanges) t.cbcRanges=tests[idx].cbcRanges;
+    // 💡 الحفاظ على النتيجة المقترحة
+    if(tests[idx]&&tests[idx].defaultResult!==undefined&&t.defaultResult===undefined) t.defaultResult=tests[idx].defaultResult;
     tests[idx]=t;
   }}
   else tests.push(t);
@@ -21806,10 +22057,97 @@ function updateTestPrice(tid,price){
   showNotif('تم','تم تحديث السعر ✅','success');
 }
 
+/* 💳 اختيار المريض في الحسابات — بحث سريع بدل <select> بآلاف الخيارات
+   • القائمة المخفية bill-pt-sel تبقى كما هي (كل الكود يقرأ قيمتها).
+   • فارغ ⇒ آخر المرضى أصحاب الطلبات · كتابة ⇒ بحث بالاسم/رقم الملف/الهاتف (أول 40). */
 function loadBillingPtDropdown(){
   const sel=document.getElementById('bill-pt-sel');if(!sel)return;
-  sel.innerHTML='<option value="">-- اختر مريض --</option>'+patients.map(p=>`<option value="${p.id}">${p.name} (${p.id})</option>`).join('');
+  sel.innerHTML='<option value="">-- اختر مريض --</option>';
+  const inp=document.getElementById('bill-pt-search'); if(inp) inp.value='';
+  const clr=document.getElementById('bill-pt-clear'); if(clr) clr.style.display='none';
+  const box=document.getElementById('bill-pt-suggest'); if(box){ box.style.display='none'; box.innerHTML=''; }
 }
+function _billNormAr(s){
+  return String(s||'').toLowerCase()
+    .replace(/[\u064B-\u0652\u0640]/g,'')
+    .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+    .replace(/\s+/g,' ').trim();
+}
+var _billPtTimer=null, _billPtList=[], _billPtIdx=-1;
+function billPtSearch(q){
+  if(_billPtTimer) clearTimeout(_billPtTimer);
+  _billPtTimer=setTimeout(function(){ _billPtRender(q); }, 120);
+}
+function _billPtRender(q){
+  const box=document.getElementById('bill-pt-suggest'); if(!box) return;
+  const clr=document.getElementById('bill-pt-clear'); if(clr) clr.style.display=(q&&q.length)?'block':'none';
+  const nq=_billNormAr(q);
+  let list=[];
+  if(!nq){
+    // آخر المرضى أصحاب الطلبات (الأحدث أولاً)
+    const seen={};
+    for(let i=requests.length-1;i>=0 && list.length<15;i--){
+      const r=requests[i]; if(!r||!r.patientId||seen[r.patientId]) continue;
+      seen[r.patientId]=1;
+      const p=patients.find(x=>x.id===r.patientId);
+      if(p) list.push(p);
+    }
+  } else {
+    const digits=String(q).replace(/\D/g,'');
+    for(let i=patients.length-1;i>=0 && list.length<40;i--){
+      const p=patients[i]; if(!p) continue;
+      if(_billNormAr(p.name).includes(nq) || String(p.id||'').toLowerCase().includes(nq) ||
+         (digits.length>=3 && String(p.phone||'').replace(/\D/g,'').includes(digits))) list.push(p);
+    }
+  }
+  _billPtList=list; _billPtIdx=-1;
+  const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const cntReq=(pid)=>{ let n=0; for(let i=0;i<requests.length;i++){ if(requests[i]&&requests[i].patientId===pid) n++; } return n; };
+  box.innerHTML = list.length
+    ? (!nq?'<div style="padding:6px 12px;font-size:10.5px;font-weight:800;color:var(--text2);border-bottom:1px solid var(--border)">🕘 آخر المرضى — اكتب للبحث في الكل</div>':'')
+      + list.map((p,i)=>`<div class="bill-pt-opt" data-i="${i}" onmousedown="event.preventDefault();billPtPick('${esc(p.id)}')"
+          style="padding:8px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);display:flex;justify-content:space-between;align-items:center;gap:8px"
+          onmouseover="this.style.background='rgba(0,212,255,0.08)'" onmouseout="this.style.background=''">
+          <div style="min-width:0"><div style="font-size:13px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
+          <div style="font-size:10.5px;color:var(--text2)" dir="ltr">${esc(p.id)}${p.phone?' · '+esc(p.phone):''}</div></div>
+          <span class="bdg bdg-p" style="flex-shrink:0">${cntReq(p.id)} طلب</span></div>`).join('')
+    : '<div style="padding:14px;text-align:center;font-size:12px;color:var(--text2)">لا توجد نتائج</div>';
+  box.style.display='block';
+}
+function billPtKey(e){
+  const box=document.getElementById('bill-pt-suggest'); if(!box||box.style.display==='none') return;
+  const opts=box.querySelectorAll('.bill-pt-opt'); if(!opts.length) return;
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    _billPtIdx = e.key==='ArrowDown' ? Math.min(opts.length-1,_billPtIdx+1) : Math.max(0,_billPtIdx-1);
+    opts.forEach((o,i)=>{ o.style.background = i===_billPtIdx ? 'rgba(0,212,255,0.14)' : ''; });
+    try{ opts[_billPtIdx].scrollIntoView({block:'nearest'}); }catch(_){}
+  } else if(e.key==='Enter'){
+    e.preventDefault();
+    const p=_billPtList[_billPtIdx>=0?_billPtIdx:0]; if(p) billPtPick(p.id);
+  } else if(e.key==='Escape'){ box.style.display='none'; }
+}
+function billPtPick(pid){
+  const p=patients.find(x=>x.id===pid); if(!p) return;
+  const sel=document.getElementById('bill-pt-sel');
+  const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  sel.innerHTML='<option value="">-- اختر مريض --</option><option value="'+esc(p.id)+'">'+esc(p.name)+' ('+esc(p.id)+')</option>';
+  sel.value=p.id;
+  const inp=document.getElementById('bill-pt-search'); if(inp) inp.value=p.name+' ('+p.id+')';
+  const clr=document.getElementById('bill-pt-clear'); if(clr) clr.style.display='block';
+  const box=document.getElementById('bill-pt-suggest'); if(box) box.style.display='none';
+  loadBillReqs();
+}
+function billPtClear(){
+  loadBillingPtDropdown();
+  loadBillReqs();
+  const inp=document.getElementById('bill-pt-search'); if(inp){ inp.focus(); billPtSearch(''); }
+}
+document.addEventListener('mousedown', function(e){
+  const box=document.getElementById('bill-pt-suggest'); if(!box||box.style.display==='none') return;
+  const inp=document.getElementById('bill-pt-search');
+  if(!box.contains(e.target) && e.target!==inp) box.style.display='none';
+});
 
 function loadBillReqs(){
   const pid=document.getElementById('bill-pt-sel').value;
@@ -22082,6 +22420,7 @@ function addTestToReq(tid){
   }
   req.tests.push(tid);
   if(!req.results) req.results={};
+  try{ if(typeof _applyDefResults==='function') _applyDefResults(req, [tid], false); }catch(e){}
   saveOne('requests',requests,req);
   _invAdjustForTest(req, tid, +1);   // 💵 الفاتورة والإيراد
   document.getElementById('res-add-test-srch').value='';
@@ -34708,10 +35047,25 @@ function _semenAutoCalc4(){
   const num=(id)=>parseFloat(raw(id))||0;
   const set=(id,v,dp)=>{ const e=g(id); if(!e) return; e.value=(v===''?'':(+v).toFixed(dp)); try{ e.readOnly=true; }catch(_){} };
   const r2=(x)=>Math.round(x*100)/100;
-  // Total Sperm no.
+  // Total Sperm no. = Volume × Concentration
   if(g('s_total_count')){
-    if(raw('s_volume')==='' || raw('s_conc')==='') { if(raw('s_volume')===''&&raw('s_conc')==='') {/* اترك القديم */} else set('s_total_count','',2); }
-    else set('s_total_count', r2(num('s_volume')*num('s_conc')), 2);
+    const tEl=g('s_total_count'), vEl=g('s_volume'), cEl=g('s_conc');
+    const vR=raw('s_volume'), cR=raw('s_conc');
+    // حقل رقمي فيه نص غير صالح (مثل فاصلة عربية) يُعيد قيمة فارغة ⇒ نُنبّه
+    const vBad=!!(vEl && vEl.validity && vEl.validity.badInput);
+    if(vR!=='' && cR!==''){
+      set('s_total_count', r2(num('s_volume')*num('s_conc')), 2);
+      tEl.placeholder='يُحسب تلقائياً';
+      if(vEl){ vEl.style.borderColor=''; vEl.style.boxShadow=''; }
+    } else {
+      if(!(vR===''&&cR==='')) tEl.value='';
+      if(cR!=='' && (vR===''||vBad)){
+        tEl.placeholder = vBad ? '⚠️ قيمة Volume غير صحيحة — استخدم النقطة (2.5)' : '⚠️ أدخل Volume (في Physical Properties) ليُحسب';
+        if(vEl){ vEl.style.borderColor='#ff8c42'; vEl.style.boxShadow='0 0 0 3px rgba(255,140,66,0.25)'; }
+      } else if(vR!=='' && cR===''){
+        tEl.placeholder='⚠️ أدخل Concentration ليُحسب';
+      } else tEl.placeholder='يُحسب تلقائياً';
+    }
   }
   const aR=raw('s_grade_a'), bR=raw('s_grade_b'), cR=raw('s_grade_c');
   // A + B
