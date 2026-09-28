@@ -3740,8 +3740,8 @@ body.light-mode .dp-viewer{background:#d8dde3;}
             <div style="background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:9px;padding:14px;margin-bottom:12px">
               <div class="fr2">
                 <div class="fg" style="margin-bottom:10px">
-                  <label class="fl">خصم (%)</label>
-                  <input class="fc" id="bill-discount" type="number" min="0" max="100" value="0" oninput="calcBillFinal()">
+                  <label class="fl">خصم (مبلغ)</label>
+                  <input class="fc" id="bill-discount" type="number" min="0" step="any" lang="en" dir="ltr" value="0" oninput="calcBillFinal()">
                 </div>
                 <div class="fg" style="margin-bottom:10px">
                   <label class="fl">نسبة الطبيب (%)</label>
@@ -3862,6 +3862,39 @@ body.light-mode .dp-viewer{background:#d8dde3;}
               <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('critical')">⚠️ النتائج الحرجة</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ── 👨‍⚕️ مراجعو طبيب معيّن ── -->
+      <div class="gc" style="margin-top:20px" id="doc-visits-card">
+        <div class="gc-hdr"><div class="gc-title">👨‍⚕️ مراجعو الطبيب</div></div>
+        <div class="gc-body">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px">
+            <div class="fg" style="margin-bottom:0;flex:1;min-width:200px">
+              <label class="fl">الطبيب</label>
+              <select class="fc" id="dv-doctor" onchange="DocVisits.run()"><option value="">-- اختر طبيباً --</option></select>
+            </div>
+            <div class="fg" style="margin-bottom:0;min-width:140px">
+              <label class="fl">الفترة</label>
+              <select class="fc" id="dv-mode" onchange="DocVisits.modeChanged()">
+                <option value="all">🌐 الكل</option>
+                <option value="month">📅 شهر معيّن</option>
+                <option value="day">📆 يوم معيّن</option>
+                <option value="range">↔️ من – إلى</option>
+              </select>
+            </div>
+            <div class="fg" id="dv-f-month" style="margin-bottom:0;display:none"><label class="fl">الشهر</label><input class="fc" type="month" id="dv-month" onchange="DocVisits.run()"></div>
+            <div class="fg" id="dv-f-day" style="margin-bottom:0;display:none"><label class="fl">اليوم</label><input class="fc" type="date" id="dv-day" onchange="DocVisits.run()"></div>
+            <div class="fg" id="dv-f-from" style="margin-bottom:0;display:none"><label class="fl">من</label><input class="fc" type="date" id="dv-from" onchange="DocVisits.run()"></div>
+            <div class="fg" id="dv-f-to" style="margin-bottom:0;display:none"><label class="fl">إلى</label><input class="fc" type="date" id="dv-to" onchange="DocVisits.run()"></div>
+            <button class="btn btn-p btn-sm" onclick="DocVisits.pdf()" id="dv-pdf-btn" disabled style="white-space:nowrap">📄 تنزيل PDF</button>
+          </div>
+          <div id="dv-summary"></div>
+          <div style="overflow-x:auto">
+            <table class="tbl"><thead><tr><th>#</th><th>اسم الطبيب</th><th>اسم المراجع</th><th>التاريخ</th><th>التحاليل</th><th>السعر</th></tr></thead>
+              <tbody id="dv-body"><tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text2)">اختر طبيباً لعرض مراجعيه</td></tr></tbody></table>
+          </div>
+          <div id="dv-more" style="text-align:center;margin-top:10px"></div>
         </div>
       </div>
 
@@ -12332,8 +12365,8 @@ function renderWizStep(){
           </div>
           <!-- خصم -->
           <div class="fg" style="min-width:120px;margin-bottom:0">
-            <label class="fl" style="font-size:10px">خصم %</label>
-            <input class="fc" id="wiz-discount" type="number" min="0" max="100" placeholder="0" oninput="updateWizTotal()" style="padding:5px 8px">
+            <label class="fl" style="font-size:10px">خصم (مبلغ ${settings.currency||''})</label>
+            <input class="fc" id="wiz-discount" type="number" min="0" step="any" lang="en" dir="ltr" placeholder="0" oninput="updateWizTotal()" style="padding:5px 8px">
           </div>
           <!-- بعد الخصم -->
           <div style="display:flex;align-items:center;gap:6px">
@@ -13029,8 +13062,11 @@ function wizFinish(){
 
   // الفاتورة مع الخصم وحالة الدفع
   const rawTotal = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
-  const disc     = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
-  const total    = Math.round(rawTotal*(1-disc/100));
+  // 💵 الخصم مبلغ بالعملة (وليس نسبة): 15000 − 5000 = 10000
+  const _discIn  = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
+  const discAmt  = Math.min(Math.max(0,_discIn), rawTotal);
+  const disc     = rawTotal ? Math.round(discAmt/rawTotal*1000)/10 : 0;   // النسبة المكافئة (توافق مع السجلات القديمة)
+  const total    = rawTotal - discAmt;
   const payStatus= (document.getElementById('wiz-pay-status')||{}).value||'معلقة';
 
   // رقم فاتورة فريد مضمون
@@ -13051,7 +13087,7 @@ function wizFinish(){
   invoices.push({
     id:_genUniqueInvId(),
     patientId:pt.id, patientName:pt.name, reqId:rqid,
-    rawTotal, discount:disc, total,
+    rawTotal, discount:disc, discountAmt:discAmt, total,
     insType:pt.insurance||'', insAmt:0,
     status:payStatus, date:today
   });
@@ -13077,7 +13113,7 @@ function wizFinish(){
 function updateWizTotal(){
   const total = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
   const disc  = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
-  const final = Math.round(total*(1-disc/100));
+  const final = total - Math.min(Math.max(0,disc), total);   // 💵 خصم بالمبلغ
   const cur   = settings.currency||'';
   const tl=document.getElementById('wiz-total-lbl');
   const fl=document.getElementById('wiz-final-lbl');
@@ -20930,7 +20966,9 @@ function renderInvoices(){
   document.getElementById('inv-body').innerHTML=_invShown.map(i=>{
     const isPaid=i.status==='مدفوعة';
     const ptDebt=debtMap[i.patientId]||0;
-    const discTxt=i.discount>0?`<span style="font-size:10px;color:var(--warning)"> (خصم ${i.discount}%)</span>`:'';
+    const discTxt=(i.discountAmt>0)
+      ?`<span style="font-size:10px;color:var(--warning)"> (خصم ${i.discountAmt} ${settings.currency||''})</span>`
+      :(i.discount>0?`<span style="font-size:10px;color:var(--warning)"> (خصم ${i.discount}%)</span>`:'');
     return`<tr>
       <td><span class="bdg bdg-p">${i.id}</span></td>
       <td>
@@ -21005,6 +21043,199 @@ function _rpResetMonth(){
 }
 window._rpResetMonth=_rpResetMonth;
 
+
+/* ══════════════════════════════════════════════════════════════════════
+   👨‍⚕️ تقرير مراجعي طبيب معيّن (قسم التقارير)
+   • الطبيب: من قائمة الأطباء + أي اسم طبيب مسجّل على الطلبات.
+   • الفترة: الكل / شهر / يوم / من–إلى (حسب تاريخ الطلب).
+   • الأعمدة: الطبيب، المراجع، التاريخ، التحاليل، السعر + المجموع.
+   • السعر = صافي فاتورة الطلب (بعد الخصم) وإلا مجموع أسعار التحاليل.
+   • العرض 10 ثم «المزيد» 10 في كل مرة. PDF يحوي كل النتائج.
+   قراءة فقط — لا يعدّل أي بيانات.
+   ══════════════════════════════════════════════════════════════════════ */
+var DocVisits = (function(){
+  var PAGE = 10, shown = PAGE, rows = [], total = 0, lastKey = '';
+  function el(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];}); }
+  function norm(s){ return String(s||'').replace(/\s+/g,' ').trim(); }
+  function cur(){ return (typeof settings!=='undefined' && settings.currency) || ''; }
+  function fmt(n){ n=parseFloat(n)||0; return n.toLocaleString('en-US',{maximumFractionDigits:2}); }
+
+  function doctorNames(){
+    var set = {}, out = [];
+    try{ (doctors||[]).forEach(function(d){ var n=norm(d&&d.name); if(n && !set[n]){ set[n]=1; out.push(n); } }); }catch(e){}
+    try{ (requests||[]).forEach(function(r){ var n=norm(r&&r.doctorName); if(n && !set[n]){ set[n]=1; out.push(n); } }); }catch(e){}
+    return out.sort(function(a,b){ return a.localeCompare(b,'ar'); });
+  }
+  function fillDoctors(){
+    var s = el('dv-doctor'); if(!s) return;
+    var keep = s.value, names = doctorNames();
+    s.innerHTML = '<option value="">-- اختر طبيباً --</option>' +
+      names.map(function(n){ return '<option value="'+esc(n)+'"'+(n===keep?' selected':'')+'>'+esc(n)+'</option>'; }).join('');
+    if(keep && names.indexOf(keep) < 0) s.value = '';
+  }
+  function modeChanged(){
+    var m = (el('dv-mode')||{}).value || 'all';
+    el('dv-f-month').style.display = m==='month' ? '' : 'none';
+    el('dv-f-day').style.display   = m==='day'   ? '' : 'none';
+    el('dv-f-from').style.display  = m==='range' ? '' : 'none';
+    el('dv-f-to').style.display    = m==='range' ? '' : 'none';
+    var today = new Date().toISOString().slice(0,10);
+    if(m==='month' && !el('dv-month').value) el('dv-month').value = today.slice(0,7);
+    if(m==='day'   && !el('dv-day').value)   el('dv-day').value = today;
+    if(m==='range'){ if(!el('dv-from').value) el('dv-from').value = today.slice(0,8)+'01'; if(!el('dv-to').value) el('dv-to').value = today; }
+    run();
+  }
+  function period(){
+    var m = (el('dv-mode')||{}).value || 'all';
+    if(m==='month'){ var mo=el('dv-month').value; return { label: mo ? ('شهر '+mo) : 'الكل', has: function(d){ return !mo || String(d||'').slice(0,7)===mo; } }; }
+    if(m==='day'){ var dy=el('dv-day').value; return { label: dy ? ('يوم '+dy) : 'الكل', has: function(d){ return !dy || String(d||'').slice(0,10)===dy; } }; }
+    if(m==='range'){
+      var f=el('dv-from').value, t=el('dv-to').value;
+      if(f && t && f>t){ var x=f; f=t; t=x; }
+      return { label: 'من '+(f||'البداية')+' إلى '+(t||'الآن'),
+               has: function(d){ d=String(d||'').slice(0,10); return (!f || d>=f) && (!t || d<=t); } };
+    }
+    return { label: 'كل الفترات', has: function(){ return true; } };
+  }
+  function priceOf(r){
+    try{
+      for(var i=invoices.length-1;i>=0;i--){
+        var inv=invoices[i];
+        if(inv && inv.reqId===r.id && isFinite(parseFloat(inv.total))) return parseFloat(inv.total);
+      }
+    }catch(e){}
+    return (r.tests||[]).reduce(function(s,tid){ var t=tests.find(function(x){return x.id===tid;}); return s+((t&&parseFloat(t.price))||0); },0);
+  }
+  function testNamesOf(r){
+    if(Array.isArray(r.testNames) && r.testNames.length) return r.testNames.join('، ');
+    return (r.tests||[]).map(function(tid){ var t=tests.find(function(x){return x.id===tid;}); return t ? (typeof tDisplayName==='function'?tDisplayName(t):t.nameEn) : tid; }).join('، ');
+  }
+  function collect(){
+    var dn = norm((el('dv-doctor')||{}).value);
+    if(!dn) return null;
+    var ids = {};
+    try{ (doctors||[]).forEach(function(d){ if(norm(d.name)===dn && d.id) ids[d.id]=1; }); }catch(e){}
+    var P = period();
+    var list = (requests||[]).filter(function(r){
+      if(!r) return false;
+      var rn = norm(r.doctorName);
+      var mine = rn ? rn===dn : !!(r.doctorId && ids[r.doctorId]);
+      return mine && P.has(r.date);
+    }).map(function(r){
+      return { doctor: dn, patient: r.patientName || '-', date: r.date || '', tests: testNamesOf(r), price: priceOf(r) };
+    }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+    return { doctor: dn, label: P.label, list: list };
+  }
+  function run(){
+    var res = collect();
+    var body = el('dv-body'), sum = el('dv-summary'), more = el('dv-more'), btn = el('dv-pdf-btn');
+    if(!body) return;
+    if(!res){
+      rows=[]; total=0; lastKey='';
+      body.innerHTML='<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text2)">اختر طبيباً لعرض مراجعيه</td></tr>';
+      sum.innerHTML=''; more.innerHTML=''; if(btn) btn.disabled=true; return;
+    }
+    var key = res.doctor+'|'+res.label;
+    if(key !== lastKey){ shown = PAGE; lastKey = key; }
+    rows = res.list; total = rows.reduce(function(s,x){ return s+x.price; },0);
+    if(btn) btn.disabled = !rows.length;
+    sum.innerHTML = '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+      + card('👨‍⚕️', res.doctor, 'الطبيب', 'var(--primary)')
+      + card('📅', res.label, 'الفترة', 'var(--text)')
+      + card('👥', rows.length, 'عدد المراجعين', 'var(--secondary)')
+      + card('💰', fmt(total)+' '+cur(), 'مجموع السعر', 'var(--success)')
+      + '</div>';
+    render();
+  }
+  function card(ic, v, l, c){
+    return '<div style="flex:1;min-width:140px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;padding:10px 14px">'
+      + '<div style="font-size:15px;font-weight:900;color:'+c+'">'+ic+' '+esc(v)+'</div><div style="font-size:11px;color:var(--text2)">'+l+'</div></div>';
+  }
+  function render(){
+    var body = el('dv-body'), more = el('dv-more');
+    if(!rows.length){
+      body.innerHTML='<tr><td colspan="6" style="text-align:center;padding:18px;color:var(--text2)">لا يوجد مراجعون لهذا الطبيب في الفترة المختارة</td></tr>';
+      more.innerHTML=''; return;
+    }
+    var part = rows.slice(0, shown);
+    body.innerHTML = part.map(function(x,i){
+      return '<tr><td>'+(i+1)+'</td><td>'+esc(x.doctor)+'</td><td><b>'+esc(x.patient)+'</b></td><td dir="ltr">'+esc(x.date)+'</td>'
+        + '<td style="font-size:11px">'+esc(x.tests||'-')+'</td><td style="font-weight:800;color:var(--success)" dir="ltr">'+fmt(x.price)+' '+esc(cur())+'</td></tr>';
+    }).join('') + '<tr style="background:rgba(0,245,147,0.06)"><td colspan="5" style="text-align:left;font-weight:900">مجموع السعر ('+rows.length+' مراجع)</td>'
+      + '<td style="font-weight:900;color:var(--success)" dir="ltr">'+fmt(total)+' '+esc(cur())+'</td></tr>';
+    var rest = rows.length - part.length;
+    more.innerHTML = rest > 0
+      ? '<button class="btn btn-s" style="font-weight:800" onclick="DocVisits.more()">⬇️ المزيد ('+Math.min(PAGE,rest)+' من '+rest+' متبقٍ)</button>'
+      : '';
+  }
+  function moreFn(){ shown += PAGE; render(); }
+
+  /* ── PDF: صفحات A4 (كل الصفوف) عبر html2canvas + jsPDF ── */
+  async function pdf(){
+    var res = collect();
+    if(!res || !res.list.length){ showNotif('تنبيه','لا توجد بيانات للتنزيل','warning'); return; }
+    if(!(window.jspdf && window.jspdf.jsPDF) || typeof html2canvas!=='function'){ showNotif('خطأ','مكتبة PDF غير متاحة','error'); return; }
+    showNotif('PDF','جاري تحضير ملف PDF...','info');
+    var lab = (typeof settings!=='undefined' && settings.name) || 'Medical Laboratory';
+    var tot = res.list.reduce(function(s,x){ return s+x.price; },0);
+    var PER = 22, pages = [];
+    for(var i=0;i<res.list.length;i+=PER) pages.push(res.list.slice(i,i+PER));
+    var css = 'body{margin:0;background:#fff;font-family:Cairo,Tahoma,Arial,sans-serif;color:#111;direction:rtl}'
+      + '.pg{width:794px;height:1123px;box-sizing:border-box;padding:36px 34px;position:relative;background:#fff}'
+      + 'h1{font-size:19px;margin:0 0 4px;color:#003366}.sub{font-size:12px;color:#444;margin-bottom:12px}'
+      + '.meta{display:flex;gap:16px;flex-wrap:wrap;background:#f0f4ff;border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:12px}'
+      + 'table{width:100%;border-collapse:collapse;font-size:11.5px}th{background:#003366;color:#fff;padding:7px 6px;text-align:right}'
+      + 'td{padding:6px;border-bottom:1px solid #ddd;vertical-align:top}.tot td{background:#eafaf0;font-weight:900}'
+      + '.ft{position:absolute;bottom:18px;left:34px;right:34px;font-size:10px;color:#777;display:flex;justify-content:space-between}';
+    var { jsPDF } = window.jspdf;
+    var doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;height:1123px;border:none;background:#fff';
+    document.body.appendChild(iframe);
+    try{
+      for(var p=0;p<pages.length;p++){
+        var startIdx = p*PER;
+        var html = '<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><style>'+css+'</style></head><body><div class="pg">'
+          + '<h1>👨‍⚕️ مراجعو الطبيب: '+esc(res.doctor)+'</h1><div class="sub">'+esc(lab)+'</div>'
+          + '<div class="meta"><span><b>الفترة:</b> '+esc(res.label)+'</span><span><b>عدد المراجعين:</b> '+res.list.length+'</span>'
+          + '<span><b>مجموع السعر:</b> '+fmt(tot)+' '+esc(cur())+'</span><span><b>تاريخ الطباعة:</b> '+new Date().toISOString().slice(0,10)+'</span></div>'
+          + '<table><thead><tr><th>#</th><th>اسم الطبيب</th><th>اسم المراجع</th><th>التاريخ</th><th>التحاليل</th><th>السعر</th></tr></thead><tbody>'
+          + pages[p].map(function(x,j){ return '<tr><td>'+(startIdx+j+1)+'</td><td>'+esc(x.doctor)+'</td><td><b>'+esc(x.patient)+'</b></td><td dir="ltr">'+esc(x.date)+'</td><td>'+esc(x.tests||'-')+'</td><td dir="ltr" style="white-space:nowrap">'+fmt(x.price)+' '+esc(cur())+'</td></tr>'; }).join('')
+          + (p===pages.length-1 ? '<tr class="tot"><td colspan="5">مجموع السعر ('+res.list.length+' مراجع)</td><td dir="ltr" style="white-space:nowrap">'+fmt(tot)+' '+esc(cur())+'</td></tr>' : '')
+          + '</tbody></table><div class="ft"><span>'+esc(lab)+'</span><span>صفحة '+(p+1)+' / '+pages.length+'</span></div></div></body></html>';
+        var iDoc = iframe.contentDocument || iframe.contentWindow.document;
+        iDoc.open(); iDoc.write(html); iDoc.close();
+        await new Promise(function(r){ setTimeout(r, 120); });
+        try{ if(iDoc.fonts && iDoc.fonts.ready) await iDoc.fonts.ready; }catch(e){}
+        try{ if(typeof _pdfArabicSafe==='function') _pdfArabicSafe(iDoc); }catch(e){}
+        var canvas = await html2canvas(iDoc.querySelector('.pg'), {scale:2, backgroundColor:'#ffffff', useCORS:true, logging:false, width:794, height:1123, windowWidth:794});
+        if(p>0) doc.addPage();
+        doc.addImage(canvas.toDataURL('image/jpeg',0.92), 'JPEG', 0, 0, 210, 297);
+      }
+    }catch(e){
+      console.warn('[DocVisits pdf]', e);
+      showNotif('خطأ','تعذّر إنشاء PDF','error');
+      try{ document.body.removeChild(iframe); }catch(_){}
+      return;
+    }
+    try{ document.body.removeChild(iframe); }catch(_){}
+    var safe = res.doctor.replace(/[\\/:*?"<>|]+/g,'_').slice(0,40);
+    var fileName = 'مراجعو_'+safe+'_'+new Date().toISOString().slice(0,10)+'.pdf';
+    // Electron: حفظ في C:\MedLabPro\تقارير الأطباء\ ، وإلا تنزيل مباشر
+    if(window.IS_ELECTRON && window.electronAPI && window.electronAPI.savePDF){
+      try{
+        var r2 = await window.electronAPI.savePDF({ pdfBuffer: Array.from(new Uint8Array(doc.output('arraybuffer'))),
+                                                    fileName: fileName, patientName: 'تقارير الأطباء', patientId: '' });
+        if(r2 && r2.ok){ showNotif('✅ تم الحفظ','PDF محفوظ في C:\\MedLabPro\\تقارير الأطباء\\'+fileName,'success'); return; }
+      }catch(e){ console.warn('[DocVisits savePDF]', e); }
+    }
+    doc.save(fileName);
+    showNotif('✅ تم','تم تنزيل ملف PDF','success');
+  }
+  return { fillDoctors: fillDoctors, modeChanged: modeChanged, run: run, more: moreFn, pdf: pdf };
+})();
+
 function renderReports(){
   const S=_rpScope();
   const mLabel=S.label;
@@ -21020,6 +21251,7 @@ function renderReports(){
   document.getElementById('rp-month-tests').textContent=rqs.reduce((s,r)=>s+((r.tests||[]).length),0);
   const revVal=invoices.filter(i=>S.has(i.date)).reduce((s,i)=>s+(parseFloat(i.total)||0),0);
   document.getElementById('rp-month-rev').textContent=revVal.toLocaleString('ar')+(settings.currency?' '+(settings.currency||'IQD'):'');
+  try{ if(typeof DocVisits!=='undefined'){ DocVisits.fillDoctors(); DocVisits.run(); } }catch(e){ console.warn('[DocVisits]', e); }
   /* أكثر التحاليل طلباً — ضمن النطاق المختار أيضاً */
   const cnt={};rqs.forEach(r=>(r.tests||[]).forEach(tid=>{cnt[tid]=(cnt[tid]||0)+1;}));
   const sorted=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -21175,10 +21407,10 @@ function exportReport(type){
     </div>`;
     csvRows.push(['#','المريض','التاريخ','الإجمالي قبل الخصم','الخصم','الصافي','الحالة']);
     list.forEach((inv,i)=>{
-      csvRows.push([i+1, inv.patientName||'-', inv.date, inv.subtotal||inv.total, inv.discount||0, inv.total, inv.status==='paid'?'مدفوع':'غير مدفوع']);
+      csvRows.push([i+1, inv.patientName||'-', inv.date, inv.rawTotal||inv.subtotal||inv.total, (inv.discountAmt!=null?inv.discountAmt:(inv.discount?inv.discount+'%':0)), inv.total, inv.status==='paid'?'مدفوع':'غير مدفوع']);
     });
     tableHTML=`<table class="tbl" id="exp-tbl"><thead><tr><th>#</th><th>المريض</th><th>التاريخ</th><th>الإجمالي</th><th>الخصم</th><th>الصافي</th><th>الحالة</th></tr></thead><tbody>`+
-      list.map((inv,i)=>`<tr><td>${i+1}</td><td><b>${inv.patientName||'-'}</b></td><td>${inv.date}</td><td>${inv.subtotal||inv.total}</td><td>${inv.discount||0}</td><td style="font-weight:800;color:var(--success)">${inv.total} ${curr}</td><td>${inv.status==='paid'?'<span class="bdg bdg-ok">مدفوع</span>':'<span class="bdg bdg-d">غير مدفوع</span>'}</td></tr>`).join('')+
+      list.map((inv,i)=>`<tr><td>${i+1}</td><td><b>${inv.patientName||'-'}</b></td><td>${inv.date}</td><td>${inv.rawTotal||inv.subtotal||inv.total}</td><td>${inv.discountAmt!=null?inv.discountAmt:(inv.discount?inv.discount+'%':0)}</td><td style="font-weight:800;color:var(--success)">${inv.total} ${curr}</td><td>${inv.status==='paid'?'<span class="bdg bdg-ok">مدفوع</span>':'<span class="bdg bdg-d">غير مدفوع</span>'}</td></tr>`).join('')+
       `</tbody></table>`;
 
   } else if(type==='tests'){
@@ -21484,6 +21716,28 @@ function loadBillReqs(){
   calcBillFinal();
 }
 
+// 💵 فاتورة الطلب (آخر فاتورة مرتبطة به) — مصدر إيراد اليوم/الشهر
+function _billInvOf(rid){
+  if(!rid) return null;
+  for(let i=invoices.length-1;i>=0;i--){ if(invoices[i]&&invoices[i].reqId===rid) return invoices[i]; }
+  return null;
+}
+// المجموع قبل الخصم: من الفاتورة إن وُجدت (المبلغ الفعلي للطلب)، وإلا من أسعار التحاليل
+function _billSub(r){
+  const inv=r?_billInvOf(r.id):null;
+  if(inv && parseFloat(inv.rawTotal)>0) return parseFloat(inv.rawTotal);
+  const reqTests=r?(r.tests||[]).map(tid=>tests.find(t=>t.id===tid)).filter(Boolean):[];
+  return reqTests.reduce((s,t)=>s+(parseFloat(t.price)||0),0);
+}
+// مبلغ الخصم الحالي في الفاتورة (السجلات القديمة بالنسبة تُحوَّل لمبلغ)
+function _invDiscAmt(inv){
+  if(!inv) return 0;
+  if(inv.discountAmt!=null && isFinite(parseFloat(inv.discountAmt))) return parseFloat(inv.discountAmt);
+  const raw=parseFloat(inv.rawTotal), tot=parseFloat(inv.total);
+  if(raw>0 && isFinite(tot)) return Math.max(0, raw-tot);
+  return 0;
+}
+
 function calcBillTotal(){
   const rid=document.getElementById('bill-req-sel').value;
   const box=document.getElementById('bill-tests-breakdown');
@@ -21495,19 +21749,20 @@ function calcBillTotal(){
   reqTests.forEach(t=>{sub+=t.price;html+=`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span>${tDisplayName(t)}</span><span style="color:var(--primary);font-weight:700">${t.price} ${settings.currency}</span></div>`;});
   html+=`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:6px;color:var(--text)"><span>المجموع:</span><span style="color:var(--primary)">${sub} ${settings.currency}</span></div></div>`;
   box.innerHTML=html;
-  document.getElementById('bill-subtotal').textContent=sub+' '+settings.currency;
+  // 💵 عبّئ الخصم الحالي للفاتورة (مبلغ) حتى لا يُحتسب الخصم مرتين
+  try{ const _inv=_billInvOf(rid); document.getElementById('bill-discount').value=_inv?_invDiscAmt(_inv):0; }catch(e){}
+  document.getElementById('bill-subtotal').textContent=_billSub(r)+' '+settings.currency;
   calcBillFinal();
 }
 
 function calcBillFinal(){
   const rid=document.getElementById('bill-req-sel').value;
   const r=rid?requests.find(x=>x.id===rid):null;
-  const reqTests=r?r.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean):[];
-  const sub=reqTests.reduce((s,t)=>s+t.price,0);
-  const discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  const sub=_billSub(r);
+  const _discIn=parseFloat(document.getElementById('bill-discount').value)||0;
   const drCommPct=parseFloat(document.getElementById('bill-dr-comm').value)||0;
   const insAmt=parseFloat(document.getElementById('bill-ins-amt').value)||0;
-  const discAmt=Math.round(sub*discPct/100);
+  const discAmt=Math.min(Math.max(0,_discIn), sub);          // 💵 خصم بالمبلغ
   const afterDisc=sub-discAmt;
   const drAmt=Math.round(afterDisc*drCommPct/100);
   const finalAmt=afterDisc-insAmt-drAmt;
@@ -21524,17 +21779,37 @@ function saveBillFinal(){
   if(!rid||!pid){showNotif('تنبيه','اختر مريضاً وطلباً','error');return;}
   const r=requests.find(x=>x.id===rid);
   const pt=patients.find(p=>p.id===pid);
-  const reqTests=r?r.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean):[];
-  const sub=reqTests.reduce((s,t)=>s+t.price,0);
-  const discPct=parseFloat(document.getElementById('bill-discount').value)||0;
+  if(!r){showNotif('تنبيه','الطلب غير موجود','error');return;}
+  const sub=_billSub(r);
+  const _discIn=parseFloat(document.getElementById('bill-discount').value)||0;
   const drCommPct=parseFloat(document.getElementById('bill-dr-comm').value)||0;
   const insAmt=parseFloat(document.getElementById('bill-ins-amt').value)||0;
-  const discAmt=Math.round(sub*discPct/100);
+  const discAmt=Math.min(Math.max(0,_discIn), sub);          // 💵 خصم بالمبلغ
+  const discPct=sub?Math.round(discAmt/sub*1000)/10:0;
   const afterDisc=sub-discAmt;
   const drAmt=Math.round(afterDisc*drCommPct/100);
   const finalAmt=Math.max(0,afterDisc-insAmt-drAmt);
-  billingRecords.push({id:'BL-'+(1000+billingRecords.length+1),patientId:pid,patientName:pt?pt.name:'-',reqId:rid,subtotal:sub,discount:discPct,discountAmt:discAmt,insAmt,drComm:drCommPct,drAmt,final:finalAmt,date:new Date().toISOString().split('T')[0],currency:settings.currency});
+
+  // 💰 تحديث فاتورة الطلب نفسه ⇒ يُخصم من إيراد يوم ذلك الطلب (وإيراد الشهر)
+  let inv=_billInvOf(rid), invCreated=false, invPrev=null;
+  if(inv){
+    invPrev={rawTotal:inv.rawTotal, discount:inv.discount, discountAmt:inv.discountAmt, total:inv.total};
+  } else {
+    inv={id:'INV-'+(1000+invoices.length+1)+'-'+Date.now().toString(36).slice(-3).toUpperCase(),
+         patientId:pid, patientName:pt?pt.name:(r.patientName||'-'), reqId:rid,
+         insType:(pt&&pt.insurance)||'', insAmt:0, status:'معلقة', date:r.date||new Date().toISOString().split('T')[0]};
+    invoices.push(inv); invCreated=true;
+  }
+  inv.rawTotal=sub; inv.discountAmt=discAmt; inv.discount=discPct; inv.total=afterDisc;
+  inv._updatedAt=Date.now();
+  save('invoices',invoices);
+
+  billingRecords.push({id:'BL-'+(1000+billingRecords.length+1),patientId:pid,patientName:pt?pt.name:'-',reqId:rid,subtotal:sub,discount:discAmt,discountAmt:discAmt,discountMode:'amt',insAmt,drComm:drCommPct,drAmt,final:finalAmt,date:new Date().toISOString().split('T')[0],currency:settings.currency,
+    invId:inv.id, invCreated:invCreated, invPrev:invPrev});
   save('billing',billingRecords);
+  try{ if(typeof renderInvoices==='function') renderInvoices(); }catch(e){}
+  try{ if(typeof updateDashboard==='function') updateDashboard(); }catch(e){}
+  try{ if(typeof renderReports==='function' && document.getElementById('sec-reports') && document.getElementById('sec-reports').classList.contains('active')) renderReports(); }catch(e){}
   renderBillingHistory();
   showNotif('تم','تم حفظ الحساب ✅','success');
 }
@@ -21551,7 +21826,7 @@ function renderBillingHistory(){
     <td>${b.patientName}</td>
     <td><span class="bdg bdg-s">${b.reqId}</span></td>
     <td>${b.subtotal} ${b.currency}</td>
-    <td style="color:var(--warning)">${b.discount}% (${b.discountAmt} ${b.currency})</td>
+    <td style="color:var(--warning)">${b.discountMode==='amt'?(b.discountAmt+' '+(b.currency||'')):(b.discount+'% ('+b.discountAmt+' '+(b.currency||'')+')')}</td>
     <td style="color:var(--success);font-weight:700">${b.final} ${b.currency}</td>
     <td style="color:#a78bfa">${b.drComm}% (${b.drAmt} ${b.currency})</td>
     <td>${b.date}</td>
@@ -21563,7 +21838,30 @@ function renderBillingHistory(){
 var _bhRenderLimit=300;
 function _showMoreBilling(){ _bhRenderLimit+=300; renderBillingHistory(); }
 
-function deleteBillingRecord(id){if(confirm('حذف؟')){billingRecords=billingRecords.filter(b=>b.id!==id);save('billing',billingRecords);renderBillingHistory();}}
+function deleteBillingRecord(id){
+  if(!confirm('حذف؟')) return;
+  const rec=billingRecords.find(b=>b.id===id);
+  // 💰 إرجاع فاتورة الطلب كما كانت قبل هذا الحساب (إن كان آخر حساب لهذا الطلب)
+  try{
+    if(rec && rec.invId){
+      const later=billingRecords.some(b=>b!==rec && b.reqId===rec.reqId && billingRecords.indexOf(b)>billingRecords.indexOf(rec));
+      const inv=invoices.find(i=>i.id===rec.invId);
+      if(inv && !later){
+        if(rec.invCreated){ invoices=invoices.filter(i=>i!==inv); }
+        else if(rec.invPrev){
+          ['rawTotal','discount','discountAmt','total'].forEach(k=>{
+            if(rec.invPrev[k]===undefined) delete inv[k]; else inv[k]=rec.invPrev[k];
+          });
+          inv._updatedAt=Date.now();
+        }
+        save('invoices',invoices);
+        try{ if(typeof renderInvoices==='function') renderInvoices(); }catch(e){}
+        try{ if(typeof updateDashboard==='function') updateDashboard(); }catch(e){}
+      }
+    }
+  }catch(e){ console.warn('[billing] restore invoice', e); }
+  billingRecords=billingRecords.filter(b=>b.id!==id);save('billing',billingRecords);renderBillingHistory();
+}
 
 function openBillingForReq(){nav('billing');loadBillingPtDropdown();}
 
