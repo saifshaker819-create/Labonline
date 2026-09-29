@@ -9568,6 +9568,7 @@ const ALL_TESTS=[
 {id:'c003',code:'HBA1C',nameEn:'HbA1c',nameShort:'HbA1c',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'%',minVal:4.0,maxVal:5.7,minF:4.0,maxF:5.7,ref:'< 5.7 Normal | 5.7-6.4 Prediabetes | ≥6.5 Diabetes',time:'3 hours',price:120,notes:''},
 {id:'c005',code:'INS',nameEn:'Insulin Fasting',nameShort:'Insulin',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'μIU/mL',minVal:2.6,maxVal:24.9,minF:2.6,maxF:24.9,ref:'2.6 - 24.9',time:'4 hours',price:110,notes:'Fasting 8-12h'},
 {id:'add004',code:'OGTT',nameEn:'GTT',nameShort:'GTT',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'mg/dL',minVal:70,maxVal:140,minF:70,maxF:140,ref:'Fasting < 100 | 2h < 140',refM:'Fasting < 100',refF:'2h < 140',time:'2 hours',price:80,notes:'75g glucose load'},
+{id:'calc_gtt',code:'GTT-CURVE',nameEn:'Glucose Tolerance Curve',nameShort:'GTT Curve',cat:'Biochemistry',subCat:'Diabetes Profile',unit:'',minVal:null,maxVal:null,minF:null,maxF:null,ref:'Normal Glucose Tolerance',time:'2-3 hours',price:0,notes:'OGTT curve — 75 g: ADA/WHO (FPG ≥126 or 2-h ≥200 = DM · FPG 100-125 = IFG · 2-h 140-199 = IGT) · 100 g: Carpenter–Coustan (F 95 · 1-h 180 · 2-h 155 · 3-h 140; ≥2 abnormal = GDM) · 50 g: GCT (1-h ≥140 abnormal)',isCalc:true,calcFormula:'gtt',calcInputSettings:{GTT_LOAD:{nameEn:'Glucose load',unit:'g',ref:'',minVal:null,maxVal:null},GTT_F:{nameEn:'F.B.Glucose',unit:'mg/dL',ref:'70 - 99',minVal:70,maxVal:99.9},GTT_30:{nameEn:'After 30 min',unit:'mg/dL',ref:'< 200',minVal:0,maxVal:199.9},GTT_60:{nameEn:'After 60 min',unit:'mg/dL',ref:'< 200',minVal:0,maxVal:199.9},GTT_90:{nameEn:'After 90 min',unit:'mg/dL',ref:'< 200',minVal:0,maxVal:199.9},GTT_120:{nameEn:'After 120 min',unit:'mg/dL',ref:'< 140',minVal:0,maxVal:139.9},GTT_150:{nameEn:'After 150 min',unit:'mg/dL',ref:'< 140',minVal:0,maxVal:139.9},GTT_180:{nameEn:'After 180 min',unit:'mg/dL',ref:'< 140',minVal:0,maxVal:139.9}}},
 // Lipids
 {id:'c006',code:'CHOL',nameEn:'Total Cholesterol',nameShort:'Cholesterol',cat:'Biochemistry',subCat:'Lipid Profile',unit:'mg/dL',minVal:0,maxVal:200,minF:0,maxF:200,ref:'< 200',time:'2 hours',price:50,notes:'Fasting 12h'},
 {id:'c007',code:'TG',nameEn:'Triglycerides',nameShort:'TG',cat:'Biochemistry',subCat:'Lipid Profile',unit:'mg/dL',minVal:0,maxVal:150,minF:0,maxF:150,ref:'< 150',time:'2 hours',price:50,notes:'Fasting 12h'},
@@ -12332,10 +12333,10 @@ function renderWizStep(){
           <!-- أكثر التحاليل طلباً — اختيار سريع مع إمكانية التعديل -->
           <div style="padding:6px 8px;border-bottom:1px solid var(--border);flex-shrink:0;overflow:visible">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-              <div style="font-size:10px;font-weight:700;color:var(--text2)">⚡ الأكثر طلباً</div>
+              <div style="font-size:12px;font-weight:800;color:var(--text2)">⚡ الأكثر طلباً</div>
               <button onclick="_toggleMRTEdit()" id="mrt-edit-btn" style="font-size:9px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text2);cursor:pointer;font-family:'Cairo',sans-serif">✏️ تعديل</button>
             </div>
-            <div id="mrt-buttons-area" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--primary) transparent"></div>
+            <div id="mrt-buttons-area" style="display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--primary) transparent"></div>
             <div id="mrt-edit-area" style="display:none;margin-top:6px;background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:8px;position:relative;z-index:99999">
               <div style="display:flex;gap:8px;align-items:flex-start">
                 <!-- يسار: منطقة البحث والإضافة -->
@@ -16976,13 +16977,57 @@ function getCalcFormulaInputs(formula){
     meld:[_mkCalcInput('TBIL','Total Bilirubin','mg/dL'),_mkCalcInput('INR','INR',''),_mkCalcInput('CREAT','Creatinine','mg/dL')],
     fib4:[{code:'AGE_INPUT',name:'العمر',unit:'سنة',label:'العمر (سنة)'},_mkCalcInput('AST','AST','U/L'),_mkCalcInput('PLT','Platelets','×10³/μL'),_mkCalcInput('ALT','ALT','U/L')],
     mchr:[_mkCalcInput('MCH','MCH','pg'),_mkCalcInput('MCHC','MCHC','g/dL')],
+    /* 📈 منحنى تحمّل الجلوكوز (OGTT) — مدخلات يدوية بلا ربط بتحاليل أخرى */
+    gtt:[
+      {code:'GTT_LOAD',name:'Glucose load',unit:'g',label:'كمية الجلوكوز المعطاة (غم) — 75 / 100 / 50'},
+      {code:'GTT_F',  name:'F.B.Glucose',  unit:'mg/dL',label:'Fasting — صائم (mg/dL)'},
+      {code:'GTT_30', name:'After 30 min', unit:'mg/dL',label:'بعد 30 دقيقة (mg/dL)'},
+      {code:'GTT_60', name:'After 60 min', unit:'mg/dL',label:'بعد 60 دقيقة — ساعة (mg/dL)'},
+      {code:'GTT_90', name:'After 90 min', unit:'mg/dL',label:'بعد 90 دقيقة (mg/dL)'},
+      {code:'GTT_120',name:'After 120 min',unit:'mg/dL',label:'بعد 120 دقيقة — ساعتان (mg/dL)'},
+      {code:'GTT_150',name:'After 150 min',unit:'mg/dL',label:'بعد 150 دقيقة (اختياري) (mg/dL)'},
+      {code:'GTT_180',name:'After 180 min',unit:'mg/dL',label:'بعد 180 دقيقة — 3 ساعات (اختياري) (mg/dL)'}
+    ],
   };
   return inputs[formula]||[];
 }
 
+/* 📈 تفسير منحنى تحمّل الجلوكوز حسب كمية الجلوكوز (mg/dL):
+   • 75 g  — ADA / WHO : FPG ≥126 أو 2-h ≥200 ⇒ DM · FPG 100–125 ⇒ IFG · 2-h 140–199 ⇒ IGT
+   • 100 g — Carpenter–Coustan (حمل، 3 ساعات): F 95 · 1-h 180 · 2-h 155 · 3-h 140 ⇒ قيمتان فأكثر = GDM
+   • 50 g  — Glucose Challenge Test: 1-h ≥140 ⇒ غير طبيعي (يُؤكَّد بـ OGTT تشخيصي)
+   القيمة 0 أو الفارغة = غير مُدخلة. */
+function _gttInterpret(vals){
+  const g=(c)=>{ const x=parseFloat(vals&&vals[c]); return (isFinite(x)&&x>0)?x:null; };
+  const load=g('GTT_LOAD')||75;
+  const F=g('GTT_F'), h1=g('GTT_60'), h2=g('GTT_120'), h3=g('GTT_180');
+  if(Math.round(load)===50){
+    if(h1===null) return '—';
+    return h1>=140 ? 'Abnormal glucose challenge (1-h ≥ 140 mg/dL) — confirm with diagnostic OGTT'
+                   : 'Normal Glucose Challenge Test';
+  }
+  if(Math.round(load)===100){
+    const th=[[F,95],[h1,180],[h2,155],[h3,140]];
+    let n=0, m=0;
+    th.forEach(function(p){ if(p[0]!==null){ m++; if(p[0]>=p[1]) n++; } });
+    if(!m) return '—';
+    if(n>=2) return 'Gestational Diabetes Mellitus (Carpenter–Coustan: '+n+' abnormal values)';
+    if(n===1) return 'One abnormal value (Carpenter–Coustan) — follow-up advised';
+    return 'Normal (Carpenter–Coustan criteria)';
+  }
+  if(F===null && h2===null) return '—';
+  if((F!==null && F>=126) || (h2!==null && h2>=200)) return 'Diabetes Mellitus (ADA/WHO criteria)';
+  const ifg = F!==null && F>=100, igt = h2!==null && h2>=140;
+  if(ifg && igt) return 'Impaired Fasting Glucose + Impaired Glucose Tolerance';
+  if(ifg) return 'Impaired Fasting Glucose (IFG)';
+  if(igt) return 'Impaired Glucose Tolerance (IGT)';
+  if(h2===null) return 'Normal fasting glucose (2-h value not entered)';
+  return 'Normal Glucose Tolerance';
+}
 function calcFormula(formula, vals){
   const v=(code)=>parseFloat(vals[code])||0;
   switch(formula){
+    case 'gtt': return _gttInterpret(vals);
     case 'homa_ir': return ((v('INSU-F')*v('FBS'))/405).toFixed(2);
     case 'homa_b': return ((20*v('INSU-F'))/(v('FBS')-3.5)).toFixed(1);
     case 'egfr_ckd':{
@@ -17044,6 +17089,18 @@ function openCalcModal(testId, reqId){
     </div>
   </div>`;
   document.body.appendChild(modal);
+  /* ↩️ تعبئة المدخلات المحفوظة سابقاً لهذا الطلب (لتعديلها بدل إعادة كتابتها) */
+  try{
+    const _rq=reqId?requests.find(r=>r.id===reqId):null;
+    const _sv=(_rq&&_rq.calcInputs&&_rq.calcInputs[testId])||{};
+    inputs.forEach(function(inp){
+      const el=document.getElementById('ci-'+inp.code);
+      if(el && _sv[inp.code] && _sv[inp.code].value!==undefined && _sv[inp.code].value!==null) el.value=_sv[inp.code].value;
+    });
+    if(t.calcFormula==='gtt'){
+      const ld=document.getElementById('ci-GTT_LOAD'); if(ld && !ld.value) ld.value='75';
+    }
+  }catch(e){}
 }
 
 function runCalcFormula(formula,testId,reqId){
@@ -19054,6 +19111,83 @@ function buildPrintHTML(req, opts){
 
 // (أُزيلت الدالة الميتة getCatDeviceName — لم تكن مُستدعاة)
 
+
+/* ════════════════════════════════════════════════════════════════════
+   📈 طباعة منحنى تحمّل الجلوكوز (GTT) — صفوف النقاط + «X gm glucose orally»
+      + التفسير + المنحنى. الأسماء/الوحدات/المدى من calcInputSettings
+      (قابلة للتعديل من قاعدة التحاليل كما في HOMA).
+   ════════════════════════════════════════════════════════════════════ */
+var _GTT_POINTS=[['GTT_F','F',0],['GTT_30','30min',30],['GTT_60','60min',60],['GTT_90','90min',90],
+                 ['GTT_120','120min',120],['GTT_150','150min',150],['GTT_180','180min',180]];
+function _gttPrintBody(req, calcTest, saved, makeRow, sep, st){
+  saved = saved||{};
+  var cs = calcTest.calcInputSettings||{};
+  var defs = getCalcFormulaInputs('gtt');
+  var defOf = function(c){ for(var i=0;i<defs.length;i++) if(defs[i].code===c) return defs[i]; return {}; };
+  var val = function(c){ var o=saved[c]; if(!o) return null; var x=parseFloat(o.value); return (isFinite(x)&&x>0)?x:null; };
+  var num = function(x){ return (x===null||x===undefined||x==='')?null:parseFloat(x); };
+  var load = val('GTT_LOAD')||75;
+  var out='';
+  var pts=[];
+  _GTT_POINTS.forEach(function(p, idx){
+    var v=val(p[0]); if(v===null) return;
+    var c=cs[p[0]]||{}, d=defOf(p[0]);
+    var name=c.nameEn||d.name||p[0];
+    var unit=(c.unit!==undefined&&c.unit!=='')?c.unit:(d.unit||'mg/dL');
+    var mn=num(c.minVal), mx=num(c.maxVal);
+    out += makeRow(name, String(v), unit, c.ref||'—', (mn===null&&mx!==null)?0:mn, mx);
+    pts.push({lbl:p[1], min:p[2], v:v});
+    if(p[0]==='GTT_F'){
+      out += '<div style="margin:3px 6px;direction:ltr"><span style="display:inline-block;background:#e3e3e3;padding:2px 14px 2px 10px;font-family:\'Times New Roman\',Times,serif;font-size:'+st.fsName+';font-weight:900;color:#000">'
+          + (Math.round(load*10)/10) + ' gm glucose orally</span></div>';
+    } else out += sep;
+  });
+  var interp = (req.results && req.results[calcTest.id]) || '';
+  if(interp && interp!=='—'){
+    var bad = /diabet|impaired|abnormal|gestational/i.test(interp);
+    out += '<div style="margin:6px 6px 2px;direction:ltr;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">'
+        +  '<span style="font-size:'+st.fsName+';font-weight:800;color:#000">● Interpretation :</span>'
+        +  '<span style="font-size:'+st.fsRes+';font-weight:900;color:'+(bad?'#cc0000':'#006633')+'">'+String(interp).replace(/</g,'&lt;')+'</span></div>';
+  }
+  if(pts.length>=2) out += _gttCurveSVG(pts, cs);
+  return out;
+}
+function _gttCurveSVG(pts, cs){
+  var W=580, H=250, L=46, R=44, T=30, B=34, pw=W-L-R, ph=H-T-B;
+  var lastMin=pts[pts.length-1].min;
+  var slots=_GTT_POINTS.filter(function(p){ return p[2]<=Math.max(120,lastMin); });
+  var maxV=Math.max.apply(null, pts.map(function(p){return p.v;}).concat([200]));
+  var yMax=Math.ceil(maxV/50)*50;
+  var xOf=function(min){ var i=0; slots.forEach(function(s,k){ if(s[2]===min) i=k; }); return L + (slots.length<=1?pw/2:(i/(slots.length-1))*pw); };
+  var yOf=function(v){ return T + ph - (v/yMax)*ph; };
+  var s='<div style="margin:10px 6px 0;text-align:center;direction:ltr"><svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="max-width:100%">';
+  s+='<text x="'+(L+pw/2)+'" y="16" text-anchor="middle" font-family="Arial" font-size="13" font-weight="700" fill="#111">Glucose Tolerance Curve</text>';
+  for(var y=0;y<=yMax;y+=50){
+    var yy=yOf(y);
+    s+='<line x1="'+L+'" y1="'+yy+'" x2="'+(L+pw)+'" y2="'+yy+'" stroke="#d6d6d6" stroke-width="1"/>';
+    s+='<text x="'+(L-7)+'" y="'+(yy+4)+'" text-anchor="end" font-family="Arial" font-size="11" font-weight="700" fill="#111">'+y+'</text>';
+  }
+  /* خط مرجعي 140 mg/dL (حدّ الساعتين) */
+  var r140=yOf(140);
+  s+='<line x1="'+L+'" y1="'+r140+'" x2="'+(L+pw)+'" y2="'+r140+'" stroke="#2e8b57" stroke-width="1" stroke-dasharray="5,4"/>';
+  s+='<text x="'+(L+pw-2)+'" y="'+(r140-4)+'" text-anchor="end" font-family="Arial" font-size="10" fill="#2e8b57">140</text>';
+  s+='<line x1="'+L+'" y1="'+T+'" x2="'+L+'" y2="'+(T+ph)+'" stroke="#111" stroke-width="1.3"/>';
+  s+='<line x1="'+L+'" y1="'+(T+ph)+'" x2="'+(L+pw)+'" y2="'+(T+ph)+'" stroke="#111" stroke-width="1.3"/>';
+  slots.forEach(function(sl){
+    var x=xOf(sl[2]);
+    s+='<line x1="'+x+'" y1="'+(T+ph)+'" x2="'+x+'" y2="'+(T+ph+4)+'" stroke="#111"/>';
+    s+='<text x="'+x+'" y="'+(T+ph+18)+'" text-anchor="middle" font-family="Arial" font-size="11" font-weight="700" fill="#111">'+(sl[1]==='F'?'Fasting':sl[1])+'</text>';
+  });
+  var d=pts.map(function(p,i){ return (i?'L':'M')+xOf(p.min)+','+yOf(p.v); }).join(' ');
+  s+='<path d="'+d+'" fill="none" stroke="#1f3a93" stroke-width="2"/>';
+  pts.forEach(function(p){
+    var x=xOf(p.min), yy=yOf(p.v);
+    s+='<path d="M'+x+','+(yy-5)+' L'+(x+5)+','+yy+' L'+x+','+(yy+5)+' L'+(x-5)+','+yy+' Z" fill="#111"/>';
+    s+='<text x="'+(x+8)+'" y="'+(yy-7)+'" font-family="Arial" font-size="11" font-weight="700" fill="#111">'+p.v+'</text>';
+  });
+  return s+'</svg></div>';
+}
+
 // ============================================================
 // CALC TEST PRINT PAGE — صفحة منفردة للتحليل المحسوب
 // ============================================================
@@ -19133,7 +19267,7 @@ function buildCalcTestPrintHTML(req, calcTest){
   // عنوان المجموعة
   body += `<div style="margin:4px 6px 0;direction:ltr">
     <div style="padding:3px 10px 2px">
-      <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px">calculated</div>
+      <div style="display:inline-block;font-size:${subcatFs};font-weight:900;color:${sectionColor};font-family:'Times New Roman',Times,serif;text-transform:capitalize;letter-spacing:0.5px;white-space:nowrap;border-bottom:2px solid ${sectionColor};padding-bottom:2px${calcTest.calcFormula==='gtt'?';text-transform:uppercase;font-size:'+(subcatFsN+4)+'px':''}">${calcTest.calcFormula==='gtt'?String(calcTest.nameEn||'Glucose Tolerance Curve').replace(/</g,'&lt;'):'calculated'}</div>
     </div>
   </div>`;
 
@@ -19177,6 +19311,10 @@ function buildCalcTestPrintHTML(req, calcTest){
     rowsToPrint.push({inpName,inpVal,inpUnit,inpRefTxt,inpMin,inpMax});
   });
 
+  if(calcTest.calcFormula==='gtt'){
+    /* 📈 منحنى تحمّل الجلوكوز — تخطيط خاص */
+    body += _gttPrintBody(req, calcTest, savedCalcInputs, _makeRow, sep, {fsName:_fsName, fsRes:_fsRes, fsRef:_fsRef, color:sectionColor});
+  } else {
   rowsToPrint.forEach(function(r, i){
     body += _makeRow(r.inpName, r.inpVal, r.inpUnit, r.inpRefTxt, r.inpMin, r.inpMax);
     if(i < rowsToPrint.length - 1) body += sep; // فاصل بين المدخلات
@@ -19184,6 +19322,7 @@ function buildCalcTestPrintHTML(req, calcTest){
 
   // فاصل قبل النتيجة المحسوبة النهائية
   if(rowsToPrint.length > 0) body += sep;
+  }
 
   // صف النتيجة المحسوبة النهائية
   const finalVal = req.results[calcTest.id]||'';
@@ -19192,7 +19331,7 @@ function buildCalcTestPrintHTML(req, calcTest){
   const finalRef = getPatientRef(calcTest, ptGender, ptAge);
   const _finalLocalRef = (req&&req.id) ? DB.get('localRef_'+req.id+'_'+calcTest.id) : null;
   let finalRefTxt = getRefText(calcTest, ptGender, ptAge, _finalLocalRef);
-  body += _makeRow(finalName, finalVal, finalUnit, finalRefTxt, finalRef.min, finalRef.max);
+  if(calcTest.calcFormula!=='gtt') body += _makeRow(finalName, finalVal, finalUnit, finalRefTxt, finalRef.min, finalRef.max);
 
   // نبني الصفحة عبر req مؤقت يحتوي فقط هذا التحليل — لكن نستبدل body بمحتوانا
   // الأسهل: استخدام buildPrintHTML مع fakeReq ونستبدل قسم body فيه
@@ -30971,8 +31110,9 @@ function printUAReport(id){
   _printViaIframe(html);
   var _mpReq=r.reqId;
   window._afterPrint(function(){
-    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq); }catch(_){}
     try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(_mpReq,'ua'); }catch(_){}
+    /* بعد تسجيل طباعة الفحص الخاص ⇒ تقييم الجاهزية والنداء */
+    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq,'sp'); }catch(_){}
   });
   showNotif('طباعة','تم إرسال تقرير البول للطابعة 🖨️','success');
 }
@@ -31575,8 +31715,9 @@ function printStoolReport(id){
   _printViaIframe(html);
   var _mpReq=r.reqId;
   window._afterPrint(function(){
-    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq); }catch(_){}
     try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(_mpReq,'stool'); }catch(_){}
+    /* بعد تسجيل طباعة الفحص الخاص ⇒ تقييم الجاهزية والنداء */
+    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq,'sp'); }catch(_){}
   });
   showNotif('طباعة','تم إرسال تقرير البراز للطابعة 🖨️','success');
 }
@@ -34305,7 +34446,7 @@ function renderMRTButtons(){
     if(!t) return '';
     const sel=!!wizSelectedTests.find(x=>x.id===t.id);
     return `<button onclick="toggleWizTest('${t.id}')"
-      style="padding:3px 8px;border-radius:5px;border:1px solid ${sel?'var(--primary)':'var(--border)'};background:${sel?'rgba(0,212,255,0.15)':'rgba(255,255,255,0.04)'};color:${sel?'var(--primary)':'var(--text)'};font-size:10px;font-weight:700;cursor:pointer;font-family:'Cairo',sans-serif;transition:all 0.15s"
+      style="padding:5px 11px;border-radius:6px;border:1px solid ${sel?'var(--primary)':'var(--border)'};background:${sel?'rgba(0,212,255,0.15)':'rgba(255,255,255,0.04)'};color:${sel?'var(--primary)':'var(--text)'};font-size:12px;font-weight:800;cursor:pointer;font-family:'Cairo',sans-serif;transition:all 0.15s"
       id="quick-btn-${t.id}">${t.code}</button>`;
   }).join('');
 }
@@ -35830,8 +35971,9 @@ function printSemenReport(id){
   _printViaIframe(html);
   var _mpReq=r.reqId;
   window._afterPrint(function(){
-    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq); }catch(_){}
     try{ if(typeof _spMarkPrinted==='function') _spMarkPrinted(_mpReq,'semen'); }catch(_){}
+    /* بعد تسجيل طباعة الفحص الخاص ⇒ تقييم الجاهزية والنداء */
+    try{ if(typeof _wsMarkPrinted==='function') _wsMarkPrinted(_mpReq,'sp'); }catch(_){}
   });
   showNotif('طباعة','تم إرسال تقرير السائل المنوي للطابعة 🖨️','success');
 }
@@ -37024,6 +37166,8 @@ function openWaitScreen(mode){
     'width='+screen.width+',height='+screen.height+',toolbar=0,menubar=0,scrollbars=0,resizable=1,left=0,top=0');
   if(!win){ alert('⚠️ السماح بالنوافذ المنبثقة مطلوب\nيرجى السماح بها من شريط العنوان ثم اضغط مجدداً'); return; }
   window._waitScreenWin = win;
+  window._waitScreenMode = (mode==='tv') ? 'tv' : 'manual';
+  var isTV = (mode==='tv');
   var yr = new Date().getFullYear();
 
   // ── بناء البيانات مباشرةً عند الفتح ──
@@ -37039,24 +37183,18 @@ function openWaitScreen(mode){
   };
   var initRows = '';
   if(filteredReqs.length > 0){
-    initRows = filteredReqs.map(function(r,i){
-      var _es=_wsEffStatus(r);
-      var sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[_es]||'-';
-      var sC={pending:'pp',inprogress:'pi',done:'pd'}[_es]||'';
-      var tn=(r.testNames||r.tests.map(function(tid){var t=tests.find(function(x){return x.id===tid;});return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
-      return '<tr><td style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:700">'+(i+1)+'</td>'
-        +'<td style="font-size:16px;font-weight:900;color:#00d4ff">'+(typeof _reqNoText==='function'?_reqNoText(r):r.id)+'</td>'
-        +'<td style="font-size:19px;font-weight:800">'+(r.patientName||'-')+'</td>'
-        +'<td style="font-size:13px;color:rgba(255,255,255,0.5)">'+tn+'</td>'
-        +'<td><span class="pill '+sC+'">'+sL+'</span></td></tr>';
-    }).join('');
+    initRows = filteredReqs.map(function(r,i){ return _wsRowHTML(r,i,isTV); }).join('');
   }
   var initSpd = _wsGetScrollSpeed();
 
   // ── بناء HTML الجدول المدمج ──
   function buildTableHTML(rows){
     if(!rows) return '<div class="empty-msg">🔬 لا توجد طلبات اليوم</div>';
-    var theadHTML='<table class="thead-tbl" style="width:100%;border-collapse:collapse;table-layout:fixed">'
+    var theadHTML = isTV
+      ? '<table class="thead-tbl" style="width:100%;border-collapse:collapse;table-layout:fixed"><thead><tr>'
+        +'<th style="width:7%">#</th><th style="width:20%">رقم الطلب</th><th style="width:47%">اسم المريض</th><th style="width:26%;text-align:center">الحالة</th>'
+        +'</tr></thead></table>'
+      : '<table class="thead-tbl" style="width:100%;border-collapse:collapse;table-layout:fixed">'
       +'<thead><tr>'
       +'<th style="width:5%">#</th>'
       +'<th style="width:15%">رقم الطلب</th>'
@@ -37065,7 +37203,8 @@ function openWaitScreen(mode){
       +'<th style="width:17%">الحالة</th>'
       +'</tr></thead></table>';
     var rowsHTML='<table style="width:100%;border-collapse:collapse;table-layout:fixed">'
-      +'<colgroup><col style="width:5%"><col style="width:15%"><col style="width:35%"><col style="width:28%"><col style="width:17%"></colgroup>'
+      +(isTV ? '<colgroup><col style="width:7%"><col style="width:20%"><col style="width:47%"><col style="width:26%"></colgroup>'
+             : '<colgroup><col style="width:5%"><col style="width:15%"><col style="width:35%"><col style="width:28%"><col style="width:17%"></colgroup>')
       +'<tbody>'+rows+'</tbody></table>';
     return '<div style="display:flex;flex-direction:column;height:100%;">'
       +'<div style="background:rgba(4,8,20,0.98);padding:6px 0;">'+theadHTML+'</div>'
@@ -37133,7 +37272,9 @@ function openWaitScreen(mode){
   /* صف المريض الجاري نداؤه */
   +'tr.calling-row td{background:rgba(0,232,122,0.18) !important;animation:rowGlow 1.2s ease-in-out infinite alternate;}'
   +'@keyframes rowGlow{0%{box-shadow:inset 0 0 0 rgba(0,232,122,0)}100%{box-shadow:inset 0 0 30px rgba(0,232,122,0.4)}}'
-  +'</style></head><body>'
+  /* 📺 وضع البث للتلفزيون: كل شيء أكبر بأربع درجات، بلا عمود التحاليل، بلا عدّاد «انتظار» */
+  +(isTV ? ('body.tv .hdr{padding:18px 40px;}'+'body.tv .logo-ic{width:66px;height:66px;font-size:36px;border-radius:16px;}'+'body.tv .logo h1{font-size:32px;}'+'body.tv .logo p{font-size:16px;}'+'body.tv .clock{font-size:44px;}'+'body.tv .date-lbl{font-size:17px;}'+'body.tv .hdmi-badge{font-size:17px;padding:9px 20px;}'+'body.tv .fs-btn{width:52px;height:52px;font-size:26px;}'+'body.tv .counters{grid-template-columns:repeat(3,1fr);gap:14px;padding:16px 40px;}'+'body.tv .cnt.cp{display:none;}'+'body.tv .cnt{padding:14px;border-radius:16px;}'+'body.tv .cnt .n{font-size:58px;}'+'body.tv .cnt .l{font-size:22px;margin-top:6px;}'+'body.tv .tbl-area{padding:0 40px;}'+'body.tv .thead-tbl th{font-size:24px;padding:16px 18px;}'+'body.tv td{padding:20px 18px;overflow:visible;}'+'body.tv .pill{font-size:28px;padding:10px 26px;border-radius:30px;gap:10px;white-space:nowrap;}'+'body.tv .empty-msg{font-size:32px;padding:100px;}'+'body.tv .footer{font-size:17px;padding:12px 40px;}'+'body.tv .call-toast{padding:48px 80px;max-width:92vw;border-radius:32px;}'+'body.tv .call-toast .ct-ic{font-size:92px;}'+'body.tv .call-toast .ct-ttl{font-size:30px;margin-bottom:14px;}'+'body.tv .call-toast .ct-name{font-size:76px;word-break:break-word;}'+'body.tv .call-toast .ct-sub{font-size:26px;}') : '')
+  +'</style></head><body'+(isTV?' class="tv"':'')+'>'
   +'<div class="hdr">'
   +'<div class="logo"><div class="logo-ic">🔬</div><div><h1>شاشة قاعة الانتظار</h1><p>MedLab Pro — وضع HDMI</p></div></div>'
   +'<div><div class="clock" id="wsclock">--:--:--</div><div class="date-lbl" id="wsdate"></div></div>'
@@ -37153,7 +37294,7 @@ function openWaitScreen(mode){
   +'<div class="tbl-area" id="wsbody">'+initBodyHTML+'</div>'
   +'<div class="footer">'
   +'<span class="live"><span class="ldot"></span> البيانات حية</span>'
-  +'<span>⏳ انتظار &nbsp;|&nbsp; 🔬 جاري التحليل &nbsp;|&nbsp; ✅ جاهز</span>'
+  +(isTV ? '<span>🔬 جاري التحليل &nbsp;|&nbsp; ✅ جاهز</span>' : '<span>⏳ انتظار &nbsp;|&nbsp; 🔬 جاري التحليل &nbsp;|&nbsp; ✅ جاهز</span>')
   +'<span>MedLab Pro &copy; '+yr+'</span>'
   +'</div>'
   +'<div id="call-toast" class="call-toast" aria-live="polite">'
@@ -37163,6 +37304,7 @@ function openWaitScreen(mode){
   +'<div class="ct-sub">تحاليلك جاهزة، يرجى التوجه إلى الاستقبال</div>'
   +'</div>'
   +'<script>'
+  +'var _isTV='+(isTV?'true':'false')+';'
   +'function tick(){var n=new Date();'
   +'var c=document.getElementById("wsclock"),d=document.getElementById("wsdate");'
   +'if(c)c.textContent=n.toLocaleTimeString("ar-EG",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false});'
@@ -37182,8 +37324,10 @@ function openWaitScreen(mode){
   +'b.innerHTML="<div class=\\"empty-msg\\">🔬 لا توجد طلبات اليوم</div>";'
   +'_inner=null;_pos=0;_totalH=0;return;'
   +'}'
-  +'var theadHTML="<table class=\\"thead-tbl\\" style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\"><thead><tr><th style=\\"width:5%\\">#</th><th style=\\"width:15%\\">رقم الطلب</th><th style=\\"width:35%\\">اسم المريض</th><th style=\\"width:28%\\">التحاليل</th><th style=\\"width:17%\\">الحالة</th></tr></thead></table>";'
-  +'var rowsHTML="<table style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\"><colgroup><col style=\\"width:5%\\"><col style=\\"width:15%\\"><col style=\\"width:35%\\"><col style=\\"width:28%\\"><col style=\\"width:17%\\"></colgroup><tbody>"+rows+"</tbody></table>";'
+  +'var theadHTML=(_isTV'
+  +'?"<table class=\\"thead-tbl\\" style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\"><thead><tr><th style=\\"width:7%\\">#</th><th style=\\"width:20%\\">رقم الطلب</th><th style=\\"width:47%\\">اسم المريض</th><th style=\\"width:26%;text-align:center\\">الحالة</th></tr></thead></table>"'
+  +':"<table class=\\"thead-tbl\\" style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\"><thead><tr><th style=\\"width:5%\\">#</th><th style=\\"width:15%\\">رقم الطلب</th><th style=\\"width:35%\\">اسم المريض</th><th style=\\"width:28%\\">التحاليل</th><th style=\\"width:17%\\">الحالة</th></tr></thead></table>");'
+  +'var rowsHTML="<table style=\\"width:100%;border-collapse:collapse;table-layout:fixed\\">"+(_isTV?"<colgroup><col style=\\"width:7%\\"><col style=\\"width:20%\\"><col style=\\"width:47%\\"><col style=\\"width:26%\\"></colgroup>":"<colgroup><col style=\\"width:5%\\"><col style=\\"width:15%\\"><col style=\\"width:35%\\"><col style=\\"width:28%\\"><col style=\\"width:17%\\"></colgroup>")+"<tbody>"+rows+"</tbody></table>";'
   +'var html="<div style=\\"display:flex;flex-direction:column;height:100%;\\">";'
   +'html+="<div style=\\"background:rgba(4,8,20,0.98);padding:6px 0;\\">"+theadHTML+"</div>";'
   +'html+="<div id=\\"hdmi-scroll-clip\\" style=\\"flex:1;overflow:hidden;position:relative;\\">";'
@@ -37266,14 +37410,14 @@ function openWaitScreen(mode){
   +'try{ _playChime(); }catch(_){}'
   /* ② تشغيل التسجيل المخصص (إن وُجد) — بعد ثانيتين من الجرس */
   +'setTimeout(function(){ try{ _doSpeak(item); }catch(_){ } }, 2000);'
-  /* ③ البطاقة تبقى ظاهرة 10 ثوانٍ كاملة بغض النظر عن نتيجة الصوت */
+  /* ③ البطاقة تبقى ظاهرة 15 ثانية كاملة بغض النظر عن نتيجة الصوت */
   +'setTimeout(function(){'
   +'if(toast) toast.classList.remove("show");'
   +'_highlightRow(item.id, false);'
   +'try{ window.speechSynthesis && window.speechSynthesis.cancel(); }catch(_){}'
   +'_speakBusy = false;'
   +'setTimeout(_speakNext, 700);'    /* فجوة قبل التالي */
-  +'}, 10000);'                       /* ⏱️ 10 ثوان */
+  +'}, 15000);'                       /* ⏱️ 15 ثانية — مدة ظهور نداء الاسم */
   +'}'
   /* ── جرس تنبيه (دينج-دونج) عبر Web Audio API — يعمل على أي نظام ── */
   +'function _playChime(){'
@@ -37592,9 +37736,10 @@ function _wsIsReady(r){
 
 // ⭐ الحالة المعروضة على شاشة المرضى: الطلب لا يصبح "جاهز" إلا بعد طباعة مؤهِّلة.
 function _wsEffStatus(r){
-  if(!r) return 'pending';
-  if(r.status === 'done' && !_wsIsReady(r)) return 'inprogress';
-  return r.status;
+  if(!r) return 'inprogress';
+  /* ⭐ أي مريض يُسجَّل يظهر «جاري التحليل» مباشرة (لا «انتظار») */
+  if(r.status === 'done' && _wsIsReady(r)) return 'done';
+  return 'inprogress';
 }
 
 // ⭐ علامة خاصة بشاشة المرضى فقط (wsPrinted): تُضبط عند طباعة تقرير CBC أو تقرير
@@ -37719,6 +37864,16 @@ function _wsMarkPrinted(reqId, src){
        النداء حصراً من «حفظ وطباعة» (doPrint).
        ↩️ لإرجاع النداء لزر طباعة CBC اليدوي: احذف السطر التالي. */
     if(src === 'cbc') return;
+    /* 🧪 طباعة من داخل الإدرار/الخروج/السائل المنوي: جاهز ونداء فقط إن كان
+       الطلب فحوصاً خاصة فقط (أو + CBC وصلت نتيجته) وطُبعت كلها.
+       إن وُجدت تحاليل أخرى ⇒ الجاهزية من «حفظ وطباعة» لبقية التحاليل. */
+    if(src === 'sp'){
+      var _P = (typeof _reqParts === 'function') ? _reqParts(r) : null;
+      if(!_P) return;
+      if(_P.regularNonCbc.length > 0 || _P.calc.length > 0) return;
+      if(typeof _spAllPrinted === 'function' && !_spAllPrinted(r)) return;
+      if(_P.cbcOrdered && !_P.hasCBC) return;
+    }
     if(r.wsPrinted && !r.wsDeviceHold) return;
     r.wsPrinted = true;
     r.wsDeviceHold = false;
@@ -37757,6 +37912,27 @@ function _wsCallPatient(reqId){
   }catch(e){}
 }
 
+/* صف شاشة الانتظار — وضع التلفزيون: بلا عمود التحاليل وخطوط أكبر بأربع درجات */
+function _wsRowHTML(r, i, isTV){
+  var _es=_wsEffStatus(r);
+  var sL={inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[_es]||'🔬 جاري التحليل';
+  var sC={inprogress:'pi',done:'pd'}[_es]||'pi';
+  var no=(typeof _reqNoText==='function'?_reqNoText(r):r.id);
+  var nm=String(r.patientName||'-').replace(/</g,'&lt;');
+  if(isTV){
+    return '<tr><td style="font-size:26px;color:rgba(255,255,255,0.35);font-weight:800">'+(i+1)+'</td>'
+      +'<td style="font-size:32px;font-weight:900;color:#00d4ff;white-space:nowrap">'+no+'</td>'
+      +'<td style="font-size:38px;font-weight:800;line-height:1.35;word-break:break-word;white-space:normal">'+nm+'</td>'
+      +'<td style="text-align:center"><span class="pill '+sC+'">'+sL+'</span></td></tr>';
+  }
+  var tn=(r.testNames||r.tests.map(function(tid){var t=tests.find(function(x){return x.id===tid;});return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
+  return '<tr><td style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:700">'+(i+1)+'</td>'
+    +'<td style="font-size:16px;font-weight:900;color:#00d4ff">'+no+'</td>'
+    +'<td style="font-size:19px;font-weight:800">'+nm+'</td>'
+    +'<td style="font-size:13px;color:rgba(255,255,255,0.5)">'+tn+'</td>'
+    +'<td><span class="pill '+sC+'">'+sL+'</span></td></tr>';
+}
+
 function _pushWaitScreenData(){
   const win = window._waitScreenWin;
   if(!win || win.closed) return;
@@ -37771,17 +37947,8 @@ function _pushWaitScreenData(){
   };
   let rows = '';
   if(filteredReqs.length > 0){
-    rows = filteredReqs.map((r,i)=>{
-        const _es=_wsEffStatus(r);
-        const sL={pending:'⏳ انتظار',inprogress:'🔬 جاري التحليل',done:'✅ جاهز'}[_es]||'-';
-        const sC={pending:'pp',inprogress:'pi',done:'pd'}[_es]||'';
-        const tn=(r.testNames||r.tests.map(tid=>{const t=tests.find(x=>x.id===tid);return t?t.nameEn:'';}).filter(Boolean)).slice(0,3).join('، ')||'-';
-        return '<tr><td style="font-size:14px;color:rgba(255,255,255,0.3);font-weight:700">'+(i+1)+'</td>'
-          +'<td style="font-size:16px;font-weight:900;color:#00d4ff">'+(typeof _reqNoText==='function'?_reqNoText(r):r.id)+'</td>'
-          +'<td style="font-size:19px;font-weight:800">'+(r.patientName||'-')+'</td>'
-          +'<td style="font-size:13px;color:rgba(255,255,255,0.5)">'+tn+'</td>'
-          +'<td><span class="pill '+sC+'">'+sL+'</span></td></tr>';
-      }).join('');
+    const _isTV = window._waitScreenMode === 'tv';
+    rows = filteredReqs.map((r,i)=>_wsRowHTML(r,i,_isTV)).join('');
   }
   // قائمة المرضى الجاهزين (للناطق الصوتي)
   var doneList = filteredReqs
@@ -41562,8 +41729,22 @@ function cbcFlush(sampleId){
     const _otherTests=(targetReq.tests||[]).filter(function(t){return !_isCbcTid(t);});
     const _otherDone=_otherTests.every(function(t){return targetReq.results&&targetReq.results[t]==='done';});
     if(_otherDone) targetReq.status='done';
+    /* 📣 شاشة الانتظار: طلب CBC فقط (أو CBC + فحوص خاصة طُبعت كلها) ⇒
+       وصول النتيجة من الجهاز = جاهز + نداء. وجود تحاليل أخرى ⇒ ينتظر «حفظ وطباعة». */
+    var _wsCallNow=false;
+    try{
+      var _Pw=(typeof _reqParts==='function')?_reqParts(targetReq):null;
+      var _spOk=(typeof _spAllPrinted==='function')?_spAllPrinted(targetReq):true;
+      if(_Pw && _Pw.regularNonCbc.length===0 && _Pw.calc.length===0 && _spOk && targetReq.status==='done' && !targetReq.wsPrinted){
+        targetReq.wsPrinted=true; targetReq.wsDeviceHold=false; _wsCallNow=true;
+      }
+    }catch(_){}
     // إذا كان هناك تحاليل أخرى لم تُكمَل — يبقى status pending
     if(typeof saveOne==='function') saveOne('requests',requests,targetReq); else if(typeof save==='function') save('requests',requests);
+    if(_wsCallNow){
+      try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+      try{ if(typeof _wsCallPatient==='function') _wsCallPatient(targetReq.id); }catch(_){}
+    }
     // تحديث شارة "نتائج الأجهزة" فور وصول CBC دون تغيير التبويب المعروض (المتطلبان ٢ و ٣)
     if(typeof _updateDeviceReqBadge==='function'){ try{ _updateDeviceReqBadge(); }catch(_){} }
     // إن كان المستخدم يعرض تبويب "نتائج الأجهزة" الآن، حدّث القائمة بنفس الفلتر
