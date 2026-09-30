@@ -4682,18 +4682,36 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <div class="fr2" style="margin-bottom:10px">
                     <div class="fg" style="margin-bottom:0">
                       <label class="fl">📍 العنوان</label>
-                      <input class="fc" id="ftr-txt-address" lang="ar" placeholder="العنوان الكامل للمختبر">
+                      <input class="fc" oninput="try{_updateFtrTxtPreview()}catch(e){}" id="ftr-txt-address" lang="ar" placeholder="العنوان الكامل للمختبر">
                     </div>
                     <div class="fg" style="margin-bottom:0">
                       <label class="fl">📞 رقم الهاتف</label>
-                      <input class="fc" id="ftr-txt-phone" lang="en" placeholder="07xxxxxxxxx">
+                      <input class="fc" oninput="try{_updateFtrTxtPreview()}catch(e){}" id="ftr-txt-phone" lang="en" placeholder="07xxxxxxxxx">
                     </div>
                   </div>
                   <div class="fg" style="margin-bottom:0">
                     <label class="fl">📝 ملاحظة أخرى</label>
-                    <input class="fc" id="ftr-txt-note" lang="ar" placeholder="مثال: أوقات العمل، تنبيه، معلومات إضافية...">
+                    <input class="fc" oninput="try{_updateFtrTxtPreview()}catch(e){}" id="ftr-txt-note" lang="ar" placeholder="مثال: أوقات العمل، تنبيه، معلومات إضافية...">
                   </div>
-                  <div id="ftr-txt-preview" style="margin-top:10px;background:#f5f7fa;border:1px solid #dde4ec;border-radius:8px;padding:8px 14px;font-family:Arial,sans-serif;font-size:11px;color:#444;text-align:center;direction:ltr;display:none"></div>
+                  <!-- 🎨 نماذج الذيل النصي -->
+                  <div style="margin-top:14px;border:1px solid var(--border);border-radius:12px;padding:12px;background:rgba(0,212,255,0.03)">
+                    <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:8px">🎨 نموذج الذيل — اختر التصميم وتُملأ معلوماتك أعلاه تلقائياً</div>
+                    <div id="ftr-tpl-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px"></div>
+                    <div id="ftr-tpl-style" style="margin-top:12px;display:none">
+                      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+                        <div class="fg" style="margin:0"><label class="fl" style="font-size:11px">🎨 اللون الأساسي</label><input type="color" id="ftr-c1" oninput="FtrUI.set('ftrC1',this.value)" style="width:56px;height:34px;border:none;background:none;cursor:pointer"></div>
+                        <div class="fg" style="margin:0"><label class="fl" style="font-size:11px">🎨 اللون الثانوي</label><input type="color" id="ftr-c2" oninput="FtrUI.set('ftrC2',this.value)" style="width:56px;height:34px;border:none;background:none;cursor:pointer"></div>
+                        <div class="fg" style="margin:0"><label class="fl" style="font-size:11px">🔤 لون النص</label><input type="color" id="ftr-tc" oninput="FtrUI.set('ftrTc',this.value)" style="width:56px;height:34px;border:none;background:none;cursor:pointer"></div>
+                        <div class="fg" style="margin:0;flex:1;min-width:190px"><label class="fl" style="font-size:11px">🔠 حجم الخط: <b id="ftr-fs-lbl">15</b>px</label><input type="range" id="ftr-fs" min="10" max="24" step="1" oninput="FtrUI.set('ftrFs',parseInt(this.value,10))" style="width:100%"></div>
+                        <button class="btn btn-s btn-sm" onclick="FtrUI.resetColors()" title="إرجاع ألوان وحجم النموذج الافتراضية">↺ الافتراضي</button>
+                      </div>
+                    </div>
+                    <div style="font-size:11px;font-weight:800;color:var(--text2);margin:12px 0 6px">👁️ معاينة الذيل في التقرير</div>
+                    <div style="background:#fff;border:1px solid #dde4ec;border-radius:8px;overflow:hidden">
+                      <div id="ftr-txt-preview" style="display:none"></div>
+                      <div id="ftr-txt-preview-empty" style="padding:12px;text-align:center;font-size:11px;color:#888">أدخل العنوان أو الهاتف أو الملاحظة لعرض المعاينة</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -17816,7 +17834,8 @@ function buildPrintHTML(req, opts){
   // زيادة الارتفاعات لتعويض unprintable area في الطابعات
   // قراءة ارتفاع التذييل من الإعدادات (افتراضي 50px لتطابق التقارير الأخرى)
   const _ftrUserH = (typeof settings.ftrImgH==='number' && settings.ftrImgH>=10 && settings.ftrImgH<=80) ? settings.ftrImgH : 50;
-  const footerH = hasFtrImg ? _ftrUserH : hasFtrTxt ? 46 : (settings.hdrMode==='text' ? 48 : 0);
+  const _ftrTB = (hasFtrTxt && typeof _ftrTextBlock==='function') ? _ftrTextBlock(settings) : null;
+  const footerH = hasFtrImg ? _ftrUserH : hasFtrTxt ? ((_ftrTB && _ftrTB.h) || 46) : (settings.hdrMode==='text' ? 48 : 0);
   const totalFooterH = footerH + sigH;
   // هامش سفلي للصفحة = إجمالي ارتفاع الذيل + 6mm احتياطي
   const pageBottomMm = totalFooterH>0 ? Math.ceil(totalFooterH*0.265) : 0;
@@ -18685,10 +18704,13 @@ function buildPrintHTML(req, opts){
   if(settings.hdrMode==='text'){
     const textFtr=buildTextFooter(settings);
     ftrInner = sigBlock + textFtr;
-  } else if(settings.footerImg){
+  } else if(settings.footerImg && settings.ftrMode!=='txt'){
     ftrInner = sigBlock +
       `<div style="width:100%;line-height:0"><img src="${settings.footerImg}" style="width:100%;height:${footerH}px;display:block;object-fit:fill;margin:0;padding:0"></div>` +
       (settings.footerCustomText?`<div style="background:#f5f7fa;border-top:1px solid #ccc;padding:4px 16px;font-family:'Inter',Arial,sans-serif;font-size:9px;color:#555;text-align:center;line-height:1.5;line-height:normal">${settings.footerCustomText}</div>`:'');
+  } else if(settings.ftrMode==='txt'&&(settings.ftrAddress||settings.ftrPhone||settings.ftrNote)&&String(settings.ftrTpl||'0')!=='0'&&_ftrTB){
+    // 🦶 الذيل النصي بتصميم مختار (١–٥)
+    ftrInner = sigBlock + _ftrTB.inner;
   } else if(settings.ftrMode==='txt'&&(settings.ftrAddress||settings.ftrPhone||settings.ftrNote)){
     // ⭐ الذيل النصي: العنوان يمين، رقم الهاتف يسار، حجم الخط 16
     // ارتفاع الذيل لا يتأثر — فقط الخط داخله يكبر
@@ -28114,15 +28136,60 @@ function switchFtrTab(tab){
   save('settings',settings);
 }
 function _updateFtrTxtPreview(){
-  var prev=document.getElementById('ftr-txt-preview'); if(!prev) return;
-  var addr=(document.getElementById('ftr-txt-address')||{}).value||'';
-  var phone=(document.getElementById('ftr-txt-phone')||{}).value||'';
-  var note=(document.getElementById('ftr-txt-note')||{}).value||'';
-  if(!addr&&!phone&&!note){prev.style.display='none';return;}
-  prev.style.display='block';
-  prev.innerHTML=(addr?'📍 '+addr+'  ':'')+(phone?'📞 '+phone:'')+
-    (note?'<br><span style="font-style:italic;color:#666">'+note+'</span>':'');
+  try{ if(typeof FtrUI!=='undefined'){ FtrUI.render(); return; } }catch(e){}
 }
+/* 🎨 واجهة اختيار نموذج الذيل النصي (المعاينات تستخدم نفس مولِّد الطباعة) */
+var FtrUI = (function(){
+  var DEF = { ftrC1:'#0d3fa6', ftrC2:'#1fa3ff', ftrTc:'#0d3fa6', ftrFs:15 };
+  function draft(){
+    var g=function(id){ var e=document.getElementById(id); return e?e.value:''; };
+    return Object.assign({}, settings, { ftrMode:'txt',
+      ftrAddress:g('ftr-txt-address'), ftrPhone:g('ftr-txt-phone'), ftrNote:g('ftr-txt-note') });
+  }
+  function scaled(html, h, boxW){
+    var W=794, sc=Math.min(1, (boxW||600)/W);
+    return '<div style="width:'+Math.round(W*sc)+'px;height:'+Math.round(h*sc)+'px;overflow:hidden;margin:0 auto">'
+      +'<div style="width:'+W+'px;transform:scale('+sc+');transform-origin:top right;direction:ltr">'+html+'</div></div>';
+  }
+  function render(){
+    var d=draft(), cur=String(settings.ftrTpl||'0');
+    var has=!!(d.ftrAddress||d.ftrPhone||d.ftrNote);
+    var sample=Object.assign({}, d, has?{}:{ftrAddress:'حي اور _ شارع المدرسة الايرانية _ مجمع الماس الطبي', ftrPhone:'07802058004'});
+    /* شبكة النماذج */
+    var grid=document.getElementById('ftr-tpl-grid');
+    if(grid){
+      var html='';
+      for(var i=0;i<FTR_TPL_NAMES.length;i++){
+        var s2=Object.assign({}, sample, {ftrTpl:String(i)});
+        var blk=_ftrTextBlock(s2)||{inner:'',h:40};
+        var on=(String(i)===cur);
+        html+='<div onclick="FtrUI.pick(\''+i+'\')" style="cursor:pointer;border:2px solid '+(on?'var(--primary)':'var(--border)')+';border-radius:10px;padding:6px;background:'+(on?'rgba(0,212,255,0.08)':'rgba(255,255,255,0.02)')+'">'
+          +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;font-size:11px;font-weight:800;color:'+(on?'var(--primary)':'var(--text2)')+'"><span>'+(on?'✓ ':'')+(i+1)+'. '+FTR_TPL_NAMES[i]+(i===0?' (الحالي)':'')+'</span></div>'
+          +'<div style="background:#fff;border-radius:6px;overflow:hidden;pointer-events:none">'+scaled(blk.inner, blk.h, 236)+'</div></div>';
+      }
+      grid.innerHTML=html;
+    }
+    /* أدوات الألوان والخط — للنماذج ١–٥ فقط */
+    var st=document.getElementById('ftr-tpl-style');
+    if(st) st.style.display = (cur==='0') ? 'none' : 'block';
+    var setv=function(id,v){ var e=document.getElementById(id); if(e && document.activeElement!==e) e.value=v; };
+    setv('ftr-c1', settings.ftrC1||DEF.ftrC1); setv('ftr-c2', settings.ftrC2||DEF.ftrC2); setv('ftr-tc', settings.ftrTc||DEF.ftrTc);
+    var fs=parseInt(settings.ftrFs,10); if(!(fs>=10&&fs<=24)) fs=DEF.ftrFs;
+    setv('ftr-fs', fs); var fl=document.getElementById('ftr-fs-lbl'); if(fl) fl.textContent=fs;
+    /* المعاينة الكبيرة */
+    var prev=document.getElementById('ftr-txt-preview'), emp=document.getElementById('ftr-txt-preview-empty');
+    if(!prev) return;
+    if(!has){ prev.style.display='none'; if(emp) emp.style.display='block'; return; }
+    var blk2=_ftrTextBlock(Object.assign({}, d, {ftrTpl:cur}));
+    var box=prev.parentElement ? prev.parentElement.clientWidth : 600;
+    prev.innerHTML = blk2 ? scaled(blk2.inner, blk2.h, Math.max(300, box-2)) : '';
+    prev.style.display='block'; if(emp) emp.style.display='none';
+  }
+  function pick(i){ settings.ftrTpl=String(i); save('settings',settings); render(); try{ showNotif('تم','🎨 نموذج الذيل: '+FTR_TPL_NAMES[+i],'success'); }catch(e){} }
+  function set(k,v){ settings[k]=v; save('settings',settings); render(); }
+  function resetColors(){ Object.keys(DEF).forEach(function(k){ settings[k]=DEF[k]; }); save('settings',settings); render(); }
+  return { render:render, pick:pick, set:set, resetColors:resetColors };
+})();
 
 function switchHdrTab(tab){
   var imgSec=document.getElementById('hdr-section-img');
@@ -28285,6 +28352,136 @@ function buildTextHeader(s){
       <div style="font-size:15px;font-weight:900;opacity:0.9;letter-spacing:1px">Lab Report</div>
     </div>`}
   </div>`;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   🦶 الذيل النصي — مُولِّد موحّد لكل التقارير (العام · CBC · الإدرار ·
+      الخروج · السائل المنوي · الزرع)
+   • settings.ftrTpl : '0' (الافتراضي الحالي) · '1'..'5' تصاميم جديدة
+   • settings.ftrC1  : اللون الأساسي   · settings.ftrC2 : اللون الثانوي
+   • settings.ftrTc  : لون النص        · settings.ftrFs : حجم الخط (px)
+   يُرجع {inner, h} حيث h = الارتفاع المحجوز بالبكسل.
+   ══════════════════════════════════════════════════════════════════════ */
+var FTR_TPL_NAMES = ['الافتراضي','الشريط الأنيق','القسمين المائل','الخطوط البسيطة','الشريط الملوّن','البطاقات'];
+function _ftrTxtHas(s){
+  return !!(s && s.ftrMode==='txt' && (s.ftrAddress || s.ftrPhone || s.ftrNote));
+}
+function _ftrEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _ftrHex(c, d){ c=String(c||'').trim(); return /^#[0-9a-f]{6}$/i.test(c) ? c : d; }
+function _ftrMix(hex, withHex, t){
+  var a=parseInt(hex.slice(1),16), b=parseInt(withHex.slice(1),16);
+  var r=Math.round(((a>>16)&255)*(1-t)+((b>>16)&255)*t), g=Math.round(((a>>8)&255)*(1-t)+((b>>8)&255)*t), bl=Math.round((a&255)*(1-t)+(b&255)*t);
+  return '#'+((1<<24)+(r<<16)+(g<<8)+bl).toString(16).slice(1);
+}
+function _ftrIco(kind, size, color){
+  var p = kind==='pin'
+    ? 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z'
+    : kind==='phone'
+    ? 'M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z'
+    : 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" style="display:block;flex-shrink:0"><path fill="'+color+'" d="'+p+'"/></svg>';
+}
+/* الارتفاع الذي تحجزه التقارير الخاصة أسفل الصفحة للذيل */
+function _ftrResH(s){
+  var imgH = (s && typeof s.ftrImgH==='number' && s.ftrImgH>=10 && s.ftrImgH<=80) ? s.ftrImgH : 50;
+  try{
+    if(s && !(s.hdrMode==='text' && s.hdrText) && _ftrTxtHas(s)){
+      var b=_ftrTextBlock(s); if(b && b.h) return Math.max(imgH, b.h);
+    }
+  }catch(e){}
+  return imgH;
+}
+function _ftrTextBlock(s){
+  if(!_ftrTxtHas(s)) return null;
+  var tpl = String(s.ftrTpl||'0');
+  var addr=_ftrEsc(s.ftrAddress||''), ph=_ftrEsc(s.ftrPhone||''), note=_ftrEsc(s.ftrNote||'');
+  if(tpl==='0'){
+    /* التصميم الافتراضي (كما كان حرفياً) */
+    return { h:46, inner:
+      '<div style="background:#f5f7fa;border-top:2px solid #003366;padding:7px 20px;font-family:\'Inter\',Arial,sans-serif;font-size:16px;color:#444;direction:ltr;line-height:1.4">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">'
+      +'<span style="text-align:left;flex:0 0 auto">'+(ph?'📞 '+ph:'')+'</span>'
+      +'<span style="text-align:right;flex:0 0 auto">'+(addr?'📍 '+addr:'')+'</span></div>'
+      +(note?'<div style="text-align:center;font-style:italic;font-size:13px;color:#666;margin-top:3px">'+note+'</div>':'')
+      +'</div>' };
+  }
+  var c1=_ftrHex(s.ftrC1,'#0d3fa6'), c2=_ftrHex(s.ftrC2,'#1fa3ff'), tc=_ftrHex(s.ftrTc,'#0d3fa6');
+  var fs=parseInt(s.ftrFs,10); if(!(fs>=10 && fs<=26)) fs=15;
+  var bh=Math.round(fs*2.5), ic=Math.round(fs*1.25), nfs=Math.max(9,Math.round(fs*0.78));
+  var font="font-family:'Cairo','Tajawal',Arial,sans-serif;";
+  var noteH = note ? Math.round(nfs*1.5)+4 : 0;
+  var noteLine = function(color){ return note ? '<div style="text-align:center;font-size:'+nfs+'px;font-weight:700;color:'+color+';margin-top:3px;line-height:1.4;direction:rtl;'+font+'">'+note+'</div>' : ''; };
+  var inner='';
+  /* ⚠️ بعض التقارير تضع الذيل داخل حاوية line-height:0 (مخصّصة للصور) ⇒ نثبّت ارتفاع السطر */
+  var _wrap=function(r){ return { h:r.h, inner:'<div style="line-height:1.35;font-size:'+fs+'px;text-align:initial">'+r.inner+'</div>' }; };
+  var _r=(function(){
+
+  if(tpl==='1'){
+    /* الشريط الأنيق (مثل النموذج المرفق): شريط مستدير بزاويتين مائلتين */
+    var cw=Math.round(bh*1.15);
+    inner='<div style="padding:4px 12px;background:#fff">'
+      +'<div style="position:relative;height:'+bh+'px;border:2px solid '+c2+';border-radius:'+(bh/2)+'px;background:#fff;overflow:hidden;direction:rtl;'+font+'">'
+      +'<div style="position:absolute;right:0;top:0;bottom:0;width:'+cw+'px;background:linear-gradient(135deg,'+c2+' 0%,'+c1+' 100%);clip-path:polygon(45% 0,100% 0,100% 100%,0 100%)"></div>'
+      +'<div style="position:absolute;left:0;top:0;bottom:0;width:'+cw+'px;background:linear-gradient(315deg,'+c2+' 0%,'+c1+' 100%);clip-path:polygon(0 0,100% 0,55% 100%,0 100%)"></div>'
+      +'<div style="position:relative;height:100%;display:flex;align-items:center;justify-content:center;gap:'+Math.round(fs*0.7)+'px;padding:0 '+(cw+6)+'px">'
+      +(ph?'<span style="background:'+c1+';color:#fff;font-weight:900;font-size:'+Math.round(fs*1.15)+'px;padding:1px '+Math.round(fs*0.9)+'px;border-radius:'+bh+'px;direction:ltr;white-space:nowrap;line-height:1.35">'+ph+'</span>'
+          +'<span style="width:'+Math.round(bh*0.82)+'px;height:'+Math.round(bh*0.82)+'px;border-radius:50%;background:'+c1+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_ftrIco('phone',Math.round(ic*1.05),'#fff')+'</span>':'')
+      +((ph&&addr)?'<span style="width:2px;height:'+Math.round(bh*0.7)+'px;background:'+c1+';flex-shrink:0;border-radius:2px"></span>':'')
+      +(addr?'<span style="color:'+tc+';font-weight:900;font-size:'+fs+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">'+addr+'</span>'+_ftrIco('pin',Math.round(ic*1.25),c1):'')
+      +'</div></div>'+noteLine(tc)+'</div>';
+    return { inner:inner, h: bh+12+noteH };
+  }
+  if(tpl==='2'){
+    /* القسمين المائل: العنوان على خلفية فاتحة، الهاتف على كتلة ملوّنة بحافة مائلة */
+    var light=_ftrMix(c1,'#ffffff',0.9), sl=Math.round(bh*0.55);
+    inner='<div style="background:#fff;padding:3px 0 0">'
+      +'<div style="display:flex;direction:rtl;height:'+bh+'px;border-top:3px solid '+c1+';'+font+'">'
+      +'<div style="flex:1;min-width:0;background:'+light+';display:flex;align-items:center;gap:8px;padding:0 20px">'
+      +(addr?_ftrIco('pin',ic,c1)+'<span style="color:'+tc+';font-weight:800;font-size:'+fs+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+addr+'</span>':'')+'</div>'
+      +(ph?'<div style="flex:0 0 auto;background:linear-gradient(90deg,'+c1+','+_ftrMix(c1,'#000000',0.18)+');display:flex;align-items:center;gap:9px;padding:0 '+(sl+16)+'px 0 22px;margin-right:-'+sl+'px;clip-path:polygon(0 0,100% 0,calc(100% - '+sl+'px) 100%,0 100%)">'
+          +'<span style="width:'+Math.round(bh*0.7)+'px;height:'+Math.round(bh*0.7)+'px;border-radius:50%;background:'+c2+';display:flex;align-items:center;justify-content:center">'+_ftrIco('phone',ic,'#fff')+'</span>'
+          +'<span style="color:#fff;font-weight:900;font-size:'+Math.round(fs*1.1)+'px;direction:ltr;white-space:nowrap">'+ph+'</span></div>':'')
+      +'</div>'
+      +(note?'<div style="background:'+c2+';color:#fff;text-align:center;font-size:'+nfs+'px;font-weight:700;padding:2px 10px;direction:rtl;'+font+'">'+note+'</div>':'')
+      +'</div>';
+    return { inner:inner, h: bh+6+(note?Math.round(nfs*1.5)+6:0) };
+  }
+  if(tpl==='3'){
+    /* الخطوط البسيطة: أبيض مع خط مزدوج وأيقونات ملوّنة في المنتصف */
+    inner='<div style="background:#fff;padding:5px 20px 4px;border-top:3px solid '+c1+';box-shadow:inset 0 3px 0 '+c2+';direction:rtl;'+font+'">'
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:'+Math.round(fs*1.3)+'px;min-height:'+Math.round(bh*0.85)+'px;flex-wrap:nowrap">'
+      +(addr?'<span style="display:flex;align-items:center;gap:6px;min-width:0">'+_ftrIco('pin',ic,c1)+'<span style="color:'+tc+';font-weight:800;font-size:'+fs+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+addr+'</span></span>':'')
+      +((ph&&addr)?'<span style="width:7px;height:7px;border-radius:50%;background:'+c2+';flex-shrink:0"></span>':'')
+      +(ph?'<span style="display:flex;align-items:center;gap:6px">'+_ftrIco('phone',ic,c1)+'<span style="color:'+tc+';font-weight:900;font-size:'+fs+'px;direction:ltr;white-space:nowrap">'+ph+'</span></span>':'')
+      +'</div>'+noteLine(_ftrMix(tc,'#ffffff',0.25))+'</div>';
+    return { inner:inner, h: Math.round(bh*0.85)+14+noteH };
+  }
+  if(tpl==='4'){
+    /* الشريط الملوّن: خلفية كاملة بتدرّج اللون الأساسي ونص أبيض */
+    inner='<div style="background:linear-gradient(90deg,'+_ftrMix(c1,'#000000',0.15)+','+c1+' 55%,'+_ftrMix(c1,c2,0.45)+');direction:rtl;'+font+'">'
+      +(note?'<div style="background:'+c2+';color:#fff;text-align:center;font-size:'+nfs+'px;font-weight:800;padding:2px 10px">'+note+'</div>':'')
+      +'<div style="display:flex;align-items:center;justify-content:space-between;gap:14px;height:'+bh+'px;padding:0 24px">'
+      +(addr?'<span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:'+Math.round(bh*0.68)+'px;height:'+Math.round(bh*0.68)+'px;border-radius:50%;background:rgba(255,255,255,0.18);border:1.5px solid '+c2+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_ftrIco('pin',ic,'#fff')+'</span><span style="color:#fff;font-weight:800;font-size:'+fs+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+addr+'</span></span>':'<span></span>')
+      +(ph?'<span style="display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="width:'+Math.round(bh*0.68)+'px;height:'+Math.round(bh*0.68)+'px;border-radius:50%;background:rgba(255,255,255,0.18);border:1.5px solid '+c2+';display:flex;align-items:center;justify-content:center">'+_ftrIco('phone',ic,'#fff')+'</span><span style="color:#fff;font-weight:900;font-size:'+Math.round(fs*1.1)+'px;direction:ltr;white-space:nowrap">'+ph+'</span></span>':'')
+      +'</div></div>';
+    return { inner:inner, h: bh+(note?Math.round(nfs*1.5)+4:0) };
+  }
+  if(tpl==='5'){
+    /* البطاقات: كبسولتان منفصلتان للعنوان والهاتف */
+    var chip=function(icon, txt, ltr, bold){
+      return '<span style="display:flex;align-items:center;gap:8px;border:1.5px solid '+c1+';border-radius:'+bh+'px;background:#fff;padding:2px 14px 2px 4px;min-width:0;height:'+Math.round(bh*0.8)+'px">'
+        +'<span style="width:'+Math.round(bh*0.62)+'px;height:'+Math.round(bh*0.62)+'px;border-radius:50%;background:'+c2+';display:flex;align-items:center;justify-content:center;flex-shrink:0">'+_ftrIco(icon,Math.round(ic*0.85),'#fff')+'</span>'
+        +'<span style="color:'+tc+';font-weight:'+bold+';font-size:'+fs+'px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'+(ltr?'direction:ltr;':'')+'">'+txt+'</span></span>';
+    };
+    inner='<div style="background:'+_ftrMix(c1,'#ffffff',0.93)+';border-top:1px solid '+_ftrMix(c1,'#ffffff',0.6)+';padding:5px 18px 4px;direction:rtl;'+font+'">'
+      +'<div style="display:flex;align-items:center;justify-content:center;gap:14px">'
+      +(addr?chip('pin',addr,false,800):'')+(ph?chip('phone',ph,true,900):'')
+      +'</div>'+noteLine(tc)+'</div>';
+    return { inner:inner, h: Math.round(bh*0.8)+13+noteH };
+  }
+  return null;
+  })();
+  return _r ? _wrap(_r) : null;
 }
 
 function buildTextFooter(s){
@@ -29838,7 +30035,8 @@ function _buildCultureHTML(cid){
 
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
-  else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+  else if(s.footerImg && s.ftrMode!=='txt') ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50))}px;object-fit:fill;display:block">`;
+  else if(typeof _ftrTxtHas==='function' && _ftrTxtHas(s)) ftrHTML=(_ftrTextBlock(s)||{}).inner||'';   /* 🦶 الذيل النصي */
   else if(s.footer) ftrHTML=`<div style="padding:4px 16px;font-size:12px;color:#555;border-top:1px solid ${color};text-align:center">${s.footer}</div>`;
 
   // ─── Patient info — same style as regular test print ───────────
@@ -30038,9 +30236,9 @@ function _buildCultureHTML(cid){
     *{margin:0;padding:0;box-sizing:border-box;}
     html,body{background:#fff;font-family:Arial,sans-serif;color:#000;font-size:16px;}
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
+    .content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+8}px;}
     .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:0 0 ${Math.ceil(((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)*0.2646)+8}mm 0 !important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @page{margin:0 0 ${Math.ceil(((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))*0.2646)+8}mm 0 !important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{ .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
   <div class="content">
@@ -30927,7 +31125,8 @@ function _buildUAPrintHTML(r){
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
-  else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+  else if(s.footerImg && s.ftrMode!=='txt') ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50))}px;object-fit:fill;display:block">`;
+  else if(typeof _ftrTxtHas==='function' && _ftrTxtHas(s)) ftrHTML=(_ftrTextBlock(s)||{}).inner||'';   /* 🦶 الذيل النصي */
 
   // ⭐ آخر فحص إدرار سابق لنفس المريض — يُعرض في عمود «Last Result»
   if((!uaRecords||!uaRecords.length) && typeof loadUARecords==='function'){ try{ loadUARecords(); }catch(e){} }
@@ -30936,7 +31135,7 @@ function _buildUAPrintHTML(r){
   // ⭐ عروض تسمح ببقاء كل صف في سطر واحد (بلا table-layout:fixed) — أهم سبب لانتقال التقرير لورقة ثانية
   const _uaW = _uaHasPrev ? ['30%','26%','18%','26%'] : ['38%','32%','30%'];
   // ⭐ ضمان ورقة واحدة: تقدير ارتفاع المحتوى — عند التجاوز نقلّص الحشو فقط (الخط كما هو)
-  const _uaFtrH2 = (typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50;
+  const _uaFtrH2 = (typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50));
   const _uaPageAvail = (typeof _spPageAvailPx==='function') ? _spPageAvailPx(_uaFtrH2) : 950;
   const _uaHdrH2 = (s.headerImg && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
       ? ((typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170) : 165;
@@ -31072,9 +31271,9 @@ function _buildUAPrintHTML(r){
     *{margin:0;padding:0;box-sizing:border-box;}
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .ua-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
+    .ua-content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+8}px;}
     .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 6mm ${Math.ceil(((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @page{margin:1mm 6mm ${Math.ceil(((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{
       body{font-size:13px;}
       .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;}
@@ -31523,7 +31722,8 @@ function _buildStoolPrintHTML(r){
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
-  else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+  else if(s.footerImg && s.ftrMode!=='txt') ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50))}px;object-fit:fill;display:block">`;
+  else if(typeof _ftrTxtHas==='function' && _ftrTxtHas(s)) ftrHTML=(_ftrTextBlock(s)||{}).inner||'';   /* 🦶 الذيل النصي */
 
   const drName=r.doctorName||pt.doctorName||(doctors&&doctors.find&&doctors.find(d=>d.id===pt.doctorId)?.name)||'';
   const _sNameColor   = s.colorName||'#cc0011';
@@ -31599,7 +31799,7 @@ function _buildStoolPrintHTML(r){
   // ⭐ عروض تسمح ببقاء كل صف في سطر واحد (بلا table-layout:fixed)
   const _stW = _stHasPrev ? ['30%','26%','18%','26%'] : ['38%','32%','30%'];
   // ⭐ ضمان ورقة واحدة: تقدير الارتفاع — عند التجاوز نقلّص الحشو فقط (الخط كما هو)
-  const _stFtrH2 = (typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50;
+  const _stFtrH2 = (typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50));
   const _stPageAvail = (typeof _spPageAvailPx==='function') ? _spPageAvailPx(_stFtrH2) : 950;
   const _stHdrH2 = (s.headerImg && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
       ? ((typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170) : 165;
@@ -31684,9 +31884,9 @@ function _buildStoolPrintHTML(r){
     *{margin:0;padding:0;box-sizing:border-box;}
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:15px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .se-content{padding-bottom:${((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)+8}px;}
+    .se-content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+8}px;}
     .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 5mm ${Math.ceil(((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)*0.2646)+8}mm 5mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @page{margin:1mm 5mm ${Math.ceil(((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))*0.2646)+8}mm 5mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{ .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="se-content">
@@ -32946,6 +33146,10 @@ function _cbcFooterParts(){
             +'px;display:block;object-fit:fill;margin:0;padding:0"></div>'+extra,
       h: imgH + (s.footerCustomText ? 18 : 0)
     };
+  }
+  /* تذييل نصي بتصميم مختار (١–٥) */
+  if(s.ftrMode === 'txt' && (s.ftrAddress || s.ftrPhone || s.ftrNote) && String(s.ftrTpl||'0')!=='0' && typeof _ftrTextBlock==='function'){
+    var _tb=_ftrTextBlock(s); if(_tb) return { inner:_tb.inner, h:_tb.h };
   }
   /* تذييل نصي (عنوان · هاتف · ملاحظة) */
   if(s.ftrMode === 'txt' && (s.ftrAddress || s.ftrPhone || s.ftrNote)){
@@ -35549,7 +35753,8 @@ function _buildSemenPrintHTML(r, mode){
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
   if(s.hdrMode==='text'&&s.hdrText) ftrHTML=buildTextFooter(s);
-  else if(s.footerImg) ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50}px;object-fit:fill;display:block">`;
+  else if(s.footerImg && s.ftrMode!=='txt') ftrHTML=`<img src="${s.footerImg}" style="width:100%;height:${(typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50))}px;object-fit:fill;display:block">`;
+  else if(typeof _ftrTxtHas==='function' && _ftrTxtHas(s)) ftrHTML=(_ftrTextBlock(s)||{}).inner||'';   /* 🦶 الذيل النصي */
 
   const drName=r.doctorName||pt.doctorName||(doctors&&doctors.find&&doctors.find(d=>d.id===pt.doctorId)?.name)||'';
   const _smNameColor   = s.colorName||'#cc0011';
@@ -35870,7 +36075,7 @@ function _buildSemenPrintHTML(r, mode){
   // آخر سطور الورقة. الحل: صف tfoot فارغ بارتفاع الذيل — المتصفح يكرّره في
   // كل ورقة ويحجز المساحة داخل تدفّق المحتوى، فلا يلامس أي قسم الذيل أبداً.
   // القيمة تُشتقّ من ارتفاع صورة الذيل نفسه، فتتكيّف تلقائياً مع أي طابعة/هامش.
-  const _smFtrPx   = ((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50);
+  const _smFtrPx   = ((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)));
   const _smFtrGuard = ftrHTML ? (_smFtrPx + 10) : 0;   // +10px هامش أمان بسيط
 
   // ── الورقة الثانية: تُبنى فقط إن وُجد فيها محتوى فعلي ──
@@ -37273,7 +37478,14 @@ function openWaitScreen(mode){
   +'tr.calling-row td{background:rgba(0,232,122,0.18) !important;animation:rowGlow 1.2s ease-in-out infinite alternate;}'
   +'@keyframes rowGlow{0%{box-shadow:inset 0 0 0 rgba(0,232,122,0)}100%{box-shadow:inset 0 0 30px rgba(0,232,122,0.4)}}'
   /* 📺 وضع البث للتلفزيون: كل شيء أكبر بأربع درجات، بلا عمود التحاليل، بلا عدّاد «انتظار» */
-  +(isTV ? ('body.tv .hdr{padding:18px 40px;}'+'body.tv .logo-ic{width:66px;height:66px;font-size:36px;border-radius:16px;}'+'body.tv .logo h1{font-size:32px;}'+'body.tv .logo p{font-size:16px;}'+'body.tv .clock{font-size:44px;}'+'body.tv .date-lbl{font-size:17px;}'+'body.tv .hdmi-badge{font-size:17px;padding:9px 20px;}'+'body.tv .fs-btn{width:52px;height:52px;font-size:26px;}'+'body.tv .counters{grid-template-columns:repeat(3,1fr);gap:14px;padding:16px 40px;}'+'body.tv .cnt.cp{display:none;}'+'body.tv .cnt{padding:14px;border-radius:16px;}'+'body.tv .cnt .n{font-size:58px;}'+'body.tv .cnt .l{font-size:22px;margin-top:6px;}'+'body.tv .tbl-area{padding:0 40px;}'+'body.tv .thead-tbl th{font-size:24px;padding:16px 18px;}'+'body.tv td{padding:20px 18px;overflow:visible;}'+'body.tv .pill{font-size:28px;padding:10px 26px;border-radius:30px;gap:10px;white-space:nowrap;}'+'body.tv .empty-msg{font-size:32px;padding:100px;}'+'body.tv .footer{font-size:17px;padding:12px 40px;}'+'body.tv .call-toast{padding:48px 80px;max-width:92vw;border-radius:32px;}'+'body.tv .call-toast .ct-ic{font-size:92px;}'+'body.tv .call-toast .ct-ttl{font-size:30px;margin-bottom:14px;}'+'body.tv .call-toast .ct-name{font-size:76px;word-break:break-word;}'+'body.tv .call-toast .ct-sub{font-size:26px;}') : '')
+  +(isTV ? (''
+ /* الترويسة بحجمها السابق · إخفاء «HDMI نشط» وأزرار/شارات الصوت (الصوت يعمل تلقائياً) */
+ +'body.tv .hdmi-badge,body.tv #voice-badge,body.tv #voice-unlock-btn{display:none !important;}'
+ /* 📞 بطاقة الاستفسار */
+ +'.tv-contact{display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,rgba(0,212,255,0.10),rgba(139,63,255,0.10));border:1px solid rgba(0,212,255,0.35);border-radius:14px;padding:7px 16px 7px 10px;box-shadow:0 0 18px rgba(0,212,255,0.12);}'
+ +'.tv-contact .tc-ic{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#00d4ff,#8b3fff);display:flex;align-items:center;justify-content:center;font-size:19px;box-shadow:0 0 12px rgba(0,212,255,0.35);flex-shrink:0;}'
+ +'.tv-contact .tc-lbl{font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);line-height:1.2;}'
+ +'.tv-contact .tc-num{font-size:20px;font-weight:900;color:#00d4ff;letter-spacing:1.5px;direction:ltr;text-align:right;line-height:1.25;}'+'body.tv .counters{grid-template-columns:repeat(3,1fr);gap:10px;padding:7px 40px;}'+'body.tv .cnt.cp{display:none;}'+'body.tv .cnt{padding:5px 12px;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:12px;}'+'body.tv .cnt .n{font-size:28px;}'+'body.tv .cnt .l{font-size:15px;margin-top:0;}'+'body.tv .tbl-area{padding:0 40px;}'+'body.tv #wsbody>div>div:first-child{padding:0 !important;background:transparent !important;margin:6px 0 4px;}'+'body.tv .thead-tbl{border-collapse:separate !important;border-spacing:0;}'+'body.tv .thead-tbl thead tr{background:transparent;}'+'body.tv .thead-tbl th{font-size:19px;font-weight:800;padding:7px 18px;line-height:1.3;background:rgba(0,212,255,0.07);border-top:1px solid rgba(0,212,255,0.18);border-bottom:1px solid rgba(0,212,255,0.18);}'+'body.tv .thead-tbl th:first-child{border-right:1px solid rgba(0,212,255,0.18);border-radius:0 10px 10px 0;}'+'body.tv .thead-tbl th:last-child{border-left:1px solid rgba(0,212,255,0.18);border-radius:10px 0 0 10px;}'+'body.tv td{padding:12px 18px;overflow:visible;line-height:1.3;}'+'body.tv .pill{font-size:28px;padding:10px 26px;border-radius:30px;gap:10px;white-space:nowrap;}'+'body.tv .empty-msg{font-size:32px;padding:100px;}'+'body.tv .footer{font-size:17px;padding:12px 40px;}'+'body.tv .call-toast{padding:44px 70px;max-width:94vw;border-radius:32px;}'+'body.tv .call-toast .ct-ic{font-size:92px;}'+'body.tv .call-toast .ct-ttl{font-size:30px;margin-bottom:14px;}'+'body.tv .call-toast .ct-name{font-size:76px;white-space:nowrap;word-break:normal;overflow:hidden;}'+'body.tv .call-toast .ct-sub{font-size:26px;}') : '')
   +'</style></head><body'+(isTV?' class="tv"':'')+'>'
   +'<div class="hdr">'
   +'<div class="logo"><div class="logo-ic">🔬</div><div><h1>شاشة قاعة الانتظار</h1><p>MedLab Pro — وضع HDMI</p></div></div>'
@@ -37282,6 +37494,7 @@ function openWaitScreen(mode){
   +'<div id="voice-badge" class="hdmi-badge" style="background:rgba(0,232,122,0.08);border-color:rgba(0,232,122,0.25);color:#00e87a;display:none"><div class="hdmi-dot" style="background:#00e87a"></div>🔊 الناطق نشط</div>'
   +'<button id="voice-unlock-btn" class="fs-btn" onclick="_unlockVoice()" title="تفعيل الصوت" style="display:none;background:rgba(255,204,0,0.12);border-color:rgba(255,204,0,0.3);color:#ffcc00;width:auto;padding:0 14px;font-size:13px;font-weight:700;gap:6px">🔊 اضغط لتفعيل الصوت</button>'
   +'<div class="hdmi-badge"><div class="hdmi-dot"></div>📺 HDMI نشط</div>'
+  +(isTV ? '<div class="tv-contact"><div class="tc-ic">📞</div><div><div class="tc-lbl">للاستفسار حول البرنامج عبر الرقم</div><div class="tc-num">07807632797</div></div></div>' : '')
   +'<button class="fs-btn" onclick="toggleFS()" title="ملء الشاشة / F11">⛶</button>'
   +'</div>'
   +'</div>'
@@ -37403,6 +37616,9 @@ function openWaitScreen(mode){
   +'var toast = document.getElementById("call-toast");'
   +'var nameEl = document.getElementById("ct-name");'
   +'if(nameEl) nameEl.textContent = item.displayName || item.name;'
+  /* 📺 التلفزيون: الاسم بسطر واحد — يُصغَّر الخط تلقائياً فقط إن تجاوز عرض البطاقة */
+  +'if(_isTV && nameEl){ try{ nameEl.style.fontSize=""; var _fs=76, _mx=Math.floor(window.innerWidth*0.94)-140;'
+  +' while(_fs>34 && nameEl.scrollWidth>_mx){ _fs-=4; nameEl.style.fontSize=_fs+"px"; } }catch(_){} }'
   +'if(toast) toast.classList.add("show");'
   /* تمييز صف المريض في الجدول */
   +'_highlightRow(item.id, true);'
