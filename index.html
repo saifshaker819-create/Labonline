@@ -4605,12 +4605,19 @@ body.light-mode .dp-viewer{background:#d8dde3;}
           <div class="st-card-hdr" onclick="toggleStCard('stc-hdrftr')">
             <div style="display:flex;align-items:center;gap:12px">
               <span style="font-size:22px">🖼️</span>
-              <div><div class="st-card-title">رأس وتذييل التقرير</div><div class="st-card-sub">صورة للرأس — وصورة أو نص للذيل</div></div>
+              <div><div class="st-card-title">رأس وتذييل التقرير</div><div class="st-card-sub">صورة أو تصميم جاهز للرأس (١٨ نموذجاً) — وصورة أو نص للذيل (٦ نماذج)</div></div>
             </div>
             <span class="st-card-arrow" id="arr-stc-hdrftr">▼</span>
           </div>
           <div class="st-card-body" id="body-stc-hdrftr" style="display:none">
             <div id="hdr-section-img">
+              <div class="hf-grp" id="hfg-hdr" style="border:1px solid var(--border);border-radius:14px;margin-bottom:12px;overflow:hidden;background:rgba(255,255,255,0.015)"><div onclick="HdrUI.toggleGrp('hdr')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:rgba(0,212,255,0.06)"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">🧾</span><div><div style="font-size:13.5px;font-weight:900">رأس الورقة</div><div style="font-size:10.5px;color:var(--text2)">صورة جاهزة أو تصميم من ١٨ نموذجاً — الارتفاع والورق المطبوع مسبقاً</div></div></div><span id="hfg-arr-hdr" style="font-size:13px;color:var(--text2)">▲</span></div><div id="hfg-body-hdr" style="padding:14px;display:block">
+              <!-- مصدر الرأس -->
+              <div style="display:flex;gap:6px;margin-bottom:14px;background:var(--bg-glass);border-radius:10px;padding:4px">
+                <button id="hdr-src-img-btn" onclick="HdrUI.setSrc('img')" style="flex:1;padding:8px;border-radius:8px;border:none;background:var(--primary);color:#000;cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:800">🖼️ صورة</button>
+                <button id="hdr-src-tpl-btn" onclick="HdrUI.setSrc('tpl')" style="flex:1;padding:8px;border-radius:8px;border:none;background:transparent;color:var(--text2);cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700">🎨 تصميم جاهز</button>
+              </div>
+              <div id="hdr-src-img">
               <!-- صورة الرأس -->
               <div class="fg">
                 <label class="fl">🖼️ صورة رأس الورقة</label>
@@ -4620,6 +4627,37 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <img id="header-img-show" style="max-height:80px;border-radius:8px;border:1px solid var(--border);width:100%;object-fit:fill;background:#fff;">
                   <button class="btn btn-d btn-sm" style="margin-top:6px" onclick="clearHeaderImg()">🗑️ إزالة الصورة</button>
                 </div>
+              </div>
+              </div>
+
+              <!-- 🎨 تصميم رأس جاهز -->
+              <div id="hdr-src-tpl" style="display:none">
+                <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:8px">① اختر التصميم</div>
+                <div id="hdr-tpl-groups"></div>
+
+                <div style="font-size:12px;font-weight:800;color:var(--primary);margin:14px 0 8px">② معلومات المختبر — تُكتب مرة واحدة وتُملأ في كل التصاميم</div>
+                <div style="font-size:10.5px;color:var(--text2);margin-bottom:8px">المعلومات الموجودة أمثلة وهمية — استبدلها بمعلومات مختبرك.</div>
+                <div id="hdr-info-box"></div>
+                <div class="fg" style="margin:10px 0 0">
+                  <label class="fl" style="font-size:11px">🖼️ الشعار — جاهز من البرنامج (يأخذ ألوان التصميم) أو من الحاسبة بخلفية شفافة</label>
+                  <div id="hdt-logo-lib" style="display:flex;flex-wrap:wrap;gap:6px;align-items:stretch"></div>
+                  <input type="file" id="hdt-logo" accept="image/*" onchange="HdrUI.logo(this)" style="display:none">
+                </div>
+
+                <div style="font-size:12px;font-weight:800;color:var(--primary);margin:14px 0 4px">③ التحكم الكامل بالتصميم</div>
+                <div style="font-size:10.5px;color:var(--text2);margin-bottom:8px">🖱️ اسحب أي عنصر (نص، شكل، شعار، ختم) لتغيير مكانه — اضغط عليه لتعديل نصه وحجمه ولونه وخلفيته، أو 📑 نسخه لتكراره، أو إخفائه</div>
+                <div id="hdr-tpl-editor" style="background:#fff;border:1px solid #dde4ec;border-radius:8px;overflow:hidden;position:relative"></div>
+                <div id="hdr-tpl-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px"></div>
+                <div id="hdr-tpl-tools" style="margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:10px;background:rgba(255,140,66,0.05)"></div>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;border:1px solid var(--border);border-radius:10px;padding:10px">
+                  <div style="font-size:11px;font-weight:800;color:var(--text2);width:100%">🎨 ألوان التصميم</div>
+                  <div class="fg" style="margin:0"><label class="fl" style="font-size:11px">الأساسي</label><input type="color" id="hdt-c1" oninput="HdrUI.color('c1',this.value)" style="width:52px;height:32px;border:none;background:none;cursor:pointer"></div>
+                  <div class="fg" style="margin:0"><label class="fl" style="font-size:11px">الثانوي</label><input type="color" id="hdt-c2" oninput="HdrUI.color('c2',this.value)" style="width:52px;height:32px;border:none;background:none;cursor:pointer"></div>
+                  <div class="fg" style="margin:0"><label class="fl" style="font-size:11px">التمييز</label><input type="color" id="hdt-c3" oninput="HdrUI.color('c3',this.value)" style="width:52px;height:32px;border:none;background:none;cursor:pointer"></div>
+                  <button class="btn btn-s btn-sm" onclick="HdrUI.matchFooter()" title="يطبّق ألوان الرأس على الذيل النصي">🔗 طابق ألوان الذيل مع الرأس</button>
+                  <button class="btn btn-w btn-sm" onclick="HdrUI.resetTpl()">↺ إعادة التصميم لوضعه الأصلي</button>
+                </div>
+                <div style="font-size:10.5px;color:var(--text2);margin-top:8px">📏 الارتفاع يتبع «ارتفاع رأس ورقة التقرير» أدناه — كل شيء في التصميم يتناسب معه تلقائياً.</div>
               </div>
 
               <!-- 📏 ارتفاع رأس التقرير -->
@@ -4645,9 +4683,14 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 </div>
               </div>
 
+              </div></div>
               <!-- ذيل الورقة: اختيار بين صورة أو نص -->
-              <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:10px">
-                <div style="font-size:12px;font-weight:800;color:var(--primary);margin-bottom:12px">📍 ذيل الورقة</div>
+              <div style="background:rgba(0,212,255,0.04);border:1px solid var(--border);border-radius:12px;padding:0;margin-top:10px;overflow:hidden">
+                <div onclick="HdrUI.toggleGrp('ftr')" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:rgba(0,212,255,0.06)">
+                  <div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">📍</span><div><div style="font-size:13.5px;font-weight:900">ذيل الورقة</div><div style="font-size:10.5px;color:var(--text2)">صورة أو نص بستة نماذج — متناسق مع تصاميم الرأس</div></div></div>
+                  <span id="hfg-arr-ftr" style="font-size:13px;color:var(--text2)">▲</span>
+                </div>
+                <div id="hfg-body-ftr" style="padding:14px">
                 <!-- تبويبات الذيل -->
                 <div style="display:flex;gap:6px;margin-bottom:14px;background:var(--bg-glass);border-radius:10px;padding:4px">
                   <button id="ftr-tab-img-btn" onclick="switchFtrTab('img')"
@@ -4712,6 +4755,7 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                       <div id="ftr-txt-preview-empty" style="padding:12px;text-align:center;font-size:11px;color:#888">أدخل العنوان أو الهاتف أو الملاحظة لعرض المعاينة</div>
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
             </div>
@@ -9104,7 +9148,7 @@ const DB={
         // الإعدادات: استبعد الحقول الكبيرة من localStorage (تذهب لـ IDB عبر setBig)
         const slim={};
         for(const key in v){
-          if(key==='headerImg'||key==='footerImg'||
+          if(key==='headerImg'||key==='footerImg'||key==='hdrTplLogo'||
              key==='_uaFieldsCustom'||key==='_stoolFieldsCustom'||key==='_semenFieldsCustom'||
              key==='hdrImgH'||key==='ftrImgH') continue;
           slim[key]=v[key];
@@ -9346,7 +9390,7 @@ window.load = load;
 // BIG settings on IDB (صور الرأس/التذييل + الحقول المخصصة لتحاليل الإدرار/البراز/المنوي)
 // تذهب مباشرة لـ IDB بمفاتيح مستقلة، ولا تُخزَّن في كائن settings (لتفادي امتلاء localStorage)
 // ══════════════════════════════════════════════════════════════
-const _BIG_KEYS=new Set(['headerImg','footerImg','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','semenFieldsCustom2','semenFieldsCustom3','hdrImgH','ftrImgH','wmImg','mrtCodes']);
+const _BIG_KEYS=new Set(['headerImg','footerImg','hdrTplLogo','uaFieldsCustom','stoolFieldsCustom','semenFieldsCustom','semenFieldsCustom2','semenFieldsCustom3','hdrImgH','ftrImgH','wmImg','mrtCodes']);
 const _BIG_MC={};   // كاش ذاكرة فوري لقيم BIG (بدون تأخير)
 
 async function getBig(k){
@@ -10797,6 +10841,7 @@ function startApp(){
   // ── تحميل القيم الكبيرة (الصور + الحقول المخصصة) من IDB، ثم إعادة تطبيقها ──
   loadAllBigToCache().then(()=>{
     // 1) الصور: ضعها في settings (للطباعة) واعرضها في الإعدادات
+    try{ const _tl=getBigCached('hdrTplLogo'); if(_tl) settings.hdrTplLogo=_tl; }catch(e){}
     const hImg = getBigCached('headerImg');
     if(hImg){
       settings.headerImg = hImg;
@@ -17923,6 +17968,9 @@ function buildPrintHTML(req, opts){
   } else if(settings.hdrMode==='text'&&showHdr){
     // Fix 5: نص مخصص للرأس
     hdr=buildTextHeader(settings);
+  } else if(showHdr && typeof _hdrTplOn==='function' && _hdrTplOn(settings)){
+    // 🎨 تصميم رأس جاهز
+    hdr=`<div style="width:100%;line-height:normal">${_hdrTplHTML(settings,_hdrImgH)}</div>`;
   } else if(settings.headerImg&&showHdr){
     // Fix 4: image fills full width AND height (no whitespace)
     hdr=`<div style="width:100%;line-height:0">
@@ -23634,6 +23682,7 @@ function loadSettings(){
   document.getElementById('sb-director').textContent=settings.dir||'';
   // Images
   if(settings.headerImg){document.getElementById('header-img-show').src=settings.headerImg;document.getElementById('header-img-preview').style.display='block';}
+  try{ if(typeof HdrUI!=='undefined') setTimeout(function(){ HdrUI.render(); }, 150); }catch(e){}
   if(settings.footerImg){document.getElementById('footer-img-show').src=settings.footerImg;document.getElementById('footer-img-preview').style.display='block';}
   // 📄 حالة زر الورق المطبوع مسبقاً
   var _bh=document.getElementById('tog-blank-hdr'); if(_bh) _bh.classList.toggle('on', !!settings.blankHdr);
@@ -25079,6 +25128,7 @@ async function saveHdrImgHeight(){
   inp.value=raw;
   const ok=await setBig('hdrImgH',raw);
   showNotif('تم', ok?`✅ تم حفظ ارتفاع الرأس (${raw}px) — سيُطبَّق في كل التقارير`:'فشل الحفظ ⚠️', ok?'success':'error');
+  try{ if(typeof HdrUI!=='undefined') HdrUI.render(); }catch(e){}
 }
 
 // ── 📄 ورق مطبوع مسبقاً: ترك مساحة فارغة بدل صورة الرأس ─────
@@ -28154,7 +28204,7 @@ var FtrUI = (function(){
   function render(){
     var d=draft(), cur=String(settings.ftrTpl||'0');
     var has=!!(d.ftrAddress||d.ftrPhone||d.ftrNote);
-    var sample=Object.assign({}, d, has?{}:{ftrAddress:'حي اور _ شارع المدرسة الايرانية _ مجمع الماس الطبي', ftrPhone:'07802058004'});
+    var sample=Object.assign({}, d, has?{}:{ftrAddress:'بغداد _ الحارثية _ مجمع القمة الطبي', ftrPhone:'07807632797'});
     /* شبكة النماذج */
     var grid=document.getElementById('ftr-tpl-grid');
     if(grid){
@@ -28179,11 +28229,12 @@ var FtrUI = (function(){
     /* المعاينة الكبيرة */
     var prev=document.getElementById('ftr-txt-preview'), emp=document.getElementById('ftr-txt-preview-empty');
     if(!prev) return;
-    if(!has){ prev.style.display='none'; if(emp) emp.style.display='block'; return; }
-    var blk2=_ftrTextBlock(Object.assign({}, d, {ftrTpl:cur}));
+    /* بلا معلومات بعد ⇒ نعرض المثال التوضيحي نفسه مع تنبيه صغير */
+    var blk2=_ftrTextBlock(Object.assign({}, has?d:sample, {ftrTpl:cur}));
+    if(emp){ emp.style.display = has ? 'none' : 'block'; emp.textContent = has ? '' : '👆 مثال توضيحي — اكتب عنوانك ورقم هاتفك أعلاه ليظهر الذيل بمعلوماتك'; }
     var box=prev.parentElement ? prev.parentElement.clientWidth : 600;
     prev.innerHTML = blk2 ? scaled(blk2.inner, blk2.h, Math.max(300, box-2)) : '';
-    prev.style.display='block'; if(emp) emp.style.display='none';
+    prev.style.display='block';
   }
   function pick(i){ settings.ftrTpl=String(i); save('settings',settings); render(); try{ showNotif('تم','🎨 نموذج الذيل: '+FTR_TPL_NAMES[+i],'success'); }catch(e){} }
   function set(k,v){ settings[k]=v; save('settings',settings); render(); }
@@ -28483,6 +28534,488 @@ function _ftrTextBlock(s){
   })();
   return _r ? _wrap(_r) : null;
 }
+
+/* 🧪 مكتبة الشعارات الجاهزة (SVG بألوان التصميم) */
+var HDR_LOGOS = {
+  flask: { name:'دورق', svg:function(a,b){ return '<path d="M37 7h26v7h-5v21l23 40c5 9-1 19-11 19H29c-10 0-16-10-11-19l23-40V14h-4z" fill="none" stroke="'+a+'" stroke-width="5.5" stroke-linejoin="round"/>'
+      +'<path d="M26 70h48l6 10c3 6-1 10-7 10H27c-6 0-10-4-7-10z" fill="'+b+'"/><path d="M50 38c6 8 9 12 9 17a9 9 0 0 1-18 0c0-5 3-9 9-17z" fill="'+b+'"/>'
+      +'<path d="M24 62 h14 l4 -6 l5 11 l4 -8 h29" fill="none" stroke="'+a+'" stroke-width="3" stroke-linejoin="round"/>'; } },
+  microscope: { name:'مجهر', svg:function(a,b){ return '<rect x="44" y="8" width="14" height="36" rx="3" transform="rotate(-28 51 26)" fill="'+a+'"/>'
+      +'<rect x="40" y="4" width="18" height="8" rx="2" transform="rotate(-28 49 8)" fill="'+b+'"/>'
+      +'<path d="M36 46 l10 6" stroke="'+a+'" stroke-width="6" stroke-linecap="round"/><circle cx="36" cy="47" r="5" fill="'+b+'"/>'
+      +'<path d="M30 60 h28" stroke="'+a+'" stroke-width="5" stroke-linecap="round"/>'
+      +'<path d="M62 34 c16 8 20 30 6 44" fill="none" stroke="'+a+'" stroke-width="7" stroke-linecap="round"/>'
+      +'<rect x="20" y="80" width="62" height="10" rx="4" fill="'+a+'"/><rect x="50" y="72" width="20" height="10" rx="2" fill="'+b+'"/>'; } },
+  dna: { name:'DNA', svg:function(a,b){ var s='';
+      for(var i=0;i<7;i++){ var y=12+i*12, w=Math.abs(Math.sin((i+0.5)*0.9))*26; s+='<line x1="'+(50-w)+'" y1="'+y+'" x2="'+(50+w)+'" y2="'+y+'" stroke="'+(i%2?a:b)+'" stroke-width="4" stroke-linecap="round"/>'; }
+      return s+'<path d="M24 6 C 76 30, 24 58, 76 94" fill="none" stroke="'+a+'" stroke-width="6" stroke-linecap="round"/>'
+        +'<path d="M76 6 C 24 30, 76 58, 24 94" fill="none" stroke="'+b+'" stroke-width="6" stroke-linecap="round"/>'; } },
+  tubes: { name:'أنابيب', svg:function(a,b){ var tube=function(x,h,c){ return '<path d="M'+x+' 14 v'+h+' a8 8 0 0 0 16 0 v-'+h+'" fill="none" stroke="'+a+'" stroke-width="5"/>'
+        +'<path d="M'+(x+2.5)+' '+(14+h*0.45)+' v'+(h*0.55)+' a5.5 5.5 0 0 0 11 0 v-'+(h*0.55)+'z" fill="'+c+'"/><rect x="'+(x-3)+'" y="8" width="22" height="7" rx="2" fill="'+a+'"/>'; };
+      return tube(14,58,b)+tube(42,66,a)+tube(70,52,b)+'<rect x="6" y="84" width="88" height="6" rx="3" fill="'+a+'"/>'; } },
+  drop: { name:'قطرة دم', svg:function(a,b){ return '<path d="M50 6 C 64 28, 82 46, 82 64 A32 32 0 0 1 18 64 C 18 46, 36 28, 50 6 Z" fill="'+b+'"/>'
+      +'<path d="M50 6 C 64 28, 82 46, 82 64 A32 32 0 0 1 18 64 C 18 46, 36 28, 50 6 Z" fill="none" stroke="'+a+'" stroke-width="4"/>'
+      +'<rect x="44" y="50" width="12" height="32" rx="2" fill="#fff"/><rect x="34" y="60" width="32" height="12" rx="2" fill="#fff"/>'; } },
+  pulse: { name:'نبض', svg:function(a,b){ return '<path d="M50 88 C 18 66, 8 48, 8 32 A20 20 0 0 1 50 22 A20 20 0 0 1 92 32 C 92 48, 82 66, 50 88 Z" fill="'+b+'"/>'
+      +'<path d="M6 52 h22 l7 -14 l9 28 l8 -36 l8 30 l5 -8 h29" fill="none" stroke="'+a+'" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/>'; } },
+  molecule: { name:'جزيئات', svg:function(a,b){ var L=function(x1,y1,x2,y2){ return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+a+'" stroke-width="5"/>'; };
+      return L(50,50,20,24)+L(50,50,82,26)+L(50,50,24,80)+L(50,50,80,78)
+        +'<circle cx="50" cy="50" r="14" fill="'+a+'"/><circle cx="20" cy="24" r="10" fill="'+b+'"/><circle cx="82" cy="26" r="9" fill="'+b+'"/>'
+        +'<circle cx="24" cy="80" r="9" fill="'+b+'"/><circle cx="80" cy="78" r="11" fill="'+b+'"/>'; } },
+  diamond: { name:'ماسة', svg:function(a,b){ return '<path d="M36 6h28v6h-4v14l20 26" fill="none" stroke="'+a+'" stroke-width="5" stroke-linejoin="round"/><path d="M40 12v14L20 52" fill="none" stroke="'+a+'" stroke-width="5" stroke-linejoin="round"/>'
+      +'<path d="M22 50 h56 l12 14 L50 96 L10 64 Z" fill="'+b+'"/><path d="M22 50 h56 l12 14 L50 96 L10 64 Z M10 64 h80 M32 50 l-6 14 L50 96 M68 50 l6 14 L50 96 M50 50 v14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linejoin="round"/>'; } }
+};
+var HDR_LOGO_IDS = ['flask','microscope','dna','tubes','drop','pulse','molecule','diamond'];
+function _hdrDefLogo(C, white, lid){
+  var a=white?'#ffffff':C.c1, b=white?'rgba(255,255,255,0.75)':C.c2;
+  var L=HDR_LOGOS[lid]||HDR_LOGOS.flask;
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style="height:100%;width:auto;display:block">'+L.svg(a,b)+'</svg>';
+}
+/* الشعار المستخدم: صورة من الحاسبة (إن اختيرت) أو شعار جاهز من المكتبة */
+function _hdrUseCustomLogo(s){ return !!(s && s.hdrTplLogo && s.hdrTplLogoSrc!=='lib'); }
+/* ══════════════════════════════════════════════════════════════════════
+   🎨 تصاميم رأس الورقة (الإصدار ٢) — محرّك عناصر مرن
+   • كل تصميم = قائمة عناصر: نص / شعار / شكل / ختم — كلها قابلة للسحب
+     والتلوين وتعديل النص والحجم والنسخ (تكرار) والإخفاء.
+   • المعلومات المشتركة (الاسم، العنوان، الهاتف…) تُكتب مرة واحدة وتُملأ
+     في كل التصاميم عبر رموز {nameAr} {phone} … — كلها معلومات وهمية افتراضياً.
+   • settings.hdrTpl = معرّف التصميم · settings.hdrTplCfg[id] = تعديلات المستخدم:
+       ov[elId] = {x,y,k,c,bg,txt,hide} · extra = [{id,from}] (عناصر منسوخة) · colors = {c1,c2,c3}
+   ══════════════════════════════════════════════════════════════════════ */
+var HDR_INFO_DEF = {
+  nameAr:'مختبر النور', subAr:'للتحليلات المرضية', nameEn:'ALNOOR LABORATORY', subEn:'FOR PATHOLOGICAL ANALYSES',
+  slogan:'نتائج دقيقة تثق بها', address:'بغداد – شارع فلسطين – مجمع الأمل الطبي', hours:'يومياً من 8 صباحاً حتى 10 مساءً',
+  phone:'0770 000 0000', phone2:'0780 000 0000', email:'info@alnoor-lab.example', tag:'مختبر',
+  docName:'د. أحمد كريم سالم', docTitle:'أخصائي علم الأمراض | خبرة 12 سنة', docQual:'دكتوراه تحليلات مرضية', docEmail:'dr.ahmed@alnoor-lab.example',
+  doc2Name:'د. سارة محمود علي', doc2Title:'ماجستير أحياء مجهرية', cert1:'رقم الإجازة: 0000/000', cert2:'شهادة الجودة: QA-0000', cert3:'تسجيل: REG-00-0000'
+};
+var HDR_INFO_FIELDS = [
+  ['🏷️ المختبر',[['nameAr','اسم المختبر'],['subAr','الوصف العربي'],['nameEn','الاسم الإنجليزي'],['subEn','الوصف الإنجليزي'],['slogan','الشعار النصي (سلوغان)'],['tag','الشارة']]],
+  ['📞 التواصل',[['address','العنوان'],['hours','أوقات الدوام'],['phone','الهاتف ١'],['phone2','الهاتف ٢ / واتساب'],['email','البريد الإلكتروني']]],
+  ['👨‍⚕️ الطبيب ١',[['docName','الاسم'],['docTitle','الاختصاص / الخبرة'],['docQual','الشهادة'],['docEmail','البريد']]],
+  ['👩‍⚕️ الطبيب ٢',[['doc2Name','الاسم'],['doc2Title','الاختصاص']]],
+  ['📜 الشهادات',[['cert1','سطر ١'],['cert2','سطر ٢'],['cert3','سطر ٣']]]
+];
+var HDR_ICONS = {
+  mail:'M3 5h18v14H3z M3 6l9 7 9-7', phone:'M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z',
+  wa:'M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z M8.5 8.5c.3 2.7 2.3 5 5 5.8l1.2-1.1 2 .9-.4 1.6c-3.8.3-8.3-3.9-8.2-7.9l1.6-.4.9 2z',
+  clock:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 7v5l3.5 2', pin:'M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z',
+  globe:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M3 12h18 M12 3c2.5 2.5 3.7 5.5 3.7 9s-1.2 6.5-3.7 9c-2.5-2.5-3.7-5.5-3.7-9S9.5 5.5 12 3z'
+};
+function _hdrIcon(id, size, color){
+  var d=HDR_ICONS[id]; if(!d) return '';
+  var fill=(id==='phone'||id==='pin'); 
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 24 24" style="flex-shrink:0;display:block"><path d="'+d+'" '
+    +(fill?'fill="'+color+'"':'fill="none" stroke="'+color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"')+'/></svg>';
+}
+/* أختام وشارات (SVG) — نصوص وهمية عامة */
+function _hdrStamp(kind, C, h, txt){
+  var s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" style="height:'+h+'px;width:auto;display:block;direction:ltr">';
+  if(kind==='247'){
+    s+='<circle cx="60" cy="42" r="22" fill="none" stroke="'+C.c3+'" stroke-width="5"/><path d="M60 30v13l8 5" stroke="'+C.c3+'" stroke-width="4" fill="none" stroke-linecap="round"/>'
+     +'<text x="60" y="92" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="30" fill="'+C.c2+'">24/7</text>'
+     +'<text x="60" y="110" text-anchor="middle" font-family="Arial" font-weight="700" font-size="11" letter-spacing="3" fill="'+C.c2+'">SERVICE</text>';
+  } else if(kind==='service'){
+    s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170 100" style="height:'+h+'px;width:auto;display:block;direction:ltr">'
+     +'<circle cx="44" cy="50" r="34" fill="none" stroke="'+C.c1+'" stroke-width="7"/><path d="M44 30v20h14" stroke="'+C.c1+'" stroke-width="6" fill="none" stroke-linecap="round"/>'
+     +'<polygon points="58,34 166,22 158,58 52,70" fill="'+C.c1+'"/><polygon points="62,20 96,16 94,32 60,36" fill="'+C.c2+'"/>'
+     +'<text x="78" y="30" text-anchor="middle" font-family="Arial" font-weight="900" font-size="11" fill="#fff" transform="rotate(-7 78 30)">24 hr</text>'
+     +'<text x="110" y="54" text-anchor="middle" font-family="Arial Black,Arial" font-weight="900" font-size="20" fill="#fff" transform="rotate(-7 110 54)">SERVICE</text>'
+     +'<text x="112" y="80" text-anchor="middle" font-family="Arial" font-weight="800" font-size="11" letter-spacing="2" fill="'+C.c2+'" transform="rotate(-7 112 80)">EVERYDAY</text>';
+  } else if(kind==='certs'){
+    s='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 64" style="height:'+h+'px;width:auto;display:block;direction:ltr">'
+     +'<circle cx="32" cy="32" r="28" fill="#fff" stroke="'+C.c2+'" stroke-width="3"/><text x="32" y="30" text-anchor="middle" font-family="Arial" font-weight="900" font-size="13" fill="'+C.c1+'">ISO</text><text x="32" y="44" text-anchor="middle" font-family="Arial" font-weight="700" font-size="8.5" fill="'+C.c2+'">9001:2015</text>'
+     +'<path d="M100 6 l24 9 v17 c0 14 -11 23 -24 27 c-13 -4 -24 -13 -24 -27 v-17z" fill="'+C.c1+'"/><text x="100" y="38" text-anchor="middle" font-family="Arial" font-weight="900" font-size="12" fill="#fff">QMS</text>'
+     +'<circle cx="168" cy="32" r="28" fill="'+C.c3+'"/><text x="168" y="36" text-anchor="middle" font-family="Arial" font-weight="900" font-size="12" fill="#fff">ACCR</text>';
+  } else if(kind==='seal'){
+    var t=String(txt||'ALNOOR LABORATORY • BAGHDAD •').toUpperCase();
+    s+='<defs><path id="hsealp" d="M60 60 m-43 0 a43 43 0 1 1 86 0 a43 43 0 1 1 -86 0"/></defs>'
+     +'<circle cx="60" cy="60" r="57" fill="#fff" stroke="'+C.c1+'" stroke-width="3"/><circle cx="60" cy="60" r="34" fill="'+C.c1+'"/>'
+     +'<text direction="ltr" font-family="Arial" font-weight="900" font-size="10.5" fill="'+C.c1+'" letter-spacing="1.2"><textPath href="#hsealp">'+_hdrEsc(t)+'</textPath></text>'
+     +'<g transform="translate(40 36) scale(0.4)">'+HDR_LOGOS.microscope.svg('#ffffff',C.c3)+'</g>';
+  }
+  return s+'</svg>';
+}
+/* ── التصاميم ── T:نص · B:شكل · L:شعار · S:ختم ─────────────────────── */
+function _T(x,y,txt,fs,o){ return Object.assign({t:'text',x:x,y:y,txt:txt,fs:fs,w:700,c:'#333',al:'c'},o||{}); }
+function _B(x,y,w,h,fill,o){ return Object.assign({t:'box',x:x,y:y,bw:w,bh:h,fill:fill},o||{}); }
+function _L(x,y,h,o){ return Object.assign({t:'logo',x:x,y:y,h:h},o||{}); }
+function _S(kind,x,y,h,o){ return Object.assign({t:'stamp',kind:kind,x:x,y:y,h:h},o||{}); }
+var HDR_TPLS = {
+  /* ═════ النماذج المرسلة (معاد تصميمها بمعلومات وهمية) ═════ */
+  s1:{ name:'البرتقالي الحديث', group:'samples', base:'#ffffff', logo:'flask', pal:{c1:'#1f9d55',c2:'#ea7a1c',c3:'#e53935'}, els:[
+    _B(0,0,34,100,'c2',{clip:'polygon(0 0,100% 0,82% 100%,0 100%)'}),
+    _B(4,94,96,3,'c2'), _L(92,45,92), _T(80,26,'{nameAr}',34,{w:900,c:'c1',al:'r'}), _T(80,50,'{address}',13,{c:'#333',al:'r',w:600}),
+    _T(80,70,'{hours}',11.5,{c:'#fff',bg:'c2',pad:'2px 12px',rad:'4px',al:'r'}), _S('247',46,47,78),
+    _T(26,20,'{email}',11,{c:'#fff',ic:'mail',al:'r',ltr:1}), _T(26,38,'{phone}',11,{c:'#fff',ic:'phone',al:'r',ltr:1}),
+    _T(26,56,'{phone2}',11,{c:'#fff',ic:'wa',al:'r',ltr:1}), _T(26,74,'{hours}',10.5,{c:'#fff',ic:'clock',al:'r'})]},
+  s2:{ name:'الطبي الرمادي', group:'samples', base:'#ffffff', logo:'pulse', pal:{c1:'#3d5a5f',c2:'#4b6b70',c3:'#8fb3b6'}, els:[
+    _B(3,8,30,72,'c2',{rad:'10px'}), _B(3,93,94,2.4,'c1'), _L(93,42,78),
+    _T(85,24,'{nameAr}',32,{w:900,c:'c1',al:'r'}), _T(85,46,'{address}',12.5,{c:'#444',al:'r',w:600}),
+    _T(85,64,'{hours}',10.5,{c:'#fff',bg:'c1',pad:'2px 10px',rad:'3px',al:'r'}),
+    _T(85,82,'{email}',10,{c:'#333',ic:'mail',al:'r',ltr:1}), _T(64,82,'{phone}',10,{c:'#333',ic:'phone',al:'r',ltr:1}), _T(46,82,'{hours}',10,{c:'#333',ic:'clock',al:'r'}),
+    _T(31,20,'{docName}',16,{w:900,c:'#fff',al:'r'}), _T(31,38,'{docTitle}',10.5,{c:'#fff',al:'r',w:600}), _T(31,52,'{docQual}',10.5,{c:'#fff',al:'r',w:600}), _T(31,66,'{docEmail}',10,{c:'#fff',al:'r',ltr:1,w:600})]},
+  s3:{ name:'الأخضر المخطط', group:'samples', base:'#ffffff', logo:'molecule', pal:{c1:'#1f9d55',c2:'#ea7a1c',c3:'#555555'}, els:[
+    _B(0,88,100,6,'c1'), _B(9,88,5,6,'#ffffff',{clip:'polygon(30% 0,100% 0,70% 100%,0 100%)'}), _B(0,88,8,6,'c3',{clip:'polygon(0 0,100% 0,80% 100%,0 100%)'}),
+    _L(93,42,80,{logo:'molecule'}), _T(85,26,'{nameAr}',32,{w:900,c:'#111',al:'r'}), _T(85,48,'{address}',12.5,{c:'#444',al:'r',w:600}),
+    _T(85,66,'{email}',10,{c:'#333',ic:'mail',al:'r',ltr:1}), _T(62,66,'{phone}',10,{c:'#333',ic:'phone',al:'r',ltr:1}), _T(46,78,'{hours}',10,{c:'#333',ic:'clock',al:'r'}),
+    _S('service',37,36,58), _T(24,22,'{docName}',16,{w:900,c:'#333',al:'r'}), _T(24,40,'{docTitle}',10.5,{c:'#444',al:'r',w:600}),
+    _T(24,54,'{docQual}',10.5,{c:'#444',al:'r',w:600}), _T(24,68,'{docEmail}',10,{c:'#444',al:'r',ltr:1,w:600})]},
+  s4:{ name:'الشريط الأخضر', group:'samples', base:'#ffffff', logo:'molecule', pal:{c1:'#7cc242',c2:'#ea7a1c',c3:'#3b3b3b'}, els:[
+    _B(0,0,100,9,'c1'), _L(92,50,96,{logo:'molecule'}), _T(81,36,'{nameAr}',30,{w:900,c:'c3',al:'r'}), _T(81,55,'{slogan}',10,{c:'#777',al:'r',w:700,ls:1}),
+    _T(81,72,'{hours}',11,{c:'#333',al:'r',w:600}), _S('service',57,52,56), _T(42,34,'{docName}',15,{w:900,c:'#333',al:'r'}),
+    _T(42,50,'{docTitle}',10,{c:'#444',al:'r',w:600}), _T(42,63,'{docQual}',10,{c:'#444',al:'r',w:600}), _T(42,76,'{docEmail}',9.5,{c:'#444',al:'r',ltr:1,w:600}),
+    _T(3,34,'{email}',10,{c:'#333',ic:'mail',al:'l',ltr:1}), _T(3,50,'{phone}',10,{c:'#333',ic:'phone',al:'l',ltr:1}), _T(3,66,'{phone2}',10,{c:'#333',ic:'wa',al:'l',ltr:1})]},
+  s5:{ name:'الكلاسيكي المتدرّج', group:'samples', base:'#ffffff', logo:'microscope', pal:{c1:'#1d5a73',c2:'#e07b28',c3:'#c9d6dc'}, els:[
+    _B(0,64,54,11,'c1'), _B(52,64,48,11,'c1',{clip:'polygon(4% 0,100% 0,100% 100%,0 100%)'}), _B(54,82,46,15,'c1'),
+    _T(77,22,'{nameEn}',30,{w:700,c:'c1',font:'serif',ltr:1}), _T(77,42,'{subAr}',15,{w:900,c:'c2'}), _T(77,56,'{address}',10.5,{c:'#333',w:700}),
+    _T(77,89,'{nameAr}',15,{w:900,c:'#fff'}), _S('seal',48,32,62), _L(9,30,58,{logo:'microscope'}), _T(27,26,'{slogan}',13,{w:900,c:'c2'}), _T(27,44,'{phone} • {phone2}',10.5,{c:'#333',w:800,ltr:1})]},
+  s6:{ name:'الأخضر المنحني', group:'samples', base:'#ffffff', logo:'drop', pal:{c1:'#2e9c4b',c2:'#1f73b7',c3:'#8cc63f'}, els:[
+    _B(-8,-20,32,150,'c1',{rad:'50%',clip:'inset(0 0 0 0)',op:0.95}), _B(-6,-16,27,140,'#ffffff',{rad:'50%'}), _B(0,0,100,6,'c1',{rad:'0 0 0 0'}), _B(26,90,74,2.6,'c2'),
+    _L(11,52,92,{logo:'drop'}), _T(78,26,'{nameAr}',34,{w:900,c:'c1',al:'r'}), _T(78,52,'{subAr}',22,{w:900,c:'c1',al:'r'}), _T(78,74,'{slogan}',14,{w:800,c:'c2',al:'r'}),
+    _S('certs',24,28,40), _T(24,56,'{cert1}',9.5,{c:'#333',w:600}), _T(24,68,'{cert2}',9.5,{c:'#333',w:600}), _T(24,80,'{cert3}',9.5,{c:'#333',w:600})]},
+  s7:{ name:'البنفسجي', group:'samples', base:'#ffffff', logo:'dna', pal:{c1:'#8e2a8b',c2:'#d0337f',c3:'#f3e5f5'}, els:[
+    _B(88,16,10,58,'grad:c2,c1',{rad:'14px'}), _L(93,45,66,{white:1,logo:'dna'}), _B(4,90,92,2.6,'c1'),
+    _T(86,26,'{nameAr}',32,{w:900,c:'c1',al:'r'}), _T(86,48,'{address}',12.5,{c:'#333',al:'r',w:600}), _T(86,67,'{hours}',10.5,{c:'#fff',bg:'c1',pad:'2px 10px',rad:'3px',al:'r'}),
+    _T(46,24,'{docName}',16,{w:900,c:'#333',al:'r'}), _T(46,42,'{docTitle}',10.5,{c:'#444',al:'r',w:600}), _T(46,56,'{docQual}',10.5,{c:'#444',al:'r',w:600}), _T(46,70,'{docEmail}',10,{c:'#444',al:'r',ltr:1,w:600}),
+    _T(3,24,'{email}',10,{c:'#333',ic:'mail',al:'l',ltr:1}), _T(3,40,'{phone}',10,{c:'#333',ic:'phone',al:'l',ltr:1}), _T(3,56,'{phone2}',10,{c:'#333',ic:'wa',al:'l',ltr:1}), _T(3,72,'{hours}',10,{c:'#333',ic:'clock',al:'l'})]},
+  s8:{ name:'الشريط الأحمر', group:'samples', base:'#ffffff', logo:'microscope', pal:{c1:'#1d5a73',c2:'#c0392b',c3:'#b8741a'}, els:[
+    _B(-6,-40,18,70,'c2',{rad:'50%'}), _B(88,-40,18,70,'c2',{rad:'50%'}), _B(0,66,100,12,'c1'), _B(41,62,26,19,'c2'),
+    _T(54,72,'{slogan}',15,{w:900,c:'#fff'}), _T(54,89,'{tag}',11,{w:800,c:'c1',bg:'#ffffff',pad:'0 10px',rad:'0'}),
+    _S('seal',11,40,66), _T(32,38,'{subEn}',12,{w:800,c:'c1',ltr:1}), _T(76,34,'{nameEn}',26,{w:900,c:'c3',font:'mono',ltr:1}),
+    _T(76,52,'{address}',12,{c:'#222',w:800}), _T(88,16,'{cert1}',9,{c:'#333',w:700})]},
+  /* ═════ تصاميم هادئة وعصرية ═════ */
+  n1:{ name:'اللؤلؤي', group:'calm', base:'#fbfbfd', logo:'flask', pal:{c1:'#34495e',c2:'#7f9cb5',c3:'#e3e9ef'}, els:[
+    _B(0,0,100,4,'c3'), _B(30,90,40,1.6,'c2',{rad:'2px'}), _L(50,24,50), _T(50,52,'{nameAr}',30,{w:900,c:'c1'}), _T(50,69,'{subAr}',13,{w:700,c:'c2'}),
+    _T(62,83,'{address}',10,{c:'#666',ic:'pin',w:600}), _T(34,83,'{phone}',10,{c:'#666',ic:'phone',ltr:1,w:600}), _T(10,40,'{nameEn}',11,{w:800,c:'c1',ltr:1,ls:1}), _T(90,40,'{docName}',12,{w:800,c:'c1'})]},
+  n2:{ name:'النعناعي', group:'calm', base:'#ffffff', logo:'drop', pal:{c1:'#2a7f6f',c2:'#8fd1c1',c3:'#e8f6f2'}, els:[
+    _B(0,0,100,5,'grad:c2,c1'), _B(84,18,13,64,'c3',{rad:'50%'}), _L(90.5,50,70), _T(80,34,'{nameAr}',32,{w:900,c:'c1',al:'r'}), _T(80,56,'{subAr}',14,{w:700,c:'c2',al:'r'}),
+    _T(80,74,'{slogan}',11,{w:700,c:'#667',al:'r'}), _B(33,24,0.4,56,'c2'), _T(29,32,'{docName}',15,{w:900,c:'c1',al:'r'}), _T(29,50,'{docTitle}',10.5,{c:'#555',al:'r',w:600}), _T(29,66,'{phone}',10.5,{c:'#555',ic:'phone',al:'r',ltr:1})]},
+  n3:{ name:'الرملي', group:'calm', base:'#ffffff', logo:'tubes', pal:{c1:'#6b5a45',c2:'#c8a97e',c3:'#f5eee4'}, els:[
+    _B(62,0,38,100,'c3'), _B(62,0,0.8,100,'c2'), _L(94,50,70), _T(80,34,'{nameAr}',28,{w:900,c:'c1'}), _T(80,56,'{subAr}',13,{w:700,c:'c2'}), _T(80,74,'{nameEn}',10,{w:800,c:'c1',ls:1.5,ltr:1}),
+    _T(55,28,'{address}',11,{c:'#555',ic:'pin',al:'r',w:600}), _T(55,46,'{phone}',11,{c:'#555',ic:'phone',al:'r',ltr:1,w:600}), _T(55,64,'{email}',11,{c:'#555',ic:'mail',al:'r',ltr:1,w:600}), _T(55,82,'{hours}',11,{c:'#555',ic:'clock',al:'r',w:600})]},
+  n4:{ name:'السماوي المنحني', group:'calm', base:'#ffffff', logo:'flask', pal:{c1:'#1e6091',c2:'#76c1e6',c3:'#e6f4fb'}, els:[
+    _B(60,55,60,90,'c3',{rad:'50% 0 0 0'}), _B(0,94,100,2,'c2'), _L(10,48,76), _T(92,32,'{nameAr}',32,{w:900,c:'c1',al:'r'}), _T(92,54,'{subAr}',14,{w:700,c:'c2',al:'r'}),
+    _T(92,74,'{hours}',10.5,{c:'#456',al:'r',w:600}), _T(44,34,'{phone}',11,{c:'#345',ic:'phone',al:'r',ltr:1,w:600}), _T(44,52,'{email}',11,{c:'#345',ic:'mail',al:'r',ltr:1,w:600}), _T(44,70,'{address}',11,{c:'#345',ic:'pin',al:'r',w:600})]},
+  n5:{ name:'الرمادي الأنيق', group:'calm', base:'#ffffff', logo:'microscope', pal:{c1:'#2f3542',c2:'#747d8c',c3:'#dfe4ea'}, els:[
+    _B(0,0,100,7,'c1'), _B(6,93,88,0.8,'c2'), _T(50,36,'{nameAr}',32,{w:900,c:'c1'}), _T(50,58,'{subAr}',14,{w:700,c:'c2'}), _T(50,76,'{nameEn}',11,{w:800,c:'c1',ls:2,ltr:1}),
+    _T(13,40,'{docName}',13,{w:900,c:'c1'}), _T(13,56,'{docQual}',10,{c:'#555',w:600}), _T(87,40,'{doc2Name}',13,{w:900,c:'c1'}), _T(87,56,'{doc2Title}',10,{c:'#555',w:600}), _L(50,14,26,{hide:1})]},
+  n6:{ name:'الزيتوني', group:'calm', base:'#ffffff', logo:'molecule', pal:{c1:'#5b6b3a',c2:'#a3b18a',c3:'#f1f3ea'}, els:[
+    _B(40,14,56,46,'c3',{rad:'40px'}), _T(68,30,'{nameAr}',28,{w:900,c:'c1'}), _T(68,48,'{subAr}',13,{w:700,c:'c2'}), _L(12,40,70),
+    _T(88,78,'{phone}',10.5,{c:'#444',ic:'phone',al:'r',ltr:1,w:600}), _T(66,78,'{email}',10.5,{c:'#444',ic:'mail',al:'r',ltr:1,w:600}), _T(40,78,'{address}',10.5,{c:'#444',ic:'pin',al:'r',w:600}), _B(4,93,92,1.2,'c2')]},
+  n7:{ name:'البطاقات الهادئة', group:'calm', base:'#f6f8fa', logo:'pulse', pal:{c1:'#355c7d',c2:'#6c8ead',c3:'#ffffff'}, els:[
+    _B(52,12,45,76,'c3',{rad:'14px',shadow:1}), _B(3,12,45,76,'c3',{rad:'14px',shadow:1}), _L(90,50,56), _T(80,36,'{nameAr}',26,{w:900,c:'c1',al:'r'}), _T(80,56,'{subAr}',12.5,{w:700,c:'c2',al:'r'}), _T(80,72,'{nameEn}',9.5,{w:800,c:'c1',ltr:1,al:'r'}),
+    _T(44,28,'{phone}',10.5,{c:'#444',ic:'phone',al:'r',ltr:1,w:600}), _T(44,44,'{email}',10.5,{c:'#444',ic:'mail',al:'r',ltr:1,w:600}), _T(44,60,'{address}',10.5,{c:'#444',ic:'pin',al:'r',w:600}), _T(44,76,'{hours}',10.5,{c:'#444',ic:'clock',al:'r',w:600})]},
+  n8:{ name:'الخطوط المتوازية', group:'calm', base:'#ffffff', logo:'dna', pal:{c1:'#264653',c2:'#2a9d8f',c3:'#e9c46a'}, els:[
+    _B(0,86,100,1.6,'c1'), _B(0,90,100,1.6,'c2'), _B(0,94,100,1.6,'c3'), _L(9,44,76), _T(90,30,'{nameAr}',30,{w:900,c:'c1',al:'r'}), _T(90,52,'{subAr}',13,{w:700,c:'c2',al:'r'}),
+    _T(90,68,'{slogan}',10.5,{w:700,c:'#777',al:'r'}), _T(48,32,'{docName}',13,{w:900,c:'c1'}), _T(48,48,'{docTitle}',10,{c:'#555',w:600}), _T(48,64,'{phone}',10,{c:'#555',ic:'phone',ltr:1,w:600})]},
+  n9:{ name:'اللافندر', group:'calm', base:'#ffffff', logo:'flask', pal:{c1:'#5b4b8a',c2:'#a393d9',c3:'#efeaf9'}, els:[
+    _B(-6,-30,26,80,'c3',{rad:'50%'}), _B(82,55,26,80,'c3',{rad:'50%'}), _L(8,34,56), _T(72,32,'{nameAr}',30,{w:900,c:'c1'}), _T(72,53,'{subAr}',13,{w:700,c:'c2'}),
+    _T(72,70,'{address}',10,{c:'#555',w:600}), _T(28,56,'{docName}',13,{w:900,c:'c1'}), _T(28,71,'{docQual}',10,{c:'#555',w:600}), _T(28,85,'{phone}',10,{c:'#555',ic:'phone',ltr:1,w:600})]},
+  n10:{ name:'الأزرق الليلي', group:'calm', base:'#ffffff', logo:'microscope', pal:{c1:'#1b2a49',c2:'#4f7cac',c3:'#c0d6ea'}, els:[
+    _B(64,0,36,100,'c1',{clip:'polygon(8% 0,100% 0,100% 100%,0 100%)'}), _B(62,0,2,100,'c2',{clip:'polygon(70% 0,100% 0,30% 100%,0 100%)'}),
+    _L(93,34,50,{white:1}), _T(81,64,'{nameAr}',24,{w:900,c:'#fff'}), _T(81,82,'{subAr}',11,{w:700,c:'c3'}),
+    _T(58,30,'{docName}',14,{w:900,c:'c1',al:'r'}), _T(58,46,'{docTitle}',10,{c:'#555',al:'r',w:600}), _T(3,30,'{phone}',10.5,{c:'#444',ic:'phone',al:'l',ltr:1,w:600}),
+    _T(3,46,'{email}',10.5,{c:'#444',ic:'mail',al:'l',ltr:1,w:600}), _T(3,62,'{address}',10.5,{c:'#444',ic:'pin',al:'l',w:600}), _B(4,90,56,1.2,'c2')]}
+};
+var HDR_GROUPS = [
+  {id:'samples', name:'🧾 النماذج المرسلة (بمعلومات وهمية)', ids:['s1','s2','s3','s4','s5','s6','s7','s8']},
+  {id:'calm',    name:'🌿 تصاميم هادئة وعصرية',              ids:['n1','n2','n3','n4','n5','n6','n7','n8','n9','n10']}
+];
+function _hdrCurId(s){ var id=String((s&&s.hdrTpl)||''); return HDR_TPLS[id] ? id : 'n1'; }
+function _hdrTplOn(s){ return !!(s && s.hdrSrc==='tpl' && !s.blankHdr); }
+function _hdrH(s){ return (s && typeof s.hdrImgH==='number' && s.hdrImgH>=70 && s.hdrImgH<=230) ? s.hdrImgH : 170; }
+function _hdrEsc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _hdrColors(s, id){
+  id=id||_hdrCurId(s); var T=HDR_TPLS[id], cfg=((s&&s.hdrTplCfg)||{})[id]||{}, c=cfg.colors||{};
+  var ok=function(v,d){ return /^#[0-9a-f]{6}$/i.test(String(v||''))?v:d; };
+  return { c1:ok(c.c1,T.pal.c1), c2:ok(c.c2,T.pal.c2), c3:ok(c.c3,T.pal.c3) };
+}
+/* عناصر التصميم الفعلية = الأصلية + المنسوخة (مع معرّفاتها) */
+function _hdrElements(s, id){
+  var T=HDR_TPLS[id], cfg=((s&&s.hdrTplCfg)||{})[id]||{}, out=[];
+  T.els.forEach(function(e,i){ out.push({id:'e'+i, d:e, extra:false}); });
+  (cfg.extra||[]).forEach(function(x){
+    var m=/^e(\d+)$/.exec(x.from||''); var base=m?T.els[+m[1]]:null; if(!base) return;
+    out.push({id:x.id, d:Object.assign({}, base, {x:base.x+3, y:base.y+(base.t==='box'?0:8)}), extra:true, from:x.from});
+  });
+  return out;
+}
+function _hdrFill(v, C){
+  v=String(v||''); if(v.indexOf('grad:')===0){ var p=v.slice(5).split(','); return 'linear-gradient(135deg,'+_hdrCol(p[0],C)+','+_hdrCol(p[1]||p[0],C)+')'; }
+  return _hdrCol(v,C);
+}
+function _hdrCol(v,C){ return (v==='c1'||v==='c2'||v==='c3') ? C[v] : v; }
+function _hdrInfo(s){ var d=(s&&s.hdrTplData)||{}; var o={}; Object.keys(HDR_INFO_DEF).forEach(function(k){ o[k]=(d[k]!==undefined)?d[k]:HDR_INFO_DEF[k]; }); return o; }
+function _hdrFillTokens(txt, info){ return String(txt||'').replace(/\{(\w+)\}/g, function(m,k){ return info[k]!==undefined?info[k]:''; }); }
+function _hdrTplHTML(s, H, opts){
+  opts=opts||{};
+  var id=_hdrCurId(s), T=HDR_TPLS[id];
+  H = H || _hdrH(s);
+  var k=H/170, C=_hdrColors(s,id), cfg=((s.hdrTplCfg||{})[id])||{}, ov=cfg.ov||{}, info=_hdrInfo(s);
+  var html='<div class="hdr-tpl" style="position:relative;width:100%;height:'+H+'px;overflow:hidden;background:'+T.base+';direction:rtl;'
+    +'font-family:\'Cairo\',\'Tajawal\',\'Segoe UI\',Arial,sans-serif;line-height:1.2;-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box">';
+  _hdrElements(s,id).forEach(function(E){
+    var d=E.d, o=ov[E.id]||{};
+    if(o.hide===true || (o.hide!==false && d.hide)) return;
+    var x=(o.x!==undefined)?o.x:d.x, y=(o.y!==undefined)?o.y:d.y, sc=o.k||1;
+    var ed=opts.edit ? ' data-hel="'+E.id+'"' : '';
+    var edSt=opts.edit ? 'cursor:move;user-select:none;touch-action:none;'+(opts.sel===E.id?'outline:2px dashed #ff8c42;outline-offset:2px;':'') : '';
+    if(d.t==='box'){
+      var bw=d.bw*sc, bh=d.bh*sc;
+      html+='<div'+ed+' style="position:absolute;left:'+x+'%;top:'+y+'%;width:'+bw+'%;height:'+bh+'%;background:'+(o.c?o.c:_hdrFill(d.fill,C))+';'
+        +(d.rad?'border-radius:'+d.rad+';':'')+(d.clip?'clip-path:'+d.clip+';':'')+(d.op?'opacity:'+d.op+';':'')+(d.shadow?'box-shadow:0 2px 10px rgba(0,0,0,0.07);':'')+edSt+'"></div>';
+      return;
+    }
+    var tr=d.al==='r'?'translate(-100%,-50%)':(d.al==='l'?'translate(0,-50%)':'translate(-50%,-50%)');
+    var st='position:absolute;left:'+x+'%;top:'+y+'%;transform:'+tr+';white-space:nowrap;box-sizing:border-box;'+edSt;
+    var inner='';
+    if(d.t==='logo'){
+      var lh=Math.round(d.h*k*sc);
+      var custom=!!(s.hdrTplLogo && s.hdrTplLogoSrc!=='lib');
+      var lid=(s.hdrTplLogoSrc==='lib' && s.hdrTplLogoLib) ? s.hdrTplLogoLib : (d.logo||T.logo||'flask');
+      inner = custom ? '<img src="'+s.hdrTplLogo+'" style="height:'+lh+'px;width:auto;max-width:'+Math.round(lh*2.4)+'px;display:block;object-fit:contain">'
+                     : '<div style="height:'+lh+'px">'+_hdrDefLogo(C, !!d.white, lid)+'</div>';
+    } else if(d.t==='stamp'){
+      inner=_hdrStamp(d.kind, C, Math.round(d.h*k*sc), info.nameEn+' • '+(info.address.split('–')[0]||'').trim()+' •');
+    } else {
+      var txt=(o.txt!==undefined)?o.txt:_hdrFillTokens(d.txt, info);
+      if(!String(txt).trim()) return;
+      var fs=d.fs*k*sc, col=o.c||_hdrCol(d.c,C);
+      var ltr=d.ltr || /^[\x00-\x7F•\s]+$/.test(txt);
+      var fam=d.font==='serif'?"'Georgia','Times New Roman',serif":(d.font==='mono'?"'Courier New',monospace":(ltr?"'Poppins','Montserrat','Segoe UI',Arial,sans-serif":''));
+      st+='font-size:'+fs.toFixed(2)+'px;font-weight:'+(d.w||700)+';color:'+col+';'+(d.ls?'letter-spacing:'+(d.ls*k).toFixed(2)+'px;':'')+(fam?'font-family:'+fam+';':'')+(ltr?'direction:ltr;':'');
+      if(d.bg||o.bg) st+='background:'+(o.bg||_hdrFill(d.bg,C))+';padding:'+String(d.pad||'2px 10px').replace(/(\d+(?:\.\d+)?)px/g,function(m,n){return (n*k*sc).toFixed(1)+'px';})+';border-radius:'+(d.rad||'4px')+';';
+      var ic=d.ic?_hdrIcon(d.ic, Math.round(fs*1.25), col):'';
+      inner = ic ? '<span style="display:inline-flex;align-items:center;gap:'+(fs*0.45).toFixed(1)+'px;'+(ltr?'flex-direction:row;':'')+'">'+ic+'<span>'+_hdrEsc(txt)+'</span></span>' : _hdrEsc(txt);
+    }
+    html+='<div'+ed+' style="'+st+'">'+inner+'</div>';
+  });
+  return html+'</div>';
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   🎨 مصمّم رأس الورقة (الإصدار ٢) — تحكم كامل بكل عنصر
+   ══════════════════════════════════════════════════════════════════════ */
+/* ✂️ إزالة خلفية الشعار تلقائياً: لون الخلفية من الحواف + تعبئة من الأطراف + حواف ناعمة + قص الفراغ */
+function _hdrRemoveBg(cv, tol){
+  tol = tol || 38;
+  var ctx=cv.getContext('2d'), W=cv.width, H=cv.height, im=ctx.getImageData(0,0,W,H), d=im.data;
+  var px=function(x,y){ var i=(y*W+x)*4; return [d[i],d[i+1],d[i+2],d[i+3]]; };
+  var samples=[px(0,0),px(W-1,0),px(0,H-1),px(W-1,H-1),px(W>>1,0),px(W>>1,H-1),px(0,H>>1),px(W-1,H>>1)];
+  if(samples.every(function(p){ return p[3]<20; })) return cv;          // شفاف أصلاً
+  var bg=[0,0,0]; samples.forEach(function(p){ bg[0]+=p[0]; bg[1]+=p[1]; bg[2]+=p[2]; }); bg=bg.map(function(v){ return v/samples.length; });
+  var dist=function(i){ var r=d[i]-bg[0], g=d[i+1]-bg[1], b=d[i+2]-bg[2]; return Math.sqrt(r*r+g*g+b*b); };
+  var seen=new Uint8Array(W*H), q=[], push=function(x,y){ var p=y*W+x; if(seen[p]) return; if(dist(p*4)<=tol){ seen[p]=1; q.push(p); } };
+  for(var x=0;x<W;x++){ push(x,0); push(x,H-1); } for(var y=0;y<H;y++){ push(0,y); push(W-1,y); }
+  while(q.length){ var p=q.pop(), X=p%W, Y=(p/W)|0; d[p*4+3]=0;
+    if(X>0) push(X-1,Y); if(X<W-1) push(X+1,Y); if(Y>0) push(X,Y-1); if(Y<H-1) push(X,Y+1); }
+  /* حواف ناعمة: البكسلات المجاورة للمحذوف والقريبة من لون الخلفية تصبح شبه شفافة */
+  for(var yy=1;yy<H-1;yy++) for(var xx=1;xx<W-1;xx++){ var pp=yy*W+xx; if(seen[pp]) continue;
+    if(seen[pp-1]||seen[pp+1]||seen[pp-W]||seen[pp+W]){ var ds=dist(pp*4); if(ds<tol*2.2) d[pp*4+3]=Math.round(d[pp*4+3]*Math.min(1,(ds-tol*0.6)/(tol*1.6))); } }
+  ctx.putImageData(im,0,0);
+  /* قص الفراغ الشفاف */
+  var minX=W,minY=H,maxX=-1,maxY=-1;
+  for(var y2=0;y2<H;y2++) for(var x2=0;x2<W;x2++){ if(d[(y2*W+x2)*4+3]>16){ if(x2<minX)minX=x2; if(x2>maxX)maxX=x2; if(y2<minY)minY=y2; if(y2>maxY)maxY=y2; } }
+  if(maxX<0) return cv;
+  var out=document.createElement('canvas'); out.width=maxX-minX+1; out.height=maxY-minY+1;
+  out.getContext('2d').drawImage(cv,minX,minY,out.width,out.height,0,0,out.width,out.height);
+  return out;
+}
+var HdrUI = (function(){
+  var sel=null, drag=null, saveT=null, openGrp=null, openInfo='🏷️ المختبر';
+  function $(id){ return document.getElementById(id); }
+  function curId(){ return _hdrCurId(settings); }
+  function cfg(id){ id=id||curId(); if(!settings.hdrTplCfg) settings.hdrTplCfg={}; if(!settings.hdrTplCfg[id]||typeof settings.hdrTplCfg[id]!=='object') settings.hdrTplCfg[id]={}; return settings.hdrTplCfg[id]; }
+  function ov(e){ var c=cfg(); if(!c.ov) c.ov={}; if(!c.ov[e]) c.ov[e]={}; return c.ov[e]; }
+  function H(){ var i=$('st-hdr-img-h'); var v=i?parseInt(i.value,10):NaN; return (v>=70&&v<=230)?v:_hdrH(settings); }
+  function persist(){ if(saveT) clearTimeout(saveT); saveT=setTimeout(function(){ try{ save('settings',settings); }catch(e){} },250); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function scaledBox(inner, h, boxW){
+    var sc=Math.min(1,(boxW||600)/794);
+    return { sc:sc, html:'<div style="width:'+Math.round(794*sc)+'px;height:'+Math.round(h*sc)+'px;overflow:hidden;margin:0 auto;position:relative">'
+      +'<div style="width:794px;transform:scale('+sc+');transform-origin:top right;position:absolute;top:0;right:0">'+inner+'</div></div>' };
+  }
+  function elList(){ return _hdrElements(settings, curId()); }
+  function elById(e){ var L=elList(); for(var i=0;i<L.length;i++) if(L[i].id===e) return L[i]; return null; }
+  function elName(E){
+    var d=E.d, info=_hdrInfo(settings), o=(cfg().ov||{})[E.id]||{};
+    if(d.t==='logo') return '🖼️ الشعار'+(E.extra?' (نسخة)':'');
+    if(d.t==='stamp') return '🏅 ختم'+(E.extra?' (نسخة)':'');
+    if(d.t==='box') return '⬛ شكل'+(E.extra?' (نسخة)':'');
+    var t=(o.txt!==undefined)?o.txt:_hdrFillTokens(d.txt,info); t=String(t).trim();
+    return '🔤 '+(t.length>16?t.slice(0,16)+'…':(t||'نص'))+(E.extra?' (نسخة)':'');
+  }
+  function toggleGrp(g){ var bd=$('hfg-body-'+g), ar=$('hfg-arr-'+g); if(!bd) return; var open=bd.style.display==='none'; bd.style.display=open?'block':'none'; if(ar) ar.textContent=open?'▲':'▼'; if(open && g==='hdr') render(); }
+  function setSrc(src){ settings.hdrSrc=(src==='tpl')?'tpl':'img'; if(settings.hdrSrc==='tpl' && !HDR_TPLS[String(settings.hdrTpl||'')]) settings.hdrTpl='n1'; save('settings',settings); render();
+    try{ showNotif('تم', settings.hdrSrc==='tpl'?'🎨 رأس التقارير: تصميم جاهز':'🖼️ رأس التقارير: صورة','success'); }catch(e){} }
+  /* ① التصاميم في قوائم منسدلة */
+  function renderGroups(){
+    var box=$('hdr-tpl-groups'); if(!box) return; var cur=curId(); var html='';
+    HDR_GROUPS.forEach(function(g){
+      var has=g.ids.indexOf(cur)>-1; if(openGrp===null && has) openGrp=g.id; var open=(openGrp===g.id);
+      html+='<div style="border:1px solid var(--border);border-radius:11px;margin-bottom:8px;overflow:hidden">'
+        +'<div onclick="HdrUI.grp(\''+g.id+'\')" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;cursor:pointer;background:'+(has?'rgba(0,212,255,0.08)':'rgba(255,255,255,0.02)')+'">'
+        +'<span style="font-size:12.5px;font-weight:800">'+g.name+' <span style="color:var(--text2);font-weight:600">('+g.ids.length+')</span>'+(has?' <span style="color:var(--primary)">• المختار هنا</span>':'')+'</span><span style="font-size:12px;color:var(--text2)">'+(open?'▲':'▼')+'</span></div>';
+      if(open){
+        html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px;padding:8px">';
+        g.ids.forEach(function(id){ var on=(id===cur); var sb=scaledBox(_hdrTplHTML(Object.assign({},settings,{hdrTpl:id}),170,{}),170,290);
+          html+='<div onclick="HdrUI.pick(\''+id+'\')" style="cursor:pointer;border:2px solid '+(on?'var(--primary)':'var(--border)')+';border-radius:10px;padding:6px;background:'+(on?'rgba(0,212,255,0.08)':'transparent')+'">'
+            +'<div style="font-size:11.5px;font-weight:800;margin-bottom:5px;color:'+(on?'var(--primary)':'var(--text2)')+'">'+(on?'✓ ':'')+HDR_TPLS[id].name+'</div>'
+            +'<div style="border-radius:6px;overflow:hidden;pointer-events:none;background:#fff">'+sb.html+'</div></div>'; });
+        html+='</div>';
+      }
+      html+='</div>';
+    });
+    box.innerHTML=html;
+  }
+  function grp(g){ openGrp=(openGrp===g)?'':g; renderGroups(); }
+  function pick(id){ settings.hdrTpl=String(id); sel=null; save('settings',settings); render(); }
+  /* ② المعلومات المشتركة + الشعار */
+  function renderInfo(){
+    var box=$('hdr-info-box'); if(!box) return; var info=_hdrInfo(settings); var html='';
+    HDR_INFO_FIELDS.forEach(function(g){
+      var open=(openInfo===g[0]);
+      html+='<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:6px;overflow:hidden">'
+        +'<div onclick="HdrUI.infoGrp(\''+g[0]+'\')" style="display:flex;justify-content:space-between;padding:8px 12px;cursor:pointer;background:rgba(255,255,255,0.03);font-size:12px;font-weight:800"><span>'+g[0]+'</span><span style="color:var(--text2)">'+(open?'▲':'▼')+'</span></div>';
+      if(open){ html+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;padding:10px">';
+        g[1].forEach(function(f){ var ltr=/^(nameEn|subEn|email|docEmail|phone|phone2)$/.test(f[0]);
+          html+='<div class="fg" style="margin:0"><label class="fl" style="font-size:10.5px">'+f[1]+'</label><input class="fc" id="hdi-'+f[0]+'" value="'+esc(info[f[0]])+'" '+(ltr?'dir="ltr" lang="en"':'lang="ar"')+' oninput="HdrUI.info(\''+f[0]+'\',this.value)" style="font-size:12px;padding:6px 9px"></div>'; });
+        html+='</div>'; }
+      html+='</div>';
+    });
+    box.innerHTML=html;
+    renderLogoLib();
+  }
+  function infoGrp(g){ openInfo=(openInfo===g)?'':g; renderInfo(); }
+  function info(k,v){ if(!settings.hdrTplData) settings.hdrTplData={}; settings.hdrTplData[k]=v; persist(); renderEditor(); if(saveT){} clearTimeout(HdrUI._gt); HdrUI._gt=setTimeout(renderGroups,500); }
+  function renderLogoLib(){
+    var box=$('hdt-logo-lib'); if(!box) return;
+    var C=_hdrColors(settings,curId()), custom=!!(settings.hdrTplLogo && settings.hdrTplLogoSrc!=='lib'), cur=settings.hdrTplLogoSrc==='lib'?(settings.hdrTplLogoLib||''):'';
+    var cell=function(on, inner, click, label){ return '<div onclick="'+click+'" style="cursor:pointer;width:72px;border:2px solid '+(on?'var(--primary)':'var(--border)')+';border-radius:10px;padding:5px 4px 3px;text-align:center;background:'+(on?'rgba(0,212,255,0.10)':'#fff')+'">'
+      +'<div style="height:40px;display:flex;align-items:center;justify-content:center;background:repeating-conic-gradient(#f0f0f0 0 25%,#fff 0 50%) 0 0/10px 10px;border-radius:6px">'+inner+'</div>'
+      +'<div style="font-size:10px;font-weight:800;color:'+(on?'var(--primary)':'#555')+';margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(on?'✓ ':'')+label+'</div></div>'; };
+    var html=cell(!custom && !cur, '<span style="font-size:10px;color:#777;font-weight:800">حسب التصميم</span>', "HdrUI.logoLib('')", 'تلقائي');
+    html+=HDR_LOGO_IDS.map(function(id){ return cell(!custom && cur===id, '<div style="height:36px">'+_hdrDefLogo(C,false,id)+'</div>', "HdrUI.logoLib('"+id+"')", HDR_LOGOS[id].name); }).join('');
+    html+=cell(custom, settings.hdrTplLogo?'<img src="'+settings.hdrTplLogo+'" style="max-height:36px;max-width:62px;object-fit:contain">':'<span style="font-size:22px">📁</span>', 'HdrUI.logoUseCustom()', settings.hdrTplLogo?'شعاري':'من الحاسبة');
+    html+='<div style="display:flex;flex-direction:column;gap:4px;justify-content:center">'
+      +'<button class="btn btn-s btn-sm" onclick="document.getElementById(\'hdt-logo\').click()" style="font-size:11px">📁 رفع شعار من الحاسبة</button>'
+      +'<label style="font-size:10.5px;display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="hdt-logo-rmbg" checked> ✂️ إزالة الخلفية تلقائياً</label>'
+      +(settings.hdrTplLogo?'<button class="btn btn-d btn-sm" onclick="HdrUI.logoDel()" style="font-size:11px">🗑️ حذف الشعار المرفوع</button>':'')+'</div>';
+    box.innerHTML=html;
+  }
+  function logoLib(id){ settings.hdrTplLogoSrc='lib'; settings.hdrTplLogoLib=id; save('settings',settings); renderLogoLib(); renderEditor(); renderGroups(); }
+  function logoUseCustom(){ if(settings.hdrTplLogo){ settings.hdrTplLogoSrc='custom'; save('settings',settings); renderLogoLib(); renderEditor(); renderGroups(); } else { var f=$('hdt-logo'); if(f) f.click(); } }
+  function logo(input){
+    var f=input&&input.files&&input.files[0]; if(!f) return;
+    var rm=!!($('hdt-logo-rmbg')||{checked:true}).checked;
+    var rd=new FileReader();
+    rd.onload=function(){ var img=new Image();
+      img.onload=async function(){
+        var mh=420, sc=Math.min(1, mh/Math.max(img.height,1)), cv=document.createElement('canvas');
+        cv.width=Math.max(1,Math.round(img.width*sc)); cv.height=Math.max(1,Math.round(img.height*sc));
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        if(rm){ try{ cv=_hdrRemoveBg(cv, 38); }catch(e){ console.warn('[logo bg]', e); } }
+        var url=cv.toDataURL('image/png');
+        settings.hdrTplLogo=url; settings.hdrTplLogoSrc='custom'; save('settings',settings);
+        try{ await setBig('hdrTplLogo', url); }catch(e){}
+        input.value=''; renderLogoLib(); renderEditor(); renderGroups();
+        try{ showNotif('تم', rm?'🖼️ تم حفظ الشعار بخلفية شفافة':'🖼️ تم حفظ الشعار','success'); }catch(e){}
+      };
+      img.src=rd.result; };
+    rd.readAsDataURL(f);
+  }
+  function logoDel(){ settings.hdrTplLogo=''; settings.hdrTplLogoSrc='lib'; try{ delBig('hdrTplLogo').catch(function(){}); }catch(e){} save('settings',settings); renderLogoLib(); renderEditor(); renderGroups(); }
+  /* ③ المحرّر: سحب + تحديد + أدوات */
+  function renderEditor(){
+    var ed=$('hdr-tpl-editor'); if(!ed) return;
+    var h=H(); var sb=scaledBox(_hdrTplHTML(settings, h, {edit:true, sel:sel}), h, Math.max(320, ed.clientWidth||640));
+    ed.innerHTML=sb.html; ed._sc=sb.sc; ed._h=h;
+    ed.querySelectorAll('[data-hel]').forEach(function(el){ el.addEventListener('pointerdown', down); });
+    renderChips(); renderTools();
+  }
+  function down(ev){
+    var el=ev.currentTarget, e=el.getAttribute('data-hel'), ed=$('hdr-tpl-editor'), E=elById(e); if(!E) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var o=(cfg().ov||{})[e]||{};
+    drag={e:e, el:el, sx:ev.clientX, sy:ev.clientY, x0:(o.x!==undefined?o.x:E.d.x), y0:(o.y!==undefined?o.y:E.d.y), sc:ed._sc||1, h:ed._h||170, moved:false};
+    try{ el.setPointerCapture(ev.pointerId); }catch(_){}
+    el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  }
+  function move(ev){ if(!drag) return; var dx=(ev.clientX-drag.sx)/drag.sc, dy=(ev.clientY-drag.sy)/drag.sc; if(Math.abs(dx)+Math.abs(dy)>2) drag.moved=true;
+    var x=Math.max(-20,Math.min(110, drag.x0 + dx/794*100)), y=Math.max(-30,Math.min(120, drag.y0 + dy/drag.h*100)); drag.el.style.left=x+'%'; drag.el.style.top=y+'%'; drag.nx=x; drag.ny=y; }
+  function up(){ if(!drag) return; var d=drag; drag=null;
+    d.el.removeEventListener('pointermove', move); d.el.removeEventListener('pointerup', up); d.el.removeEventListener('pointercancel', up);
+    if(d.moved && d.nx!==undefined){ var o=ov(d.e); o.x=Math.round(d.nx*10)/10; o.y=Math.round(d.ny*10)/10; save('settings',settings); }
+    sel=d.e; renderEditor(); clearTimeout(HdrUI._gt); HdrUI._gt=setTimeout(renderGroups,300); }
+  function isHidden(E){ var o=(cfg().ov||{})[E.id]||{}; return o.hide===true || (o.hide!==false && !!E.d.hide); }
+  function renderChips(){
+    var box=$('hdr-tpl-chips'); if(!box) return;
+    box.innerHTML=elList().map(function(E){ var hid=isHidden(E), on=(sel===E.id);
+      return '<span style="display:inline-flex;align-items:center;gap:4px;border:1.5px solid '+(on?'#ff8c42':'var(--border)')+';border-radius:20px;padding:2px 3px 2px 9px;font-size:11px;font-weight:700;background:'+(on?'rgba(255,140,66,0.12)':'rgba(255,255,255,0.03)')+';opacity:'+(hid?0.5:1)+'">'
+        +'<span style="cursor:pointer;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" onclick="HdrUI.select(\''+E.id+'\')">'+esc(elName(E))+'</span>'
+        +'<button onclick="HdrUI.toggleHide(\''+E.id+'\')" title="'+(hid?'إظهار':'إخفاء')+'" style="border:none;background:'+(hid?'rgba(255,255,255,0.08)':'rgba(0,196,106,0.2)')+';color:var(--text);border-radius:12px;padding:1px 6px;cursor:pointer;font-size:10.5px">'+(hid?'🚫':'👁️')+'</button></span>';
+    }).join('');
+  }
+  function renderTools(){
+    var box=$('hdr-tpl-tools'); if(!box) return;
+    var C=_hdrColors(settings,curId());
+    ['c1','c2','c3'].forEach(function(k){ var el=$('hdt-'+k); if(el && document.activeElement!==el) el.value=C[k]; });
+    var E=sel?elById(sel):null;
+    if(!E){ box.innerHTML='<div style="font-size:11px;color:var(--text2)">👆 اضغط على أي عنصر في الرأس (أو على اسمه أعلاه) للتحكم به: النص، الحجم، اللون، الخلفية، النسخ، الإخفاء</div>'; return; }
+    var d=E.d, o=(cfg().ov||{})[E.id]||{}, sz=Math.round((o.k||1)*100), info=_hdrInfo(settings);
+    var hex=function(v){ v=_hdrCol(v,C); return /^#[0-9a-f]{6}$/i.test(v)?v:'#333333'; };
+    var colv=o.c || (d.t==='box' ? hex(String(d.fill||'').replace(/^grad:([^,]+).*/,'$1')) : hex(d.c||'#333333'));
+    var h='<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">'
+      +'<b style="font-size:12px;color:#ff8c42">✥ '+esc(elName(E))+'</b>';
+    if(d.t==='text'){
+      var txt=(o.txt!==undefined)?o.txt:_hdrFillTokens(d.txt,info);
+      h+='<div style="flex:1 1 100%;display:flex;gap:6px;align-items:center"><input class="fc" id="hdt-eltxt" value="'+esc(txt)+'" oninput="HdrUI.elText(this.value)" style="font-size:12px;padding:6px 9px;flex:1">'
+        +(o.txt!==undefined?'<button class="btn btn-s btn-sm" onclick="HdrUI.elText(null)" title="إرجاع النص ليتبع المعلومات المشتركة">🔗 ربط بالمعلومات</button>':'')+'</div>';
+    }
+    h+='<label style="display:flex;align-items:center;gap:6px;font-size:11px;flex:1;min-width:190px">🔠 الحجم <input type="range" min="30" max="250" step="5" value="'+sz+'" oninput="HdrUI.size(this.value)" style="flex:1"><b id="hdt-sz-lbl">'+sz+'%</b></label>';
+    if(d.t!=='logo' && d.t!=='stamp') h+='<label style="display:flex;align-items:center;gap:5px;font-size:11px">🎨 '+(d.t==='box'?'اللون':'لون النص')+' <input type="color" value="'+colv+'" oninput="HdrUI.elColor(this.value)" style="width:40px;height:26px;border:none;background:none;cursor:pointer"></label>';
+    if(d.t==='text') h+='<label style="display:flex;align-items:center;gap:5px;font-size:11px">🟦 الخلفية <input type="color" value="'+(o.bg||(d.bg?hex(String(d.bg).replace(/^grad:([^,]+).*/,'$1')):'#ffffff'))+'" oninput="HdrUI.elBg(this.value)" style="width:40px;height:26px;border:none;background:none;cursor:pointer"></label>'
+        +(o.bg||d.bg?'<button class="btn btn-s btn-sm" onclick="HdrUI.elBg(\'transparent\')" title="بدون خلفية">⌀</button>':'');
+    h+='<span style="display:inline-flex;gap:3px"><button class="btn btn-s btn-sm" onclick="HdrUI.nudge(0,-1)">⬆️</button><button class="btn btn-s btn-sm" onclick="HdrUI.nudge(0,1)">⬇️</button><button class="btn btn-s btn-sm" onclick="HdrUI.nudge(1,0)">➡️</button><button class="btn btn-s btn-sm" onclick="HdrUI.nudge(-1,0)">⬅️</button></span>'
+      +'<button class="btn btn-p btn-sm" onclick="HdrUI.dup()" title="تكرار هذا العنصر">📑 نسخ العنصر</button>'
+      +(E.extra?'<button class="btn btn-d btn-sm" onclick="HdrUI.delEl()">🗑️ حذف النسخة</button>':'<button class="btn btn-s btn-sm" onclick="HdrUI.toggleHide(\''+E.id+'\')">'+(isHidden(E)?'👁️ إظهار':'🚫 إخفاء')+'</button>')
+      +'<button class="btn btn-w btn-sm" onclick="HdrUI.resetEl()">↺ العنصر</button></div>';
+    box.innerHTML=h;
+  }
+  function refreshQuick(){ var ed=$('hdr-tpl-editor'); if(!ed) return; var h=ed._h||H(); var sb=scaledBox(_hdrTplHTML(settings,h,{edit:true,sel:sel}),h,Math.max(320,ed.clientWidth||640)); ed.innerHTML=sb.html; ed._sc=sb.sc; ed.querySelectorAll('[data-hel]').forEach(function(el){ el.addEventListener('pointerdown', down); }); }
+  function select(e){ sel=e; renderEditor(); }
+  function toggleHide(e){ var E=elById(e); if(!E) return; ov(e).hide=!isHidden(E); save('settings',settings); renderEditor(); renderGroups(); }
+  function size(v){ if(!sel) return; ov(sel).k=Math.round(v)/100; var l=$('hdt-sz-lbl'); if(l) l.textContent=Math.round(v)+'%'; persist(); refreshQuick(); }
+  function elColor(v){ if(!sel) return; ov(sel).c=v; persist(); refreshQuick(); renderChips(); }
+  function elBg(v){ if(!sel) return; ov(sel).bg=v; persist(); refreshQuick(); if(v==='transparent') renderTools(); }
+  function elText(v){ if(!sel) return; var o=ov(sel); if(v===null){ delete o.txt; save('settings',settings); renderEditor(); return; } o.txt=v; persist(); refreshQuick(); renderChips(); }
+  function nudge(dx,dy){ if(!sel) return; var E=elById(sel); if(!E) return; var o=ov(sel); var x=(o.x!==undefined?o.x:E.d.x), y=(o.y!==undefined?o.y:E.d.y);
+    o.x=Math.round((x+dx*0.5)*10)/10; o.y=Math.round((y+dy)*10)/10; persist(); renderEditor(); }
+  function dup(){ if(!sel) return; var E=elById(sel); if(!E) return; var c=cfg(); if(!c.extra) c.extra=[];
+    var nid='x'+Date.now().toString(36); c.extra.push({id:nid, from:E.extra?E.from:E.id});
+    var src=(c.ov||{})[sel]||{}; var o=ov(nid); ['k','c','bg','txt'].forEach(function(k){ if(src[k]!==undefined) o[k]=src[k]; });
+    var bx=(src.x!==undefined?src.x:E.d.x), by=(src.y!==undefined?src.y:E.d.y); o.x=Math.round((bx+3)*10)/10; o.y=Math.round((by+(E.d.t==='box'?4:10))*10)/10;
+    sel=nid; save('settings',settings); renderEditor(); renderGroups(); try{ showNotif('تم','📑 نُسخ العنصر — اسحبه إلى مكانه','success'); }catch(e){} }
+  function delEl(){ if(!sel) return; var c=cfg(); c.extra=(c.extra||[]).filter(function(x){ return x.id!==sel; }); if(c.ov) delete c.ov[sel]; sel=null; save('settings',settings); renderEditor(); renderGroups(); }
+  function resetEl(){ if(!sel) return; var c=cfg(); if(c.ov){ var keep=null; delete c.ov[sel]; } save('settings',settings); renderEditor(); renderGroups(); }
+  function color(k,v){ var c=cfg(); if(!c.colors) c.colors={}; c.colors[k]=v; persist(); refreshQuick(); renderLogoLib(); clearTimeout(HdrUI._gt); HdrUI._gt=setTimeout(renderGroups,400); }
+  function resetTpl(){ if(!confirm('إرجاع هذا التصميم لوضعه الأصلي (المواضع والأحجام والألوان والنصوص والنسخ)؟')) return; settings.hdrTplCfg[curId()]={}; sel=null; save('settings',settings); render(); }
+  function matchFooter(){ var C=_hdrColors(settings,curId()); settings.ftrC1=C.c1; settings.ftrC2=C.c2; settings.ftrTc=C.c1; if(String(settings.ftrTpl||'0')==='0') settings.ftrTpl='1';
+    save('settings',settings); try{ if(typeof FtrUI!=='undefined') FtrUI.render(); }catch(e){} try{ showNotif('تم','🔗 طُبّقت ألوان الرأس على الذيل النصي','success'); }catch(e){} }
+  function render(){
+    var tpl=settings.hdrSrc==='tpl';
+    var a=$('hdr-src-img'), b2=$('hdr-src-tpl'), ib=$('hdr-src-img-btn'), tb=$('hdr-src-tpl-btn');
+    if(a) a.style.display=tpl?'none':'block'; if(b2) b2.style.display=tpl?'block':'none';
+    if(ib){ ib.style.background=tpl?'transparent':'var(--primary)'; ib.style.color=tpl?'var(--text2)':'#000'; }
+    if(tb){ tb.style.background=tpl?'var(--primary)':'transparent'; tb.style.color=tpl?'#000':'var(--text2)'; }
+    if(!tpl) return;
+    renderGroups(); renderInfo(); renderEditor();
+  }
+  return { render:render, setSrc:setSrc, toggleGrp:toggleGrp, grp:grp, pick:pick, info:info, infoGrp:infoGrp, select:select, toggleHide:toggleHide,
+           size:size, elColor:elColor, elBg:elBg, elText:elText, nudge:nudge, dup:dup, delEl:delEl, resetEl:resetEl, color:color, resetTpl:resetTpl,
+           matchFooter:matchFooter, logo:logo, logoDel:logoDel, logoLib:logoLib, logoUseCustom:logoUseCustom };
+})();
 
 function buildTextFooter(s){
   const h=s.hdrText||{};
@@ -30030,6 +30563,7 @@ function _buildCultureHTML(cid){
   let hdrHTML='';
   if(s.blankHdr) hdrHTML=blankHdrHTML(s);
   else if(s.hdrMode==='text'&&s.hdrText) hdrHTML=buildTextHeader(s);
+  else if(typeof _hdrTplOn==='function' && _hdrTplOn(s)) hdrHTML=_hdrTplHTML(s);   /* 🎨 تصميم رأس جاهز */
   else if(s.headerImg) hdrHTML=`<img src="${s.headerImg}" style="width:100%;height:${(typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170}px;display:block;object-fit:fill">`;
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-family:Arial,sans-serif;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
 
@@ -31121,6 +31655,7 @@ function _buildUAPrintHTML(r){
   let hdrHTML='';
   if(s.blankHdr) hdrHTML=blankHdrHTML(s);
   else if(s.hdrMode==='text'&&s.hdrText) hdrHTML=buildTextHeader(s);
+  else if(typeof _hdrTplOn==='function' && _hdrTplOn(s)) hdrHTML=_hdrTplHTML(s);   /* 🎨 تصميم رأس جاهز */
   else if(s.headerImg) hdrHTML=`<img src="${s.headerImg}" style="width:100%;height:${(typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170}px;display:block;object-fit:fill">`;
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
@@ -31137,7 +31672,7 @@ function _buildUAPrintHTML(r){
   // ⭐ ضمان ورقة واحدة: تقدير ارتفاع المحتوى — عند التجاوز نقلّص الحشو فقط (الخط كما هو)
   const _uaFtrH2 = (typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50));
   const _uaPageAvail = (typeof _spPageAvailPx==='function') ? _spPageAvailPx(_uaFtrH2) : 950;
-  const _uaHdrH2 = (s.headerImg && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
+  const _uaHdrH2 = ((s.headerImg || (typeof _hdrTplOn==='function' && _hdrTplOn(s))) && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
       ? ((typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170) : 165;
   let _uaRowsN=0,_uaSecsN=0;
   Object.values(UA_FIELDS).forEach(sec=>{
@@ -31718,6 +32253,7 @@ function _buildStoolPrintHTML(r){
   let hdrHTML='';
   if(s.blankHdr) hdrHTML=blankHdrHTML(s);
   else if(s.hdrMode==='text'&&s.hdrText) hdrHTML=buildTextHeader(s);
+  else if(typeof _hdrTplOn==='function' && _hdrTplOn(s)) hdrHTML=_hdrTplHTML(s);   /* 🎨 تصميم رأس جاهز */
   else if(s.headerImg) hdrHTML=`<img src="${s.headerImg}" style="width:100%;height:${(typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170}px;display:block;object-fit:fill">`;
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
@@ -31801,7 +32337,7 @@ function _buildStoolPrintHTML(r){
   // ⭐ ضمان ورقة واحدة: تقدير الارتفاع — عند التجاوز نقلّص الحشو فقط (الخط كما هو)
   const _stFtrH2 = (typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50));
   const _stPageAvail = (typeof _spPageAvailPx==='function') ? _spPageAvailPx(_stFtrH2) : 950;
-  const _stHdrH2 = (s.headerImg && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
+  const _stHdrH2 = ((s.headerImg || (typeof _hdrTplOn==='function' && _hdrTplOn(s))) && !(s.hdrMode==='text'&&s.hdrText) && !s.blankHdr)
       ? ((typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170) : 165;
   let _stRowsN=0,_stSecsN=0;
   Object.values(STOOL_FIELDS).forEach(sec=>{
@@ -33571,6 +34107,8 @@ function _buildCBCReportHTML_core(cbcParams, pt, req, templateId){
     hdr='<div style="width:100%;height:'+_hdrUserH+'px;display:block;background:#fff;line-height:0">&nbsp;</div>';
   } else if(settings.hdrMode==='text'){
     hdr=typeof buildTextHeader==='function'?buildTextHeader(settings):'';
+  } else if(typeof _hdrTplOn==='function' && _hdrTplOn(settings)){
+    hdr='<div style="width:100%;line-height:normal">'+_hdrTplHTML(settings,_hdrUserH)+'</div>';   /* 🎨 تصميم رأس جاهز */
   } else if(settings.headerImg){
     hdr='<div style="width:100%;line-height:0"><img src="'+settings.headerImg+'" style="width:100%;height:'+_hdrUserH+'px;display:block;object-fit:fill"></div>';
   } else {
@@ -35749,6 +36287,7 @@ function _buildSemenPrintHTML(r, mode){
   let hdrHTML='';
   if(s.blankHdr) hdrHTML=blankHdrHTML(s);
   else if(s.hdrMode==='text'&&s.hdrText) hdrHTML=buildTextHeader(s);
+  else if(typeof _hdrTplOn==='function' && _hdrTplOn(s)) hdrHTML=_hdrTplHTML(s);   /* 🎨 تصميم رأس جاهز */
   else if(s.headerImg) hdrHTML=`<img src="${s.headerImg}" style="width:100%;height:${(typeof s.hdrImgH==='number'&&s.hdrImgH>=70&&s.hdrImgH<=230)?s.hdrImgH:170}px;display:block;object-fit:fill">`;
   else hdrHTML=`<div style="background:${color};color:#fff;padding:8px 18px;font-size:16px;font-weight:900">${s.name||'Medical Laboratory'}</div>`;
   let ftrHTML='';
