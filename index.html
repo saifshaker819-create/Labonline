@@ -14766,6 +14766,7 @@ window.rrOpen = function(triggerBtn){
         { cls:'c-print',  icon:'🖨️', lbl:'طباعة',  fn: function(){ goToPrint(rid); } },
         { cls:'c-edit',   icon:'✏️', lbl:'تعديل',   fn: function(){ goToResult(rid); } },
         { cls:'c-label',  icon:'🏷️', lbl:'ملصق',    fn: function(){ openLabelCopiesPopup(rid); } },
+        { cls:'c-call',   icon:'📣', lbl:'نداء',    fn: function(){ wsManualCall(rid); } },
         { cls:'c-delete', icon:'🗑️', lbl:'حذف',     fn: function(){ deleteReq(rid); } }
       ]
     : [
@@ -38335,7 +38336,7 @@ function openWaitScreen(mode){
   +'if(e.data.type === "WQ_CALL"){'
   +'try{'
   /* منع النداء المكرر: إن سبق نداؤه ضمن قائمة الجاهزين فلا نُعيده */
-  +'if(e.data.id && !_announcedIds[e.data.id]){'
+  +'if(e.data.id && (e.data.force || !_announcedIds[e.data.id])){'
   +'_announcedIds[e.data.id] = true;'
   +'if(_speakEnabled) _enqueueSpeak({ id: e.data.id, name: e.data.name || "" });'
   +'}'
@@ -38637,6 +38638,39 @@ function _wsMarkPrinted(reqId, src){
     if(typeof updateWaitScreen === 'function') updateWaitScreen();
     _wsCallPatient(reqId);
   }catch(e){}
+}
+
+/* 📣 نداء يدوي للمريض (قسم الطلبات ← الزر الدائري ← «نداء»)
+   يعمل فقط إن كانت إحدى شاشات الانتظار مفتوحة (النافذة/التلفزيون أو البث اللاسلكي)،
+   ويُنادي تماماً كما عند «حفظ وطباعة»: يصبح المريض «جاهز» ويُنادى —
+   ويمكن إعادة النداء لنفس المريض أكثر من مرة. */
+function wsManualCall(reqId){
+  try{
+    var r = requests.find(function(x){ return x.id === reqId; });
+    if(!r){ showNotif('تنبيه','الطلب غير موجود','error'); return; }
+    var win = window._waitScreenWin;
+    var popupOpen = !!(win && !win.closed);
+    var castOn = !!(window._tvCastActive && typeof _lanSendRaw === 'function');
+    if(!popupOpen && !castOn){
+      showNotif('تنبيه','لا توجد شاشة انتظار مفتوحة — افتح شاشة الانتظار أو البث للتلفزيون أولاً','warning'); return;
+    }
+    if(typeof _wsIsAutoDeviceReq==='function' && _wsIsAutoDeviceReq(r)){
+      showNotif('تنبيه','هذا طلب تلقائي من الجهاز ولا يظهر على شاشة الانتظار','warning'); return;
+    }
+    var ws = (settings && settings.waitScreen) || {};
+    if(ws.speakEnabled === false){
+      showNotif('تنبيه','النداء معطّل من إعدادات شاشة الانتظار','warning'); return;
+    }
+    var name = String(r.patientName || '').trim();
+    if(!name){ showNotif('تنبيه','لا يوجد اسم للمريض','warning'); return; }
+    /* نفس أثر «حفظ وطباعة»: المريض جاهز */
+    r.wsPrinted = true; r.wsDeviceHold = false; r._updatedAt = Date.now();
+    saveOne('requests', requests, r);
+    if(typeof updateWaitScreen === 'function') updateWaitScreen();
+    if(popupOpen){ try{ win.postMessage({ type:'WQ_CALL', id: r.id, name: name, force: true }, '*'); }catch(_){} }
+    if(castOn){ try{ _lanSendRaw({ type:'tvcast_call', id: r.id, name: name, force: true, ts: Date.now() }); }catch(_){} }
+    showNotif('📣 نداء', 'تم نداء المريض: '+name, 'success');
+  }catch(e){ console.warn('[wsManualCall]', e); }
 }
 
 // ⭐ نداء صريح لحظة الطباعة — لا يعتمد على مقارنة القوائم (doneList) إطلاقاً.
@@ -48118,6 +48152,7 @@ body.light-mode .pm-note{color:rgba(10,42,37,.38)}
 .rri.c-print {background:linear-gradient(135deg,#00c853,#007a25);}
 .rri.c-edit  {background:linear-gradient(135deg,#ff9800,#d84000);}
 .rri.c-label {background:linear-gradient(135deg,#aa00ff,#6600aa);}
+.rri.c-call  {background:linear-gradient(135deg,#00c46a,#008a4a);}
 .rri.c-delete{background:linear-gradient(135deg,#f44336,#b71c1c);}
 .rri.c-result{background:linear-gradient(135deg,#1e90ff,#0040bb);}
 
