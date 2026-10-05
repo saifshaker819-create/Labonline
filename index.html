@@ -5148,6 +5148,21 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                 </div>
                 <div id="body-pr-wsr" style="display:none;padding:14px;border-top:1px solid var(--border)">
                   <div style="font-size:12px;font-weight:800;margin-bottom:8px">📋 ورقة العمل</div>
+                  <select id="st-ws-mode" class="fc" style="font-size:12px;margin-bottom:8px" onchange="_wsrSaveSizes()">
+                    <option value="printer">مقاس قياسي (موصى به — تلتزم به الطابعة تلقائياً)</option>
+                    <option value="custom">مقاس مخصص (العرض × الارتفاع أدناه)</option>
+                  </select>
+                  <div id="wsr-ws-auto" style="background:rgba(0,150,255,0.07);border:1px solid rgba(0,150,255,0.3);border-radius:9px;padding:9px 11px;margin-bottom:10px">
+                    <label class="fl" style="font-size:11px;margin-bottom:4px">📄 مقاس ورقة العمل</label>
+                    <select id="st-ws-paper" class="fc" style="font-size:12px" onchange="_wsrSaveSizes()">
+                      <option value="A5">A5 (موصى به)</option>
+                      <option value="A4">A4</option>
+                      <option value="A6">A6</option>
+                    </select>
+                    <div style="font-size:10px;color:var(--text2);margin-top:5px;line-height:1.6">يُرسَل المقاس للطابعة مع رقمه الرسمي في ويندوز لهذه المهمة فقط — فتطبع ورقة العمل بمقاسها والتقارير A4 كما هي، بلا أي تعديل في إعدادات ويندوز.</div>
+                    <button class="btn btn-s" style="margin-top:8px;font-size:11px;font-weight:800" onclick="_wsrDiagA5()">🧪 طباعة صفحة اختبار A5 (تشخيص)</button>
+                  </div>
+                  <div id="wsr-ws-custom">
                   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px">
                     <div>
                       <label class="fl" style="font-size:11px;margin-bottom:4px">العرض (مم)</label>
@@ -5171,7 +5186,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                   <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
                     <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrWsPreset(148,210)">A5</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrWsPreset(210,297)">A4</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrWsPreset(105,148)">A6</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrWsPreset(176,250)">B5</button>
                   </div>
+                  </div>
                   <div style="font-size:12px;font-weight:800;margin-bottom:8px;padding-top:10px;border-top:1px dashed var(--border)">🧾 وصل الحساب</div>
+                  <div style="font-size:10.5px;color:var(--text2);margin-bottom:8px">رول حراري — العرض أدناه + طول تلقائي حسب عدد التحاليل</div>
                   <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:8px">
                     <div>
                       <label class="fl" style="font-size:11px;margin-bottom:4px">العرض (مم)</label>
@@ -5193,9 +5210,9 @@ body.light-mode .dp-viewer{background:#d8dde3;}
                     </div>
                   </div>
                   <div style="display:flex;flex-wrap:wrap;gap:5px">
-                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(58,0)">58 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(80,0)">80 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(57,0)">57 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(76,0)">76 مم</button>
+                    <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(58,0)">58 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(80,0)">80 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(57,0)">57 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(76,0)">76 مم</button> <button class="btn btn-s" style="font-size:10px;padding:4px 8px" onclick="_wsrRcPreset(48,0)">48 مم</button>
                   </div>
-                  <div style="font-size:10px;color:var(--text2);margin-top:10px;line-height:1.7">💡 الوحدة: مليمتر · الارتفاع 0 للوصل = حسب طول المحتوى (بلا هدر ورق الرول)<br>«حجم المحتوى» يكبّر أو يصغّر الكتابة داخل الورقة دون تغيير مقاسها</div>
+                  <div style="font-size:10px;color:var(--text2);margin-top:10px;line-height:1.7">💡 الوحدة: مليمتر · الارتفاع 0 للوصل = حسب طول المحتوى (بلا هدر ورق الرول)<br>«حجم المحتوى» يكبّر أو يصغّر الكتابة داخل الورقة دون تغيير مقاسها<br>ورقة العمل: المقاس القياسي (A5) تلتزم به الطابعة تلقائياً — لا حاجة لتعديل ويندوز<br>الوصل: إن انقطعت أطرافه على طابعة 58مم اختر 48 مم (عرض الطباعة الفعلي لأغلب طابعات 58)</div>
                 </div>
               </div>
 
@@ -63614,28 +63631,89 @@ document.addEventListener('click', function(e){
 function _clamp(v, mn, mx, d){ v = parseFloat(v); if(!isFinite(v)) v = d; return Math.max(mn, Math.min(mx, v)); }
 function _wsSize(){
   var s=_S();
-  return { w: _clamp(s.wsW,50,300,148), h: _clamp(s.wsH,50,450,210), z: _clamp(s.wsZoom,50,200,100)/100 };
+  var STD = { A4:[210,297], A5:[148,210], A6:[105,148] };
+  var ap = String(s.wsAutoPaper||'A5'); if(!STD[ap]) ap = 'A5';     // الافتراضي A5 ('none' القديمة ⇒ A5)
+  var custom = (s.wsPaper==='custom');
+  return { mode: custom ? 'custom' : 'std', autoPaper: ap,
+           w: custom ? _clamp(s.wsW,50,300,148) : STD[ap][0],
+           h: custom ? _clamp(s.wsH,50,450,210) : STD[ap][1],
+           z: _clamp(s.wsZoom,50,200,100)/100 };
 }
 function _rcSize(){
   var s=_S(), h=parseFloat(s.rcH);
-  return { w: _clamp(s.rcW,30,120,58), h: (isFinite(h) && h>0) ? _clamp(h,30,600,0) : 0, z: _clamp(s.rcZoom,50,200,100)/100 };
+  return { mode: 'custom',                                        // رول حراري: العرض + طول تلقائي
+           w: _clamp(s.rcW,30,120,58), h: (isFinite(h) && h>0) ? _clamp(h,30,600,0) : 0, z: _clamp(s.rcZoom,50,200,100)/100 };
 }
 window._wsrLoadSizesUI = function(){
   var a=_wsSize(), b=_rcSize();
   function set(id,v){ var e=document.getElementById(id); if(e && document.activeElement!==e) e.value=v; }
   set('st-ws-w',a.w); set('st-ws-h',a.h); set('st-ws-z',Math.round(a.z*100));
   set('st-rc-w',b.w); set('st-rc-h',b.h); set('st-rc-z',Math.round(b.z*100));
+  set('st-ws-mode',a.mode==='custom'?'custom':'printer'); set('st-ws-paper',a.autoPaper);
+  if(a.mode!=='custom'){ set('st-ws-w',_clamp(_S().wsW,50,300,148)); set('st-ws-h',_clamp(_S().wsH,50,450,210)); }
+  _modeUI();
 };
+function _modeUI(){
+  [['st-ws-mode','wsr-ws-custom']].forEach(function(x){
+    var m=document.getElementById(x[0]), box=document.getElementById(x[1]);
+    if(m && box){ var on = (m.value==='custom'); box.style.opacity = on ? '1' : '0.45'; box.style.pointerEvents = on ? 'auto' : 'none'; }
+  });
+  var wm=document.getElementById('st-ws-mode'), au=document.getElementById('wsr-ws-auto');
+  if(wm && au) au.style.display = (wm.value==='custom') ? 'none' : 'block';
+}
 window._wsrSaveSizes = function(){
   function g(id){ var e=document.getElementById(id); return e ? e.value : ''; }
-  settings.wsW    = _clamp(g('st-ws-w'),50,300,148);
-  settings.wsH    = _clamp(g('st-ws-h'),50,450,210);
+  if(g('st-ws-mode')==='custom' || !document.getElementById('st-ws-mode')){
+    settings.wsW = _clamp(g('st-ws-w'),50,300,148);
+    settings.wsH = _clamp(g('st-ws-h'),50,450,210);
+  }
   settings.wsZoom = _clamp(g('st-ws-z'),50,200,100);
   settings.rcW    = _clamp(g('st-rc-w'),30,120,58);
   var rh = parseFloat(g('st-rc-h'));
   settings.rcH    = (isFinite(rh) && rh>0) ? _clamp(rh,30,600,0) : 0;
   settings.rcZoom = _clamp(g('st-rc-z'),50,200,100);
+  if(document.getElementById('st-ws-mode')) settings.wsPaper = g('st-ws-mode')==='custom' ? 'custom' : 'printer';
+  if(document.getElementById('st-ws-paper')) settings.wsAutoPaper = g('st-ws-paper') || 'A5';
+  _modeUI();
   _saveSettings();
+};
+// 🧪 صفحة اختبار A5 — مسطرة وحدود تكشف أين تقص الطابعة بالضبط
+window._wsrDiagA5 = async function(){
+  var S=_S(), pr=S.printerWorksheet||'';
+  var ruler='';
+  for(var x=0;x<=148;x+=10){
+    ruler += '<div style="position:absolute;left:'+x+'mm;top:0;height:210mm;border-left:0.25mm solid '+(x%50===0?'#000':'#999')+'"></div>' +
+             '<div style="position:absolute;left:'+(x+0.8)+'mm;top:'+(30+(x%20===0?0:6))+'mm;font:bold 9pt Arial">'+x+'</div>';
+  }
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><style>*{margin:0;padding:0;box-sizing:border-box}'+
+    '@page{size:148mm 210mm;margin:0}html,body{width:148mm;height:210mm;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+    'body{position:relative;overflow:hidden;font-family:Arial}</style></head><body>'+
+    '<div style="position:absolute;left:3mm;top:3mm;width:142mm;height:204mm;border:0.6mm solid #000"></div>'+ruler+
+    '<div style="position:absolute;left:5mm;top:8mm;font:bold 13pt Arial">&#8592; LEFT</div>'+
+    '<div style="position:absolute;right:5mm;top:8mm;font:bold 13pt Arial">RIGHT &#8594;</div>'+
+    '<div style="position:absolute;left:0;width:148mm;top:85mm;text-align:center;font:900 30pt Arial">A5 TEST</div>'+
+    '<div style="position:absolute;left:0;width:148mm;top:105mm;text-align:center;font:bold 11pt Arial">148 x 210 mm</div>'+
+    '<div style="position:absolute;left:5mm;bottom:8mm;font:bold 11pt Arial">BOTTOM-LEFT</div>'+
+    '<div style="position:absolute;right:5mm;bottom:8mm;font:bold 11pt Arial">BOTTOM-RIGHT</div>'+
+    '</body></html>';
+  if(!(window.electronAPI && window.electronAPI.printContent)){ _notif('تنبيه','التشخيص يعمل في نسخة سطح المكتب فقط','warning'); return; }
+  _notif('🧪 تشخيص','جارٍ طباعة صفحة اختبار A5…','info');
+  var r;
+  try{
+    r = await window.electronAPI.printContent({ html:html, printer:pr, silent:true, pageSize:'std:A5',
+          margins:{marginType:'none'}, freshWindow:true, winWidth:559, winHeight:794, diag:true });
+  }catch(e){ r={ok:false,error:(e&&e.message)||String(e)}; }
+  r = r || {};
+  var via = r.via==='pdf' ? '✅ PDF + SumatraPDF (الطريقة الدقيقة)'
+          : r.via==='chromium-nosumatra' ? '❌ Chromium — SumatraPDF غير موجود'
+          : r.via==='chromium-fallback' ? '⚠️ Chromium — فشل SumatraPDF فاستُخدم الاحتياطي'
+          : (r.via||'—');
+  var msg = 'النتيجة: '+(r.ok?'أُرسلت للطباعة':'فشل — '+(r.error||''))+'\n'+
+            'الطابعة: '+(pr||'الافتراضية')+'\n'+
+            'طريقة الطباعة: '+via+'\n'+
+            'SumatraPDF: '+(r.sumatra||'غير موجود')+'\n'+
+            'ملف PDF: '+(r.diagPdf||'لم يُحفظ');
+  alert('🧪 تشخيص طباعة A5\n\n'+msg);
 };
 window._wsrWsPreset = function(w,h){
   var a=document.getElementById('st-ws-w'), b=document.getElementById('st-ws-h');
@@ -63732,17 +63810,29 @@ function _measureMM(html, widthMM){
 }
 
 // wMM/hMM: مقاس الورقة الفعلي بالملّيمتر — يُرسل بالميكرون دائماً (لا أسماء مثل 'A5')
-function _printHTML(html, printer, wMM, hMM, label){
+//            wMM = 0 ⇒ بلا فرض مقاس: يُستخدم ورق الطابعة المضبوط في ويندوز
+// stdName: 'A5'/'A4'/'A6' ⇒ مقاس قياسي يُرسَل مع رقم ورق ويندوز (تلتزم به الطابعة)
+//          وإلا ⇒ مقاس مخصص بالميكرون (لطابعات الرول/الملصقات الحرارية)
+var _viaWarned = {};
+function _printHTML(html, printer, wMM, hMM, label, stdName){
   if(window.electronAPI && window.electronAPI.printContent){
+    var custom = !stdName;
     return window.electronAPI.printContent({
       html: html, printer: printer || '', silent: true,
-      pageSize: { width: Math.round(wMM*1000), height: Math.round(hMM*1000) },
+      pageSize: stdName ? ('std:' + stdName) : { width: Math.round(wMM*1000), height: Math.round(hMM*1000) },
       margins: { marginType: 'none' },
       freshWindow: true,                                 // نافذة طباعة نظيفة لهذه المهمة فقط
       winWidth:  Math.round(wMM*96/25.4),
       winHeight: Math.round(Math.min(hMM,600)*96/25.4)
     }).then(function(r){
       if(r && !r.ok){ _notif('تنبيه طباعة', label+': '+(r.error||'خطأ طباعة'),'warning'); return false; }
+      // مكوّن طباعة المقاسات الدقيقة غير مثبت ⇒ تنبيه مرة واحدة في الجلسة
+      if(r && stdName && (r.via==='chromium-nosumatra' || r.via==='chromium-fallback') && !_viaWarned[r.via]){
+        _viaWarned[r.via] = 1;
+        _notif('تنبيه طباعة', r.via==='chromium-nosumatra'
+          ? 'مكوّن طباعة المقاسات الدقيقة (SumatraPDF) غير موجود — قد تُقصّ '+label+' في بعض الطابعات'
+          : 'تعذّرت الطباعة الدقيقة لـ'+label+' — استُخدمت الطريقة الاحتياطية','warning');
+      }
       return true;
     }).catch(function(e){ _notif('تنبيه طباعة', label+': '+((e&&e.message)||'خطأ'),'warning'); return false; });
   }
@@ -63774,8 +63864,11 @@ async function _buildWorksheet(req){
   var bc = await _barcodePng(bcId);
 
   var n = list.length;
-  var rowPad = n>30 ? '1.1mm' : (n>20 ? '1.6mm' : '2.3mm');
-  var rowFs  = n>30 ? '8.5pt' : (n>20 ? '9.5pt' : '10.5pt');
+  // كثافة الصفوف حسب العدد — حتى تبقى الورقة صفحة واحدة على A5
+  //  ≤9: عمود واحد · >9: عمودان (يسار ثم يمين، واحد أسفل الآخر) مع تصغير تدريجي
+  var twoCol = n > 9;
+  var rowPad = n<=6 ? '2.3mm' : (n<=9 ? '1.6mm' : (n<=18 ? '1.25mm' : (n<=26 ? '0.75mm' : '0.4mm')));
+  var rowFs  = n<=6 ? '10.5pt' : (n<=9 ? '9.8pt' : (n<=18 ? '9pt' : (n<=26 ? '8.2pt' : '7.2pt')));
 
   function info(lbl, val, wide){
     return '<div class="it'+(wide?' wide':'')+'"><span class="l">'+lbl+'</span><span class="v">'+_esc(val||'—')+'</span></div>';
@@ -63787,16 +63880,16 @@ async function _buildWorksheet(req){
       '<span class="nm">'+_esc(t.name)+'</span>' +
       (t.code && t.code!==t.name ? '<span class="cd">'+_esc(t.code)+'</span>' : '') +
       '<span class="fill"></span>' +
-      (t.cat ? '<span class="ct">'+_esc(t.cat)+'</span>' : '') +
+      (t.cat && !twoCol ? '<span class="ct">'+_esc(t.cat)+'</span>' : '') +
     '</div>';
   }).join('');
 
   var css =
     '*{margin:0;padding:0;box-sizing:border-box}' +
-    '@page{size:'+SZ.w+'mm '+SZ.h+'mm;margin:0}' +
-    'html,body{width:'+SZ.w+'mm;background:#fff}' +
+    '@page{size:'+SZ.w+'mm '+SZ.h+'mm;margin:0}html,body{width:'+SZ.w+'mm;background:#fff}' +
     'body{font-family:'+FONT+';color:#1d2733;padding:6mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-    '.frame{zoom:'+SZ.z+';min-height:'+((SZ.h-12.5)/SZ.z).toFixed(2)+'mm;border:0.45mm solid #c9d4e0;border-radius:4.5mm;padding:5mm 5.5mm;position:relative;' +
+    '.frame{zoom:'+SZ.z+';min-height:'+((SZ.h-12.5)/SZ.z).toFixed(2)+'mm;' +
+      'border:0.45mm solid #c9d4e0;border-radius:4.5mm;padding:5mm 5.5mm;position:relative;' +
       '-webkit-box-decoration-break:clone;box-decoration-break:clone;display:flex;flex-direction:column}' +
     '.hd{display:flex;justify-content:space-between;align-items:center;gap:4mm;padding-bottom:3.5mm;border-bottom:0.3mm solid #e2e8ef}' +
     '.lab{font-size:15pt;font-weight:900;color:#0b3a5c;line-height:1.25}' +
@@ -63813,8 +63906,9 @@ async function _buildWorksheet(req){
     '.it.name .v{font-size:11pt;color:#0b3a5c}' +
     '.th{display:flex;justify-content:space-between;align-items:center;direction:ltr;margin:1mm 0 2mm;font-size:9.5pt;font-weight:900;color:#0b3a5c;letter-spacing:.3px}' +
     '.th .cnt{background:#e8f1f8;color:#0b3a5c;border-radius:10mm;padding:.4mm 3mm;font-size:8.5pt}' +
-    '.list{direction:ltr;text-align:left;border:0.25mm solid #e2e8ef;border-radius:3mm;overflow:hidden}' +
-    '.row{display:flex;align-items:center;gap:2.4mm;padding:'+rowPad+' 3mm;font-size:'+rowFs+';break-inside:avoid;border-bottom:0.2mm solid #edf1f5}' +
+    '.list{direction:ltr;text-align:left;border:0.25mm solid #e2e8ef;border-radius:3mm;overflow:hidden' +
+      (twoCol ? ';column-count:2;column-gap:0;column-rule:0.25mm solid #e2e8ef' : '') + '}' +
+    '.row{display:flex;align-items:center;gap:'+(twoCol?'1.6mm':'2.4mm')+';padding:'+rowPad+' '+(twoCol?'2mm':'3mm')+';font-size:'+rowFs+';break-inside:avoid;border-bottom:0.2mm solid #edf1f5}' +
     '.row:last-child{border-bottom:none}' +
     '.row:nth-child(even){background:#fafcfd}' +
     '.chk{width:3.4mm;height:3.4mm;border:0.35mm solid #8fa3b6;border-radius:.8mm;flex-shrink:0}' +
@@ -63825,7 +63919,7 @@ async function _buildWorksheet(req){
     '.ct{font-size:7.5pt;color:#8a97a5;font-weight:600;white-space:nowrap}' +
     '.note{margin-top:3mm;border:0.25mm dashed #c9d4e0;border-radius:3mm;padding:2mm 3mm;font-size:8.5pt}' +
     '.note b{color:#0b3a5c}' +
-    '.ft{margin-top:auto;padding-top:4mm;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt;color:#6b7a8a}' +
+    '.ft{margin-top:auto;padding-top:4mm;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt;color:#6b7a8a}' +
     '.sig{border-top:0.25mm solid #9aabbb;width:38mm;text-align:center;padding-top:1mm;font-weight:700}' +
     '.pr{font-weight:700}';
 
@@ -63862,7 +63956,8 @@ async function _printWorksheet(reqId, silentNotif){
   if(!req){ _notif('خطأ','الطلب غير موجود','error'); return; }
   try{
     var html = await _buildWorksheet(req), SZ = _wsSize();
-    var ok = await _printHTML(html, _S().printerWorksheet||'', SZ.w, SZ.h, 'ورقة العمل');
+    var ok = await _printHTML(html, _S().printerWorksheet||'', SZ.w, SZ.h, 'ورقة العمل',
+                              SZ.mode==='custom' ? '' : SZ.autoPaper);
     if(ok && !silentNotif) _notif('🖨️ تم','📋 أُرسلت ورقة العمل للطباعة','success');
   }catch(e){ console.warn('[worksheet]', e); _notif('خطأ','تعذّرت طباعة ورقة العمل','error'); }
 }
@@ -63895,29 +63990,29 @@ function _buildReceipt(req){
     '*{margin:0;padding:0;box-sizing:border-box}' +
     '@page{size:'+SZ.w+'mm __H__;margin:0}' +
     'html,body{width:'+SZ.w+'mm;background:#fff}' +
-    'body{font-family:'+FONT+';color:#000;padding:2.5mm 3mm 3mm;font-size:8pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'body{font-family:'+FONT+';color:#000;padding:2.5mm 2.5mm 4mm;font-size:9.5pt;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
     '.rc{zoom:'+SZ.z+'}' +
     '.c{text-align:center}' +
-    '.lab{font-size:12.5pt;font-weight:900;line-height:1.25}' +
-    '.sub{font-size:6.8pt;font-weight:700;margin-top:.6mm;line-height:1.4}' +
-    '.ttl{display:inline-block;margin:2mm 0 1.6mm;border:0.35mm solid #000;border-radius:10mm;padding:.5mm 4mm;font-size:9pt;font-weight:900}' +
+    '.lab{font-size:15pt;font-weight:900;line-height:1.25}' +
+    '.sub{font-size:8.3pt;font-weight:700;margin-top:.6mm;line-height:1.4}' +
+    '.ttl{display:inline-block;margin:2.2mm 0 1.8mm;border:0.4mm solid #000;border-radius:10mm;padding:.6mm 5mm;font-size:11pt;font-weight:900}' +
     '.hr{border-top:0.3mm dashed #000;margin:1.8mm 0}' +
     '.hr2{border-top:0.5mm solid #000;margin:1.6mm 0}' +
-    '.ln{display:flex;justify-content:space-between;gap:2mm;font-size:7.8pt;font-weight:700;line-height:1.55}' +
+    '.ln{display:flex;justify-content:space-between;gap:2mm;font-size:9.6pt;font-weight:700;line-height:1.55}' +
     '.ln span:last-child{font-weight:900;text-align:left;direction:ltr;unicode-bidi:plaintext}' +
     '.ln.pt span:last-child{direction:rtl;text-align:left}' +
     'table{width:100%;border-collapse:collapse;margin-top:.6mm}' +
-    'th{font-size:7.6pt;font-weight:900;padding:.8mm 0;border-bottom:0.35mm solid #000}' +
+    'th{font-size:9.4pt;font-weight:900;padding:.9mm 0;border-bottom:0.4mm solid #000}' +
     'th.a{text-align:right}th.b{text-align:left}' +
-    'td{font-size:7.8pt;font-weight:700;padding:.9mm 0;border-bottom:0.2mm dotted #777;vertical-align:top}' +
+    'td{font-size:9.6pt;font-weight:700;padding:1mm 0;border-bottom:0.2mm dotted #777;vertical-align:top}' +
     'tr:last-child td{border-bottom:none}' +
     '.tn{direction:ltr;text-align:right;padding-left:1.5mm;word-break:break-word}' +
     '.tp{text-align:left;white-space:nowrap;direction:ltr}' +
-    '.net{margin:1.2mm 0;border:0.4mm solid #000;border-radius:1.6mm;padding:1.2mm 2mm;font-size:10pt}' +
-    '.net span{font-size:9.5pt}' +
-    '.ok{font-size:8pt}' +
-    '.thx{font-size:7.4pt;font-weight:800;margin-top:2mm;line-height:1.5}' +
-    '.tm{font-size:6.6pt;margin-top:1mm;font-weight:700}';
+    '.net{margin:1.4mm 0;border:0.45mm solid #000;border-radius:1.6mm;padding:1.4mm 2mm;font-size:12.5pt}' +
+    '.net span{font-size:12pt}' +
+    '.ok{font-size:9.6pt}' +
+    '.thx{font-size:9pt;font-weight:800;margin-top:2mm;line-height:1.5}' +
+    '.tm{font-size:8pt;margin-top:1mm;font-weight:700}';
 
   var status = '';
   if(inv){
@@ -63948,7 +64043,7 @@ function _buildReceipt(req){
     '<div class="ln net"><span>المجموع الكلي</span><span>'+_money(net)+'</span></div>' +
     (inv ? line('المدفوع', _money(paid), 'ok') : '') +
     (inv && due>0 ? line('المتبقي', _money(due), 'ok') : '') +
-    (status ? '<div class="c" style="font-size:7.6pt;font-weight:900;margin-top:.8mm">'+status+'</div>' : '') +
+    (status ? '<div class="c" style="font-size:9.4pt;font-weight:900;margin-top:.8mm">'+status+'</div>' : '') +
     '<div class="hr"></div>' +
     '<div class="c thx">شكراً لثقتكم — نتمنى لكم دوام الصحة</div>' +
     '<div class="c tm">MedLab Pro</div>' +
