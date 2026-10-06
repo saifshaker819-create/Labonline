@@ -2543,6 +2543,8 @@ select.fc:focus{outline:none;}
   border-top:1px solid var(--border);
   display:flex;
   justify-content:flex-end;
+  align-items:center;
+  flex-wrap:wrap;
   gap:10px;
   background:rgba(0,0,0,0.15);
   flex-shrink:0;
@@ -10384,6 +10386,11 @@ let _wizEditPatientOnly=false;
    الاقتراحات ملفاً سابقاً لنفس المريض فنقوم بدمج السجلين بدل الفشل. */
 let _wizEditOrigPatientId=null;
 let _wizEditOrigReqId=null;
+/* ✏️ تعديل الطلب من واجهة إدخال النتائج: بعد «التالي» ننتقل لاختيار التحاليل
+   مع تحاليل الطلب نفسه، و«حفظ» يحدّث نفس الطلب وفاتورته بدل إنشاء طلب جديد. */
+let _wizEditTestsLoaded=false;   // حُمِّلت تحاليل الطلب الأصلي إلى المعالج
+let _wizEditDraft=null;          // قيم الخطوة ٢ (العينة/الأولوية/الملاحظة/الخصم/الدفع)
+let _wizEditOrigDefRes={};       // النتائج الحالية للتحاليل ذات «النتيجة المقترحة»
 let currentReqId=null;
 let editTestId=null;
 
@@ -12353,7 +12360,8 @@ function markWpNameEnManual(){
 // ============================================================
 // WIZARD - NEW PATIENT WITH AUTOCOMPLETE
 // ============================================================
-function startNewPatient(){wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;renderWizStep();openModal('m-wizard');}
+function startNewPatient(){wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;_wizEditResetState();renderWizStep();openModal('m-wizard');}
+function _wizEditResetState(){ _wizEditTestsLoaded=false; _wizEditDraft=null; _wizEditOrigDefRes={}; }
 
 function renderWizStep(){
   const body=document.getElementById('wiz-body');
@@ -12579,9 +12587,11 @@ function renderWizStep(){
   }
 
   else if(wizStep===2){
-    title.textContent='🧪 الخطوة 2: اختيار التحاليل';
+    title.textContent=_wizEditPatientOnly?'✏️ تعديل الطلب: اختيار التحاليل':'🧪 الخطوة 2: اختيار التحاليل';
+    const _eReq2=_wizEditPatientOnly?requests.find(r=>r.id===_wizEditOrigReqId):null;
     const catBtns=TEST_CATS.map(c=>`<button class="cat-btn ${c===currentTestCat?'active':''}" onclick="filterWizTests('${c}')">${c}</button>`).join('');
     body.innerHTML=`
+    ${_eReq2?`<div style="margin-bottom:8px;padding:8px 12px;border-radius:10px;border:1.5px solid #a78bfa;background:rgba(167,139,250,0.10);color:#c4b5fd;font-size:12.5px;font-weight:800">✏️ تعديل الطلب رقم <span dir="ltr">${_eReq2.orderNo||_eReq2.id}</span> — ستُحفظ التعديلات على نفس الطلب ولن يُنشأ طلب جديد</div>`:''}
     <!-- شريط معلومات المريض -->
     <div class="pt-bar" style="margin-bottom:10px">
       <div class="pt-bar-item"><label>المريض</label><span style="color:var(--color-name,var(--primary));font-weight:900">${wizPatient.name}</span></div>
@@ -12722,9 +12732,9 @@ function renderWizStep(){
     updateWizTotal();
     renderMRTButtons();
     ftr.innerHTML=`
-      <div id="wiz-pay-bar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-left:auto">
-        <span style="font-size:11px;color:var(--text2);font-weight:800">💳 الدفع:</span>
-        <select class="fc" id="wiz-pay-status" onchange="_wizPayChanged()" style="width:auto;padding:6px 10px;font-size:12.5px;font-weight:800">
+      <div id="wiz-pay-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;padding:7px 12px;border-radius:12px;border:2px solid var(--warning,#ffb020);background:rgba(255,176,32,0.10);transition:border-color .2s,background .2s">
+        <span id="wiz-pay-ttl" style="font-size:13.5px;color:var(--warning,#ffb020);font-weight:900;white-space:nowrap">💳 حالة الدفع</span>
+        <select class="fc" id="wiz-pay-status" onchange="_wizPayChanged()" title="اختر حالة الدفع لهذا الطلب" style="width:auto;padding:7px 12px;font-size:14px;font-weight:900;border-width:1.5px;cursor:pointer">
           <option value="مدفوعة">✅ مدفوع</option>
           <option value="معلقة" selected>⏳ غير مدفوع</option>
           <option value="جزئية">💳 مطلوب (دفع جزئي)</option>
@@ -12736,12 +12746,20 @@ function renderWizStep(){
           <span id="wiz-debt-amount" style="font-size:14px;font-weight:900;color:var(--danger)">0</span>
           <button onclick="nav('invoices');closeModal('m-wizard')" style="background:none;border:1.5px solid var(--danger);color:var(--danger);border-radius:6px;padding:3px 9px;cursor:pointer;font-size:10px;font-family:'Cairo',sans-serif;font-weight:800">📋 ارجع للفاتورة</button>
         </div>
+        <span style="width:1px;align-self:stretch;background:var(--border);margin:0 2px"></span>
+        <label title="عند الإطفاء: يُطبع وصل الحساب بدون أسماء التحاليل وأسعارها (بيانات المريض + الخصم + المجموع فقط). يُحفظ الاختيار." style="display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;white-space:nowrap" onclick="event.preventDefault();_wizToggleRcDetails()">
+          <span style="font-size:12px;font-weight:800;color:var(--text)">🧾 إظهار تفاصيل وصل الحسابات</span>
+          <div class="tog${_rcShowDetails()?' on':''}" id="wiz-rc-details-tog"><div class="tog-t"></div></div>
+        </label>
       </div>
       <button class="btn btn-s" onclick="wizBack()">← السابق</button>
       <button class="btn btn-s" onclick="closeModal('m-wizard')">إلغاء</button>
-      <button class="btn btn-p btn-lg" onclick="wizFinish()">✅ حفظ وإنشاء الطلب</button>`;
+      <button class="btn btn-p btn-lg" onclick="wizFinish()">${_eReq2?'💾 حفظ التعديلات على الطلب':'✅ حفظ وإنشاء الطلب'}</button>`;
+    // ✏️ وضع تعديل الطلب: املأ العينة/الأولوية/الملاحظة/الخصم/الدفع من الطلب وفاتورته
+    if(_eReq2) _wizEditApplyDraft();
     // تحقق من الديون السابقة (بعد رسم شريط الدفع)
     checkPatientDebt();
+    _wizPayPaint();
     updateWizTotal();
     requestAnimationFrame(()=>{
       const el=document.getElementById('wiz-test-srch');
@@ -13013,7 +13031,13 @@ function renderWizTestList(){
 }
 
 function toggleWizTest(tid){
-  const t=tests.find(x=>x.id===tid);if(!t)return;
+  const t=tests.find(x=>x.id===tid);
+  if(!t){
+    // تحليل محذوف من القائمة لكنه موجود في طلب قيد التعديل — يُزال فقط
+    const _mi=wizSelectedTests.findIndex(x=>String(x.id)===String(tid));
+    if(_mi>-1){ wizSelectedTests.splice(_mi,1); renderWizRightPanel(); }
+    return;
+  }
   const idx=wizSelectedTests.findIndex(x=>x.id===tid);
   const nowSelected=idx===-1;
   if(idx>-1){ wizSelectedTests.splice(idx,1); try{ delete _wizDefRes[tid]; }catch(e){} }
@@ -13316,7 +13340,10 @@ function _sideLabAutoPrint(req){
   }catch(e){ return false; }
 }
 
-function wizBack(){wizStep=1;renderWizStep();}
+function wizBack(){
+  if(_wizEditPatientOnly && wizStep===2) _wizEditCaptureDraft();
+  wizStep=1;renderWizStep();
+}
 
 function wizNext(){
   // 🧪 سايد لاب: تُستثنى شروط اللقب والاسم الثلاثي والعمر (الاسم يبقى مطلوباً)
@@ -13418,7 +13445,8 @@ function wizNext(){
     chronic,notes:document.getElementById('wp-notes').value
   };
 
-  // إذا كان وضع تعديل بيانات المريض فقط — احفظ مباشرةً بدون الانتقال لاختيار التحاليل
+  // ✏️ وضع تعديل الطلب (من واجهة إدخال النتائج): ننتقل لاختيار التحاليل مع تحاليل
+  //    الطلب نفسه — والحفظ الفعلي يتم عند «حفظ» فوق نفس الطلب (wizFinish)
   if(_wizEditPatientOnly){
     /* 🔗 هل اختار المستخدم من قائمة الاقتراحات ملفاً سابقاً لنفس المريض؟
        عندها يختلف wizPatient.id عن هوية المريض الذي فُتح التعديل عليه،
@@ -13441,7 +13469,94 @@ function wizNext(){
         return;
       }
     }
-    _wizEditPatientOnly=false;
+    // الطلب الأصلي يجب أن يكون موجوداً
+    const _eReq=requests.find(r=>r.id===_wizEditOrigReqId);
+    if(!_eReq){ showNotif('خطأ','الطلب الأصلي غير موجود — لا يمكن متابعة التعديل','error'); return; }
+    if(!_wizEditTestsLoaded) _wizEditLoadReq(_eReq);
+    wizStep=2; renderWizStep();
+    return;
+  }
+
+  wizStep=2;renderWizStep();
+}
+
+
+/* ══════════════════════════════════════════════════════════════
+   ✏️ تعديل الطلب من واجهة إدخال النتائج
+   «تعديل بيانات المريض» ← «التالي» ← اختيار التحاليل (تحاليل الطلب نفسه)
+   ← «حفظ» = تحديث نفس الطلب وفاتورته (لا يُنشأ طلب جديد إطلاقاً)
+   ══════════════════════════════════════════════════════════════ */
+function _wizPayOptOf(inv){
+  if(!inv) return 'معلقة';
+  try{
+    const k=(typeof _invKind==='function')?_invKind(inv):'';
+    if(k==='paid') return 'مدفوعة';
+    if(k==='partial') return 'جزئية';
+    if(k==='unpaid') return 'معلقة';
+  }catch(e){}
+  const st=String(inv.status||'').trim();
+  return (st==='مدفوعة'||st==='جزئية')?st:'معلقة';
+}
+function _wizEditLoadReq(req){
+  // ① التحاليل المختارة = تحاليل الطلب (بنفس الترتيب، بلا تكرار)
+  const seen=new Set(), list=[];
+  (req.tests||[]).forEach(function(tid){
+    if(tid==null || seen.has(String(tid))) return; seen.add(String(tid));
+    const t=tests.find(x=>x.id===tid);
+    // تحليل حُذف من قائمة التحاليل: يبقى في الطلب كما هو (يمكن إزالته يدوياً)
+    list.push(t || {id:tid, code:'', nameEn:String(tid), nameShort:'', price:0, _missing:true});
+  });
+  wizSelectedTests=list;
+  // ② النتائج الحالية تظهر في خانة «💡 النتيجة» بدل النتيجة الافتراضية
+  _wizDefRes={}; _wizEditOrigDefRes={};
+  const res=req.results||{};
+  list.forEach(function(t){
+    if(t._missing) return;
+    try{ if(!_defResOf(t)) return; }catch(e){ return; }
+    const v=res[t.id];
+    if(v===undefined||v===null||typeof v==='object') return;
+    const sv=String(v);
+    if(sv.trim()===''||sv==='done') return;
+    _wizDefRes[t.id]=sv; _wizEditOrigDefRes[t.id]=sv;
+  });
+  // ③ حقول الخطوة ٢ من الطلب وفاتورته
+  const inv=(typeof _billInvOf==='function')?_billInvOf(req.id):null;
+  let disc=0, paid=0;
+  try{ disc=inv?((typeof _invDiscAmt==='function')?_invDiscAmt(inv):(parseFloat(inv.discountAmt)||0)):0; }catch(e){ disc=0; }
+  try{ paid=inv?((typeof _invPaidAmt==='function')?_invPaidAmt(inv):(parseFloat(inv.paidAmt)||0)):0; }catch(e){ paid=0; }
+  _wizEditDraft={
+    sample:req.sample||'', priority:req.priority||'Routine', note:req.note||'',
+    discount:disc>0?disc:'', payStatus:_wizPayOptOf(inv), paidAmt:paid>0?paid:''
+  };
+  _wizEditTestsLoaded=true;
+}
+function _wizEditCaptureDraft(){
+  const g=function(id){ const el=document.getElementById(id); return el?el.value:undefined; };
+  if(!_wizEditDraft) _wizEditDraft={};
+  const m={sample:'wiz-sample',priority:'wiz-priority',note:'wiz-req-note',discount:'wiz-discount',payStatus:'wiz-pay-status',paidAmt:'wiz-paid-amt'};
+  Object.keys(m).forEach(function(k){ const v=g(m[k]); if(v!==undefined) _wizEditDraft[k]=v; });
+}
+function _wizEditApplyDraft(){
+  const d=_wizEditDraft; if(!d) return;
+  const setV=function(id,v){ const el=document.getElementById(id); if(el && v!==undefined && v!==null) el.value=v; };
+  // نوع العينة: إن لم يكن ضمن الخيارات نضيفه كي لا يتغيّر عند الحفظ
+  const smp=document.getElementById('wiz-sample');
+  if(smp && d.sample){
+    if(![...smp.options].some(o=>o.value===d.sample)){ const o=document.createElement('option'); o.textContent=d.sample; o.value=d.sample; smp.appendChild(o); }
+    smp.value=d.sample;
+  }
+  setV('wiz-priority', d.priority||'Routine');
+  setV('wiz-req-note', d.note||'');
+  setV('wiz-discount', d.discount===0?'':d.discount);
+  setV('wiz-pay-status', d.payStatus||'معلقة');
+  setV('wiz-paid-amt', d.paidAmt===0?'':d.paidAmt);
+  try{ _wizPayChanged(true); }catch(e){ try{ updateWizTotal(); }catch(_){} }
+}
+/* حفظ بيانات المريض المعدّلة (مع دمج الملف المكرّر إن اختير ملف سابق) */
+function _wizSaveEditedPatient(){
+    const _origPid = _wizEditOrigPatientId;
+    const _isMerge = !!(_origPid && wizPatient.id && String(_origPid)!==String(wizPatient.id)
+                        && patients.some(p=>String(p.id)===String(wizPatient.id)));
     const pt=patients.find(p=>p.id===wizPatient.id);
     if(pt){
       const oldChron=pt.chronic;
@@ -13483,27 +13598,132 @@ function wizNext(){
           renderPatients(_f,(_si&&_si.value)||'');
         }catch(e){}
       }
-      // تحديث شريط بيانات المريض في واجهة إدخال النتائج إن كانت مفتوحة
-      const resSelId=document.getElementById('res-req-sel')?.value;
-      if(resSelId){
-        const openReq=requests.find(r=>r.id===resSelId);
-        if(openReq&&String(openReq.patientId)===String(pt.id)) loadResultEntry();
-      }
-      if(_mergedN){
-        showNotif('تم الدمج ✅','نُقل الطلب إلى ملف المريض السابق ('+pt.id+') — نتائجه السابقة صارت متاحة','success');
-      } else {
-        showNotif('تم','تم تعديل بيانات المريض ✅','success');
-      }
+      return {pt:pt, mergedN:_mergedN};
     }
-    _wizEditOrigPatientId=null; _wizEditOrigReqId=null;
-    closeModal('m-wizard');
-    return;
-  }
+    return null;
+}
+function _wizNewInvId(){
+  const counterKey='medlab_inv_counter';
+  let counter=parseInt(localStorage.getItem(counterKey)||'0',10)||0;
+  if(counter<1000+invoices.length) counter=1000+invoices.length;
+  let candidate;
+  do{ counter++; candidate='INV-'+counter; }while(invoices.find(i=>i&&i.id===candidate));
+  localStorage.setItem(counterKey, String(counter));
+  return candidate;
+}
+function _wizFinishEditReq(){
+  if(wizSelectedTests.length===0){showNotif('تنبيه','يرجى اختيار تحليل واحد على الأقل','error');return;}
+  const req=requests.find(r=>r.id===_wizEditOrigReqId);
+  if(!req){ showNotif('خطأ','الطلب الأصلي غير موجود — لم يُحفظ أي تغيير','error'); return; }
 
-  wizStep=2;renderWizStep();
+  // ① بيانات المريض (ودمج الملف إن لزم)
+  const sv=_wizSaveEditedPatient();
+  if(!sv || !sv.pt){ showNotif('خطأ','لم يُعثر على بيانات المريض — لم يُحفظ أي تغيير','error'); return; }
+  const pt=sv.pt;
+
+  // ② تحديث نفس الطلب: التحاليل + العينة + الأولوية + الملاحظة
+  const oldIds=(req.tests||[]).slice();
+  const newIds=[]; wizSelectedTests.forEach(function(t){ if(t && newIds.indexOf(t.id)<0) newIds.push(t.id); });
+  const removed=oldIds.filter(id=>newIds.indexOf(id)<0);
+  const added=newIds.filter(id=>oldIds.indexOf(id)<0);
+  req.tests=newIds;
+  req.testNames=newIds.map(function(id){ const t=wizSelectedTests.find(x=>x.id===id); return t?(t.nameEn||String(id)):String(id); });
+  if(!req.results) req.results={};
+  removed.forEach(function(tid){ delete req.results[tid]; });
+  // النتائج المقترحة: للتحاليل المضافة حديثاً، أو لما عدّله المستخدم في خانة «💡 النتيجة»
+  try{ if(added.length && typeof _applyDefResults==='function') _applyDefResults(req, added, true); }catch(e){}
+  newIds.forEach(function(tid){
+    if(added.indexOf(tid)>-1) return;
+    if(!Object.prototype.hasOwnProperty.call(_wizDefRes, tid)) return;
+    const nv=String(_wizDefRes[tid]==null?'':_wizDefRes[tid]).trim();
+    const ov=Object.prototype.hasOwnProperty.call(_wizEditOrigDefRes, tid)?String(_wizEditOrigDefRes[tid]).trim():null;
+    if(ov===null){ if(nv && (req.results[tid]===undefined||req.results[tid]===null||String(req.results[tid]).trim()==='')) req.results[tid]=nv; return; }
+    if(nv===ov) return;
+    if(nv) req.results[tid]=nv; else delete req.results[tid];
+  });
+  _wizDefRes={};
+  req.sample=(document.getElementById('wiz-sample')||{}).value||req.sample||'';
+  req.priority=(document.getElementById('wiz-priority')||{}).value||req.priority||'Routine';
+  const _noteEl=document.getElementById('wiz-req-note'); if(_noteEl) req.note=_noteEl.value||'';
+  req.patientId=pt.id; req.patientName=pt.name;
+  if(pt.doctorName!==undefined){ req.doctorName=pt.doctorName; req.doctorId=pt.doctorId; }
+  req._updatedAt=Date.now();
+  saveOne('requests',requests,req);
+
+  // ③ تحديث فاتورة نفس الطلب (لا فاتورة جديدة) — أو إنشاؤها إن لم تكن موجودة
+  const today=new Date().toISOString().split('T')[0];
+  const rawTotal=wizSelectedTests.reduce((s,t)=>s+(parseFloat(t.price)||0),0);
+  const _discIn=parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
+  const discAmt=Math.min(Math.max(0,_discIn), rawTotal);
+  const disc=rawTotal?Math.round(discAmt/rawTotal*1000)/10:0;
+  const total=rawTotal-discAmt;
+  let payStatus=(document.getElementById('wiz-pay-status')||{}).value||'معلقة';
+  let paidAmt=0;
+  if(payStatus==='مدفوعة') paidAmt=total;
+  else if(payStatus==='جزئية'){
+    paidAmt=Math.round(Math.min(Math.max(0,parseFloat((document.getElementById('wiz-paid-amt')||{}).value)||0), total)*100)/100;
+    if(total<=0 || paidAmt>=total){ payStatus='مدفوعة'; paidAmt=total; }
+    else if(paidAmt<=0){ payStatus='معلقة'; paidAmt=0; }
+  }
+  const _payUser=(typeof _rpUser==='function')?_rpUser():'';
+  let inv=(typeof _billInvOf==='function')?_billInvOf(req.id):invoices.find(i=>i&&i.reqId===req.id);
+  if(inv){
+    let prevPaid=0;
+    try{ prevPaid=(typeof _invPaidAmt==='function')?_invPaidAmt(inv):(parseFloat(inv.paidAmt)||0); }catch(e){ prevPaid=parseFloat(inv.paidAmt)||0; }
+    prevPaid=Math.round(prevPaid*100)/100;
+    const diff=Math.round((paidAmt-prevPaid)*100)/100;
+    if(diff!==0){
+      if(!Array.isArray(inv.payments)) inv.payments=[];
+      if(!inv.payments.length && prevPaid>0) inv.payments.push({amt:prevPaid, date:inv.date||'', ts:0, by:'—', note:'رصيد سابق'});
+      inv.payments.push({amt:diff, date:today, ts:Date.now(), by:_payUser, note:diff>0?'تعديل الطلب':'تعديل الطلب — تصحيح المدفوع'});
+    }
+    inv.patientId=pt.id; inv.patientName=pt.name;
+    inv.rawTotal=rawTotal; inv.discount=disc; inv.discountAmt=discAmt; inv.total=total;
+    inv.status=payStatus; inv.paidAmt=paidAmt; inv._updatedAt=Date.now();
+  } else {
+    inv={
+      id:_wizNewInvId(), patientId:pt.id, patientName:pt.name, reqId:req.id,
+      rawTotal, discount:disc, discountAmt:discAmt, total,
+      insType:pt.insurance||'', insAmt:0, status:payStatus, date:req.date||today,
+      paidAmt, payments: paidAmt>0?[{amt:paidAmt, date:today, ts:Date.now(), by:_payUser, note:'تعديل الطلب'}]:[]
+    };
+    invoices.push(inv);
+  }
+  save('invoices',invoices);
+
+  // ④ إنهاء وضع التعديل والعودة لنفس الطلب في واجهة إدخال النتائج
+  _wizEditPatientOnly=false; _wizEditOrigPatientId=null; _wizEditOrigReqId=null; _wizEditResetState();
+  closeModal('m-wizard');
+  currentReqId=req.id;
+  try{ renderRequests(); }catch(e){}
+  try{ updateBadges(); }catch(e){}
+  try{ updateDashboard(); }catch(e){}
+  try{ loadResultsDropdown(); }catch(e){}
+  try{ loadPrintDropdown(); }catch(e){}
+  try{ if(typeof renderInvoices==='function') renderInvoices(); }catch(e){}
+  if(sv.mergedN){
+    try{
+      const _tab=document.querySelector('#sec-patients .tabs .tab.active');
+      const _f=(_tab&&_tab.textContent.trim()==='اليوم')?'today':'all';
+      const _si=document.getElementById('pts-srch-inp');
+      renderPatients(_f,(_si&&_si.value)||'');
+    }catch(e){}
+  }
+  try{
+    const sel=document.getElementById('res-req-sel');
+    if(sel){ if(sel.value!==req.id) sel.value=req.id; if(sel.value===req.id) loadResultEntry(); }
+  }catch(e){}
+  const _chg=[];
+  if(added.length) _chg.push('أُضيف '+added.length);
+  if(removed.length) _chg.push('حُذف '+removed.length);
+  showNotif(sv.mergedN?'تم الدمج والتعديل ✅':'تم حفظ التعديلات ✅',
+    (req.orderNo||req.id)+' — '+pt.name+' | '+total+' '+(settings.currency||'')+(_chg.length?' | تحاليل: '+_chg.join('، '):'')
+    +(sv.mergedN?' — نُقل الطلب إلى ملف المريض السابق ('+pt.id+')':''),'success');
 }
 
 function wizFinish(){
+  // ✏️ تعديل طلب موجود (من واجهة إدخال النتائج) ⇒ حفظ فوق نفس الطلب — لا طلب جديد
+  if(_wizEditPatientOnly && _wizEditOrigReqId){ return _wizFinishEditReq(); }
   if(wizSelectedTests.length===0){showNotif('تنبيه','يرجى اختيار تحليل واحد على الأقل','error');return;}
   const today=new Date().toISOString().split('T')[0];
   // ⚠️ البحث يكون فقط بـ id — رقم الهاتف لا يُستخدم أبداً لتحديد هوية المريض
@@ -13626,17 +13846,43 @@ function updateWizTotal(){
     } else rl.style.display='none';
   }
 }
-function _wizPayChanged(){
+function _wizPayChanged(noFocus){
   const ps=(document.getElementById('wiz-pay-status')||{}).value;
   const pa=document.getElementById('wiz-paid-amt');
-  if(pa){ pa.style.display=ps==='جزئية'?'':'none'; if(ps==='جزئية') setTimeout(function(){ pa.focus(); },0); }
+  if(pa){ pa.style.display=ps==='جزئية'?'':'none'; if(ps==='جزئية' && noFocus!==true) setTimeout(function(){ pa.focus(); },0); }
+  _wizPayPaint();
   updateWizTotal();
 }
+/* 💳 تلوين صندوق «حالة الدفع» حسب الحالة كي يكون واضحاً للمستخدم */
+function _wizPayPaint(){
+  const bar=document.getElementById('wiz-pay-bar'); if(!bar) return;
+  const ps=(document.getElementById('wiz-pay-status')||{}).value;
+  const c = ps==='مدفوعة' ? ['var(--success,#00e676)','rgba(0,230,118,0.10)']
+          : ps==='جزئية'  ? ['#4da3ff','rgba(77,163,255,0.10)']
+          :                 ['var(--warning,#ffb020)','rgba(255,176,32,0.10)'];
+  bar.style.borderColor=c[0]; bar.style.background=c[1];
+  const ttl=document.getElementById('wiz-pay-ttl'); if(ttl) ttl.style.color=c[0];
+  const sel=document.getElementById('wiz-pay-status'); if(sel) sel.style.borderColor=c[0];
+}
+/* 🧾 إظهار تفاصيل وصل الحسابات (أسماء التحاليل وأسعارها) — الافتراضي: مفعّل.
+   يُحفظ في الإعدادات فيبقى كما تركه المستخدم في المرّات القادمة. */
+function _rcShowDetails(){
+  try{ return !(typeof settings!=='undefined' && settings && settings.receiptShowDetails===false); }catch(e){ return true; }
+}
+function _wizToggleRcDetails(){
+  const on=!_rcShowDetails();
+  try{ settings.receiptShowDetails=on; if(typeof save==='function') save('settings',settings); }catch(e){}
+  const tg=document.getElementById('wiz-rc-details-tog'); if(tg) tg.classList.toggle('on',on);
+  try{ showNotif('🧾 وصل الحسابات', on?'سيُطبع الوصل بتفاصيل التحاليل وأسعارها':'سيُطبع الوصل بدون أسماء التحاليل وأسعارها (الخصم والمجموع فقط)','success'); }catch(e){}
+}
+window._rcShowDetails=_rcShowDetails;
+window._wizToggleRcDetails=_wizToggleRcDetails;
 
 function checkPatientDebt(){
   const pid=wizPatient.id; if(!pid) return;
   const _rs=new Set(requests.map(r=>r.id));
-  const debt=Math.round(invoices.filter(i=>i&&i.patientId===pid&&!(i.reqId&&!_rs.has(i.reqId)))
+  const _exReq=(_wizEditPatientOnly&&_wizEditOrigReqId)?_wizEditOrigReqId:null;   // ✏️ لا نحسب فاتورة الطلب الجاري تعديله كـ«مطلوب سابق»
+  const debt=Math.round(invoices.filter(i=>i&&i.patientId===pid&&!(i.reqId&&!_rs.has(i.reqId))&&!(_exReq&&i.reqId===_exReq))
                      .reduce((s,i)=>s+_invDue(i),0)*100)/100;
   const w=document.getElementById('wiz-debt-warning');
   const a=document.getElementById('wiz-debt-amount');
@@ -13784,7 +14030,7 @@ function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا
   // ⭐ استعادة التركيز (يعالج فقدان المؤشر بعد الحذف على سطح المكتب وVercel)
   setTimeout(_restoreAppFocus,0);
 }}
-function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;renderWizStep();openModal('m-wizard');}
+function editPatient(id){const p=patients.find(x=>x.id===id);if(!p)return;wizPatient={...p};wizSelectedTests=[];wizStep=1;_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;_wizEditResetState();renderWizStep();openModal('m-wizard');}
 
 // ── دوال التقويم ────────────────────────────────────────────
 function toggleCalendar(e){
@@ -13954,14 +14200,15 @@ function openLabelCopiesPopup(reqId){
         +'سيُطبع لكل نسخة ملصقان:<br>'
         +'• <b>سيرم</b> — التحاليل الكيميائية<br>'
         +'• <b>EDTA (تراكمي)</b> — برقم مختلف<br>'
-        +'<span style="color:#ff9d9d">الصق كل ملصق على تيوبه الصحيح.</span>'
+        +'<span style="color:#ff9d9d">الصق كل ملصق على تيوبه الصحيح.</span><br>'
+        +'<span style="color:var(--text2,#8a97a6)">اجعل العدد <b>0</b> لعدم طباعة ذلك الملصق.</span>'
         +'</div>'
       : '')
     +'<div style="font-size:12px;color:var(--text2,#8a97a6);margin-bottom:8px">'
     +(_needsWB?'نسخ بقية التحاليل (سيرم)':'عدد النسخ')+'</div>'
     +'<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:'+(_needsWB?'14px':'20px')+'">'
     +'  <button id="_lblDec" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▼</button>'
-    +'  <input id="_lblCount" type="number" min="1" max="50" value="1" '
+    +'  <input id="_lblCount" type="number" min="'+(_needsWB?0:1)+'" max="50" value="1" '
     +'    style="width:74px;height:52px;text-align:center;font-size:24px;font-weight:900;border-radius:12px;'
     +'    border:1.5px solid var(--primary,#00d4ff);background:rgba(0,212,255,0.08);color:var(--primary,#00d4ff)">'
     +'  <button id="_lblInc" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▲</button>'
@@ -13971,7 +14218,7 @@ function openLabelCopiesPopup(reqId){
       ? '<div style="font-size:12px;color:#ff9d9d;margin-bottom:8px">🩸 نسخ ملصق التراكمي (EDTA)</div>'
         +'<div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:20px">'
         +'  <button id="_wbDec" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▼</button>'
-        +'  <input id="_wbCount" type="number" min="1" max="50" value="1" '
+        +'  <input id="_wbCount" type="number" min="0" max="50" value="1" '
         +'    style="width:74px;height:52px;text-align:center;font-size:24px;font-weight:900;border-radius:12px;'
         +'    border:1.5px solid #ff6b6b;background:rgba(255,107,107,0.08);color:#ff9d9d">'
         +'  <button id="_wbInc" style="width:44px;height:44px;border-radius:12px;border:1px solid var(--border,rgba(255,255,255,0.15));background:rgba(255,255,255,0.05);color:var(--text,#e6edf3);font-size:22px;font-weight:900;cursor:pointer;line-height:1">▲</button>'
@@ -13984,31 +14231,39 @@ function openLabelCopiesPopup(reqId){
   document.body.appendChild(pop);
 
   var inp=document.getElementById('_lblCount');
-  function _clamp(){ var v=parseInt(inp.value,10)||1; if(v<1)v=1; if(v>50)v=50; inp.value=v; }
-  document.getElementById('_lblInc').addEventListener('click',function(){ inp.value=(parseInt(inp.value,10)||1)+1; _clamp(); });
-  document.getElementById('_lblDec').addEventListener('click',function(){ inp.value=(parseInt(inp.value,10)||1)-1; _clamp(); });
-  inp.addEventListener('input',_clamp);
-  // 🩸 خانة نسخ التراكمي المنفصلة (موجودة فقط عند _needsWB)
+  // 🩸 عند وجود التراكمي (تيوبان) يمكن إنزال أي من العدّادين إلى 0 ⇒ لا يُطبع ذلك الملصق
+  var _minN=_needsWB?0:1;
+  function _num(el,def){ var v=parseInt(el.value,10); return isNaN(v)?def:v; }
+  function _fix(el,min){ var v=_num(el,min); if(v<min)v=min; if(v>50)v=50; el.value=v; return v; }
+  function _clamp(){ return _fix(inp,_minN); }
+  document.getElementById('_lblInc').addEventListener('click',function(){ inp.value=_num(inp,_minN)+1; _clamp(); });
+  document.getElementById('_lblDec').addEventListener('click',function(){ inp.value=_num(inp,_minN)-1; _clamp(); });
+  inp.addEventListener('change',_clamp);
+  inp.addEventListener('blur',_clamp);
+  // 🩸 خانة نسخ التراكمي المنفصلة (موجودة فقط عند _needsWB) — تنزل إلى 0
   var wbInp=document.getElementById('_wbCount');
-  function _wbClamp(){ if(!wbInp) return; var v=parseInt(wbInp.value,10)||1; if(v<1)v=1; if(v>50)v=50; wbInp.value=v; }
+  function _wbClamp(){ if(!wbInp) return 0; return _fix(wbInp,0); }
   if(wbInp){
-    document.getElementById('_wbInc').addEventListener('click',function(){ wbInp.value=(parseInt(wbInp.value,10)||1)+1; _wbClamp(); });
-    document.getElementById('_wbDec').addEventListener('click',function(){ wbInp.value=(parseInt(wbInp.value,10)||1)-1; _wbClamp(); });
-    wbInp.addEventListener('input',_wbClamp);
+    document.getElementById('_wbInc').addEventListener('click',function(){ wbInp.value=_num(wbInp,0)+1; _wbClamp(); });
+    document.getElementById('_wbDec').addEventListener('click',function(){ wbInp.value=_num(wbInp,0)-1; _wbClamp(); });
+    wbInp.addEventListener('change',_wbClamp);
+    wbInp.addEventListener('blur',_wbClamp);
   }
   document.getElementById('_lblCancel').addEventListener('click',function(){ closeLabelCopiesPopup(); });
   document.getElementById('_lblPrint').addEventListener('click',function(){
-    _clamp();
-    var n=parseInt(inp.value,10)||1;
-    // عدد نسخ التراكمي: من خانته المنفصلة إن وُجدت، وإلا 1
-    var wbN=1;
-    if(wbInp){ _wbClamp(); wbN=parseInt(wbInp.value,10)||1; }
+    var n=_clamp();
+    // عدد نسخ التراكمي: من خانته المنفصلة إن وُجدت
+    var wbN=wbInp?_wbClamp():0;
+    if(n<=0 && wbN<=0){
+      showNotif('تنبيه','كل الأعداد صفر — لن يُطبع أي ملصق. ارفع العدد لملصق واحد على الأقل','warning');
+      return;
+    }
     closeLabelCopiesPopup();
-    // ملصق السيرم (السلوك القديم تماماً)
-    printTubeLabel(reqId, n);
+    // ملصق السيرم (السلوك القديم تماماً) — يُتخطّى إذا كان عدده 0
+    if(n>0) printTubeLabel(reqId, n);
     // 🩸 ملصق تيوب الهول بلود — بعدده المستقل — فقط عند وجود تراكمي + تحاليل سيرم معاً
-    if(_needsWB){
-      setTimeout(function(){ printTubeLabel(reqId, wbN, 'wb'); }, 900*n+400);
+    if(_needsWB && wbN>0){
+      setTimeout(function(){ printTubeLabel(reqId, wbN, 'wb'); }, n>0 ? (900*n+400) : 0);
     }
   });
   setTimeout(function(){ try{inp.focus();inp.select();}catch(e){} },60);
@@ -16799,8 +17054,10 @@ function editPatientFromResults(){
   if(!pt){showNotif('خطأ','لم يُعثر على بيانات المريض','error');return;}
   // فتح نموذج تعديل بيانات المريض فقط بدون تغيير التحاليل
   wizPatient={...pt}; wizSelectedTests=[]; wizStep=1;
-  // تعديل زر "التالي" ليحفظ مباشرةً بدون الانتقال لاختيار التحاليل
+  // ✏️ وضع «تعديل الطلب»: «التالي» ينقل لاختيار التحاليل بتحاليل هذا الطلب،
+  //    و«حفظ» يحدّث نفس الطلب (لا يُنشئ طلباً جديداً)
   _wizEditPatientOnly=true;
+  _wizEditResetState();
   // 🆔 هوية المريض/الطلب الأصليين — لازمة لدمج الملفات إن اختير مريض سابق
   _wizEditOrigPatientId=pt.id;
   _wizEditOrigReqId=req.id;
@@ -64044,6 +64301,7 @@ function _buildReceipt(req){
     due = Math.max(0, Math.round((net-paid)*100)/100);
   }
 
+  var showDetails = (s.receiptShowDetails !== false);   // الافتراضي: إظهار التفاصيل
   var rows = list.map(function(t){
     return '<tr><td class="tn">'+_esc(t.name)+'</td><td class="tp">'+_money(t.price)+'</td></tr>';
   }).join('');
@@ -64096,12 +64354,15 @@ function _buildReceipt(req){
     (inv ? line('رقم الوصل', _esc(inv.id)) : '') +
     line('التاريخ', now.date) +
     line('وقت الطباعة', now.time) +
-    '<div class="hr"></div>' +
-    '<table><thead><tr><th class="a">التحليل</th><th class="b">السعر</th></tr></thead><tbody>' +
-      (rows || '<tr><td class="tn">—</td><td class="tp">—</td></tr>') +
-    '</tbody></table>' +
-    '<div class="hr2"></div>' +
-    line('عدد التحاليل', String(list.length)) +
+    // 🧾 «إظهار تفاصيل وصل الحسابات»: عند الإطفاء لا تُطبع أسماء التحاليل وأسعارها
+    (showDetails
+      ? '<div class="hr"></div>' +
+        '<table><thead><tr><th class="a">التحليل</th><th class="b">السعر</th></tr></thead><tbody>' +
+          (rows || '<tr><td class="tn">—</td><td class="tp">—</td></tr>') +
+        '</tbody></table>' +
+        '<div class="hr2"></div>' +
+        line('عدد التحاليل', String(list.length))
+      : '<div class="hr2"></div>') +
     line('المجموع', _money(raw)) +
     (disc>0 ? line('الخصم', '- '+_money(disc)) : '') +
     '<div class="ln net"><span>المجموع الكلي</span><span>'+_money(net)+'</span></div>' +
