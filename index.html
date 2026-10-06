@@ -2573,10 +2573,6 @@ select.fc:focus{outline:none;}
   #m-wizard-inner.wiz-s2-mode .wiz-panel-body{min-height:0;}
   #m-wizard-inner.wiz-s2-mode #wiz-body .wiz-s2-footer .fg{margin-bottom:0;}
 }
-/* الشاشات القصيرة: تقليل مساحة «الأكثر طلباً» (تبقى قابلة للتمرير) كي تبقى قائمة التحاليل واضحة */
-@media (min-width:769px) and (max-height:720px){
-  #m-wizard-inner.wiz-s2-mode #mrt-buttons-area{max-height:76px !important;}
-}
 /* 🧪 الشريط السفلي المضغوط (العينة · الأولوية · الملاحظة · المجموع) — سطر واحد */
 .wiz-s2-bottom{flex-wrap:nowrap !important;align-items:center !important;gap:10px !important;padding:5px 10px;
   border:1.5px solid var(--border);border-radius:10px;background:rgba(0,212,255,0.04);}
@@ -37065,7 +37061,31 @@ function renderMRTButtons(){
       style="padding:5px 11px;border-radius:6px;border:1px solid ${sel?'var(--primary)':'var(--border)'};background:${sel?'rgba(0,212,255,0.15)':'rgba(255,255,255,0.04)'};color:${sel?'var(--primary)':'var(--text)'};font-size:12px;font-weight:800;cursor:pointer;font-family:'Cairo',sans-serif;transition:all 0.15s"
       id="quick-btn-${t.id}">${t.code}</button>`;
   }).join('');
+  _mrtFitRows();
+  requestAnimationFrame(_mrtFitRows);
 }
+/* ⚡ «الأكثر طلباً»: ٣ أسطر كحد أدنى، وتزيد مع ارتفاع شاشة الحاسبة
+   (768 ⇒ ٤ أسطر · 1080 ⇒ ٥ · 1440 ⇒ ٧). الارتفاع يُضبط على أسطر كاملة
+   فلا يظهر سطر مقطوع، والباقي يُعرض بالتمرير. */
+function _mrtFitRows(){
+  try{
+    const area=document.getElementById('mrt-buttons-area'); if(!area) return;
+    const b=area.querySelector('button');
+    if(!b){ area.style.maxHeight=''; return; }
+    const rowH=b.offsetHeight; if(!rowH) return;          // النافذة غير ظاهرة بعد
+    const gap=parseFloat(getComputedStyle(area).rowGap)||6;
+    const rows=Math.max(3, Math.floor((window.innerHeight||768)/190));
+    area.style.maxHeight=(rows*rowH+(rows-1)*gap+2)+'px';
+  }catch(e){}
+}
+window._mrtFitRows=_mrtFitRows;
+(function(){
+  let _t=null;
+  window.addEventListener('resize',function(){
+    clearTimeout(_t);
+    _t=setTimeout(function(){ if(typeof wizStep!=='undefined' && wizStep===2) _mrtFitRows(); },120);
+  });
+})();
 
 function _toggleMRTEdit(){
   _mrtEditMode=!_mrtEditMode;
@@ -64192,8 +64212,11 @@ var FONT = "'Segoe UI',Tahoma,'Arial',sans-serif";
 /* ══════════════════════════════════════════════════════════════
    3) 📋 ورقة العمل — A5
    ══════════════════════════════════════════════════════════════ */
-async function _buildWorksheet(req){
+async function _buildWorksheet(req, fitMul){
   var pt = _pt(req), s = _S(), now = _now(), SZ = _wsSize();
+  // 📐 ملاءمة تلقائية: إن زاد المحتوى عن صفحة واحدة يُصغَّر الإطار بهذا المعامل (انظر _printWorksheet)
+  var _fm = (isFinite(fitMul) && fitMul>0 && fitMul<1) ? fitMul : 1;
+  SZ = { mode:SZ.mode, autoPaper:SZ.autoPaper, w:SZ.w, h:SZ.h, z:SZ.z*_fm };
   var list = _testsOf(req);
   var bcId = (typeof _reportBarcodeId==='function')
     ? _reportBarcodeId(req.orderNo, pt.barcode, pt.id, req.id)
@@ -64215,10 +64238,12 @@ async function _buildWorksheet(req){
   var n = list.length;
   // كثافة الصفوف حسب العدد — حتى تبقى الورقة صفحة واحدة على A5
   //  ≤9: عمود واحد · >9: عمودان (يسار ثم يمين، واحد أسفل الآخر) مع تصغير تدريجي
+  //  الورقة تستوعب ~٦٠ تحليلاً في صفحة A5 واحدة (وأكثر عبر الملاءمة التلقائية)
   var twoCol = n > 9;
-  var rowPad = n<=6 ? '2.3mm' : (n<=9 ? '1.6mm' : (n<=18 ? '1.25mm' : (n<=26 ? '0.75mm' : '0.4mm')));
-  // اسم التحليل أكبر بدرجة عن السابق (المساحة الموفَّرة من ضغط بيانات المريض)
-  var rowFs  = n<=6 ? '11.5pt' : (n<=9 ? '10.8pt' : (n<=18 ? '10pt' : (n<=26 ? '9pt' : '8pt')));
+  var dense  = n > 40;          // كثيف جداً: مربع وكود أصغر
+  var rowPad = n<=6 ? '2.1mm' : (n<=9 ? '1.5mm' : (n<=18 ? '1.1mm' : (n<=26 ? '0.7mm' : (n<=40 ? '0.45mm' : '0.3mm'))));
+  // حجم اسم التحليل — أصغر بدرجة عن السابق
+  var rowFs  = n<=6 ? '11pt' : (n<=9 ? '10.3pt' : (n<=18 ? '9.5pt' : (n<=26 ? '8.5pt' : (n<=40 ? '7.6pt' : '7.2pt'))));
 
   function info(lbl, val, cls){
     return '<div class="it'+(cls?' '+cls:'')+'"><span class="l">'+lbl+'</span><span class="v">'+_esc(val||'—')+'</span></div>';
@@ -64240,8 +64265,7 @@ async function _buildWorksheet(req){
       (tag ? '<div class="stk-tag">'+tag+'</div>' : '') +
       '<div class="stk-bc">'+img+'</div>' +
       '<div class="stk-n">'+_esc(num)+'</div>' +
-      '<div class="stk-p">'+_esc(ptName)+'</div>' +
-    '</div>';
+    '</div>';   // بلا اسم المريض — الاسم مذكور في بيانات المريض أسفل الرأس
   }
   var labBlock =
     '<div class="lab">'+_esc(s.name||'المختبر الطبي')+'</div>' +
@@ -64266,52 +64290,48 @@ async function _buildWorksheet(req){
     '.frame{zoom:'+SZ.z+';min-height:'+((SZ.h-12.5)/SZ.z).toFixed(2)+'mm;' +
       'border:0.55mm solid #0033cc;border-radius:4.5mm;padding:4.5mm 5mm;position:relative;' +
       '-webkit-box-decoration-break:clone;box-decoration-break:clone;display:flex;flex-direction:column}' +
-    '.hd{display:flex;justify-content:space-between;align-items:center;gap:4mm;padding-bottom:3mm;border-bottom:0.35mm solid #000}' +
+    '.hd{display:flex;justify-content:space-between;align-items:center;gap:4mm;padding-bottom:2mm;border-bottom:0.35mm solid #000}' +
     '.hd.wb{display:grid;grid-template-columns:40mm 1fr 40mm;gap:2.5mm;align-items:stretch}' +
     '.hd.wb .mid{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:0}' +
-    '.hd.wb .lab{font-size:13pt}' +
-    '.hd.wb .sub{font-size:7.5pt}' +
-    '.hd.wb .badge{font-size:8pt;padding:.8mm 2.6mm}' +
-    '.lab{font-size:15pt;font-weight:900;color:#0033cc;line-height:1.25}' +
-    '.sub{font-size:8.5pt;color:#000;margin-top:1mm;font-weight:700}' +
-    '.badge{display:inline-block;white-space:nowrap;margin-top:2mm;background:#000;color:#fff;font-size:9pt;font-weight:800;padding:1mm 3.5mm;border-radius:10mm;letter-spacing:.3px}' +
+    '.hd.wb .lab{font-size:11pt}' +
+    '.hd.wb .sub{font-size:6.6pt}' +
+    '.hd.wb .badge{font-size:6.6pt;padding:.6mm 2.2mm}' +
+    '.lab{font-size:12.5pt;font-weight:900;color:#0033cc;line-height:1.2}' +
+    '.sub{font-size:7.4pt;color:#000;margin-top:.6mm;font-weight:700}' +
+    '.badge{display:inline-block;white-space:nowrap;margin-top:1.3mm;background:#000;color:#fff;font-size:7.6pt;font-weight:800;padding:.7mm 3mm;border-radius:10mm;letter-spacing:.3px}' +
     '.bc{text-align:center;flex-shrink:0}' +
-    '.bc-img,.bc svg{display:block;height:13mm;width:auto;max-width:52mm;margin:0 auto}' +
-    '.bcn{font-family:"Courier New",monospace;font-size:9pt;font-weight:900;letter-spacing:1.6px;margin-top:.6mm;color:#000}' +
+    '.bc-img,.bc svg{display:block;height:11.5mm;width:auto;max-width:52mm;margin:0 auto}' +
+    '.bcn{font-family:"Courier New",monospace;font-size:8.5pt;font-weight:900;letter-spacing:1.6px;margin-top:.5mm;color:#000}' +
     // 🏷️ الملصق المطبوع على الورقة — بنفس شكل ملصق التيوب
-    '.stk{border:0.4mm solid #000;border-radius:1.6mm;padding:1.2mm 1.4mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4mm;min-width:0;background:#fff}' +
+    '.stk{border:0.4mm solid #000;border-radius:1.6mm;padding:1mm 1.4mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4mm;min-width:0;background:#fff}' +
     '.stk-tag{font-size:7.5pt;font-weight:900;color:#000;border:0.3mm solid #000;border-radius:1mm;padding:.2mm 1.5mm;line-height:1.25;direction:rtl;white-space:nowrap}' +
     '.stk-bc{width:100%;text-align:center}' +
     '.stk-bc .bc-img,.stk-bc svg{display:block;width:100%;height:9.5mm;max-width:none;margin:0 auto}' +
     '.stk-n{font-family:"Courier New",monospace;font-size:8pt;font-weight:900;letter-spacing:1.4px;color:#000;line-height:1}' +
     '.stk-p{font-size:7.5pt;font-weight:900;color:#000;width:100%;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;border-top:0.25mm solid #000;padding-top:.4mm}' +
-    // 👤 بيانات المريض — ٣ أعمدة مضغوطة
-    '.info{display:grid;grid-template-columns:repeat(6,1fr);gap:1.2mm 3mm;margin:2.5mm 0;border:0.3mm solid #000;border-radius:2.5mm;padding:2mm 3mm}' +
-    '.it{display:flex;gap:1.4mm;font-size:8.8pt;align-items:baseline;min-width:0}' +
-    '.it{grid-column:span 2}' +
-    '.it.s3{grid-column:span 3}' +
-    '.it.s4{grid-column:span 4}' +
-    '.it.s6{grid-column:1/-1}' +
+    // 👤 بيانات المريض — مضغوطة في ٣ أسطر (شبكة ١٢ عموداً)
+    '.info{display:flex;flex-direction:column;gap:.7mm;margin:1.6mm 0;border:0.3mm solid #000;border-radius:2mm;padding:1.2mm 2.6mm}' +
+    '.ir{display:flex;align-items:baseline;gap:5mm;min-width:0}' +
+    '.it{display:flex;gap:1.2mm;font-size:8pt;align-items:baseline;min-width:0;line-height:1.35;flex:0 0 auto}' +
+    '.it.grow{flex:1 1 auto}' +
     '.it .l{color:#000;font-weight:700;white-space:nowrap}' +
     '.it .v{font-weight:900;color:#000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-    '.it.name{padding-bottom:1mm;border-bottom:0.25mm solid #000}' +
-    '.it.name .v{font-size:11.5pt}' +
-    '.it.name + .it{padding-bottom:1mm;border-bottom:0.25mm solid #000}' +
-    '.th{display:flex;justify-content:space-between;align-items:center;direction:ltr;margin:.5mm 0 1.6mm;font-size:9.5pt;font-weight:900;color:#000;letter-spacing:.3px}' +
-    '.th .cnt{border:0.35mm solid #0033cc;color:#0033cc;border-radius:10mm;padding:.3mm 3mm;font-size:8.5pt}' +
+    '.it.name .v{font-size:10pt}' +
+    '.th{display:flex;justify-content:space-between;align-items:center;direction:ltr;margin:0 0 1mm;font-size:8.6pt;font-weight:900;color:#000;letter-spacing:.3px}' +
+    '.th .cnt{border:0.35mm solid #0033cc;color:#0033cc;border-radius:10mm;padding:.1mm 2.6mm;font-size:7.8pt}' +
     '.list{direction:ltr;text-align:left;border:0.3mm solid #000;border-radius:2.5mm;overflow:hidden' +
       (twoCol ? ';column-count:2;column-gap:0;column-rule:0.3mm solid #000' : '') + '}' +
     '.row{display:flex;align-items:center;gap:'+(twoCol?'1.6mm':'2.4mm')+';padding:'+rowPad+' '+(twoCol?'2mm':'3mm')+';font-size:'+rowFs+';break-inside:avoid;border-bottom:0.2mm solid #000}' +
     '.row:last-child{border-bottom:none}' +
-    '.chk{width:3.4mm;height:3.4mm;border:0.35mm solid #000;border-radius:.8mm;flex-shrink:0}' +
-    '.no{font-family:"Courier New",monospace;font-weight:900;color:#000;font-size:8.5pt;flex-shrink:0}' +
-    '.nm{font-weight:900;color:#000}' +
-    '.cd{font-size:7.5pt;color:#000;border:0.25mm solid #000;border-radius:1mm;padding:0 1.4mm;font-weight:700}' +
+    '.chk{width:'+(dense?'2.8mm':'3.2mm')+';height:'+(dense?'2.8mm':'3.2mm')+';border:0.35mm solid #000;border-radius:.7mm;flex-shrink:0}' +
+    '.no{font-family:"Courier New",monospace;font-weight:900;color:#000;font-size:'+(dense?'7pt':'8pt')+';flex-shrink:0}' +
+    '.nm{font-weight:900;color:#000;line-height:1.15;min-width:0}' +
+    '.cd{font-size:'+(dense?'6.2pt':'7pt')+';color:#000;border:0.25mm solid #000;border-radius:1mm;padding:0 1.2mm;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.25}' +
     '.fill{flex:1;border-bottom:0.25mm dotted #000;margin:0 1mm;transform:translateY(1mm)}' +
     '.ct{font-size:7.5pt;color:#000;font-weight:700;white-space:nowrap}' +
-    '.note{margin-top:3mm;border:0.3mm dashed #000;border-radius:3mm;padding:2mm 3mm;font-size:8.5pt;color:#000}' +
+    '.note{margin-top:1.6mm;border:0.3mm dashed #000;border-radius:2.5mm;padding:1.2mm 2.6mm;font-size:8pt;color:#000}' +
     '.note b{color:#000}' +
-    '.ft{margin-top:auto;padding-top:4mm;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt;color:#000}' +
+    '.ft{margin-top:auto;padding-top:3mm;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt;color:#000}' +
     '.sig{border-top:0.3mm solid #000;width:38mm;text-align:center;padding-top:1mm;font-weight:700}' +
     '.pr{font-weight:700}';
 
@@ -64321,17 +64341,27 @@ async function _buildWorksheet(req){
   //  ٣) الطبيب · الأولوية
   //  ٤) تاريخ الطلب · وقت الطباعة
   //  ٥) نوع العينة (إن وُجد)
+  //  ٣ أسطر مضغوطة (RTL — من اليمين) · بلا «نوع العينة»:
+  //  ١) المريض · العمر · الجنس
+  //  ٢) الطبيب · رقم الملف · رقم الطلب
+  //  ٣) تاريخ الطلب · وقت الطباعة · الأولوية
+  //  كل سطر يأخذ عرض محتواه (لا قصّ للأرقام) — العنصر الأول يتمدّد ويُختصر عند الحاجة
   var infoHTML =
-    '<div class="it name s4"><span class="l">المريض:</span><span class="v">'+_esc(ptName)+'</span></div>' +
-    info('العمر:', _age(pt)) +
-    info('الجنس:', _gender(pt.gender)) +
-    info('رقم الملف:', pt.id||req.patientId) +
-    info('رقم الطلب:', req.orderNo||req.id) +
-    info('الطبيب:', req.doctorName||pt.doctorName, 's4') +
-    info('الأولوية:', req.priority||'Routine') +
-    info('تاريخ الطلب:', [req.date, req.time].filter(Boolean).join('  '), 's3') +
-    info('وقت الطباعة:', now.date+'  '+now.time, 's3') +
-    (req.sample ? info('نوع العينة:', req.sample, 's6') : '');
+    '<div class="ir">' +
+      '<div class="it name grow"><span class="l">المريض:</span><span class="v">'+_esc(ptName)+'</span></div>' +
+      info('العمر:', _age(pt)) +
+      info('الجنس:', _gender(pt.gender)) +
+    '</div>' +
+    '<div class="ir">' +
+      info('الطبيب:', req.doctorName||pt.doctorName, 'grow') +
+      info('رقم الملف:', pt.id||req.patientId) +
+      info('رقم الطلب:', req.orderNo||req.id) +
+    '</div>' +
+    '<div class="ir">' +
+      info('تاريخ الطلب:', [req.date, req.time].filter(Boolean).join('  '), 'grow') +
+      info('وقت الطباعة:', now.date+'  '+now.time) +
+      info('الأولوية:', req.priority||'Routine') +
+    '</div>';
 
   return '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>ورقة العمل</title><style>'+css+'</style></head><body>' +
     '<div class="frame">' +
@@ -64344,11 +64374,50 @@ async function _buildWorksheet(req){
     '</div></body></html>';
 }
 
+/* يقيس هل تتجاوز ورقة العمل صفحة واحدة؛ يُعيد نسبة التصغير اللازمة (1 = لا تجاوز) */
+function _wsOverflow(html, wMM, hMM){
+  return new Promise(function(res){
+    var f=document.createElement('iframe');
+    f.style.cssText='position:fixed;left:-9999px;top:0;width:'+wMM+'mm;height:'+hMM+'mm;border:0;opacity:0;pointer-events:none';
+    document.body.appendChild(f);
+    var done=false;
+    function fin(){
+      if(done) return; done=true;
+      var r=1;
+      try{
+        var d=f.contentDocument, pagePx=hMM*96/25.4, padPx=12*96/25.4;
+        var used=d.body.getBoundingClientRect().height;   // قياس دقيق (scrollHeight يُقرَّب لارتفاع الإطار)
+        // الإطار يملأ الصفحة إلا ~0.5مم؛ أي زيادة فوق (الصفحة − 1px) تعني صفحة ثانية
+        if(used>pagePx-1) r=(pagePx-padPx-6)/(used-padPx);
+      }catch(e){ r=1; }
+      try{ document.body.removeChild(f); }catch(e){}
+      res(r);
+    }
+    try{
+      var d=f.contentDocument; d.open(); d.write(html); d.close();
+      var go=function(){ setTimeout(fin,80); };
+      if(d.fonts && d.fonts.ready) d.fonts.ready.then(go,go); else go();
+      setTimeout(fin,1500);
+    }catch(e){ fin(); }
+  });
+}
+
 async function _printWorksheet(reqId, silentNotif){
   var req=_req(reqId);
   if(!req){ _notif('خطأ','الطلب غير موجود','error'); return; }
   try{
     var html = await _buildWorksheet(req), SZ = _wsSize();
+    // 📐 ضمان صفحة واحدة: إن تجاوز المحتوى طول الورقة نصغّره بالنسبة اللازمة (حتى ٣ محاولات)
+    try{
+      var mul = 1;
+      for(var k=0; k<3; k++){
+        var f = await _wsOverflow(html, SZ.w, SZ.h);
+        if(!(f>0 && f<0.995)) break;
+        mul = Math.max(0.6, mul*f*0.985);
+        html = await _buildWorksheet(req, mul);
+        if(mul<=0.6) break;
+      }
+    }catch(_){}
     var ok = await _printHTML(html, _S().printerWorksheet||'', SZ.w, SZ.h, 'ورقة العمل',
                               SZ.mode==='custom' ? '' : SZ.autoPaper);
     if(ok && !silentNotif) _notif('🖨️ تم','📋 أُرسلت ورقة العمل للطباعة','success');
