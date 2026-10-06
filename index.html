@@ -37843,7 +37843,7 @@ function _buildSemenPrintHTML(r, mode){
   const drName=r.doctorName||pt.doctorName||(doctors&&doctors.find&&doctors.find(d=>d.id===pt.doctorId)?.name)||'';
   const _smNameColor   = s.colorName||'#cc0011';
   const _smDoctorColor = s.colorDoctor||'#cc0011';
-  const _smPtTitle     = pt.title||'';
+  const _smPtTitle     = pt.title||r.patientTitle||'';
   const _smPtFullName  = _smPtTitle ? _smPtTitle+' / '+(pt.name||r.patientName||'—') : (pt.name||r.patientName||'—');
   const _smAgeTxt      = (pt.ageDisplay||r.patientAge||'—').replace(/سنة/g,'Year').replace(/شهر/g,'Month').replace(/يوم/g,'Day').replace(/ساعة/g,'Hour');
   const _smPrintTime   = new Date().toLocaleString('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -37889,23 +37889,31 @@ function _buildSemenPrintHTML(r, mode){
   const _smBR=(c)=>`flex:1;border:1.5px solid #bbb;border-radius:3px;background:#fff;padding:1px 6px;font-size:12px;font-weight:700;color:${c||'#000'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block`;
   const _smRR=(lbl,val)=>`<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px"><span style="${_smLBLR}">${lbl}</span><span style="${_smBR('#000')}">${val}</span></div>`;
 
-  const _smPtBox=`<div style="margin:2px 0;direction:ltr"><div style="display:flex;align-items:flex-start;gap:8px">
+  // 👤 بيانات المريض — بنفس ترتيب تقرير الزرع:
+  //    يسار: الاسم (مع اللقب) · الجنس/العمر · الطبيب
+  //    يمين: الباركود ثم (Input | Time) ثم (Phone | Print)
+  const _smPhone = String(pt.phone || r.patientPhone || '').trim() || '—';
+  const _smRowL=(lbl,val,c,rtl)=>`<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px"><span style="${_smLBL};width:52px">${lbl}</span><span style="${_smBL(c,rtl)}">${val}</span></div>`;
+  const _smRowLSA=(lbl,val,c,rtl)=>`<div style="display:flex;align-items:center;gap:5px;margin-bottom:3px"><span style="${_smLBL};width:52px">${lbl}</span><span style="${_smBLSA(c,rtl)}">${val}</span></div>`;
+  const _smRowR=(lbl,val)=>`<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;flex:1;min-width:0"><span style="${_smLBLR}">${lbl}</span><span style="${_smBR('#000')}">${val}</span></div>`;
+  const _smPtBox=`<div style="margin:2px 0;direction:ltr"><div style="display:flex;align-items:flex-start;gap:10px">
     <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-      ${_smRL('Name',_smPtFullName,_smNameColor,true)}
-      ${_smRL_SA('Sex/Age','Male / '+_smAgeTxt,'#000',false)}
-      ${_smRL('Doctor',drName||'—',_smDoctorColor,true)}
+      ${_smRowL('Name',_smPtFullName,_smNameColor,true)}
+      ${_smRowLSA('Sex/Age','Male / '+_smAgeTxt,'#000',false)}
+      ${_smRowL('Doctor',drName||'—',_smDoctorColor,true)}
     </div>
-    <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:stretch">
-      <div style="text-align:right;margin-bottom:2px">
-        ${_smBarcodeSvg}
+    <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:stretch;min-width:200px">
+      <div style="text-align:center;margin-bottom:2px">
+        <div style="display:inline-block">${_smBarcodeSvg}</div>
         <div style="font-size:7px;font-weight:900;color:#000;letter-spacing:2px;font-family:'Courier New',monospace;text-align:center;line-height:1">${_smBarcodeId}</div>
       </div>
-      <div style="display:flex;flex-direction:column">
-        <div style="display:flex;gap:4px">
-          ${_smRR('Input',r.date||'—')}
-          ${_smRR('Time',_ptEntryTime(pt, r))}
-        </div>
-        ${_smRR('Print',_smPrintTime)}
+      <div style="display:flex;gap:4px">
+        ${_smRowR('Input',r.date||'—')}
+        ${_smRowR('Time',_ptEntryTime(pt, r))}
+      </div>
+      <div style="display:flex;gap:4px">
+        ${_smRowR('Phone','<span style="direction:ltr;unicode-bidi:embed">'+_smPhone+'</span>')}
+        ${_smRowR('Print',_smPrintTime)}
       </div>
     </div>
   </div></div>`;
@@ -63863,15 +63871,28 @@ async function _buildWorksheet(req){
     : String(req.orderNo||pt.id||req.id||'').replace(/[^0-9A-Za-z]/g,'');
   var bc = await _barcodePng(bcId);
 
+  // 🩸 ملصق التراكمي — نفس شرط طباعة ملصق EDTA المنفصل (تراكمي + تحاليل أخرى معاً)
+  //    وبنفس رقمه (بادئة 9). عند غياب التراكمي يبقى رأس الورقة كما هو تماماً.
+  var hasWB = false, wbId = '', wbBc = '';
+  try{
+    if(typeof _c111SplitReqTests==='function' && typeof _c111WbSid==='function'){
+      var _sp = _c111SplitReqTests(req);
+      hasWB = !!(_sp && _sp.wb.length>0 && _sp.serum.length>0);
+      if(hasWB){ wbId = _c111WbSid(bcId) || ''; if(!wbId) hasWB = false; }
+    }
+  }catch(_){ hasWB = false; }
+  if(hasWB) wbBc = await _barcodePng(wbId);
+
   var n = list.length;
   // كثافة الصفوف حسب العدد — حتى تبقى الورقة صفحة واحدة على A5
   //  ≤9: عمود واحد · >9: عمودان (يسار ثم يمين، واحد أسفل الآخر) مع تصغير تدريجي
   var twoCol = n > 9;
   var rowPad = n<=6 ? '2.3mm' : (n<=9 ? '1.6mm' : (n<=18 ? '1.25mm' : (n<=26 ? '0.75mm' : '0.4mm')));
-  var rowFs  = n<=6 ? '10.5pt' : (n<=9 ? '9.8pt' : (n<=18 ? '9pt' : (n<=26 ? '8.2pt' : '7.2pt')));
+  // اسم التحليل أكبر بدرجة عن السابق (المساحة الموفَّرة من ضغط بيانات المريض)
+  var rowFs  = n<=6 ? '11.5pt' : (n<=9 ? '10.8pt' : (n<=18 ? '10pt' : (n<=26 ? '9pt' : '8pt')));
 
-  function info(lbl, val, wide){
-    return '<div class="it'+(wide?' wide':'')+'"><span class="l">'+lbl+'</span><span class="v">'+_esc(val||'—')+'</span></div>';
+  function info(lbl, val, cls){
+    return '<div class="it'+(cls?' '+cls:'')+'"><span class="l">'+lbl+'</span><span class="v">'+_esc(val||'—')+'</span></div>';
   }
   var rows = list.map(function(t,i){
     return '<div class="row">' +
@@ -63884,66 +63905,109 @@ async function _buildWorksheet(req){
     '</div>';
   }).join('');
 
+  var ptName = pt.name||req.patientName||'—';
+  function sticker(img, num, tag){
+    return '<div class="stk">' +
+      (tag ? '<div class="stk-tag">'+tag+'</div>' : '') +
+      '<div class="stk-bc">'+img+'</div>' +
+      '<div class="stk-n">'+_esc(num)+'</div>' +
+      '<div class="stk-p">'+_esc(ptName)+'</div>' +
+    '</div>';
+  }
+  var labBlock =
+    '<div class="lab">'+_esc(s.name||'المختبر الطبي')+'</div>' +
+    (s.addr||s.phone ? '<div class="sub">'+_esc([s.addr, s.phone].filter(Boolean).join('  ·  '))+'</div>' : '') +
+    '<div class="badge">📋 ورقة العمل · Work Sheet</div>';
+  var header = hasWB
+    // RTL: يمين = ملصق التراكمي · وسط = اسم المختبر · يسار = ملصق الطلب لبقية التحاليل
+    ? '<div class="hd wb">' +
+        sticker(wbBc, wbId, '🩸 EDTA — تراكمي') +
+        '<div class="mid">'+labBlock+'</div>' +
+        sticker(bc, bcId, '') +
+      '</div>'
+    : '<div class="hd">' +
+        '<div>'+labBlock+'</div>' +
+        '<div class="bc">'+bc+'<div class="bcn">'+_esc(bcId)+'</div></div>' +
+      '</div>';
+
   var css =
     '*{margin:0;padding:0;box-sizing:border-box}' +
     '@page{size:'+SZ.w+'mm '+SZ.h+'mm;margin:0}html,body{width:'+SZ.w+'mm;background:#fff}' +
-    'body{font-family:'+FONT+';color:#1d2733;padding:6mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    'body{font-family:'+FONT+';color:#000;padding:6mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
     '.frame{zoom:'+SZ.z+';min-height:'+((SZ.h-12.5)/SZ.z).toFixed(2)+'mm;' +
-      'border:0.45mm solid #c9d4e0;border-radius:4.5mm;padding:5mm 5.5mm;position:relative;' +
+      'border:0.45mm solid #000;border-radius:4.5mm;padding:4.5mm 5mm;position:relative;' +
       '-webkit-box-decoration-break:clone;box-decoration-break:clone;display:flex;flex-direction:column}' +
-    '.hd{display:flex;justify-content:space-between;align-items:center;gap:4mm;padding-bottom:3.5mm;border-bottom:0.3mm solid #e2e8ef}' +
-    '.lab{font-size:15pt;font-weight:900;color:#0b3a5c;line-height:1.25}' +
-    '.sub{font-size:8.5pt;color:#6b7a8a;margin-top:1mm;font-weight:600}' +
-    '.badge{display:inline-block;margin-top:2mm;background:#0b3a5c;color:#fff;font-size:9pt;font-weight:800;padding:1mm 3.5mm;border-radius:10mm;letter-spacing:.3px}' +
+    '.hd{display:flex;justify-content:space-between;align-items:center;gap:4mm;padding-bottom:3mm;border-bottom:0.35mm solid #000}' +
+    '.hd.wb{display:grid;grid-template-columns:40mm 1fr 40mm;gap:2.5mm;align-items:stretch}' +
+    '.hd.wb .mid{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-width:0}' +
+    '.hd.wb .lab{font-size:13pt}' +
+    '.hd.wb .sub{font-size:7.5pt}' +
+    '.hd.wb .badge{font-size:8pt;padding:.8mm 2.6mm}' +
+    '.lab{font-size:15pt;font-weight:900;color:#000;line-height:1.25}' +
+    '.sub{font-size:8.5pt;color:#000;margin-top:1mm;font-weight:700}' +
+    '.badge{display:inline-block;white-space:nowrap;margin-top:2mm;background:#000;color:#fff;font-size:9pt;font-weight:800;padding:1mm 3.5mm;border-radius:10mm;letter-spacing:.3px}' +
     '.bc{text-align:center;flex-shrink:0}' +
     '.bc-img,.bc svg{display:block;height:13mm;width:auto;max-width:52mm;margin:0 auto}' +
-    '.bcn{font-family:"Courier New",monospace;font-size:9pt;font-weight:900;letter-spacing:1.6px;margin-top:.6mm}' +
-    '.info{display:grid;grid-template-columns:1fr 1fr;gap:1.6mm 4mm;margin:3.5mm 0;background:#f5f8fb;border:0.25mm solid #e2e8ef;border-radius:3mm;padding:3mm 3.5mm}' +
-    '.it{display:flex;gap:2mm;font-size:9pt;align-items:baseline;min-width:0}' +
-    '.it.wide{grid-column:1/3}' +
-    '.it .l{color:#7a8897;font-weight:700;white-space:nowrap}' +
-    '.it .v{font-weight:800;color:#1d2733;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
-    '.it.name .v{font-size:11pt;color:#0b3a5c}' +
-    '.th{display:flex;justify-content:space-between;align-items:center;direction:ltr;margin:1mm 0 2mm;font-size:9.5pt;font-weight:900;color:#0b3a5c;letter-spacing:.3px}' +
-    '.th .cnt{background:#e8f1f8;color:#0b3a5c;border-radius:10mm;padding:.4mm 3mm;font-size:8.5pt}' +
-    '.list{direction:ltr;text-align:left;border:0.25mm solid #e2e8ef;border-radius:3mm;overflow:hidden' +
-      (twoCol ? ';column-count:2;column-gap:0;column-rule:0.25mm solid #e2e8ef' : '') + '}' +
-    '.row{display:flex;align-items:center;gap:'+(twoCol?'1.6mm':'2.4mm')+';padding:'+rowPad+' '+(twoCol?'2mm':'3mm')+';font-size:'+rowFs+';break-inside:avoid;border-bottom:0.2mm solid #edf1f5}' +
+    '.bcn{font-family:"Courier New",monospace;font-size:9pt;font-weight:900;letter-spacing:1.6px;margin-top:.6mm;color:#000}' +
+    // 🏷️ الملصق المطبوع على الورقة — بنفس شكل ملصق التيوب
+    '.stk{border:0.4mm solid #000;border-radius:1.6mm;padding:1.2mm 1.4mm;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4mm;min-width:0;background:#fff}' +
+    '.stk-tag{font-size:7.5pt;font-weight:900;color:#000;border:0.3mm solid #000;border-radius:1mm;padding:.2mm 1.5mm;line-height:1.25;direction:rtl;white-space:nowrap}' +
+    '.stk-bc{width:100%;text-align:center}' +
+    '.stk-bc .bc-img,.stk-bc svg{display:block;width:100%;height:9.5mm;max-width:none;margin:0 auto}' +
+    '.stk-n{font-family:"Courier New",monospace;font-size:8pt;font-weight:900;letter-spacing:1.4px;color:#000;line-height:1}' +
+    '.stk-p{font-size:7.5pt;font-weight:900;color:#000;width:100%;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;border-top:0.25mm solid #000;padding-top:.4mm}' +
+    // 👤 بيانات المريض — ٣ أعمدة مضغوطة
+    '.info{display:grid;grid-template-columns:repeat(6,1fr);gap:1.2mm 3mm;margin:2.5mm 0;border:0.3mm solid #000;border-radius:2.5mm;padding:2mm 3mm}' +
+    '.it{display:flex;gap:1.4mm;font-size:8.8pt;align-items:baseline;min-width:0}' +
+    '.it{grid-column:span 2}' +
+    '.it.s3{grid-column:span 3}' +
+    '.it.s4{grid-column:span 4}' +
+    '.it.s6{grid-column:1/-1}' +
+    '.it .l{color:#000;font-weight:700;white-space:nowrap}' +
+    '.it .v{font-weight:900;color:#000;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.it.name{padding-bottom:1mm;border-bottom:0.25mm solid #000}' +
+    '.it.name .v{font-size:11.5pt}' +
+    '.it.name + .it{padding-bottom:1mm;border-bottom:0.25mm solid #000}' +
+    '.th{display:flex;justify-content:space-between;align-items:center;direction:ltr;margin:.5mm 0 1.6mm;font-size:9.5pt;font-weight:900;color:#000;letter-spacing:.3px}' +
+    '.th .cnt{border:0.3mm solid #000;color:#000;border-radius:10mm;padding:.3mm 3mm;font-size:8.5pt}' +
+    '.list{direction:ltr;text-align:left;border:0.3mm solid #000;border-radius:2.5mm;overflow:hidden' +
+      (twoCol ? ';column-count:2;column-gap:0;column-rule:0.3mm solid #000' : '') + '}' +
+    '.row{display:flex;align-items:center;gap:'+(twoCol?'1.6mm':'2.4mm')+';padding:'+rowPad+' '+(twoCol?'2mm':'3mm')+';font-size:'+rowFs+';break-inside:avoid;border-bottom:0.2mm solid #000}' +
     '.row:last-child{border-bottom:none}' +
-    '.row:nth-child(even){background:#fafcfd}' +
-    '.chk{width:3.4mm;height:3.4mm;border:0.35mm solid #8fa3b6;border-radius:.8mm;flex-shrink:0}' +
-    '.no{font-family:"Courier New",monospace;font-weight:900;color:#8fa3b6;font-size:8.5pt;flex-shrink:0}' +
-    '.nm{font-weight:800;color:#1d2733}' +
-    '.cd{font-size:7.5pt;color:#6b7a8a;background:#eef3f7;border-radius:1mm;padding:.2mm 1.4mm;font-weight:700}' +
-    '.fill{flex:1;border-bottom:0.25mm dotted #c3cfdb;margin:0 1mm;transform:translateY(1mm)}' +
-    '.ct{font-size:7.5pt;color:#8a97a5;font-weight:600;white-space:nowrap}' +
-    '.note{margin-top:3mm;border:0.25mm dashed #c9d4e0;border-radius:3mm;padding:2mm 3mm;font-size:8.5pt}' +
-    '.note b{color:#0b3a5c}' +
-    '.ft{margin-top:auto;padding-top:4mm;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt;color:#6b7a8a}' +
-    '.sig{border-top:0.25mm solid #9aabbb;width:38mm;text-align:center;padding-top:1mm;font-weight:700}' +
+    '.chk{width:3.4mm;height:3.4mm;border:0.35mm solid #000;border-radius:.8mm;flex-shrink:0}' +
+    '.no{font-family:"Courier New",monospace;font-weight:900;color:#000;font-size:8.5pt;flex-shrink:0}' +
+    '.nm{font-weight:900;color:#000}' +
+    '.cd{font-size:7.5pt;color:#000;border:0.25mm solid #000;border-radius:1mm;padding:0 1.4mm;font-weight:700}' +
+    '.fill{flex:1;border-bottom:0.25mm dotted #000;margin:0 1mm;transform:translateY(1mm)}' +
+    '.ct{font-size:7.5pt;color:#000;font-weight:700;white-space:nowrap}' +
+    '.note{margin-top:3mm;border:0.3mm dashed #000;border-radius:3mm;padding:2mm 3mm;font-size:8.5pt;color:#000}' +
+    '.note b{color:#000}' +
+    '.ft{margin-top:auto;padding-top:4mm;break-inside:avoid;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt;color:#000}' +
+    '.sig{border-top:0.3mm solid #000;width:38mm;text-align:center;padding-top:1mm;font-weight:700}' +
     '.pr{font-weight:700}';
+
+  // ترتيب بيانات المريض (RTL — من اليمين):
+  //  ١) الاسم · العمر
+  //  ٢) الجنس · رقم الملف · رقم الطلب
+  //  ٣) الطبيب · الأولوية
+  //  ٤) تاريخ الطلب · وقت الطباعة
+  //  ٥) نوع العينة (إن وُجد)
+  var infoHTML =
+    '<div class="it name s4"><span class="l">المريض:</span><span class="v">'+_esc(ptName)+'</span></div>' +
+    info('العمر:', _age(pt)) +
+    info('الجنس:', _gender(pt.gender)) +
+    info('رقم الملف:', pt.id||req.patientId) +
+    info('رقم الطلب:', req.orderNo||req.id) +
+    info('الطبيب:', req.doctorName||pt.doctorName, 's4') +
+    info('الأولوية:', req.priority||'Routine') +
+    info('تاريخ الطلب:', [req.date, req.time].filter(Boolean).join('  '), 's3') +
+    info('وقت الطباعة:', now.date+'  '+now.time, 's3') +
+    (req.sample ? info('نوع العينة:', req.sample, 's6') : '');
 
   return '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>ورقة العمل</title><style>'+css+'</style></head><body>' +
     '<div class="frame">' +
-      '<div class="hd">' +
-        '<div><div class="lab">'+_esc(s.name||'المختبر الطبي')+'</div>' +
-          (s.addr||s.phone ? '<div class="sub">'+_esc([s.addr, s.phone].filter(Boolean).join('  ·  '))+'</div>' : '') +
-          '<div class="badge">📋 ورقة العمل · Work Sheet</div></div>' +
-        '<div class="bc">'+bc+'<div class="bcn">'+_esc(bcId)+'</div></div>' +
-      '</div>' +
-      '<div class="info">' +
-        '<div class="it name wide"><span class="l">اسم المريض:</span><span class="v">'+_esc(pt.name||req.patientName||'—')+'</span></div>' +
-        (pt.nameEn ? info('الاسم بالإنجليزي:', pt.nameEn, true) : '') +
-        info('رقم الملف:', pt.id||req.patientId) +
-        info('رقم الطلب:', req.orderNo||req.id) +
-        info('العمر:', _age(pt)) +
-        info('الجنس:', _gender(pt.gender)) +
-        info('الطبيب:', req.doctorName||pt.doctorName) +
-        info('الأولوية:', req.priority||'Routine') +
-        info('تاريخ الطلب:', [req.date, req.time].filter(Boolean).join('  ')) +
-        info('وقت الطباعة:', now.date+'  '+now.time) +
-        (req.sample ? info('نوع العينة:', req.sample, true) : '') +
-      '</div>' +
+      header +
+      '<div class="info">' + infoHTML + '</div>' +
       '<div class="th"><span>Requested Tests</span><span class="cnt">'+n+' test'+(n===1?'':'s')+'</span></div>' +
       '<div class="list">'+(rows || '<div class="row"><span class="nm">—</span></div>')+'</div>' +
       (req.note ? '<div class="note"><b>ملاحظة:</b> '+_esc(req.note)+'</div>' : '') +
