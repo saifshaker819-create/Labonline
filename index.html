@@ -12713,11 +12713,7 @@ function renderWizStep(){
             <span style="font-size:12px;color:var(--text2);font-weight:700">المجموع:</span>
             <span id="wiz-total-lbl" style="font-size:18px;font-weight:900;color:var(--primary)">0 ${settings.currency}</span>
           </div>
-          <!-- خصم -->
-          <div class="fg" style="min-width:120px;margin-bottom:0">
-            <label class="fl" style="font-size:10px">خصم (مبلغ ${settings.currency||''})</label>
-            <input class="fc" id="wiz-discount" type="number" min="0" step="any" lang="en" dir="ltr" placeholder="0" oninput="updateWizTotal()" style="padding:5px 8px">
-          </div>
+          <!-- 🏷️ خانة الخصم انتقلت إلى صندوق «حالة الدفع» أسفل النافذة -->
           <!-- بعد الخصم -->
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-size:11px;color:var(--text2);font-weight:700">بعد الخصم:</span>
@@ -12733,6 +12729,12 @@ function renderWizStep(){
     renderMRTButtons();
     ftr.innerHTML=`
       <div id="wiz-pay-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-left:auto;padding:7px 12px;border-radius:12px;border:2px solid var(--warning,#ffb020);background:rgba(255,176,32,0.10);transition:border-color .2s,background .2s">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:13px;color:var(--text);font-weight:900;white-space:nowrap">🏷️ الخصم</span>
+          <input class="fc" id="wiz-discount" type="number" min="0" step="any" lang="en" dir="ltr" placeholder="0" oninput="updateWizTotal()" title="مبلغ الخصم بالـ${settings.currency||''}" style="width:105px;padding:7px 10px;font-size:14px;font-weight:800">
+          <span style="font-size:11px;color:var(--text2);font-weight:700">${settings.currency||''}</span>
+        </div>
+        <span style="width:1px;align-self:stretch;background:var(--border);margin:0 2px"></span>
         <span id="wiz-pay-ttl" style="font-size:13.5px;color:var(--warning,#ffb020);font-weight:900;white-space:nowrap">💳 حالة الدفع</span>
         <select class="fc" id="wiz-pay-status" onchange="_wizPayChanged()" title="اختر حالة الدفع لهذا الطلب" style="width:auto;padding:7px 12px;font-size:14px;font-weight:900;border-width:1.5px;cursor:pointer">
           <option value="مدفوعة">✅ مدفوع</option>
@@ -64286,7 +64288,7 @@ async function _printWorksheet(reqId, silentNotif){
 /* ══════════════════════════════════════════════════════════════
    4) 🧾 وصل الحساب — 58 ملم
    ══════════════════════════════════════════════════════════════ */
-function _buildReceipt(req){
+function _buildReceipt(req, bcMarkup, bcId){
   var pt=_pt(req), s=_S(), now=_now(), SZ=_rcSize();
   var list=_testsOf(req);
   var inv=(typeof invoices!=='undefined' ? invoices : []).find(function(i){ return i && i.reqId===req.id; }) || null;
@@ -64334,7 +64336,10 @@ function _buildReceipt(req){
     '.net span{font-size:12pt}' +
     '.ok{font-size:9.6pt}' +
     '.thx{font-size:9pt;font-weight:800;margin-top:2mm;line-height:1.5}' +
-    '.tm{font-size:8pt;margin-top:1mm;font-weight:700}';
+    '.tm{font-size:8pt;margin-top:1mm;font-weight:700}' +
+    '.bc{margin:1.8mm auto .4mm;text-align:center}' +
+    '.bc img,.bc svg{display:block;max-width:100%;height:auto;margin:0 auto}' +
+    '.bcn{font-family:"Courier New",monospace;font-size:8pt;font-weight:900;letter-spacing:1.5px;text-align:center;direction:ltr;margin-bottom:.6mm}';
 
   var status = '';
   if(inv){
@@ -64368,6 +64373,8 @@ function _buildReceipt(req){
     '<div class="ln net"><span>المجموع الكلي</span><span>'+_money(net)+'</span></div>' +
     (inv ? line('المدفوع', _money(paid), 'ok') : '') +
     (inv && due>0 ? line('المتبقي', _money(due), 'ok') : '') +
+    // 🔖 باركود طلب المريض — فوق حالة الدفع (نفس رقم ملصق التيوب/ورقة العمل)
+    (bcMarkup ? '<div class="bc">'+bcMarkup+'</div>' + (bcId ? '<div class="bcn">'+_esc(bcId)+'</div>' : '') : '') +
     (status ? '<div class="c" style="font-size:9.4pt;font-weight:900;margin-top:.8mm">'+status+'</div>' : '') +
     '<div class="hr"></div>' +
     '<div class="c thx">شكراً لثقتكم — نتمنى لكم دوام الصحة</div>' +
@@ -64379,7 +64386,13 @@ async function _printReceipt(reqId, silentNotif){
   var req=_req(reqId);
   if(!req){ _notif('خطأ','الطلب غير موجود','error'); return; }
   try{
-    var html = _buildReceipt(req), SZ = _rcSize();
+    var _rpt = _pt(req);
+    var _bcId = (typeof _reportBarcodeId==='function')
+      ? _reportBarcodeId(req.orderNo, _rpt.barcode, _rpt.id, req.id)
+      : String(req.orderNo||_rpt.id||req.id||'').replace(/[^0-9A-Za-z]/g,'');
+    var _bc = '';
+    try{ _bc = await _barcodePng(_bcId); }catch(_){ _bc=''; }
+    var html = _buildReceipt(req, _bc, _bcId), SZ = _rcSize();
     var hmm  = SZ.h;
     if(!hmm){                                   // تلقائي: طول الوصل = طول المحتوى الفعلي
       hmm = await _measureMM(html, SZ.w);
