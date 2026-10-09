@@ -67784,9 +67784,20 @@ function sendRows(peer, col, rows){
 }
 
 /* ── البثّ الحيّ لكل الحاسبات المفتوحة ── */
-function queueLive(col, ids){
+/* ⛔ قاطع الحلقات: إعادة البثّ «التلقائية» (الناتجة عن تطبيق الوارد لا عن تعديل المستخدم)
+   محدودة بـ 6 مرات لكل سجل خلال دقيقتين — ما زاد يُتجاهل ويُسجَّل، والمطابقة الدورية تكفي */
+var _echo={};
+function echoOk(col, id){
+  var k=col+'|'+id, t=Date.now(), e=_echo[k];
+  if(!e || t-e[0]>120000){ _echo[k]=[t,1]; return true; }
+  if(++e[1]<=6) return true;
+  if(e[1]===7){ S.loopBlocked=(S.loopBlocked||0)+1; console.warn('[MSync] loop guard', col, id); }
+  return false;
+}
+function queueLive(col, ids, auto){
   var q=S.liveQ[col]||(S.liveQ[col]={});
-  ids.forEach(function(id){ q[id]=1; });
+  ids.forEach(function(id){ if(auto && !echoOk(col, String(id))) return; q[id]=1; });
+  if(!Object.keys(q).length){ delete S.liveQ[col]; return; }
   if(S.liveT) return;
   S.liveT=setTimeout(flushLive, 450);
 }
@@ -67820,15 +67831,20 @@ function sameEntity(col, a, b){
 function fpOf(o){ return [o.reqId||'', o.patientId||'', o.date||'', o.createdAt||'', o.total||o.subtotal||''].join('|'); }
 function mergeReq(win, lose){
   // نتائج الطلب: تحليلاً بتحليل — لا تضيع نتيجة أدخلتها حاسبة أخرى
-  var out=Object.assign({}, win);
+  /* ⛔ حارس الحلقة: يُضاف فقط ما ينقص الفائز، وبترتيب الفائز نفسه —
+     إن لم ينقصه شيء يُعاد السجل الوارد كما هو تماماً ⇒ لا «تغيير» ولا إعادة بثّ */
+  var out=null;
   ['results','resultNotesPer','resultDetails'].forEach(function(f){
-    if(lose && lose[f] && typeof lose[f]==='object'){
-      var m=Object.assign({}, lose[f], win[f]||{});
-      for(var k in lose[f]){ if(win[f] && win[f][k]===undefined) m[k]=lose[f][k]; }
-      out[f]=m;
-    }
+    var L=lose && lose[f], W=win[f];
+    if(!L || typeof L!=='object' || Array.isArray(L)) return;
+    if(W!=null && (typeof W!=='object' || Array.isArray(W))) return;
+    var add=null;
+    for(var k in L){ if(L[k]!==undefined && L[k]!=='' && L[k]!==null && (!W || W[k]===undefined)){ (add||(add={}))[k]=L[k]; } }
+    if(!add) return;
+    if(!out) out=Object.assign({}, win);
+    out[f]=Object.assign({}, W||{}, add);
   });
-  return out;
+  return out || win;
 }
 function applyRows(col, rows){
   if(!rows || !rows.length) return 0;
@@ -67884,7 +67900,7 @@ function applyRows(col, rows){
     var nh=fnv(JSON.stringify(nrec));
     meta[id]=[nh, v, R()];
     changed.push(nrec);
-    if(nh!==h){ /* اتّحاد النتائج غيّر السجل ⇒ إصدار محلي أحدث يُبثّ للبقية */ meta[id]=[nh, Math.max(srv(), v+1), R()]; queueLive(col,[id]); }
+    if(nh!==h){ /* اتّحاد النتائج غيّر السجل ⇒ إصدار محلي أحدث يُبثّ للبقية */ meta[id]=[nh, Math.max(srv(), v+1), R()]; queueLive(col,[id],true); }
   });
   if(removed){ arr=arr.filter(function(x){ return x!==null; }); }
   // تصادم أرقام قديمة: كيانان مختلفان بالمعرّف نفسه ⇒ لا طمس
@@ -67908,7 +67924,7 @@ function applyRows(col, rows){
     /* ⭐ المُرسِل لا يعلم بالتصادم (البصمة تقارن المعرّف والإصدار فقط) ⇒ نُعيد إرسال
        سجلنا الفائز بالمعرّف نفسه، فيكتشف التصادم عنده ويُعيد الترقيم بالقاعدة نفسها */
     var cids=collide.map(function(x){ return String(x.id).split('~')[0]; });
-    setTimeout(function(){ queueLive(col, cids); }, 120);
+    setTimeout(function(){ queueLive(col, cids, true); }, 120);
   }
   if(changed.length || removed){
     S.applying=true; window._msApplying=true;
