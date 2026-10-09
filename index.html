@@ -66267,6 +66267,11 @@ function detectOne(input, size){
   var fa=window.faceapi;
   return withTimeout(fa.detectSingleFace(input, detOpts(size)).withFaceLandmarks().withFaceDescriptor(), 6000);
 }
+/* كشف سريع: الوجه + المعالم فقط (بدون شبكة البصمة الثقيلة) — لمراقبة الرمش بمعدل إطارات عالٍ */
+function detectLM(input, size){
+  var fa=window.faceapi;
+  return withTimeout(fa.detectSingleFace(input, detOpts(size)).withFaceLandmarks(), 4000);
+}
 function dist(a,b){ var s=0, n=Math.min(a.length,b.length); for(var i=0;i<n;i++){ var d=a[i]-b[i]; s+=d*d; } return Math.sqrt(s); }
 /** أفضل تطابق مع هامش تمييز بين الموظفين */
 function bestMatch(desc, exceptId){
@@ -66287,6 +66292,48 @@ function bestMatch(desc, exceptId){
 function ear(pts, i){ // نسبة انفتاح العين (Eye Aspect Ratio)
   var p=function(k){ return pts[i+k]; }, dd=function(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); };
   return (dd(p(1),p(5)) + dd(p(2),p(4))) / (2*dd(p(0),p(3)) || 1);
+}
+function earAvg(pts){ return (ear(pts,36)+ear(pts,42))/2; }
+/* 👀 كشف الرمش من سلسلة زمنية [وقت، عين يمنى، عين يسرى] — تكيّفي لكل شخص وكاميرا:
+   • المرجع محلي: وسيط الانفتاح قبل الهبوط (≤0.7 ث) وبعده (≤0.9 ث) ⇒ لا تؤثر حركة الرأس البطيئة
+   • ضجيج الكاميرا يُقدَّر من فروق الإطارات المتتالية (MAD) ⇒ العتبة تتكيّف مع جودة الكاميرا
+   • العينان معاً: الرمشة الحقيقية تُغلق العينين في اللحظة نفسها، أما ضجيج الصورة فمستقل لكل عين
+   • إطار واحد في الهبوط يحتاج عمقاً أكبر — إطاران فأكثر تكفيهما العتبة
+   • يجب أن تعود العين مفتوحة كما كانت، والهبوط كله ≤ 1 ث
+   صورة مطبوعة أو شاشة هاتف: لا هبوط متزامن للعينين ⇒ لا رمشة. */
+function _med(a){ if(!a.length) return 0; var b=a.slice().sort(function(x,y){ return x-y; }); return b[Math.floor(b.length/2)]; }
+function _noise(w, c, B){ var d=[]; for(var i=1;i<w.length;i++) d.push(Math.abs(w[i][c]-w[i-1][c])); return (_med(d)*1.4826/Math.SQRT2)/(B||1); }
+function _depth(w, j, c){
+  var tj=w[j][0], pre=[], post=[], k;
+  for(k=j-1;k>=0 && tj-w[k][0]<=700;k--) pre.push(w[k][c]);
+  for(k=j+1;k<w.length && w[k][0]-tj<=900;k++) post.push(w[k][c]);
+  if(!pre.length || !post.length) return null;
+  var preM=Math.max(_med(pre), pre[0]), postM=Math.max(_med(post), post[post.length-1]);
+  return {ref:Math.min(preM,postM), preM:preM, postM:postM, d:1-w[j][c]/Math.min(preM,postM)};
+}
+function blinkFound(S){
+  var t=Date.now(), w=S.filter(function(x){ return t-x[0] <= 3000; }).map(function(x){ return [x[0], (x[1]+x[2])/2, x[1], x[2]]; });
+  if(w.length < 5) return null;
+  var B=_med(w.map(function(x){ return x[1]; })); if(!(B>0.05)) return null;
+  var sA=_noise(w,1,B), sL=_noise(w,2,_med(w.map(function(x){ return x[2]; }))), sR=_noise(w,3,_med(w.map(function(x){ return x[3]; })));
+  var thr=Math.max(0.13, sA*4.6), eyeThr=Math.max(0.08, Math.max(sL,sR)*3.0);
+  var dt=_med(w.slice(1).map(function(x,i){ return x[0]-w[i][0]; }));   // زمن الإطار ⇒ الكاميرا السريعة تلتقط الرمشة في إطارين فأكثر
+  for(var j=1;j<w.length-1;j++){
+    var ej=w[j][1];
+    if(!(ej<=w[j-1][1] && ej<=w[j+1][1])) continue;              // قاع محلي
+    var A=_depth(w,j,1); if(!A) continue;
+    if(A.postM < A.preM*0.85) continue;                           // لم تعد العين مفتوحة
+    if(A.d < thr) continue;
+    var L=_depth(w,j,2), R=_depth(w,j,3);                         // العينان معاً
+    if(!L || !R || L.d < eyeThr || R.d < eyeThr) continue;
+    var lim=A.ref*(1-thr*0.6), a=j, b=j;
+    while(a-1>=0 && w[a-1][1]<=lim) a--;
+    while(b+1<w.length && w[b+1][1]<=lim) b++;
+    if(w[b][0]-w[a][0] > 1000) continue;
+    var n=b-a+1;
+    if(n>=2 || (dt>=70 && A.d >= thr*1.3)) return {depth:A.d, thr:thr, n:n};
+  }
+  return null;
 }
 function snapFace(video, box, size){
   try{
@@ -66348,7 +66395,7 @@ ATT.startKiosk = function(){
         $('att-cam-badge').classList.add('on');
         camMsg('قف أمام الكاميرا…');
         fillCameras();
-        KS.track=null; KS.unknown=0;
+        KS.track=null; KS.live=null; KS.unknown=0;
         kioskLoop();
       });
     });
@@ -66379,7 +66426,7 @@ function modeUI(){
 ATT.setMode = function(m){
   D.set.camMode = (m==='out') ? 'out' : 'in';
   persist('set'); modeUI();
-  KS.track=null; KS.lastAt={};            // تغيير الوضع ⇒ تعرّف جديد فوراً
+  KS.track=null; KS.live=null; KS.lastAt={};            // تغيير الوضع ⇒ تعرّف جديد فوراً
   notif('وضع الكاميرا', D.set.camMode==='out' ? '🟠 الكاميرا تسجّل الانصراف الآن' : '🟢 الكاميرا تسجّل الحضور الآن', 'info');
 };
 ATT.pickCamera = function(id){
@@ -66411,7 +66458,46 @@ function drawBox(det, color, label){
 }
 function kioskLoop(){
   if(!KS.on) return;
-  KS.timer = setTimeout(kioskTick, document.hidden ? 600 : 40);
+  KS.timer = setTimeout(kioskTick, document.hidden ? 600 : (KS.live ? 0 : 40));   // مرحلة الرمش: أقصى معدل إطارات
+}
+var LIVE_MS = 10000;
+async function liveStep(v){
+  var L=KS.live, t=Date.now();
+  if(t-L.t0 > LIVE_MS){
+    KS.live=null; KS.track=null; drawBox(null);
+    camMsg('⏱️ لم يُلتقط الرمش — انظر للكاميرا وارمش مرة واحدة ببطء'); KS.pauseUntil=t+900; return;
+  }
+  var det = await detectLM(v);
+  if(!KS.on || !KS.live) return;
+  if(!det){
+    if(Date.now()-L.seen > 1500){ KS.live=null; KS.track=null; drawBox(null); camMsg('قف أمام الكاميرا…'); }
+    return;
+  }
+  var box=det.detection.box, cx=box.x+box.width/2;
+  /* قفزة مفاجئة للوجه = شخص آخر دخل الإطار ⇒ إعادة التعرّف */
+  if(Math.abs(cx-L.cx) > L.w*0.6 || box.width < L.w*0.55 || box.width > L.w*1.8){ KS.live=null; KS.track=null; return; }
+  L.cx=L.cx*0.6+cx*0.4; L.w=L.w*0.7+box.width*0.3; L.seen=Date.now();
+  L.s.push([Date.now(), ear(det.landmarks.positions,36), ear(det.landmarks.positions,42)]);
+  if(L.s.length>90) L.s.splice(0, L.s.length-90);
+  var left=Math.max(0, Math.ceil((LIVE_MS-(Date.now()-L.t0))/1000));
+  if(!L.blinked && !blinkFound(L.s)){
+    drawBox(det,'#a78bfa',L.emp.name); camMsg('👀 '+L.emp.name+' — ارمش ببطء مرة واحدة ('+left+')');
+    return;
+  }
+  /* ✅ رمشة حقيقية ⇒ تحقق أخير بالبصمة أن الوجه نفسه */
+  L.blinked=true;
+  drawBox(det,'#00d4ff',L.emp.name); camMsg('✔️ '+L.emp.name+' — جارِ التثبيت…');
+  var d2 = await detectOne(v);
+  if(!KS.on || !KS.live) return;
+  if(d2){
+    var m2=bestMatch(d2.descriptor), thr=+D.set.threshold||0.45;
+    var same = (m2.emp && m2.emp.id===L.emp.id) || (!m2.emp && m2.cand && m2.cand.id===L.emp.id && m2.d <= thr+0.03);
+    if(same){ var emp=L.emp, bd=Math.min(L.best, m2.d); KS.live=null; await commitPunch(emp, bd, d2, v, m2); return; }
+    if(m2.emp && m2.emp.id!==L.emp.id){ KS.live=null; KS.track=null; return; }   // شخص آخر
+  }
+  /* لم يُثبت التحقق في هذا الإطار ⇒ نحاول التحقق مجدداً دون طلب رمشة جديدة */
+  L.verify=(L.verify||0)+1;
+  if(L.verify>=3){ KS.live=null; KS.track=null; camMsg('حاول مجدداً — ثبّت وجهك أمام الكاميرا'); }
 }
 async function kioskTick(){
   if(!KS.on) return;
@@ -66419,9 +66505,10 @@ async function kioskTick(){
   if(!v || v.readyState<2 || KS.busy || !attVisible() || document.hidden || Date.now()<KS.pauseUntil){ return kioskLoop(); }
   KS.busy=true;
   try{
+    if(KS.live){ await liveStep(v); return; }
     var det = await detectOne(v);
     if(!KS.on) return;
-    if(!det){ drawBox(null); KS.track=null; KS.unknown=0; camMsg(faceCount()?'قف أمام الكاميرا…':'لا توجد بصمات وجه مسجّلة بعد'); return; }
+    if(!det){ drawBox(null); KS.track=null; KS.live=null; KS.unknown=0; camMsg(faceCount()?'قف أمام الكاميرا…':'لا توجد بصمات وجه مسجّلة بعد'); return; }
     var box=det.detection.box, vw=v.videoWidth||640;
     if(box.width < vw*0.14){ drawBox(det,'#ffcc00','اقترب'); camMsg('🔍 اقترب من الكاميرا قليلاً'); KS.track=null; return; }
     var m = bestMatch(det.descriptor);
@@ -66432,46 +66519,51 @@ async function kioskTick(){
       return;
     }
     KS.unknown=0;
-    var e=m.emp, pts=det.landmarks.positions, er=(ear(pts,36)+ear(pts,42))/2;
-    if(!KS.track || KS.track.id!==e.id) KS.track={id:e.id, n:0, closed:false, blink:false, best:m.d, t0:Date.now(), open:er};
+    var e=m.emp;
+    if(!KS.track || KS.track.id!==e.id) KS.track={id:e.id, n:0, best:m.d};
     var tr=KS.track; tr.n++; tr.best=Math.min(tr.best,m.d);
-    // 👀 رمش تكيّفي: يُقاس انفتاح العين نسبةً لعين الشخص نفسه (يناسب العيون الضيقة والواسعة)
-    if(!tr.closed) tr.open=Math.max(tr.open*0.92+er*0.08, er);
-    if(er < Math.min(0.21, tr.open*0.72)) tr.closed=true;
-    else if(tr.closed && er > tr.open*0.85) tr.blink=true;
     var need=Math.max(1, +D.set.confirmFrames||2);
     if(tr.n < need){ drawBox(det,'#00d4ff',e.name); camMsg('جارِ التحقق… '+e.name); return; }
-    if(D.set.liveness && !tr.blink){
-      drawBox(det,'#a78bfa',e.name); camMsg('👀 '+e.name+' — ارمش بعينيك للتأكيد');
-      if(Date.now()-tr.t0>9000) KS.track=null;
+    if(Date.now()-(KS.lastAt[e.id]||0) < Math.max(5,+D.set.dupSec||60)*1000){
+      drawBox(det,'#ffcc00',e.name); camMsg('ℹ️ '+e.name+' — تم التعامل مع تسجيلك قبل قليل'); return;
+    }
+    if(D.set.liveness){
+      /* انتقل لمرحلة الحيوية: مراقبة سريعة للعين بلا بصمة */
+      var c0=box.x+box.width/2;
+      KS.live={emp:e, best:tr.best, t0:Date.now(), seen:Date.now(), s:[[Date.now(), ear(det.landmarks.positions,36), ear(det.landmarks.positions,42)]], cx:c0, w:box.width};
+      drawBox(det,'#a78bfa',e.name); camMsg('👀 '+e.name+' — ارمش ببطء مرة واحدة');
       return;
     }
-    // ✅ تطابق مؤكد
-    var last=KS.lastAt[e.id]||0, dupMs=Math.max(5,+D.set.dupSec||60)*1000;
-    if(Date.now()-last < dupMs){
-      drawBox(det,'#ffcc00',e.name); camMsg('ℹ️ '+e.name+' — تم التعامل مع تسجيلك قبل قليل');
-      return;
-    }
-    var photo = D.set.savePhotos ? snapFace(v, box, 112) : '';
-    if(KS.on===false) return;
-    var res = ATT.punch(e.id, 'face', {photo:photo, dist:tr.best, force:(D.set.camMode==='out'?'out':'in')});
-    KS.lastAt[e.id]=Date.now(); KS.track=null;
-    drawBox(det, res.ok ? (res.type==='in'?'#00e087':'#ffa53a') : '#ffcc00', e.name);
-    flashResult(res,'kiosk');
-    KS.pauseUntil = Date.now()+2300;
-    camMsg(res.ok ? (res.type==='in'?'✅ حضور ':'👋 انصراف ')+e.name : ('ℹ️ '+(res.msg||'')));
-    // 🧠 تعلّم تلقائي: تحسين البصمة بعينة جديدة عند ثقة عالية جداً
-    try{
-      if(res.ok && D.set.autoLearn && m.d < 0.36 && m.margin > 0.1 && (e.faces||[]).length < MAX_FACES){
-        var minToOwn = Math.min.apply(null, e.faces.map(function(f){ return dist(det.descriptor,f); }));
-        if(minToOwn > 0.22){ e.faces.push(packDesc(det.descriptor)); e._updatedAt=Date.now(); persist('emps'); }
-      }
-    }catch(_){}
+    await commitPunch(e, tr.best, det, v, m);
+    return;
   }catch(err){
     console.warn('[ATT] detect', err);
   }finally{
     KS.busy=false; kioskLoop();
   }
+}
+async function commitPunch(e, bestD, det, v, m){
+    // ✅ تطابق مؤكد
+  var last=KS.lastAt[e.id]||0, dupMs=Math.max(5,+D.set.dupSec||60)*1000;
+  if(Date.now()-last < dupMs){
+    drawBox(det,'#ffcc00',e.name); camMsg('ℹ️ '+e.name+' — تم التعامل مع تسجيلك قبل قليل');
+    return;
+  }
+  var box=det.detection.box, photo = D.set.savePhotos ? snapFace(v, box, 112) : '';
+  if(KS.on===false) return;
+  var res = ATT.punch(e.id, 'face', {photo:photo, dist:bestD, force:(D.set.camMode==='out'?'out':'in')});
+  KS.lastAt[e.id]=Date.now(); KS.track=null; KS.live=null;
+  drawBox(det, res.ok ? (res.type==='in'?'#00e087':'#ffa53a') : '#ffcc00', e.name);
+  flashResult(res,'kiosk');
+  KS.pauseUntil = Date.now()+2300;
+  camMsg(res.ok ? (res.type==='in'?'✅ حضور ':'👋 انصراف ')+e.name : ('ℹ️ '+(res.msg||'')));
+  // 🧠 تعلّم تلقائي: تحسين البصمة بعينة جديدة عند ثقة عالية جداً
+  try{
+    if(res.ok && D.set.autoLearn && m.d < 0.36 && m.margin > 0.1 && (e.faces||[]).length < MAX_FACES){
+      var minToOwn = Math.min.apply(null, e.faces.map(function(f){ return dist(det.descriptor,f); }));
+      if(minToOwn > 0.22){ e.faces.push(packDesc(det.descriptor)); e._updatedAt=Date.now(); persist('emps'); }
+    }
+  }catch(_){}
 }
 ATT.fullscreen = function(){
   var el=$('att-pane-kiosk'); if(!el) return;
