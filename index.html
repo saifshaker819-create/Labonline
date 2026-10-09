@@ -66293,48 +66293,112 @@ function ear(pts, i){ // نسبة انفتاح العين (Eye Aspect Ratio)
   var p=function(k){ return pts[i+k]; }, dd=function(a,b){ return Math.hypot(a.x-b.x, a.y-b.y); };
   return (dd(p(1),p(5)) + dd(p(2),p(4))) / (2*dd(p(0),p(3)) || 1);
 }
-function earAvg(pts){ return (ear(pts,36)+ear(pts,42))/2; }
-/* 👀 كشف الرمش من سلسلة زمنية [وقت، عين يمنى، عين يسرى] — تكيّفي لكل شخص وكاميرا:
-   • المرجع محلي: وسيط الانفتاح قبل الهبوط (≤0.7 ث) وبعده (≤0.9 ث) ⇒ لا تؤثر حركة الرأس البطيئة
-   • ضجيج الكاميرا يُقدَّر من فروق الإطارات المتتالية (MAD) ⇒ العتبة تتكيّف مع جودة الكاميرا
-   • العينان معاً: الرمشة الحقيقية تُغلق العينين في اللحظة نفسها، أما ضجيج الصورة فمستقل لكل عين
-   • إطار واحد في الهبوط يحتاج عمقاً أكبر — إطاران فأكثر تكفيهما العتبة
-   • يجب أن تعود العين مفتوحة كما كانت، والهبوط كله ≤ 1 ث
-   صورة مطبوعة أو شاشة هاتف: لا هبوط متزامن للعينين ⇒ لا رمشة. */
-function _med(a){ if(!a.length) return 0; var b=a.slice().sort(function(x,y){ return x-y; }); return b[Math.floor(b.length/2)]; }
-function _noise(w, c, B){ var d=[]; for(var i=1;i<w.length;i++) d.push(Math.abs(w[i][c]-w[i-1][c])); return (_med(d)*1.4826/Math.SQRT2)/(B||1); }
-function _depth(w, j, c){
-  var tj=w[j][0], pre=[], post=[], k;
-  for(k=j-1;k>=0 && tj-w[k][0]<=700;k--) pre.push(w[k][c]);
-  for(k=j+1;k<w.length && w[k][0]-tj<=900;k++) post.push(w[k][c]);
-  if(!pre.length || !post.length) return null;
-  var preM=Math.max(_med(pre), pre[0]), postM=Math.max(_med(post), post[post.length-1]);
-  return {ref:Math.min(preM,postM), preM:preM, postM:postM, d:1-w[j][c]/Math.min(preM,postM)};
-}
-function blinkFound(S){
-  var t=Date.now(), w=S.filter(function(x){ return t-x[0] <= 3000; }).map(function(x){ return [x[0], (x[1]+x[2])/2, x[1], x[2]]; });
-  if(w.length < 5) return null;
-  var B=_med(w.map(function(x){ return x[1]; })); if(!(B>0.05)) return null;
-  var sA=_noise(w,1,B), sL=_noise(w,2,_med(w.map(function(x){ return x[2]; }))), sR=_noise(w,3,_med(w.map(function(x){ return x[3]; })));
-  var thr=Math.max(0.13, sA*4.6), eyeThr=Math.max(0.08, Math.max(sL,sR)*3.0);
-  var dt=_med(w.slice(1).map(function(x,i){ return x[0]-w[i][0]; }));   // زمن الإطار ⇒ الكاميرا السريعة تلتقط الرمشة في إطارين فأكثر
-  for(var j=1;j<w.length-1;j++){
-    var ej=w[j][1];
-    if(!(ej<=w[j-1][1] && ej<=w[j+1][1])) continue;              // قاع محلي
-    var A=_depth(w,j,1); if(!A) continue;
-    if(A.postM < A.preM*0.85) continue;                           // لم تعد العين مفتوحة
-    if(A.d < thr) continue;
-    var L=_depth(w,j,2), R=_depth(w,j,3);                         // العينان معاً
-    if(!L || !R || L.d < eyeThr || R.d < eyeThr) continue;
-    var lim=A.ref*(1-thr*0.6), a=j, b=j;
-    while(a-1>=0 && w[a-1][1]<=lim) a--;
-    while(b+1<w.length && w[b+1][1]<=lim) b++;
-    if(w[b][0]-w[a][0] > 1000) continue;
-    var n=b-a+1;
-    if(n>=2 || (dt>=70 && A.d >= thr*1.3)) return {depth:A.d, thr:thr, n:n};
+/* ═════════════ 👀 فحص الحيوية — كشف الرمش من بكسلات العين ═════════════
+   لماذا ليس «نسبة انفتاح العين» من النقاط؟ نموذج النقاط في face-api لا يتتبّع الجفن:
+   على فيديو حقيقي لرمشة كاملة تتغيّر النسبة 5% فقط (0.32→0.30) — لذلك كان الرمش لا يُلتقط.
+   الطريقة هنا: النقاط تُستخدم فقط لتحديد زوايا العين، ثم تُقارَن «صورة العين» الحالية
+   (32×16 رمادية، مُطبَّعة الإضاءة) بمرجعها قبل لحظات (وسيط 0.3–2 ث) بالارتباط المتقاطع NCC
+   مع سماح بإزاحة بسيطة (يلغي اهتزاز النقاط). الرمشة = تغيّر كبير ومتزامن في العينين
+   ثم عودة لنفس الشكل خلال ≤ 1 ث، بينما رقعة «جسر الأنف» (لا تتأثر بالرمش) ثابتة.
+   • حركة الرأس/الضبابية/وميض الإضاءة ⇒ تتغيّر رقعة الأنف أيضاً ⇒ تُرفض.
+   • صورة مطبوعة أو على شاشة مهتزّة ⇒ لا تغيّر في شكل العين ⇒ لا رمشة.
+   مُختبَر على فيديوهات حقيقية لأشخاص يرمشون وعلى صور مهتزّة بضجيج وضغط. */
+var EPW=32, EPH=16, _epc=null, _epg=null;
+function eyePatches(src, pts, off){
+  if(off && (off.x||off.y)) pts=pts.map(function(p){ return {x:p.x+off.x, y:p.y+off.y}; });
+  if(!_epc){ _epc=document.createElement('canvas'); _epc.width=EPW; _epc.height=EPH; _epg=_epc.getContext('2d',{willReadFrequently:true}); }
+  function grab(cx, cy, w, ang, sx, sy){
+    var g=_epg; g.setTransform(1,0,0,1,0,0); g.fillStyle='#000'; g.fillRect(0,0,EPW,EPH);
+    g.translate(EPW/2, EPH/2); g.scale(EPW/(w*sx), EPH/(w*sy)); g.rotate(-ang); g.translate(-cx,-cy);
+    g.drawImage(src, 0, 0); g.setTransform(1,0,0,1,0,0);
+    var d=g.getImageData(0,0,EPW,EPH).data, a=new Float32Array(EPW*EPH);
+    for(var i=0;i<a.length;i++) a[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+    return a;
   }
-  return null;
+  function eye(i0, i1){ var A=pts[i0], B=pts[i1]; return grab((A.x+B.x)/2, (A.y+B.y)/2, Math.hypot(B.x-A.x,B.y-A.y)||1, Math.atan2(B.y-A.y,B.x-A.x), 1.5, 0.75); }
+  var A=pts[39], B=pts[42];
+  return { L:eye(36,39), R:eye(42,45),
+           /* رقعة التحكّم: منتصف الأنف (النقطتان 28–29) — بعيدة عن زوايا الجفن فلا تتأثر بالرمش */
+           C:grab((pts[28].x+pts[29].x)/2, (pts[28].y+pts[29].y)/2, Math.hypot(B.x-A.x,B.y-A.y)||1, Math.atan2(B.y-A.y,B.x-A.x), 1.0, 0.6) };
 }
+/* ارتباط متقاطع مُطبَّع مع أفضل إزاحة (±3 أفقياً، ±2 عمودياً) على المنطقة الوسطى */
+function nccS(a, ref, out){
+  var best=-1, bx=0, by=0, x, y, i, dx, dy, n=(EPH-4)*(EPW-6);
+  var ma=0; for(y=2;y<EPH-2;y++) for(x=3;x<EPW-3;x++) ma+=a[y*EPW+x]; ma/=n;
+  var va=0; for(y=2;y<EPH-2;y++) for(x=3;x<EPW-3;x++){ var q=a[y*EPW+x]-ma; va+=q*q; }
+  if(va<1e-6) return 1;
+  for(dy=-2;dy<=2;dy++) for(dx=-3;dx<=3;dx++){
+    var mb=0; for(y=2;y<EPH-2;y++) for(x=3;x<EPW-3;x++) mb+=ref[(y+dy)*EPW+x+dx]; mb/=n;
+    var sab=0, vb=0;
+    for(y=2;y<EPH-2;y++) for(x=3;x<EPW-3;x++){ i=y*EPW+x; var p=a[i]-ma, r=ref[(y+dy)*EPW+x+dx]-mb; sab+=p*r; vb+=r*r; }
+    var v = vb>1e-6 ? sab/Math.sqrt(va*vb) : 0;
+    if(v>best){ best=v; bx=dx; by=dy; }
+    if(out && !dx && !dy) out.v0=v;
+  }
+  if(out){ out.dx=bx; out.dy=by; }
+  return best;
+}
+function _medArr(list){   // وسيط لكل بكسل
+  var n=list.length, out=new Float32Array(EPW*EPH), tmp=new Array(n);
+  for(var i=0;i<out.length;i++){ for(var k=0;k<n;k++) tmp[k]=list[k][i]; tmp.sort(function(a,b){ return a-b; }); out[i]=tmp[n>>1]; }
+  return out;
+}
+function _med(a){ if(!a.length) return 0; var b=a.slice().sort(function(x,y){ return x-y; }); return b[Math.floor(b.length/2)]; }
+/* كاشف الرمش: يُغذّى بإطار في كل مرة ويُعيد true عند رمشة مؤكدة
+   • المرجع = وسيط صور العين قبل 0.2–0.65 ث (قصير ⇒ لا يتأثر بانجراف الرأس البطيء)
+   • القمة: تغيّر كبير في العينين معاً، ورقعة الأنف ثابتة
+   • العودة: صورة العين بعد ≤ 1 ث تطابق صورتها قبل الرمشة (مقارنة مباشرة بمرجع القمة) */
+function BlinkDet(){ this.h=[]; this.s=[]; this.lastEv=0; }
+BlinkDet.prototype.push = function(t, P){
+  var old=this.h.filter(function(x){ var d=t-x.t; return d>=200 && d<=650; });
+  if(old.length<3) old=this.h.filter(function(x){ var d=t-x.t; return d>=120 && d<=1200; });
+  if(old.length>=3){
+    if(old.length>9){ var st=old.length/9, pick=[]; for(var q=0;q<9;q++) pick.push(old[Math.floor(q*st)]); old=pick; }
+    var c={}, ref={}, oc={};
+    ['L','R','C'].forEach(function(k){ ref[k]=_medArr(old.map(function(x){ return x.P[k]; })); c[k]=1-nccS(P[k], ref[k], k==='C'?oc:null); });
+    var c0 = 1-(oc.v0==null ? 1 : oc.v0);                                 // تغيّر الأنف بلا سماح إزاحة = حركة فعلية
+    var hi=Math.max(c.L,c.R), lo=Math.min(c.L,c.R);
+    this.s.push({t:t, e:Math.min(hi, lo*2.5), c:c.C, c0:c0, mv:P.mv?1:0, ref:ref, P:P});   // عين بتغيّر قوي + الأخرى ≥ 40% منه
+    if(window.__attBlinkDbg) try{ window.__attBlinkDbg([t, c.L, c.R, c.C, c0, P.mv?1:0]); }catch(_){}
+  }
+  this.h.push({t:t, P:P});
+  this.h=this.h.filter(function(x){ return t-x.t<=1500; });
+  this.s=this.s.filter(function(x){ return t-x.t<=3000; });
+  return this.detect();
+};
+BlinkDet.prototype.detect = function(){
+  var w=this.s; if(w.length<6) return false;
+  var e=w.map(function(x){ return x.e; }), cc=w.map(function(x){ return x.c; });
+  var base=_med(e), mad=_med(e.map(function(v){ return Math.abs(v-base); }))+0.004;
+  var bc=_med(cc), madc=_med(cc.map(function(v){ return Math.abs(v-bc); }))+0.004;
+  var thr=Math.max(0.10, base+7*mad);
+  for(var j=1;j<w.length-1;j++){
+    if(w[j].t<=this.lastEv) continue;
+    if(e[j]<thr || e[j]<e[j-1] || e[j]<e[j+1]) continue;                 // قمة تغيّر في العينين معاً
+    if(cc[j] > Math.max(0.06, bc+5*madc) || cc[j] > 0.35*e[j]) continue;  // تغيّر الأنف أيضاً ⇒ حركة لا رمش
+    /* ثبات الرأس حول الرمشة (قيمة مطلقة): الرمشة الحقيقية لا تحرّك جسر الأنف */
+    var still=true, k, moves=0;
+    for(k=0;k<w.length;k++){
+      var d=w[k].t-w[j].t;
+      if(d>=-350 && d<=350 && (cc[k]>0.10 || w[k].c0>0.22)){ still=false; break; }   // الرأس/الصورة تحرّكت ⇒ ليست رمشة
+    }
+    if(!still) continue;
+    /* قبلها: عين مفتوحة ثابتة (تغيّر صغير مطلق) */
+    var pre=false;
+    for(k=j-1;k>=0 && w[j].t-w[k].t<=900;k--){ if(e[k] <= Math.min(0.08, base+(e[j]-base)*0.4) && cc[k]<=0.06){ pre=true; break; } }
+    if(!pre) continue;
+    var back=Math.max(0.06, e[j]*0.4), post=-1, R=w[j].ref;
+    for(k=j+1;k<w.length && w[k].t-w[j].t<=1000;k++){                      // عادت العين كما كانت قبل الرمشة؟
+      var P=w[k].P, rL=1-nccS(P.L,R.L), rR=1-nccS(P.R,R.R);
+      if(Math.min(Math.max(rL,rR), Math.min(rL,rR)*2.5) <= back){ post=k; break; }
+    }
+    if(post<0) continue;
+    this.lastEv=w[post].t;
+    this.last={peak:e[j], thr:thr, ctrl:cc[j]};
+    return true;
+  }
+  return false;
+};
 function snapFace(video, box, size){
   try{
     size=size||128;
@@ -66395,7 +66459,7 @@ ATT.startKiosk = function(){
         $('att-cam-badge').classList.add('on');
         camMsg('قف أمام الكاميرا…');
         fillCameras();
-        KS.track=null; KS.live=null; KS.unknown=0;
+        KS.track=null; liveStop(); KS.unknown=0;
         kioskLoop();
       });
     });
@@ -66406,7 +66470,7 @@ ATT.startKiosk = function(){
   });
 };
 ATT.stopKiosk = function(){
-  KS.on=false; clearTimeout(KS.timer); stopStream(KS.stream); KS.stream=null;
+  KS.on=false; liveStop(); clearTimeout(KS.timer); stopStream(KS.stream); KS.stream=null;
   var v=$('att-video'); if(v) v.srcObject=null;
   var c=$('att-overlay'); if(c){ var g=c.getContext('2d'); g&&g.clearRect(0,0,c.width,c.height); }
   if($('att-cam-ph')) $('att-cam-ph').style.display='';
@@ -66426,7 +66490,7 @@ function modeUI(){
 ATT.setMode = function(m){
   D.set.camMode = (m==='out') ? 'out' : 'in';
   persist('set'); modeUI();
-  KS.track=null; KS.live=null; KS.lastAt={};            // تغيير الوضع ⇒ تعرّف جديد فوراً
+  KS.track=null; liveStop(); KS.lastAt={};            // تغيير الوضع ⇒ تعرّف جديد فوراً
   notif('وضع الكاميرا', D.set.camMode==='out' ? '🟠 الكاميرا تسجّل الانصراف الآن' : '🟢 الكاميرا تسجّل الحضور الآن', 'info');
 };
 ATT.pickCamera = function(id){
@@ -66458,46 +66522,97 @@ function drawBox(det, color, label){
 }
 function kioskLoop(){
   if(!KS.on) return;
-  KS.timer = setTimeout(kioskTick, document.hidden ? 600 : (KS.live ? 0 : 40));   // مرحلة الرمش: أقصى معدل إطارات
+  KS.timer = setTimeout(kioskTick, document.hidden ? 600 : (KS.live ? 60 : 40));   // مرحلة الرمش: العيّنات تؤخذ بمؤقّت مستقل
 }
-var LIVE_MS = 10000;
+var LIVE_MS = 12000;
+/* ⚡ مرحلة الحيوية: أخذ عينات العين من الكاميرا ~30 مرة/ث بمواقع العين المعروفة (عملية رخيصة جداً)
+   بمعزل عن نموذج الذكاء الاصطناعي البطيء — فالرمشة تُلتقط حتى على حاسبة بلا كرت شاشة.
+   النموذج لا يعمل أثناء الانتظار إلا لإعادة تحديد موضع العين إن تحرّك الرأس، ثم للتحقق الأخير. */
+function liveStart(e, best, det, tr){
+  var box=det.detection.box;
+  KS.live={emp:e, best:best, t0:Date.now(), seen:Date.now(), bd:new BlinkDet(), blinked:false,
+           pts:det.landmarks.positions.map(function(p){ return {x:p.x, y:p.y}; }), box:box,
+           cx:box.x+box.width/2, w:box.width, locAt:Date.now(), drift:0, det:det, off:{x:0,y:0}, anchor:null};
+  clearInterval(KS.sampT);
+  KS.sampT=setInterval(liveSample, 33);
+}
+function liveStop(){ clearInterval(KS.sampT); KS.sampT=null; KS.live=null; }
+function liveSample(){
+  var L=KS.live, v=$('att-video');
+  if(!KS.on || !L){ clearInterval(KS.sampT); KS.sampT=null; return; }
+  if(L.blinked || !v || v.readyState<2 || L.locating) return;
+  try{
+    var P=eyePatches(v, L.pts, L.off);
+    /* 🎯 تتبّع خفيف بلا نموذج: إزاحة رقعة الأنف عن صورتها وقت تحديد الموضع ⇒ نحرّك مواقع العين معها */
+    if(!L.anchor) L.anchor=P.C;
+    else{
+      var sh={}, a=nccS(P.C, L.anchor, sh);
+      if(a < 0.85) L.drift++; else L.drift=0;                       // تطابق ضعيف مستمر ⇒ إعادة تحديد بالنموذج (لا تخمين)
+      var lim=L.w*0.22;
+      if(Math.abs(L.off.x)>lim || Math.abs(L.off.y)>lim) L.drift=99; // انجراف كبير ⇒ إعادة تحديد
+      if(a >= 0.85 && (sh.dx || sh.dy) && a - (sh.v0==null?-1:sh.v0) > 0.02){
+        var p39=L.pts[39], p42=L.pts[42], w=Math.hypot(p42.x-p39.x, p42.y-p39.y)||1, ang=Math.atan2(p42.y-p39.y, p42.x-p39.x);
+        /* المحتوى الحالي عند x يطابق المرجع عند x+dx ⇒ الوجه تحرّك بمقدار −dx ⇒ نحرّك المواقع بالاتجاه نفسه (خطوة بكسل واحد) */
+        var ux=(sh.dx>0?-1:sh.dx<0?1:0)*w*1.2/EPW, uy=(sh.dy>0?-1:sh.dy<0?1:0)*w*0.6/EPH;
+        L.off.x += ux*Math.cos(ang) - uy*Math.sin(ang);
+        L.off.y += ux*Math.sin(ang) + uy*Math.cos(ang);
+        P=eyePatches(v, L.pts, L.off); P.mv=1;
+      }
+    }
+    if(window.__attBlinkDbg && ((L._dn=(L._dn||0)+1)%5===0)) try{ window.__attBlinkDbg(['pos', Date.now(), {ox:+L.off.x.toFixed(1), oy:+L.off.y.toFixed(1), ex:Math.round(L.pts[36].x), ey:Math.round(L.pts[36].y), a:L.anchor?+nccS(P.C,L.anchor).toFixed(3):1}]); }catch(_){}
+    if(L.bd.push(Date.now(), P)){
+      if(window.__attBlinkDbg) try{ window.__attBlinkDbg(['blink', Date.now(), L.bd.last]); }catch(_){}
+      if(!window.__attCountOnly){ L.blinked=true; L.blinkAt=Date.now(); }
+    }
+  }catch(_){}
+}
 async function liveStep(v){
   var L=KS.live, t=Date.now();
-  if(t-L.t0 > LIVE_MS){
-    KS.live=null; KS.track=null; drawBox(null);
-    camMsg('⏱️ لم يُلتقط الرمش — انظر للكاميرا وارمش مرة واحدة ببطء'); KS.pauseUntil=t+900; return;
-  }
-  var det = await detectLM(v);
-  if(!KS.on || !KS.live) return;
-  if(!det){
-    if(Date.now()-L.seen > 1500){ KS.live=null; KS.track=null; drawBox(null); camMsg('قف أمام الكاميرا…'); }
+  if(L.blinked){
+    /* ✅ رمشة حقيقية ⇒ تحقق أخير بالبصمة أن الوجه نفسه */
+    drawBox(L.det,'#00d4ff',L.emp.name); camMsg('✔️ '+L.emp.name+' — جارِ التثبيت…');
+    var d2 = await detectOne(v);
+    if(!KS.on || KS.live!==L) return;
+    if(window.__attBlinkDbg) try{ var _m=d2?bestMatch(d2.descriptor):null; window.__attBlinkDbg(['verify', Date.now(), d2?(_m.emp?_m.emp.id:'-')+' '+_m.d.toFixed(3):'noface']); }catch(_){}
+    if(d2){
+      var m2=bestMatch(d2.descriptor), thr=+D.set.threshold||0.45;
+      var same = (m2.emp && m2.emp.id===L.emp.id) || (!m2.emp && m2.cand && m2.cand.id===L.emp.id && m2.d <= thr+0.03);
+      if(same){ var emp=L.emp, bd=Math.min(L.best, m2.d); liveStop(); await commitPunch(emp, bd, d2, v, m2); return; }
+      if(m2.emp && m2.emp.id!==L.emp.id){ liveStop(); KS.track=null; return; }   // شخص آخر
+    }
+    L.verify=(L.verify||0)+1;
+    if(L.verify>=4){ liveStop(); KS.track=null; camMsg('حاول مجدداً — ثبّت وجهك أمام الكاميرا'); }
     return;
   }
-  var box=det.detection.box, cx=box.x+box.width/2;
-  /* قفزة مفاجئة للوجه = شخص آخر دخل الإطار ⇒ إعادة التعرّف */
-  if(Math.abs(cx-L.cx) > L.w*0.6 || box.width < L.w*0.55 || box.width > L.w*1.8){ KS.live=null; KS.track=null; return; }
-  L.cx=L.cx*0.6+cx*0.4; L.w=L.w*0.7+box.width*0.3; L.seen=Date.now();
-  L.s.push([Date.now(), ear(det.landmarks.positions,36), ear(det.landmarks.positions,42)]);
-  if(L.s.length>90) L.s.splice(0, L.s.length-90);
-  var left=Math.max(0, Math.ceil((LIVE_MS-(Date.now()-L.t0))/1000));
-  if(!L.blinked && !blinkFound(L.s)){
-    drawBox(det,'#a78bfa',L.emp.name); camMsg('👀 '+L.emp.name+' — ارمش ببطء مرة واحدة ('+left+')');
-    return;
+  if(t-L.t0 > LIVE_MS && !window.__attCountOnly){
+    liveStop(); KS.track=null; drawBox(null);
+    camMsg('⏱️ لم يُلتقط الرمش — انظر للكاميرا وارمش مرة واحدة'); KS.pauseUntil=t+900; return;
   }
-  /* ✅ رمشة حقيقية ⇒ تحقق أخير بالبصمة أن الوجه نفسه */
-  L.blinked=true;
-  drawBox(det,'#00d4ff',L.emp.name); camMsg('✔️ '+L.emp.name+' — جارِ التثبيت…');
-  var d2 = await detectOne(v);
-  if(!KS.on || !KS.live) return;
-  if(d2){
-    var m2=bestMatch(d2.descriptor), thr=+D.set.threshold||0.45;
-    var same = (m2.emp && m2.emp.id===L.emp.id) || (!m2.emp && m2.cand && m2.cand.id===L.emp.id && m2.d <= thr+0.03);
-    if(same){ var emp=L.emp, bd=Math.min(L.best, m2.d); KS.live=null; await commitPunch(emp, bd, d2, v, m2); return; }
-    if(m2.emp && m2.emp.id!==L.emp.id){ KS.live=null; KS.track=null; return; }   // شخص آخر
+  var left=Math.max(0, Math.ceil((LIVE_MS-(t-L.t0))/1000));
+  /* إعادة تحديد موضع العين فقط عند حركة الرأس، أو كل 5 ث للتأكد من بقاء الوجه */
+  /* لا نُشغّل النموذج أثناء تغيّر العين (رمشة جارية) — نؤجّل حتى 1.5 ث ما لم يكن الانجراف كبيراً */
+  var bs=L.bd.s, busyEye=bs.length && bs[bs.length-1].e > 0.06 && (L.drift<99) && !(L.deferSince && t-L.deferSince>1500);
+  if(busyEye){ if(!L.deferSince) L.deferSince=t; } else L.deferSince=0;
+  if(!busyEye && (L.drift>=15 || t-L.locAt>15000)){
+    L.locating=true;
+    if(window.__attBlinkDbg) try{ window.__attBlinkDbg(['loc', Date.now(), L.drift, t-L.locAt]); }catch(_){}
+    var det;
+    try{ det = await detectLM(v, Math.min(+D.set.inputSize||320, 256)); }finally{ L.locating=false; }
+    if(!KS.on || KS.live!==L) return;
+    L.locAt=Date.now(); L.drift=0;
+    if(!det){
+      if(Date.now()-L.seen > 1500){ liveStop(); KS.track=null; drawBox(null); camMsg('قف أمام الكاميرا…'); }
+      return;
+    }
+    var box=det.detection.box, cx=box.x+box.width/2;
+    if(Math.abs(cx-L.cx) > L.w*0.6 || box.width < L.w*0.55 || box.width > L.w*1.8){ liveStop(); KS.track=null; return; }   // وجه آخر
+    var np=det.landmarks.positions;
+    var tx=L.pts[27].x+L.off.x, ty=L.pts[27].y+L.off.y, mv=Math.hypot(np[27].x-tx, np[27].y-ty);
+    L.pts=np.map(function(p){ return {x:p.x, y:p.y}; }); L.det=det; L.seen=Date.now();
+    L.cx=cx; L.w=box.width; L.off={x:0,y:0}; L.anchor=null;
+    if(mv > box.width*0.05) L.bd=new BlinkDet();          // التتبّع انحرف ⇒ مرجع جديد للعين
   }
-  /* لم يُثبت التحقق في هذا الإطار ⇒ نحاول التحقق مجدداً دون طلب رمشة جديدة */
-  L.verify=(L.verify||0)+1;
-  if(L.verify>=3){ KS.live=null; KS.track=null; camMsg('حاول مجدداً — ثبّت وجهك أمام الكاميرا'); }
+  drawBox(L.det,'#a78bfa',L.emp.name); camMsg('👀 '+L.emp.name+' — ارمش مرة واحدة ('+left+')');
 }
 async function kioskTick(){
   if(!KS.on) return;
@@ -66508,7 +66623,7 @@ async function kioskTick(){
     if(KS.live){ await liveStep(v); return; }
     var det = await detectOne(v);
     if(!KS.on) return;
-    if(!det){ drawBox(null); KS.track=null; KS.live=null; KS.unknown=0; camMsg(faceCount()?'قف أمام الكاميرا…':'لا توجد بصمات وجه مسجّلة بعد'); return; }
+    if(!det){ drawBox(null); KS.track=null; liveStop(); KS.unknown=0; camMsg(faceCount()?'قف أمام الكاميرا…':'لا توجد بصمات وجه مسجّلة بعد'); return; }
     var box=det.detection.box, vw=v.videoWidth||640;
     if(box.width < vw*0.14){ drawBox(det,'#ffcc00','اقترب'); camMsg('🔍 اقترب من الكاميرا قليلاً'); KS.track=null; return; }
     var m = bestMatch(det.descriptor);
@@ -66529,9 +66644,8 @@ async function kioskTick(){
     }
     if(D.set.liveness){
       /* انتقل لمرحلة الحيوية: مراقبة سريعة للعين بلا بصمة */
-      var c0=box.x+box.width/2;
-      KS.live={emp:e, best:tr.best, t0:Date.now(), seen:Date.now(), s:[[Date.now(), ear(det.landmarks.positions,36), ear(det.landmarks.positions,42)]], cx:c0, w:box.width};
-      drawBox(det,'#a78bfa',e.name); camMsg('👀 '+e.name+' — ارمش ببطء مرة واحدة');
+      liveStart(e, tr.best, det, tr);
+      drawBox(det,'#a78bfa',e.name); camMsg('👀 '+e.name+' — ارمش مرة واحدة');
       return;
     }
     await commitPunch(e, tr.best, det, v, m);
@@ -66552,7 +66666,7 @@ async function commitPunch(e, bestD, det, v, m){
   var box=det.detection.box, photo = D.set.savePhotos ? snapFace(v, box, 112) : '';
   if(KS.on===false) return;
   var res = ATT.punch(e.id, 'face', {photo:photo, dist:bestD, force:(D.set.camMode==='out'?'out':'in')});
-  KS.lastAt[e.id]=Date.now(); KS.track=null; KS.live=null;
+  KS.lastAt[e.id]=Date.now(); KS.track=null; liveStop();
   drawBox(det, res.ok ? (res.type==='in'?'#00e087':'#ffa53a') : '#ffcc00', e.name);
   flashResult(res,'kiosk');
   KS.pauseUntil = Date.now()+2300;
