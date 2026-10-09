@@ -4359,7 +4359,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
     <div class="sec" id="sec-inventory">
       <div style="display:flex;justify-content:space-between;margin-bottom:18px">
         <h2 style="font-size:16px">🗂️ المخزون والكواشف</h2>
-        <button class="btn btn-p" onclick="openModal('m-inv-item')">➕ إضافة مادة</button>
+        <button class="btn btn-p" onclick="if(typeof _invKitReset==='function')_invKitReset(null);openModal('m-inv-item')">➕ إضافة مادة</button>
       </div>
       <div class="gc">
         <div style="overflow-x:auto">
@@ -7193,6 +7193,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
             <option value="mindray_bs230">Mindray BS-230 (Chemistry)</option>
             <option value="mindray_bc30s">Mindray BC-30s (CBC)</option>
             <option value="mindray_bc6000">Mindray BC-6000 Series (CBC)</option>
+            <option value="dymind_dh36">Dymind DH36 (CBC 3-Part)</option>
             <option value="zybio">Zybio (Z60 / Z3)</option>
             <option value="zybio_z50">Zybio Z50 (5-Diff)</option>
             <option value="nano">Nano 3001 (Nanomax CBC)</option>
@@ -7383,6 +7384,10 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
             <div class="wiz-card" onclick="lisWizSelectVendor('mindray_bc6000','Mindray BC-6000','hl7')" data-v="mindray_bc6000">
               <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Mindray BC-6000</div>
               <div style="font-size:10px;color:var(--text2)">دم (CBC) — HL7 عبر الشبكة</div>
+            </div>
+            <div class="wiz-card" onclick="lisWizSelectVendor('dymind_dh36','Dymind DH36','hl7')" data-v="dymind_dh36">
+              <div style="font-size:22px">🩸</div><div style="font-weight:800;font-size:12px">Dymind DH36</div>
+              <div style="font-size:10px;color:var(--text2)">دم (CBC 3-Part) — HL7 عبر الشبكة</div>
             </div>
             <div class="wiz-card" onclick="lisWizSelectVendor('diesse_chorus','DIESSE Chorus TRIO','chorus')" data-v="diesse_chorus">
               <div style="font-size:22px">🧿</div><div style="font-weight:800;font-size:12px">DIESSE Chorus TRIO</div>
@@ -7676,6 +7681,17 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
               • <b style="color:var(--warn,#ffb020)">الكنترول (QC)</b> — رسائل <b style="color:var(--text)">MSH-11 = Q</b> — تُتجاهل تلقائياً ولا تُحفظ كنتائج مرضى (القسم 1.2.6.3).<br>
               • الهيستوغرام وبيانات الرسم (OBX نوع <b style="color:var(--text)">ED</b> وأكواد 15xxx) تُتجاهل تلقائياً — تُحفظ نتائج التحاليل فقط.<br>
               • رايات الإنذار (12xxx مثل Leucocytosis / Anemia) لا تُحفظ كنتائج رقمية.<br>
+              • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
+            </div>
+            <div id="wiz-dh36-hint" style="display:none;margin-top:12px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
+              🩸 <b style="color:var(--primary)">Dymind DH36</b> (حسب دليل الشركة — Service Manual §5.5 + LIS Communication Protocol):<br>
+              • في الجهاز: <span style="color:var(--primary)">Setup → Communication → LIS Communication</span> — أدخل <b style="color:var(--text)">IP الحاسوب</b> + <b style="color:var(--text)">Port</b> نفسه ثم OK.<br>
+              • وفي <span style="color:var(--primary)">Host Communication</span>: IP الجهاز في <b style="color:var(--text)">نفس شبكة</b> الحاسوب وبنفس Subnet Mask.<br>
+              • نجاح الربط: أيقونة <b style="color:var(--text)">LIS</b> أعلى شاشة الجهاز تتحوّل من الرمادي إلى الأسود.<br>
+              • البروتوكول: <b style="color:var(--text)">HL7 v2.3.1</b> عبر <b style="color:var(--text)">MLLP</b> · الترميز <b style="color:var(--text)">UTF-8 (UNICODE)</b> · الجهاز هو من <b style="color:var(--text)">يتصل بالبرنامج</b>.<br>
+              • النتائج: الجهاز يرسل <b style="color:var(--text)">ORU^R01</b> والبرنامج يرد <b style="color:var(--text)">ACK^R01</b> فوراً · الاستعلام <b style="color:var(--text)">ORM^O01</b> ← <b style="color:var(--text)">ORR^O02</b>.<br>
+              • رقم العينة يُقرأ من <b style="color:var(--text)">Sample ID</b> في الجهاز (OBR-3) — اكتب/امسح رقم الطلب فيه قبل العدّ.<br>
+              • <b style="color:var(--warn,#ffb020)">الكنترول (QC)</b> — رسائل <b style="color:var(--text)">MSH-11 = Q</b> — يُرد عليها لكن تُتجاهل ولا تُحفظ كنتائج مرضى.<br>
               • <b style="color:var(--text)">تأكد أن الجدار الناري (Firewall)</b> يسمح بالمنفذ على الحاسوب.
             </div>
             <div id="wiz-bs230-hint" style="display:none;margin-top:12px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:12px;font-size:11px;color:var(--text2)">
@@ -8408,6 +8424,26 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
               max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4)"></div>
           </div>
         </div>
+      </div>
+      <!-- 📷 قراءة باركود الكت — كل مسحة = كت واحد -->
+      <div id="ii-kit-box" style="background:rgba(0,245,147,0.05);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="font-size:11px;color:var(--success);font-weight:800">📷 قراءة باركود الكت</div>
+          <span style="font-size:10px;color:var(--text2)">كل مسحة = كت واحد · امسح الكتات واحداً بعد الآخر</span>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+          <div class="fg" style="margin-bottom:0;flex:2;min-width:200px">
+            <label class="fl" style="font-size:10px">امسح باركود الكت هنا</label>
+            <input class="fc" id="ii-kit-scan" lang="en" dir="ltr" autocomplete="off" spellcheck="false" placeholder="Scan barcode…">
+          </div>
+          <div class="fg" style="margin-bottom:0;flex:1;min-width:120px">
+            <label class="fl" style="font-size:10px">تيستات / كت (لكل الكتات)</label>
+            <input class="fc" id="ii-kit-per" type="number" min="0" placeholder="مثلاً 100" style="font-weight:800" oninput="_invKitSetPer(this.value)">
+          </div>
+        </div>
+        <div id="ii-kit-info"></div>
+        <div id="ii-kit-merge"></div>
+        <div id="ii-kit-list"></div>
       </div>
       <!-- حساب الكمية -->
       <div style="background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">
@@ -23063,17 +23099,30 @@ function editInvItem(id){
   document.getElementById('ii-sup').value=i.sup||'';
   document.getElementById('m-inv-item').dataset.editId=id;
   document.querySelector('#m-inv-item .mtitle').textContent='🗂️ تعديل مادة';
+  if(typeof _invKitReset==='function') _invKitReset(i);   /* 📷 قائمة كتات جديدة فارغة لهذه المادة */
   openModal('m-inv-item');
 }
 
 function saveInvItem(){
+  // 📷 كتات ممسوحة لمنتج موجود مسبقاً → تُضاف لنفس المادة (عند اختيار الدمج)
+  if(typeof _invKitTryMerge==='function' && _invKitTryMerge(document.getElementById('m-inv-item').dataset.editId)) return;
   const name=document.getElementById('ii-name').value.trim();
-  if(!name) return;
+  if(!name){
+    if(typeof _invKit!=='undefined'&&_invKit.list&&_invKit.list.length){
+      showNotif('اسم المادة','اكتب اسم المادة (مثلاً TSH) — سيُتذكّر تلقائياً عند مسح نفس الكت لاحقاً','error');
+      try{ document.getElementById('ii-name').focus(); }catch(_){}
+    }
+    return;
+  }
   const editId=document.getElementById('m-inv-item').dataset.editId;
-  const kits=parseInt(document.getElementById('ii-kits').value)||0;
-  const perKit=parseInt(document.getElementById('ii-per-kit').value)||0;
+  let kits=parseInt(document.getElementById('ii-kits').value)||0;
+  let perKit=parseInt(document.getElementById('ii-per-kit').value)||0;
   let qty=parseFloat(document.getElementById('ii-qty').value)||0;
   if(kits>0&&perKit>0) qty=kits*perKit;
+  // 📷 الكتات الممسوحة: الكمية = الرصيد + مجموع تيستات كل كت (يدعم كتاً ناقصاً)
+  const _ks=(typeof _invKitApply==='function')?_invKitApply():null;
+  if(_ks&&_ks.abort) return;
+  if(_ks){ qty=_ks.qty; kits=_ks.kits; perKit=_ks.perKit; }
 
   const item={
     id:editId||_uid('inv'),
@@ -23083,6 +23132,14 @@ function saveInvItem(){
     exp:document.getElementById('ii-exp').value||'',
     sup:document.getElementById('ii-sup').value||''
   };
+  // 📷 الحفاظ على رمز المنتج وسجل الكتات عند التعديل + إضافة الكتات الجديدة
+  const _oldInv=editId?inventory.find(x=>x.id===editId):null;
+  if(_oldInv&&_oldInv.gtin) item.gtin=_oldInv.gtin;
+  if(_oldInv&&Array.isArray(_oldInv.kitList)) item.kitList=_oldInv.kitList;
+  if(_ks){
+    if(_ks.key&&!/^RAW:/.test(_ks.key)&&!item.gtin) item.gtin=_ks.key;
+    item.kitList=(item.kitList||[]).concat(_ks.added).slice(-300);
+  }
   if(editId){
     const idx=inventory.findIndex(x=>x.id===editId);
     if(idx>-1) inventory[idx]=item;
@@ -23094,6 +23151,7 @@ function saveInvItem(){
   document.getElementById('inv-search-drop').style.display='none';
   save('inventory',inventory); renderInventory(); closeModal('m-inv-item');
   showNotif('تم',editId?'تم التعديل ✅':'تم الإضافة ✅','success');
+  if(_ks&&typeof _invKitReset==='function') _invKitReset(null);
 }
 
 function invItemSearch(q){
@@ -23127,6 +23185,559 @@ function invItemSearch(q){
 function invItemPick(name){
   document.getElementById('ii-name').value=name;
   document.getElementById('inv-search-drop').style.display='none';
+}
+/* ══════════════════════════════════════════════════════════════════
+ * 📷 قراءة باركود كتات الكواشف — إضافة المخزون بالمسح
+ * ──────────────────────────────────────────────────────────────────
+ * كل مسحة = كت واحد. عدد التيستات لكل كت يُدخل يدوياً (قيمة عامة تُطبَّق
+ * على كل الكتات) ويمكن تعديل كت بعينه (كت ناقص). الإجمالي = مجموع الكتات.
+ *
+ * فكّ الباركود (أي شركة/أي نوع):
+ *   • GS1-128 / GS1 DataMatrix — بفاصل GS أو بدونه، بأقواس (01)… أو بدونها،
+ *     مع/بدون معرّف الرمز ]C1 ]d2 ]Q3 — كل الـ AI القياسية (GTIN 01، LOT 10،
+ *     EXP 17، PROD 11، SERIAL 21، QTY 30/37، …).
+ *   • GS1 Digital Link (رابط https://…/01/GTIN/10/LOT?17=YYMMDD).
+ *   • HIBC (+LIC…) — البيانات الأساسية والثانوية بكل صيغ التاريخ ($ $$ $$+).
+ *   • EAN-13 / UPC-A / GTIN-14 (مع التحقق من رقم الفحص).
+ *   • باركود خاص بالشركة: تُلتقط نصوص LOT/EXP والتواريخ الواضحة إن وُجدت،
+ *     ويُحفظ الباركود كاملاً كمعرّف للمنتج.
+ *   • قارئ يكتب بلوحة مفاتيح عربية (حروف عربية بدل الإنجليزية) يُصحَّح تلقائياً.
+ * التعرّف على المنتج: GTIN (أو كود HIBC/الباركود) يُحفظ مع المادة، فالمسحة
+ * القادمة لنفس المنتج تملأ الاسم والمورد والتيستات/كت تلقائياً.
+ *
+ * معزول: لا يغيّر سلوك الإدخال اليدوي إطلاقاً — بلا كتات ممسوحة يعمل الحفظ
+ * حرفياً كما كان (كتات × تيستات أو الإجمالي المباشر).
+ * ══════════════════════════════════════════════════════════════════ */
+var InvKit=(function(){
+  var GS='\x1d';
+  /* ── جدول AI القياسي: [طول ثابت للبيانات أو 0 = متغيّر، الحد الأقصى، النوع، الاسم] ── */
+  var AI={
+    '00':[18,18,'n','SSCC'], '01':[14,14,'n','GTIN'], '02':[14,14,'n','GTIN المحتوى'],
+    '10':[0,20,'x','LOT'], '11':[6,6,'d','تاريخ الإنتاج'], '12':[6,6,'d','تاريخ الاستحقاق'],
+    '13':[6,6,'d','تاريخ التعبئة'], '15':[6,6,'d','أفضل قبل'], '16':[6,6,'d','تاريخ البيع'],
+    '17':[6,6,'d','تاريخ الانتهاء'], '20':[2,2,'n','نوع المنتج'], '21':[0,20,'x','الرقم التسلسلي'],
+    '22':[0,20,'x','CPV'], '235':[0,28,'x','TPX'], '240':[0,30,'x','رقم إضافي'], '241':[0,30,'x','رقم القطعة'],
+    '242':[0,6,'n','MTO'], '243':[0,20,'x','PCN'], '250':[0,30,'x','رقم تسلسلي ثانوي'], '251':[0,30,'x','مرجع المصدر'],
+    '253':[0,30,'x','GDTI'], '254':[0,20,'x','GLN ext'], '255':[0,25,'n','GCN'],
+    '30':[0,8,'n','العدد'], '37':[0,8,'n','العدد'],
+    '400':[0,30,'x','رقم أمر الشراء'], '401':[0,30,'x','GINC'], '402':[17,17,'n','GSIN'], '403':[0,30,'x','الشحن'],
+    '410':[13,13,'n','GLN'], '411':[13,13,'n','GLN'], '412':[13,13,'n','GLN المورد'], '413':[13,13,'n','GLN'],
+    '414':[13,13,'n','GLN'], '415':[13,13,'n','GLN'], '416':[13,13,'n','GLN'], '417':[13,13,'n','GLN'],
+    '420':[0,20,'x','الرمز البريدي'], '421':[0,12,'x','الرمز البريدي'], '422':[3,3,'n','بلد المنشأ'],
+    '423':[0,15,'n','بلد المعالجة'], '424':[3,3,'n','بلد المعالجة'], '425':[0,15,'n','بلد التفكيك'], '426':[3,3,'n','بلد المعالجة'],
+    '7001':[13,13,'n','NSN'], '7003':[10,10,'n','تاريخ ووقت الانتهاء'], '7004':[0,4,'n','القدرة'],
+    '7006':[6,6,'d','أول تجميد'], '710':[0,20,'x','NHRN'], '711':[0,20,'x','NHRN'], '712':[0,20,'x','NHRN'],
+    '713':[0,20,'x','NHRN'], '714':[0,20,'x','NHRN'], '715':[0,20,'x','NHRN'],
+    '8001':[14,14,'n','أبعاد'], '8003':[0,30,'x','GRAI'], '8004':[0,30,'x','GIAI'], '8005':[6,6,'n','السعر'],
+    '8006':[18,18,'n','ITIP'], '8008':[0,12,'n','وقت الإنتاج'], '8020':[0,25,'x','رقم مرجع الدفع'],
+    '90':[0,30,'x','بيانات داخلية'], '91':[0,90,'x','بيانات الشركة'], '92':[0,90,'x','بيانات الشركة'],
+    '93':[0,90,'x','بيانات الشركة'], '94':[0,90,'x','بيانات الشركة'], '95':[0,90,'x','بيانات الشركة'],
+    '96':[0,90,'x','بيانات الشركة'], '97':[0,90,'x','بيانات الشركة'], '98':[0,90,'x','بيانات الشركة'], '99':[0,90,'x','بيانات الشركة']
+  };
+  /* أوزان/قياسات 31xx–36xx (6 أرقام ثابتة) و 39xx (متغيّر) — 4 أرقام مع الفاصلة */
+  function aiInfo(code){
+    if(AI[code]) return AI[code];
+    if(/^3[1-6]\d\d$/.test(code)) return [6,6,'n','قياس'];
+    if(/^39[0-3]\d$/.test(code)) return [0,18,'n','مبلغ'];
+    return null;
+  }
+  /* أطوال الـ AI الممكنة عند المحاولة: 2 ثم 3 ثم 4 */
+  function matchAI(s,i){
+    for(var L=2;L<=4;L++){
+      var c=s.substr(i,L); if(c.length<L||!/^\d+$/.test(c)) return null;
+      var inf=aiInfo(c); if(inf) return {ai:c,inf:inf};
+    }
+    return null;
+  }
+  function validDate6(v){
+    if(!/^\d{6}$/.test(v)) return false;
+    var m=+v.substr(2,2), d=+v.substr(4,2);
+    return m>=1&&m<=12&&d>=0&&d<=31;
+  }
+  /* YYMMDD → YYYY-MM-DD (يوم 00 = آخر الشهر حسب معيار GS1، والقرن بقاعدة النافذة) */
+  function gs1Date(v){
+    if(!validDate6(v)) return '';
+    var yy=+v.substr(0,2), m=+v.substr(2,2), d=+v.substr(4,2);
+    var curY=new Date().getFullYear(), base=Math.floor(curY/100)*100, y=base+yy;
+    if(y-curY>=51) y-=100; else if(curY-y>49) y+=100;
+    if(d===0) d=new Date(y,m,0).getDate();
+    return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  }
+  /* تحقق رقم الفحص (GTIN/EAN/UPC) */
+  function gtinOk(n){
+    if(!/^\d{8}$|^\d{12,14}$/.test(n)) return false;
+    var s=0, ds=n.split('').map(Number), chk=ds.pop();
+    for(var i=ds.length-1,w=3;i>=0;i--,w=(w===3?1:3)) s+=ds[i]*w;
+    return (10-(s%10))%10===chk;
+  }
+
+  /* ── تصحيح الكتابة بلوحة مفاتيح عربية (القارئ HID يرسل مواقع المفاتيح) ── */
+  var AR_MULTI=[['لإ','T'],['لأ','G'],['لآ','B'],['لا','b']];
+  var AR_MAP={'ض':'q','ص':'w','ث':'e','ق':'r','ف':'t','غ':'y','ع':'u','ه':'i','خ':'o','ح':'p','ج':'[','د':']',
+    'ش':'a','س':'s','ي':'d','ب':'f','ل':'g','ا':'h','ت':'j','ن':'k','م':'l','ك':';','ط':"'",
+    'ئ':'z','ء':'x','ؤ':'c','ر':'v','ى':'n','ة':'m','و':',','ز':'.','ظ':'/','ذ':'`',
+    'َ':'Q','ً':'W','ُ':'E','ٌ':'R','إ':'Y','‘':'U','÷':'I','×':'O','؛':'P',
+    'ِ':'A','ٍ':'S',']':'D','[':'F','أ':'H','ـ':'J','،':'K','/':'L','~':'Z','ْ':'X',
+    '}':'C','{':'V','آ':'N','’':'M','؟':'?',
+    '٠':'0','١':'1','٢':'2','٣':'3','٤':'4','٥':'5','٦':'6','٧':'7','٨':'8','٩':'9'};
+  function fixArabicLayout(s){
+    if(!/[؀-ۿ‘’]/.test(s)) return s;
+    AR_MULTI.forEach(function(p){ s=s.split(p[0]).join(p[1]); });
+    var o=''; for(var i=0;i<s.length;i++){ var c=s.charAt(i); o+=(AR_MAP.hasOwnProperty(c)?AR_MAP[c]:c); }
+    return o;
+  }
+  /* تنظيف المدخل: معرّف الرمز، تمثيلات GS النصّية، الفراغات الطرفية */
+  function clean(raw){
+    var s=String(raw==null?'':raw).replace(/[\r\n\t]+$/,'').replace(/^\s+|\s+$/g,'');
+    s=fixArabicLayout(s);
+    s=s.replace(/<GS>|\{GS\}|\[GS\]|\\x1d|\\u001d|␝/gi, GS);
+    s=s.replace(/^\][A-Za-z]\d/,'');           /* ]C1 ]d2 ]Q3 ]e0 */
+    s=s.replace(/^\x1d+/,'');
+    if(/^\*\+.*\*$/.test(s)) s=s.slice(1,-1);   /* HIBC بنجوم Code 39 */
+    return s;
+  }
+
+  /* ── GS1 بصيغة الأقواس (01)…(17)… ── */
+  function parseGS1Paren(s){
+    if(!/^\(\d{2,4}\)/.test(s)) return null;
+    var re=/\((\d{2,4})\)([^()]*)/g, m, out=[];
+    while((m=re.exec(s))){ out.push({ai:m[1],v:m[2].replace(/\x1d/g,'')}); }
+    return out.length?out:null;
+  }
+  /* ── GS1 خام (بفاصل GS أو بدونه) ── تراجع ذكي لتحديد نهاية الحقل المتغيّر */
+  function parseGS1Raw(s, i, depth){
+    if(i>=s.length) return [];
+    if(s.charAt(i)===GS) return parseGS1Raw(s,i+1,depth);
+    if((depth||0)>12) return null;
+    var m=matchAI(s,i); if(!m) return null;
+    var p=i+m.ai.length, inf=m.inf;
+    if(inf[0]>0){
+      var v=s.substr(p,inf[0]);
+      if(v.length<inf[0]) return null;
+      if(inf[2]==='n'&&!/^\d+$/.test(v)) return null;
+      if(inf[2]==='d'&&!validDate6(v)) return null;
+      var rest=parseGS1Raw(s,p+inf[0],(depth||0)+1);
+      return rest?[{ai:m.ai,v:v}].concat(rest):null;
+    }
+    /* متغيّر: ينتهي بـ GS إن وُجد */
+    var g=s.indexOf(GS,p);
+    if(g>=0){
+      var v2=s.substring(p,g);
+      if(!v2.length||v2.length>inf[1]) return null;
+      if(inf[2]==='n'&&!/^\d+$/.test(v2)) return null;
+      var r2=parseGS1Raw(s,g+1,(depth||0)+1);
+      return r2?[{ai:m.ai,v:v2}].concat(r2):null;
+    }
+    /* بلا GS: نجرّب أقصر قيمة يبقى بعدها نصّ صالح كاملاً، وإلا يأخذ الباقي */
+    var maxEnd=Math.min(s.length,p+inf[1]);
+    for(var e=p+1;e<maxEnd;e++){
+      var v3=s.substring(p,e);
+      if(inf[2]==='n'&&!/^\d+$/.test(v3)) break;
+      var nm=matchAI(s,e);
+      if(!nm) continue;
+      /* لا نقطع إلا عند AI بقيمة ثابتة صحيحة (تاريخ/GTIN) لتجنّب القطع داخل اللوت */
+      if(nm.inf[0]===0) continue;
+      var r3=parseGS1Raw(s,e,(depth||0)+1);
+      if(r3&&r3.length) return [{ai:m.ai,v:v3}].concat(r3);
+    }
+    var v4=s.substring(p);
+    if(!v4.length||v4.length>inf[1]) return null;
+    if(inf[2]==='n'&&!/^\d+$/.test(v4)) return null;
+    return [{ai:m.ai,v:v4}];
+  }
+  /* ── GS1 Digital Link ── */
+  function parseDigitalLink(s){
+    if(!/^https?:\/\//i.test(s)) return null;
+    var u; try{ u=new URL(s); }catch(e){ return null; }
+    var parts=u.pathname.split('/').filter(Boolean), out=[];
+    for(var i=0;i<parts.length-1;i++){
+      if(/^\d{2,4}$/.test(parts[i])&&aiInfo(parts[i])){ out.push({ai:parts[i],v:decodeURIComponent(parts[i+1])}); i++; }
+    }
+    u.searchParams.forEach(function(v,k){ if(/^\d{2,4}$/.test(k)&&aiInfo(k)) out.push({ai:k,v:v}); });
+    return out.some(function(x){ return x.ai==='01'; })?out:null;
+  }
+  function fromAIs(list, fmt){
+    var r={format:fmt, fields:[], gtin:'', lot:'', exp:'', prod:'', serial:'', qty:''};
+    list.forEach(function(x){
+      var inf=aiInfo(x.ai)||[0,0,'x',x.ai], v=x.v, show=v;
+      if(x.ai==='01'||x.ai==='02'){ if(!r.gtin) r.gtin=v; }
+      else if(x.ai==='10') r.lot=v;
+      else if(x.ai==='17'){ r.exp=gs1Date(v); show=r.exp||v; }
+      else if(x.ai==='7003'){ if(!r.exp){ r.exp=gs1Date(v.substr(0,6)); } show=gs1Date(v.substr(0,6))+' '+v.substr(6,2)+':'+v.substr(8,2); }
+      else if(x.ai==='11'){ r.prod=gs1Date(v); show=r.prod||v; }
+      else if(inf[2]==='d'){ show=gs1Date(v)||v; }
+      else if(x.ai==='21') r.serial=v;
+      else if(x.ai==='30'||x.ai==='37') r.qty=String(parseInt(v,10));
+      r.fields.push({ai:x.ai, label:inf[3], value:show});
+    });
+    return r;
+  }
+
+  /* ── HIBC ── */
+  function hibcSecondary(sec, r){
+    /* sec بدون '+' البادئة ولا رمز الفحص */
+    var s=sec, qty='';
+    function take(n){ var v=s.substr(0,n); s=s.substr(n); return v; }
+    function dateFmt(code){
+      var y,m,d,v;
+      if(code==='0'||code==='1'){ /* MMYY: الرقم نفسه جزء من الشهر */ v=take(4); m=v.substr(0,2); y=v.substr(2,2); d='00'; }
+      else if(code==='2'){ take(1); v=take(6); m=v.substr(0,2); d=v.substr(2,2); y=v.substr(4,2); }
+      else if(code==='3'){ take(1); v=take(6); y=v.substr(0,2); m=v.substr(2,2); d=v.substr(4,2); }
+      else if(code==='4'){ take(1); v=take(8); y=v.substr(0,2); m=v.substr(2,2); d=v.substr(4,2); }
+      else if(code==='5'||code==='6'){ take(1); v=take(code==='5'?5:7); return julian(v.substr(0,5)); }
+      else if(code==='7'){ take(1); return ''; }
+      else return '';
+      return gs1Date(y+m+d);
+    }
+    if(s.charAt(0)==='$'){
+      if(s.substr(0,2)==='$$'){
+        var isSerial=s.charAt(2)==='+'; s=s.substr(isSerial?3:2);
+        if(s.charAt(0)==='8'){ take(1); qty=take(2); } else if(s.charAt(0)==='9'){ take(1); qty=take(5); }
+        var exp=dateFmt(s.charAt(0));
+        r.exp=exp||r.exp; if(isSerial) r.serial=s; else r.lot=s;
+      } else if(s.substr(0,2)==='$+'){ r.serial=s.substr(2); }
+      else { r.lot=s.substr(1); }
+    } else if(/^\d{5}/.test(s)){
+      r.exp=julian(s.substr(0,5)); r.lot=s.substr(5);
+    }
+    if(qty) r.qty=String(parseInt(qty,10));
+  }
+  function julian(v){
+    if(!/^\d{5}$/.test(v)) return '';
+    var y=2000+(+v.substr(0,2)), j=+v.substr(2,3); if(j<1||j>366) return '';
+    var dt=new Date(Date.UTC(y,0,j)); return dt.toISOString().slice(0,10);
+  }
+  function parseHIBC(s){
+    if(s.charAt(0)!=='+'||s.length<6) return null;
+    var body=s.substr(1);
+    var r={format:'HIBC', fields:[], gtin:'', lot:'', exp:'', prod:'', serial:'', qty:'', lic:'', pcn:''};
+    if(/^[A-Za-z]/.test(body)){
+      /* أساسي: LIC(4) PCN UOM(1) [/ثانوي] فحص(1) */
+      var slash=body.indexOf('/');
+      var prim=slash>=0?body.substring(0,slash):body.substring(0,body.length-1);
+      r.lic=prim.substr(0,4); r.pcn=prim.substring(4,prim.length-1);
+      r.uom=prim.charAt(prim.length-1);
+      if(slash>=0) hibcSecondary(body.substring(slash+1,body.length-1), r);   /* مدمج: رمز فحص واحد في النهاية */
+      r.gtin='HIBC:'+r.lic+r.pcn+r.uom;
+    } else {
+      hibcSecondary(body.substring(0,body.length-2), r);   /* ثانوي مستقل: رمز ربط + رمز فحص */
+    }
+    if(r.lic) r.fields.push({ai:'LIC',label:'رمز الشركة',value:r.lic});
+    if(r.pcn) r.fields.push({ai:'PCN',label:'رمز المنتج',value:r.pcn});
+    if(r.lot) r.fields.push({ai:'LOT',label:'LOT',value:r.lot});
+    if(r.exp) r.fields.push({ai:'EXP',label:'تاريخ الانتهاء',value:r.exp});
+    if(r.serial) r.fields.push({ai:'SN',label:'الرقم التسلسلي',value:r.serial});
+    if(r.qty) r.fields.push({ai:'QTY',label:'العدد',value:r.qty});
+    return r;
+  }
+
+  /* ── باركود خاص بالشركة: نصوص LOT/EXP والتواريخ الواضحة ── */
+  function anyDate(t){
+    var m;
+    if((m=t.match(/(20\d{2})[-\/.](\d{1,2})[-\/.](\d{1,2})/))) return fmtYMD(m[1],m[2],m[3]);
+    if((m=t.match(/(\d{1,2})[-\/.](\d{1,2})[-\/.](20\d{2})/))) return fmtYMD(m[3],m[2],m[1]);
+    if((m=t.match(/(20\d{2})[-\/.](\d{1,2})(?![\d])/))) return fmtYMD(m[1],m[2],'00');
+    if((m=t.match(/(?:^|\D)(20\d{2})(0[1-9]|1[0-2])(0[0-9]|[12]\d|3[01])(?!\d)/))) return fmtYMD(m[1],m[2],m[3]);
+    return '';
+  }
+  function fmtYMD(y,m,d){
+    m=+m; d=+d; y=+y; if(m<1||m>12||d>31) return '';
+    if(d===0) d=new Date(y,m,0).getDate();
+    return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  }
+  function parseFree(s){
+    var r={format:'باركود خاص بالشركة', fields:[], gtin:'', lot:'', exp:'', prod:'', serial:'', qty:''};
+    var m;
+    if((m=s.match(/(?:LOT|LOT\s*NO|BATCH|LN)[\s:#.\-]*([A-Za-z0-9\-]{2,20})/i))) r.lot=m[1];
+    if((m=s.match(/(?:EXP|EXPIRY|EXPIRES|USE\s*BY|EXP\.?\s*DATE)[\s:#.\-]*([0-9][0-9\/\-.]{4,10})/i))) r.exp=anyDate(m[1])||'';
+    if((m=s.match(/(?:SN|S\/N|SERIAL)[\s:#.\-]*([A-Za-z0-9\-]{2,25})/i))) r.serial=m[1];
+    if(!r.exp) r.exp=anyDate(s);
+    if(r.lot) r.fields.push({ai:'LOT',label:'LOT',value:r.lot});
+    if(r.exp) r.fields.push({ai:'EXP',label:'تاريخ الانتهاء',value:r.exp});
+    if(r.serial) r.fields.push({ai:'SN',label:'الرقم التسلسلي',value:r.serial});
+    return r;
+  }
+
+  /* ── نقطة الدخول: يُرجع دائماً كائناً (لا يفشل) ── */
+  function parse(raw){
+    var s=clean(raw), r=null;
+    if(!s) return null;
+    r=(function(){
+      var dl=parseDigitalLink(s); if(dl) return fromAIs(dl,'GS1 Digital Link');
+      var pa=parseGS1Paren(s); if(pa) return fromAIs(pa,'GS1');
+      if(s.charAt(0)==='+'){ var h=parseHIBC(s); if(h) return h; }
+      var d=s.replace(/\s+/g,'');
+      if(/^\d{8}$|^\d{12,14}$/.test(d) && gtinOk(d)){
+        var g=d.padStart(14,'0');
+        return {format:d.length===13?'EAN-13':d.length===12?'UPC-A':d.length===8?'EAN-8':'GTIN-14', fields:[{ai:'01',label:'GTIN',value:g}],
+                gtin:g, lot:'', exp:'', prod:'', serial:'', qty:''};
+      }
+      /* GS1 خام: يجب أن يبدأ بـ AI معروف ويُستهلك كاملاً */
+      if(/^\d{2}/.test(s)){
+        var g1=parseGS1Raw(s,0,0);
+        if(g1&&g1.length&&g1.some(function(x){ return x.ai==='01'||x.ai==='02'||x.ai==='10'||x.ai==='17'||x.ai==='21'; })
+           && (g1.length>1 || g1[0].ai==='01')){
+          var okG=g1.every(function(x){ return (x.ai!=='01'&&x.ai!=='02')||gtinOk(x.v); });
+          if(okG) return fromAIs(g1,'GS1');
+        }
+      }
+      return parseFree(s);
+    })();
+    r.raw=s;
+    /* المفتاح الذي يُعرَّف به المنتج: GTIN ← كود HIBC ← الباركود كاملاً */
+    r.key=r.gtin||('RAW:'+s);
+    if(r.gtin && !/^HIBC:/.test(r.gtin) && !r.fields.some(function(f){ return f.ai==='01'; })) r.fields.unshift({ai:'01',label:'GTIN',value:r.gtin});
+    if(r.gtin && /^\d{14}$/.test(r.gtin)){ var cc=gs1Country(r.gtin); if(cc) r.country=cc; }
+    return r;
+  }
+  /* بلد مُصدِر رمز الشركة (من بادئة GS1) — معلومة إضافية فقط */
+  function gs1Country(g){
+    var p=+g.substr(1,3);
+    var T=[[0,139,'الولايات المتحدة/كندا'],[300,379,'فرنسا'],[380,380,'بلغاريا'],[400,440,'ألمانيا'],[450,459,'اليابان'],[490,499,'اليابان'],
+      [460,469,'روسيا'],[471,471,'تايوان'],[489,489,'هونغ كونغ'],[500,509,'المملكة المتحدة'],[520,521,'اليونان'],[528,528,'لبنان'],[529,529,'قبرص'],
+      [540,549,'بلجيكا/لوكسمبورغ'],[560,560,'البرتغال'],[569,569,'آيسلندا'],[570,579,'الدنمارك'],[590,590,'بولندا'],[594,594,'رومانيا'],[599,599,'هنغاريا'],
+      [600,601,'جنوب أفريقيا'],[611,611,'المغرب'],[613,613,'الجزائر'],[619,619,'تونس'],[621,621,'سوريا'],[622,622,'مصر'],[625,625,'الأردن'],[626,626,'إيران'],
+      [627,627,'الكويت'],[628,628,'السعودية'],[629,629,'الإمارات'],[640,649,'فنلندا'],[690,699,'الصين'],[700,709,'النرويج'],[729,729,'إسرائيل'],
+      [730,739,'السويد'],[760,769,'سويسرا'],[800,839,'إيطاليا'],[840,849,'إسبانيا'],[858,858,'سلوفاكيا'],[859,859,'التشيك'],[868,869,'تركيا'],
+      [870,879,'هولندا'],[880,880,'كوريا الجنوبية'],[885,885,'تايلاند'],[888,888,'سنغافورة'],[890,890,'الهند'],[893,893,'فيتنام'],[899,899,'إندونيسيا'],
+      [900,919,'النمسا'],[930,939,'أستراليا'],[940,949,'نيوزيلندا'],[955,955,'ماليزيا']];
+    for(var i=0;i<T.length;i++) if(p>=T[i][0]&&p<=T[i][1]) return T[i][2];
+    return '';
+  }
+  return { parse:parse, clean:clean, fixArabicLayout:fixArabicLayout, gs1Date:gs1Date, gtinOk:gtinOk };
+})();
+window.InvKit=InvKit;
+
+/* ── حالة نافذة الإضافة: الكتات الممسوحة في هذه الجلسة ── */
+var _invKit={list:[], per:'', baseQty:0, baseKits:0, editId:'', mergeId:'', merge:true, autoExp:'', last:null};
+function _ikEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function _ikEl(id){ return document.getElementById(id); }
+function _ikRealKey(k){ return !!k && !/^RAW:/.test(k); }
+function _ikNum(v){ var n=parseInt(v,10); return (isFinite(n)&&n>0)?n:0; }
+function _ikToday(){ return new Date().toISOString().split('T')[0]; }
+/* البحث عن مادة سبق إدخال نفس المنتج لها (GTIN محفوظ أو كت ممسوح سابقاً) */
+function _ikFindItem(key){
+  if(!key||typeof inventory==='undefined'||!Array.isArray(inventory)) return null;
+  return inventory.find(function(i){ return i && (i.gtin===key || (Array.isArray(i.kitList)&&i.kitList.some(function(k){ return k&&k.key===key; }))); })||null;
+}
+function _invKitReset(item){
+  _invKit={list:[], per:item&&item.perKit?String(item.perKit):'', baseQty:0, baseKits:0,
+           editId:item?item.id:'', mergeId:'', merge:true, autoExp:'', last:null};
+  ['ii-kits','ii-per-kit','ii-qty'].forEach(function(id){ var e=_ikEl(id); if(e) e.readOnly=false; });
+  var s=_ikEl('ii-kit-scan'); if(s) s.value='';
+  var p=_ikEl('ii-kit-per'); if(p) p.value=_invKit.per;
+  _invKitRender();
+  if(!item) setTimeout(function(){ var s2=_ikEl('ii-kit-scan'); if(s2) try{ s2.focus(); }catch(_){} },160);
+}
+/* القارئ يُنهي كل قراءة بـ Enter (أو Tab). Ctrl+] = فاصل GS في بعض القارئات */
+function _invKitKey(e){
+  var inp=e.target;
+  if((e.ctrlKey&&(e.key===']'||e.code==='BracketRight')) || e.key==='\x1d' || e.keyCode===29){
+    e.preventDefault();
+    var st=inp.selectionStart, en=inp.selectionEnd, v=inp.value;
+    inp.value=v.slice(0,st)+'\x1d'+v.slice(en); inp.selectionStart=inp.selectionEnd=st+1;
+    return;
+  }
+  /* الحرف من موقع المفتاح الفعلي (e.code) لا من لغة لوحة المفاتيح — القارئ يرسل
+     مواقع مفاتيح بتخطيط US، فتصل الحروف الكبيرة/الصغيرة والرموز حرفياً حتى لو
+     كانت لغة الويندوز عربية. مفاتيح غير معروفة تُترك لسلوكها الطبيعي. */
+  if(!e.ctrlKey&&!e.altKey&&!e.metaKey&&e.key&&(e.key.length===1||/^[\u0600-\u06FF]{2}$/.test(e.key))){   /* «لا» = حرفان */
+    var ch=_ikCodeChar(e.code,e.shiftKey,e.getModifierState&&e.getModifierState('CapsLock'),e.key);
+    if(ch!==null){
+      e.preventDefault();
+      var a=inp.selectionStart, z=inp.selectionEnd, vv=inp.value;
+      inp.value=vv.slice(0,a)+ch+vv.slice(z); inp.selectionStart=inp.selectionEnd=a+ch.length;
+      return;
+    }
+  }
+  if(e.key==='Enter'||(e.key==='Tab'&&inp.value.trim())){
+    e.preventDefault();
+    var raw=inp.value; inp.value='';
+    if(raw.trim()) _invKitAdd(raw);
+    try{ inp.focus(); }catch(_){}
+  }
+}
+/* المسح يُلتقط على مستوى window (قبل محوّل اللغة العام المسجّل على document)
+   فيصل نص القارئ حرفياً. المفاتيح التي يعالجها الحقل فقط تتوقف هنا؛ غيرها يمرّ. */
+if(!window._ikKeyBound){
+  window._ikKeyBound=true;
+  window.addEventListener('keydown',function(e){
+    var t=e.target; if(!t||t.id!=='ii-kit-scan') return;
+    _invKitKey(e);
+    if(e.defaultPrevented) e.stopImmediatePropagation();
+  },true);
+}
+var _IK_US={Backquote:['`','~'],Digit1:['1','!'],Digit2:['2','@'],Digit3:['3','#'],Digit4:['4','$'],Digit5:['5','%'],
+  Digit6:['6','^'],Digit7:['7','&'],Digit8:['8','*'],Digit9:['9','('],Digit0:['0',')'],Minus:['-','_'],Equal:['=','+'],
+  BracketLeft:['[','{'],BracketRight:[']','}'],Backslash:['\\','|'],Semicolon:[';',':'],Quote:["'",'"'],
+  Comma:[',','<'],Period:['.','>'],Slash:['/','?'],Space:[' ',' '],IntlBackslash:['\\','|'],
+  Numpad0:['0','0'],Numpad1:['1','1'],Numpad2:['2','2'],Numpad3:['3','3'],Numpad4:['4','4'],Numpad5:['5','5'],
+  Numpad6:['6','6'],Numpad7:['7','7'],Numpad8:['8','8'],Numpad9:['9','9'],NumpadDecimal:['.','.'],
+  NumpadAdd:['+','+'],NumpadSubtract:['-','-'],NumpadMultiply:['*','*'],NumpadDivide:['/','/']};
+function _ikCodeChar(code,shift,caps,key){
+  var asc=(typeof key==='string'&&key.length===1&&key.charCodeAt(0)>=32&&key.charCodeAt(0)<127);
+  if(!code) return asc?key:null;
+  var m=/^Key([A-Z])$/.exec(code);
+  if(m){
+    /* لوحة لاتينية: الحرف نفسه بحالته كما أرسله النظام */
+    if(asc&&key.toUpperCase()===m[1]) return key;
+    /* لوحة عربية (حرف عربي أو رمز لا يطابق المفتاح مثل Shift+D = ]) → من موقع المفتاح */
+    var up=!!shift!==!!caps; return up?m[1]:m[1].toLowerCase();
+  }
+  if(asc) return key;
+  var u=_IK_US[code]; if(!u) return null;
+  return shift?u[1]:u[0];
+}
+function _invKitAdd(raw){
+  var r=(typeof InvKit!=='undefined')?InvKit.parse(raw):null;
+  if(!r){ return; }
+  var L=_invKit.list;
+  var target=_invKit.editId?(inventory||[]).find(function(x){ return x&&x.id===_invKit.editId; }):null;
+  /* نفس الرقم التسلسلي = نفس الكت الفعلي → لا يُحسب مرتين */
+  if(r.serial){
+    var dupNow=L.some(function(k){ return k.serial===r.serial && k.key===r.key; });
+    var hist=(target&&target.kitList)||[];
+    var dupOld=hist.some(function(k){ return k&&k.serial===r.serial && k.key===r.key; });
+    if(dupNow||dupOld){
+      showNotif('⚠️ مقروء مسبقاً','هذا الكت (S/N '+r.serial+') '+(dupNow?'ممسوح في هذه القائمة':'مُدخل سابقاً في هذه المادة')+' — لم يُحسب مرة ثانية','warning');
+      return;
+    }
+  }
+  /* منتج مختلف عن الكتات السابقة/المادة المفتوحة → تأكيد */
+  var ref=(L.length?L[0].key:'')||(target&&target.gtin)||'';
+  if(_ikRealKey(ref)&&_ikRealKey(r.key)&&ref!==r.key){
+    if(!confirm('⚠️ هذا الباركود لمنتج مختلف عن '+(L.length?'الكتات الممسوحة':'هذه المادة')+'.\n\nالسابق: '+ref.replace(/^HIBC:/,'')+'\nالحالي: '+r.key.replace(/^HIBC:/,'')+'\n\nهل تريد إضافته لنفس المادة؟')) return;
+  }
+  /* أول كت: تثبيت الأساس (في التعديل = الرصيد الحالي في الحقول) + التعرّف على المنتج */
+  if(!L.length){
+    if(_invKit.editId){
+      _invKit.baseQty=parseFloat((_ikEl('ii-qty')||{}).value)||0;
+      _invKit.baseKits=parseInt((_ikEl('ii-kits')||{}).value,10)||0;
+    } else {
+      _invKit.baseQty=0; _invKit.baseKits=0;
+      var known=_ikFindItem(r.key);
+      if(known){
+        _invKit.mergeId=known.id; _invKit.merge=true;
+        var nm=_ikEl('ii-name'); if(nm&&!nm.value.trim()) nm.value=known.name||'';
+        var sp=_ikEl('ii-sup'); if(sp&&!sp.value.trim()&&known.sup) sp.value=known.sup;
+        var un=_ikEl('ii-unit'); if(un&&!un.value.trim()&&known.unit) un.value=known.unit;
+        if(!_invKit.per&&known.perKit){ _invKit.per=String(known.perKit); var pp=_ikEl('ii-kit-per'); if(pp) pp.value=_invKit.per; }
+      }
+    }
+  }
+  L.push({key:r.key, gtin:r.gtin||'', lot:r.lot||'', exp:r.exp||'', prod:r.prod||'', serial:r.serial||'',
+          fmt:r.format, raw:String(r.raw||'').slice(0,160), tests:_invKit.per, custom:false, at:new Date().toISOString()});
+  _invKit.last=r;
+  /* تاريخ الانتهاء = الأقرب بين الكتات (لا يكتب فوق تاريخ أدخله المستخدم يدوياً) */
+  var exps=L.map(function(k){ return k.exp; }).filter(Boolean).sort();
+  var ex=_ikEl('ii-exp');
+  if(ex&&exps.length&&(!ex.value||ex.value===_invKit.autoExp)){ ex.value=exps[0]; _invKit.autoExp=exps[0]; }
+  if(r.exp&&r.exp<=_ikToday()) showNotif('⏰ كت منتهي','الكت الممسوح منتهي الصلاحية ('+r.exp+')','warning');
+  _invKitRender();
+}
+function _invKitSetPer(v){
+  _invKit.per=v;
+  _invKit.list.forEach(function(k,i){
+    if(k.custom) return;
+    k.tests=v; var e=_ikEl('ii-kit-t-'+i); if(e) e.value=v;
+  });
+  _invKitTotals();
+}
+function _invKitSetOne(i,v){
+  var k=_invKit.list[i]; if(!k) return;
+  k.tests=v; k.custom=(String(v)!==String(_invKit.per));
+  var row=_ikEl('ii-kit-r-'+i); if(row) row.style.background=k.custom?'rgba(255,214,10,0.10)':'';
+  _invKitTotals();
+}
+function _invKitDel(i){ _invKit.list.splice(i,1); if(!_invKit.list.length){ _invKit.mergeId=''; } _invKitRender(); }
+function _invKitClearAll(){ if(!_invKit.list.length) return; if(!confirm('حذف كل الكتات الممسوحة؟')) return; _invKit.list=[]; _invKit.mergeId=''; _invKitRender(); }
+function _invKitTotal(){ return _invKit.list.reduce(function(s,k){ return s+_ikNum(k.tests); },0); }
+/* مزامنة حقول «حساب الكمية» الأصلية — مقفلة أثناء وجود كتات ممسوحة */
+function _invKitSync(){
+  var n=_invKit.list.length, kE=_ikEl('ii-kits'), pE=_ikEl('ii-per-kit'), qE=_ikEl('ii-qty');
+  [kE,pE,qE].forEach(function(e){ if(e) e.readOnly=!!n; });
+  if(!n) return;
+  if(kE) kE.value=_invKit.baseKits+n;
+  if(pE) pE.value=_invKit.per||'';
+  if(qE) qE.value=_invKit.baseQty+_invKitTotal();
+}
+function _invKitTotals(){
+  var n=_invKit.list.length, tot=_invKitTotal(), miss=_invKit.list.filter(function(k){ return !_ikNum(k.tests); }).length;
+  var t=_ikEl('ii-kit-tot');
+  if(t) t.innerHTML='📦 عدد الكتات: <b style="color:var(--primary)">'+n+'</b> &nbsp;·&nbsp; 🧪 إجمالي التيستات: <b style="color:var(--success);font-size:14px">'+tot+'</b>'
+    +(_invKit.baseQty&&!_invKit.mergeId?' &nbsp;·&nbsp; <span style="color:var(--text2)">الرصيد بعد الإضافة: <b>'+(_invKit.baseQty+tot)+'</b></span>':'')
+    +(miss?'<div style="color:var(--danger);font-weight:800;margin-top:4px">⚠️ '+miss+' كت بلا عدد تيستات — أدخل «تيستات / كت»</div>':'');
+  var mg=_ikEl('ii-kit-merge-after');
+  if(mg){ var it=(inventory||[]).find(function(x){ return x&&x.id===_invKit.mergeId; }); if(it) mg.textContent=(parseFloat(it.qty)||0)+tot; }
+  _invKitSync();
+}
+function _invKitRender(){
+  var info=_ikEl('ii-kit-info'), list=_ikEl('ii-kit-list'), mer=_ikEl('ii-kit-merge');
+  if(!info||!list) return;
+  var r=_invKit.last, today=_ikToday();
+  info.innerHTML=r?('<div style="margin-top:8px;background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:8px 10px">'
+      +'<div style="font-size:10.5px;color:var(--text2);margin-bottom:6px">آخر قراءة: <b style="color:var(--text)">'+_ikEsc(r.format)+'</b>'+(r.country?' · بلد رمز الشركة: <b style="color:var(--text)">'+_ikEsc(r.country)+'</b>':'')+'</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:6px">'+(r.fields.length?r.fields.map(function(f){
+          return '<span style="font-size:11px;background:rgba(0,212,255,0.08);border:1px solid var(--border);border-radius:6px;padding:3px 7px" dir="ltr"><span style="color:var(--text2)">'+_ikEsc(f.label)+':</span> <b>'+_ikEsc(f.value)+'</b></span>';
+        }).join(''):'<span style="font-size:11px;color:var(--text2)">لا حقول قياسية — حُفظ الباركود كمعرّف: <span dir="ltr">'+_ikEsc(r.raw)+'</span></span>')+'</div></div>'):'';
+  if(mer){
+    var it=_invKit.mergeId?(inventory||[]).find(function(x){ return x&&x.id===_invKit.mergeId; }):null;
+    mer.innerHTML=it?('<label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.3);border-radius:8px;padding:8px 10px;font-size:11.5px;cursor:pointer">'
+      +'<input type="checkbox" '+(_invKit.merge?'checked':'')+' onchange="_invKit.merge=this.checked" style="margin-top:2px">'
+      +'<span>📦 هذا المنتج موجود في المخزون باسم <b>'+_ikEsc(it.name)+'</b> (الرصيد الحالي <b>'+_ikEsc(it.qty)+'</b>).<br>'
+      +'<b>إضافة الكتات إلى نفس المادة</b> بدل إنشاء مادة مكررة — الرصيد بعد الإضافة: <b id="ii-kit-merge-after" style="color:var(--success)"></b></span></label>'):'';
+  }
+  var L=_invKit.list;
+  list.innerHTML=L.length?('<div style="margin-top:10px;max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:8px">'
+      +'<table class="tbl" style="font-size:11.5px;margin:0"><thead><tr><th>#</th><th>LOT</th><th>الانتهاء</th><th>S/N</th><th style="width:96px">تيستات</th><th></th></tr></thead><tbody>'
+      +L.map(function(k,i){
+        var expd=k.exp&&k.exp<=today;
+        return '<tr id="ii-kit-r-'+i+'"'+(k.custom?' style="background:rgba(255,214,10,0.10)"':'')+'><td>'+(i+1)+'</td>'
+          +'<td dir="ltr"><b>'+_ikEsc(k.lot||'—')+'</b></td>'
+          +'<td dir="ltr" style="'+(expd?'color:var(--danger);font-weight:800':'')+'">'+_ikEsc(k.exp||'—')+(expd?' ⚠️':'')+'</td>'
+          +'<td dir="ltr" style="color:var(--text2)">'+_ikEsc(k.serial||'—')+'</td>'
+          +'<td><input class="fc" id="ii-kit-t-'+i+'" type="number" min="0" value="'+_ikEsc(k.tests)+'" style="padding:4px 6px;height:auto;font-weight:800" oninput="_invKitSetOne('+i+',this.value)" title="عدّل إن كان هذا الكت ناقصاً"></td>'
+          +'<td><button type="button" class="btn btn-sm btn-d" onclick="_invKitDel('+i+')" title="حذف هذا الكت">✕</button></td></tr>';
+      }).join('')+'</tbody></table></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">'
+      +'<div id="ii-kit-tot" style="font-size:12px"></div>'
+      +'<button type="button" class="btn btn-sm btn-s" onclick="_invKitClearAll()">🗑️ مسح القائمة</button></div>'):'';
+  _invKitTotals();
+}
+/* الدمج في مادة موجودة (نفس المنتج) — يُستدعى أول saveInvItem. يُرجع true إن أنجز الحفظ */
+function _invKitTryMerge(editId){
+  if(editId||!_invKit.list.length||!_invKit.mergeId||!_invKit.merge) return false;
+  var it=(inventory||[]).find(function(x){ return x&&x.id===_invKit.mergeId; }); if(!it) return false;
+  var k=_invKitCollect(); if(!k) return true;   /* نقص في عدد التيستات — أُبلغ المستخدم */
+  it.qty=(parseFloat(it.qty)||0)+k.total;
+  it.kits=(parseInt(it.kits,10)||0)+k.added.length;
+  if(k.per) it.perKit=k.per;
+  if(_ikRealKey(k.key)&&!it.gtin) it.gtin=k.key;
+  it.kitList=(Array.isArray(it.kitList)?it.kitList:[]).concat(k.added).slice(-300);
+  /* تاريخ الانتهاء: إن كان القديم فارغاً أو منتهياً يأخذ أقرب تاريخ للكتات الجديدة، وإلا الأقرب بينهما */
+  if(k.exp){ if(!it.exp||it.exp<=_ikToday()||k.exp<it.exp) it.exp=k.exp; }
+  var _m=_ikEl('m-inv-item'); if(_m) delete _m.dataset.editId;
+  var _sd=_ikEl('inv-search-drop'); if(_sd) _sd.style.display='none';
+  save('inventory',inventory); renderInventory(); closeModal('m-inv-item');
+  showNotif('تم ✅','أُضيف '+k.added.length+' كت ('+k.total+' تيست) إلى «'+it.name+'» — الرصيد الآن '+it.qty,'success');
+  _invKitReset(null);
+  return true;
+}
+/* تجهيز الكتات للحفظ — null عند خطأ (مع رسالة) */
+function _invKitCollect(){
+  var L=_invKit.list;
+  var miss=L.filter(function(k){ return !_ikNum(k.tests); }).length;
+  if(miss){ showNotif('عدد التيستات','أدخل عدد التيستات لكل كت ('+miss+' كت بلا عدد)','error'); var p=_ikEl('ii-kit-per'); if(p) try{ p.focus(); }catch(_){} return null; }
+  var exps=L.map(function(k){ return k.exp; }).filter(Boolean).sort();
+  var key=(L.find(function(k){ return _ikRealKey(k.key); })||L[0]||{}).key||'';
+  return { total:_invKitTotal(), per:_ikNum(_invKit.per), key:key, exp:exps[0]||'',
+    added:L.map(function(k){ return {key:k.key, gtin:k.gtin, lot:k.lot, exp:k.exp, serial:k.serial, tests:_ikNum(k.tests), raw:k.raw, at:k.at}; }) };
+}
+/* يُستدعى من saveInvItem بعد حساب الكمية اليدوية — null إن لا كتات ممسوحة (سلوك قديم حرفياً) */
+function _invKitApply(){
+  if(!_invKit.list.length) return null;
+  var k=_invKitCollect(); if(!k) return {abort:true};
+  return { qty:_invKit.baseQty+k.total, kits:_invKit.baseKits+k.added.length, perKit:k.per, key:k.key, added:k.added };
 }
 
 // ── خصم تلقائي من المخزون عند الطباعة ────────────────────
@@ -24236,8 +24847,12 @@ function _rpBuildDef(type){
     def.extra=[{name:grain==='month'?'ملخص شهري':'ملخص يومي', title:'📊 ملخص الإيرادات '+(grain==='month'?'الشهري':'اليومي')+' — '+S.label,
       columns:[{h:grain==='month'?'الشهر':'اليوم',type:'date'},{h:'العمليات',type:'num'},{h:'الصافي',type:'money'},{h:'المحصّل',type:'money'},{h:'المتبقي',type:'money'},{h:'غير مفوتر',type:'money'},{h:'نقدي',type:'money'},{h:'إلكتروني',type:'money'}],
       rows:def.breakdown.rows, totals:['المجموع',M.n,M.net,M.paid,M.due,M.unbilled,M.pCash,M.pElec]}];
+  } else if(type==='tests' && window._rpTestFilter){
+    /* 🧪 فلتر: تحليل محدد — تفاصيل كل مرة أُجري فيها */
+    _rpBuildTestDetail(def, D);
   } else if(type==='tests'){
     var TC=RpData.testCounts(D), total=TC.reduce(function(s,c){ return s+c.n; },0), val=0;
+    def.testIds=TC.map(function(c){ return c.id; });   /* للضغط على السطر → تفاصيل التحليل */
     def.title='🧪 تقرير التحاليل — '+S.label;
     def.columns=[{h:'#',type:'num'},{h:'الكود',type:'center'},{h:'اسم التحليل',type:'bold'},{h:'القسم',type:'center'},{h:'العدد',type:'num'},{h:'النسبة',type:'pct'},{h:'سعر القائمة',type:'money'},{h:'القيمة بسعر القائمة',type:'money'}];
     def.rows=TC.map(function(c,i){ var v=_rpR2(c.n*c.price); val+=v; return [i+1, c.code||'-', c.name, c.cat||'-', c.n, total?Math.round(c.n/total*1000)/10:0, c.price, v]; });
@@ -24284,14 +24899,137 @@ function _rpPayFilterHTML(){
 }
 function _rpSetPayFilter(v){ window._rpPayFilter=(v==='cash'||v==='electronic')?v:'all'; _rpShown=500; _rpRenderReportModal(); }
 window._rpSetPayFilter=_rpSetPayFilter;
+/* ══════════════════════════════════════════════════════════════════
+ * 🧪 فلتر تقرير التحاليل — «الكل» أو تحليل محدد (بحث بالاسم/الكود)
+ *   • الكل: الجدول المجمّع كما كان حرفياً (+ الضغط على سطر يفتح تفاصيله).
+ *   • تحليل محدد: كل مرة أُجري فيها ضمن الفترة — المريض، الطلب، التاريخ،
+ *     الطبيب، الحالة، النتيجة — مع ملخص. Excel والطباعة يتبعان الفلتر تلقائياً.
+ *   معزول: يعمل فقط في نافذة تقرير التحاليل (type='tests').
+ * ══════════════════════════════════════════════════════════════════ */
+window._rpTestFilter='';
+var _rpTfSug=[], _rpTfHi=-1;
+function _rpTfNorm(s){ return String(s==null?'':s).toLowerCase().replace(/[\s\-_.()]+/g,''); }
+/* مصدر الاقتراحات: كل تحاليل القائمة + ما ظهر في الفترة (مع العدد) */
+function _rpTfCatalog(){
+  var S=_rpScope(), D=RpData.build(S), TC=RpData.testCounts(D), byId=new Map();
+  TC.forEach(function(c){ byId.set(String(c.id),{id:String(c.id),code:c.code||'',name:c.name,cat:c.cat||'',n:c.n}); });
+  (Array.isArray(typeof tests!=='undefined'?tests:null)?tests:[]).forEach(function(t){
+    if(!t||t.id==null||byId.has(String(t.id))) return;
+    byId.set(String(t.id),{id:String(t.id),code:t.code||'',name:t.nameEn||t.nameShort||t.code||String(t.id),cat:t.cat||'',n:0,short:t.nameShort||'',ar:t.nameAr||''});
+  });
+  return Array.from(byId.values());
+}
+function _rpTestFilterHTML(){
+  var sel=window._rpTestFilter||'', selName='';
+  if(sel){ var it=_rpTfCatalog().find(function(x){ return x.id===sel; }); selName=it?it.name:(window._rpTestFilterName||sel); }
+  var b=function(on,l,js){ return '<button class="btn btn-sm '+(on?'btn-p':'btn-s')+'" style="font-weight:800" onclick="'+js+'">'+l+'</button>'; };
+  return '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<span style="font-size:12px;font-weight:900;color:var(--text2)">🧪 التحليل:</span>'
+    +b(!sel,'الكل','_rpSetTestFilter(\'\')')
+    +'<div style="position:relative;flex:1;min-width:220px;max-width:440px">'
+      +'<input class="fc" id="rp-tf-q" lang="en" dir="ltr" autocomplete="off" placeholder="🔍 ابحث عن تحليل معيّن بالاسم أو الكود..." value="'+_rpEsc(selName)+'"'
+      +' oninput="_rpTestFilterSuggest(this.value)" onfocus="this.select();_rpTestFilterSuggest(\'\')" onkeydown="_rpTestFilterKey(event)" onblur="setTimeout(_rpTfHide,180)">'
+      +'<div id="rp-tf-drop" style="display:none;position:absolute;top:100%;right:0;left:0;z-index:50;background:var(--bg-modal);border:1px solid var(--border);border-radius:0 0 10px 10px;max-height:260px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,0.4)"></div>'
+    +'</div>'
+    +(sel?'<span class="bdg bdg-p" style="font-weight:800;cursor:pointer" title="إلغاء الفلتر" onclick="_rpSetTestFilter(\'\')">'+_rpEsc(selName)+' ✕</span>'
+         :'<span style="font-size:11px;color:var(--text2)">اضغط على أي تحليل في الجدول لعرض تفاصيله</span>')
+    +'</div>';
+}
+function _rpTfHide(){ var d=document.getElementById('rp-tf-drop'); if(d) d.style.display='none'; _rpTfHi=-1; }
+function _rpTestFilterSuggest(q){
+  var drop=document.getElementById('rp-tf-drop'); if(!drop) return;
+  var qn=_rpTfNorm(q), all=_rpTfCatalog();
+  var list=all.filter(function(x){
+    if(!qn) return x.n>0;
+    return [x.name,x.code,x.short,x.ar,x.cat].some(function(f){ return f&&_rpTfNorm(f).indexOf(qn)>=0; });
+  });
+  /* الأولوية: تطابق بداية الكود/الاسم ← ما أُجري في الفترة (الأكثر أولاً) ← الاسم */
+  list.sort(function(a,b){
+    var as=(_rpTfNorm(a.code).indexOf(qn)===0||_rpTfNorm(a.name).indexOf(qn)===0)?0:1;
+    var bs=(_rpTfNorm(b.code).indexOf(qn)===0||_rpTfNorm(b.name).indexOf(qn)===0)?0:1;
+    return (qn?as-bs:0) || (b.n-a.n) || String(a.name).localeCompare(String(b.name));
+  });
+  _rpTfSug=list.slice(0,40); _rpTfHi=_rpTfSug.length?0:-1;
+  if(!_rpTfSug.length){
+    drop.innerHTML='<div style="padding:10px 14px;font-size:12px;color:var(--text2)">'+(qn?'لا يوجد تحليل مطابق':'لا تحاليل في هذه الفترة — اكتب للبحث في كل التحاليل')+'</div>';
+    drop.style.display='block'; return;
+  }
+  drop.innerHTML=_rpTfSug.map(function(x,i){
+    return '<div data-i="'+i+'" onmousedown="event.preventDefault();_rpSetTestFilterIdx('+i+')"'
+      +' style="padding:8px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;gap:8px'+(i===_rpTfHi?';background:rgba(0,212,255,0.12)':'')+'">'
+      +'<span style="font-size:12px;font-weight:700">'+_rpEsc(x.name)+(x.code&&x.code!==x.name?' <span style="color:var(--text2);font-weight:600" dir="ltr">('+_rpEsc(x.code)+')</span>':'')+'</span>'
+      +'<span style="font-size:11px;white-space:nowrap;'+(x.n?'color:var(--success);font-weight:800':'color:var(--text2)')+'">'+(x.n?x.n+' مرة':'لم يُجرَ')+'</span></div>';
+  }).join('');
+  drop.style.display='block';
+}
+function _rpTestFilterKey(e){
+  var drop=document.getElementById('rp-tf-drop');
+  if(e.key==='Escape'){ _rpTfHide(); return; }
+  if(!drop||drop.style.display==='none'||!_rpTfSug.length){ if(e.key==='Enter') e.preventDefault(); return; }
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+    e.preventDefault();
+    _rpTfHi=(_rpTfHi+(e.key==='ArrowDown'?1:-1)+_rpTfSug.length)%_rpTfSug.length;
+    Array.prototype.forEach.call(drop.children,function(el,i){ el.style.background=(i===_rpTfHi)?'rgba(0,212,255,0.12)':''; if(i===_rpTfHi) el.scrollIntoView({block:'nearest'}); });
+  } else if(e.key==='Enter'){
+    e.preventDefault(); if(_rpTfHi>=0) _rpSetTestFilterIdx(_rpTfHi);
+  }
+}
+function _rpSetTestFilterIdx(i){ var x=_rpTfSug[i]; if(x){ window._rpTestFilterName=x.name; _rpSetTestFilter(x.id); } }
+function _rpOpenTestRow(i){ var ids=window._rpTestRowIds||[]; if(ids[i]!=null){ window._rpTestFilterName=''; _rpSetTestFilter(String(ids[i])); } }
+function _rpSetTestFilter(id){ window._rpTestFilter=id?String(id):''; _rpShown=500; _rpRenderReportModal(); }
+window._rpSetTestFilter=_rpSetTestFilter; window._rpSetTestFilterIdx=_rpSetTestFilterIdx; window._rpOpenTestRow=_rpOpenTestRow;
+/* بناء تقرير تحليل واحد */
+function _rpBuildTestDetail(def, D){
+  var tid=String(window._rpTestFilter), TC=RpData.testCounts(D);
+  var total=TC.reduce(function(s,c){ return s+c.n; },0);
+  var c=TC.find(function(x){ return String(x.id)===tid; });
+  var t=D.TM.get(tid)||D.TM.get(window._rpTestFilter)||null;
+  if(!t){ D.TM.forEach(function(x){ if(!t&&String(x.id)===tid) t=x; }); }
+  var name=c?c.name:(t?(t.nameEn||t.nameShort||t.code||tid):(window._rpTestFilterName||tid));
+  var code=c?(c.code||''):(t?(t.code||''):''), price=c?c.price:(t?_rpNum(t.price):0);
+  var ST={done:'منجز',pending:'قيد الانتظار',inprogress:'قيد العمل'};
+  var rows=[], pts=new Set(), done=0;
+  D.reqs.forEach(function(r){
+    (r.tests||[]).forEach(function(x){
+      if(String(x)!==tid) return;
+      var res=(r.results&&Object.prototype.hasOwnProperty.call(r.results,x))?r.results[x]:'';
+      var resTxt=(res===null||res===undefined||typeof res==='object')?(res&&typeof res==='object'?'✓':''):String(res);
+      var st=ST[r.status]||r.status||'-'; if(r.status==='done') done++;
+      pts.add(r.patientId!=null&&r.patientId!==''?'id:'+r.patientId:'nm:'+(r.patientName||''));
+      rows.push([0, r.orderNo||r.id||'-', r.patientName||'-', r.patientId!=null?String(r.patientId):'-', _rpD(r.date)||'-', r.doctorName||'-', 'طلب', st, resTxt, price]);
+    });
+  });
+  D.stand.forEach(function(s){
+    s.tests.forEach(function(x){
+      if(String(x.id)!==tid) return;
+      done++; pts.add(s.patientId?'id:'+s.patientId:'nm:'+(s.patientName||''));
+      rows.push([0, '-', s.patientName||'-', s.patientId||'-', s.date||'-', s.doctor||'-', s.srcLbl, 'منجز', '', x.price]);
+    });
+  });
+  rows.sort(function(a,b){ return String(b[4]).localeCompare(String(a[4])); });
+  rows.forEach(function(r,i){ r[0]=i+1; });
+  var val=_rpR2(rows.reduce(function(s,r){ return s+(_rpNum(r[9])||0); },0));
+  def.title='🧪 تقرير التحاليل — '+name+(code&&code!==name?' ('+code+')':'')+' — '+def.S.label;
+  def.columns=[{h:'#',type:'num'},{h:'رقم الطلب',type:'center'},{h:'المريض',type:'bold'},{h:'رقم الملف',type:'center'},{h:'التاريخ',type:'date'},
+    {h:'الطبيب',type:'center'},{h:'المصدر',type:'center'},{h:'الحالة',type:'center'},{h:'النتيجة',type:'center'},{h:'سعر القائمة',type:'money'}];
+  def.rows=rows;
+  def.totals=['المجموع','','','','','','','','',val];
+  def.summary=[['عدد مرات الإجراء',rows.length,'num','var(--primary)'],['عدد المرضى',pts.size,'num','var(--secondary)'],
+    ['منجز / غير منجز',done+' / '+(rows.length-done),'text','var(--success)'],
+    ['النسبة من كل التحاليل',(total?Math.round(rows.length/total*1000)/10:0)+'%','text','#a78bfa'],
+    ['سعر القائمة',_rpR2(price),'money','var(--text)'],['القيمة بسعر القائمة',val,'money','var(--warning)']];
+  return def;
+}
 function exportReport(type){
   window._rpPayFilter='all';
+  window._rpTestFilter='';   /* 🧪 تقرير التحاليل يفتح دائماً على «الكل» */
   _rpCurType=type; _rpShown=500;
   _rpRenderReportModal();
 }
 function _rpRenderReportModal(){
   var type=_rpCurType; if(!type) return;
   var def=_rpBuildDef(type); window._rpLastDef=def;
+  window._rpTestRowIds=(def.type==='tests'&&def.testIds)?def.testIds:[];
   var cur=def.cur, rows=def.rows||[], part=rows.slice(0,_rpShown), rest=rows.length-part.length;
   var table;
   if(!rows.length){
@@ -24300,6 +25038,7 @@ function _rpRenderReportModal(){
     table='<table class="tbl" id="exp-tbl"><thead><tr>'+def.columns.map(function(c){ return '<th style="white-space:nowrap">'+_rpEsc(c.h)+'</th>'; }).join('')+'</tr></thead><tbody>'
       +part.map(function(r,ri){
         var click=(def.type==='critical'&&def.reqIds)?' style="cursor:pointer" onclick="try{openViewResultsModal(\''+_rpEsc(def.reqIds[ri])+'\')}catch(e){}"':'';
+        if(def.type==='tests'&&def.testIds) click=' style="cursor:pointer" title="عرض تفاصيل هذا التحليل" onclick="_rpOpenTestRow('+ri+')"';
         return '<tr'+click+'>'+def.columns.map(function(c,ci){ return _rpCellHTML(r[ci],c.type); }).join('')+'</tr>';
       }).join('')
       +(def.totals&&!rest?'<tr style="background:rgba(0,212,255,0.08)">'+def.columns.map(function(c,ci){ var v=def.totals[ci]; return (v===''||v==null)?'<td></td>':(typeof v==='number'?'<td dir="ltr" style="font-weight:900;color:var(--primary);white-space:nowrap">'+_rpFmt(v)+'</td>':'<td style="font-weight:900">'+_rpEsc(v)+'</td>'); }).join('')+'</tr>':'')
@@ -24326,6 +25065,7 @@ function _rpRenderReportModal(){
     +'<div class="mbody" style="overflow-y:auto;flex:1;padding:18px">'
       +RpPeriod.barHTML('rpm')
       +(type==='revenue'?_rpPayFilterHTML():'')
+      +(type==='tests'?_rpTestFilterHTML():'')
       +_rpSummaryHTML(def.summary||[],cur)+breakdown
       +'<div style="overflow-x:auto">'+table+'</div>'
       +(type==='revenue'?'<div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.8">ℹ️ «غير مفوتر» = تحاليل زرع/إدرار/خروج/منوي أُدخلت من أقسامها مباشرة بلا طلب ولا فاتورة — تُحسب بسعر التحليل في قاعدة التحاليل. الفواتير المرتبطة بطلبات محذوفة مستبعدة.'+((window._rpPayFilter==='cash'||window._rpPayFilter==='electronic')?'<br>💳 عند الفلترة تُعرض الفواتير التي فيها تحصيل بهذه الطريقة فقط (الفاتورة المختلطة تظهر في الاثنتين مع مبلغ كل طريقة)، وتُستبعد السجلات «غير المفوترة» لأنه لا تحصيل لها. الدفعات القديمة بلا طريقة تُحتسب نقدية.':'')+'</div>':'')
@@ -40173,7 +40913,8 @@ function toggleInputLang(inputId, btnId){
     'st-phone','st-email','ftr-email','ftr-website','ftr-txt-phone',
     'et-price','ii-qty','ii-exp','adm-uname','adm-pass',
     'db-auth-user','db-auth-pass','res-tech','st-db-pin-new','st-db-pin-confirm','db-pin-inp',
-    'st-font-size-range','st-print-font-size-range','st-pt-font-size-range'
+    'st-font-size-range','st-print-font-size-range','st-pt-font-size-range',
+    'ii-kit-scan'   // 📷 قارئ باركود الكتات — يجب أن يصل النص كما يرسله القارئ بلا تحويل
   ];
 
   // الحقول التي اللغة الافتراضية فيها إنجليزية
@@ -42719,6 +43460,9 @@ function lisWizShowConnFields(){
   // 🩸 BC-6000: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
   const sHint=document.getElementById('wiz-bc6000-hint');
   if(sHint) sHint.style.display=(_wizVendor==='mindray_bc6000'&&_wizConn==='tcpserver')?'block':'none';
+  // 🩸 Dymind DH36: تعليمات الربط تظهر فقط في وضع السيرفر ولهذا الجهاز
+  const dHint=document.getElementById('wiz-dh36-hint');
+  if(dHint) dHint.style.display=(_wizVendor==='dymind_dh36'&&_wizConn==='tcpserver')?'block':'none';
   // 🧿 Chorus TRIO: السرعة المصنعية 38400 حسب دليل الشركة §5.6.2 — نختارها تلقائياً
   if(_wizVendor==='diesse_chorus'&&_wizConn==='serial'){
     const bd=document.getElementById('wiz-baud');
@@ -42805,7 +43549,7 @@ async function lisWizFinish(){
     // 🧫 BS-230 جهاز كيمياء (chemistry) حسب دليل الشركة
     // 🩸 BC-30s جهاز دم (CBC) حسب دليل الشركة (OBR-24 = HM)
     // 🩸 BC-6000 جهاز دم (CBC) حسب دليل الشركة (OBR-24 = HM — جدول 7)
-    type:((_wizVendor==='zybio'||_wizVendor==='zybio_z50'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000')?'hematology':'chemistry'),
+    type:((_wizVendor==='zybio'||_wizVendor==='zybio_z50'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'||_wizVendor==='dymind_dh36')?'hematology':'chemistry'),
     conn:connMap[_wizConn],
     protocol:_wizProtocol,
     baud,
@@ -42819,7 +43563,7 @@ async function lisWizFinish(){
     // 🧫 BS-230: الرد ACK^R01 إلزامي أيضاً + يدعم استعلام QRY^Q02
     // 🩸 BC-30s: الرد ACK^R01 إلزامي حسب الدليل (1.1.1 و 4.6.2)
     // 🩸 BC-6000: الرد ACK^R01 إلزامي حسب الدليل (1.2.4 و 1.2.6.2)
-    sendAck:(_wizVendor==='zybio'||_wizVendor==='zybio_z50'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'||_wizVendor==='nano'),
+    sendAck:(_wizVendor==='zybio'||_wizVendor==='zybio_z50'||_wizVendor==='mindray_bs230'||_wizVendor==='mindray_bc30s'||_wizVendor==='mindray_bc6000'||_wizVendor==='nano'||_wizVendor==='dymind_dh36'),
     // 🧪 cobas e 411: صيغة البروتوكول المختارة على شاشة الجهاز (cobas/elecsys)
     e411Type:(_wizVendor==='roche_e411'
       ? ((document.getElementById('wiz-e411-type')?.value)||'cobas')
@@ -43425,6 +44169,9 @@ function lisAutoFillDevice(){
     mindray_bc30s:{name:'Mindray BC-30s',proto:'hl7',  conn:'tcpserver', port:'5100'},
     // 🩸 Mindray BC-6000 Series: جهاز دم (CBC) — HL7 v2.3.1 عبر MLLP (الدليل 1.2)
     mindray_bc6000:{name:'Mindray BC-6000',proto:'hl7', conn:'tcpserver', port:'5100'},
+    // 🩸 Dymind DH36: عدّاد دم ثلاثي — الجهاز يتصل بالبرنامج (LIS Server)
+    //    عبر HL7 v2.3.1 فوق MLLP (Service Manual §5.5 + بروتوكول Dymind LIS)
+    dymind_dh36:{name:'Dymind DH36',   proto:'hl7',  conn:'tcpserver', port:'5100'},
     // 🧿 DIESSE Chorus TRIO: مناعة/أمصال — Serial RS-232C ببروتوكول ثنائي
     //    خاص (§5.6). السرعة المصنعية 38400 والكابل مستقيم (لا Null-Modem).
     diesse_chorus:{name:'DIESSE Chorus TRIO',proto:'chorus',conn:'serial', baud:'38400'},
