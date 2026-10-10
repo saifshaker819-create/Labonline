@@ -4171,6 +4171,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <div class="tabs" id="test-cat-tabs" style="flex:1;flex-wrap:wrap;gap:4px;height:auto;overflow:visible"></div>
           <button class="btn btn-s btn-sm" onclick="openReportOrderModal()" style="flex-shrink:0;white-space:nowrap" title="ترتيب ظهور التحاليل داخل كل مجموعة فرعية في ورقة التقرير">↕️ ترتيب التحاليل في ورقة التقرير</button>
+          <button class="btn btn-s btn-sm" onclick="gltOpen()" style="flex-shrink:0;white-space:nowrap" title="استيراد التحاليل (الوحدة · القيم الطبيعية · المجموعات · الأسعار) من ملف Green Lab System">📥 استيراد من Green Lab</button>
           <button class="btn btn-p btn-sm" onclick="openEditTest(null)" style="flex-shrink:0;white-space:nowrap">➕ Add</button>
         </div>
       </div>
@@ -4396,6 +4397,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
             <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('revenue')">💰 تقرير الإيرادات</button>
             <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('tests')">🧪 تقرير التحاليل</button>
             <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('critical')">⚠️ النتائج الحرجة</button>
+            <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="exportReport('suppliers')">🏭 الشركات — المشتريات والتسديد</button>
             <button class="btn btn-s" style="justify-content:flex-start;width:100%" onclick="AuditLog.open()">📜 السجل — عمليات الإضافة والحذف</button>
           </div>
         </div>
@@ -8440,6 +8442,10 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
             <label class="fl" style="font-size:10px">تيستات / كت (لكل الكتات)</label>
             <input class="fc" id="ii-kit-per" type="number" min="0" placeholder="مثلاً 100" style="font-weight:800" oninput="_invKitSetPer(this.value)">
           </div>
+          <div class="fg" style="margin-bottom:0;flex:1;min-width:120px">
+            <label class="fl" style="font-size:10px">سعر الكت (لكل الكتات)</label>
+            <input class="fc" id="ii-kit-price" type="number" min="0" step="any" placeholder="مثلاً 100000" style="font-weight:800" oninput="_invKitSetPrice(this.value)">
+          </div>
         </div>
         <div id="ii-kit-info"></div>
         <div id="ii-kit-merge"></div>
@@ -8463,12 +8469,24 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
           </div>
         </div>
         <div style="font-size:10px;color:var(--text2);margin-top:6px">أو أدخل إجمالي التيستات مباشرة</div>
+        <!-- 💰 سعر الشراء — يُسجَّل كعملية شراء في حساب الشركة (المورد) -->
+        <div class="fr2" style="gap:8px;align-items:flex-end;margin-top:10px">
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl" style="font-size:10px">💰 سعر الكت</label>
+            <input class="fc" id="ii-kit-price-m" type="number" min="0" step="any" placeholder="0" oninput="_invCostCalc()" style="font-weight:800">
+          </div>
+          <div class="fg" style="margin-bottom:0">
+            <label class="fl" style="font-size:10px" id="ii-cost-lbl">إجمالي سعر الشراء</label>
+            <input class="fc" id="ii-cost-total" type="text" readonly tabindex="-1" placeholder="0" dir="ltr" style="font-weight:900;color:var(--warning)">
+          </div>
+        </div>
       </div>
+      <div id="ii-purch-box"></div>
       <div class="fr2">
         <div class="fg"><label class="fl">الوحدة <span style="font-size:10px;color:var(--text2)">(اختياري)</span></label><input class="fc" id="ii-unit" placeholder="قارورة، عبوة..."></div>
         <div class="fg"><label class="fl">حد التنبيه <span style="font-size:10px;color:var(--text2)">(افتراضي 10)</span></label><input class="fc" id="ii-min" type="number" placeholder="10"></div>
         <div class="fg"><label class="fl">تاريخ الانتهاء <span style="font-size:10px;color:var(--text2)">(اختياري)</span></label><input class="fc" id="ii-exp" type="date"></div>
-        <div class="fg"><label class="fl">المورد <span style="font-size:10px;color:var(--text2)">(اختياري)</span></label><input class="fc" id="ii-sup" placeholder="اسم المورد..."></div>
+        <div class="fg"><label class="fl">المورد / الشركة <span style="font-size:10px;color:var(--text2)">(لحساب الشركة في التقارير)</span></label><input class="fc" id="ii-sup" list="ii-sup-list" autocomplete="off" placeholder="اسم الشركة..."><datalist id="ii-sup-list"></datalist></div>
       </div>
     </div>
     <div class="mftr">
@@ -23064,7 +23082,7 @@ function renderInventory(){
     const low=i.qty<=10; const exp=i.exp&&i.exp<=today;
     let st=low?'<span class="bdg bdg-d">⚠️ نفاد</span>':exp?'<span class="bdg bdg-w">⏰ منتهي</span>':'<span class="bdg bdg-ok">جيد</span>';
     return`<tr>
-      <td><b>${i.name}</b></td>
+      <td><b>${i.name}</b>${(i.sup||i.kitPrice)?`<div style="font-size:10.5px;color:var(--text2);margin-top:2px">${i.sup?'🏭 '+_ikEsc(i.sup):''}${i.sup&&i.kitPrice?' · ':''}${i.kitPrice?'💰 '+(typeof _rpFmt==='function'?_rpFmt(i.kitPrice):i.kitPrice)+' / كت':''}</div>`:''}</td>
       <td style="${low?'color:var(--danger);font-weight:800':'color:var(--success);font-weight:700'}">${i.qty} ${i.unit||''}</td>
       <td>${i.min||0}</td><td>${st}</td>
       <td style="${exp?'color:var(--danger);font-weight:700':''}">${i.exp||'—'}</td>
@@ -23080,11 +23098,20 @@ function renderInventory(){
 function calcInvQty(){
   const kits=parseInt(document.getElementById('ii-kits')?.value)||0;
   const perKit=parseInt(document.getElementById('ii-per-kit')?.value)||0;
+  // ✏️ التعديل: الرصيد الحالي + الفرق فقط (لا يُمسح ما استُهلك من التيستات)
+  const _ed=document.getElementById('m-inv-item')?.dataset.editId;
+  const _o=_ed?inventory.find(x=>x.id===_ed):null;
+  if(_o&&(parseInt(_o.kits)||0)>0&&(parseInt(_o.perKit)||0)>0){
+    const qtyEl=document.getElementById('ii-qty');
+    const diff=kits*perKit-(parseInt(_o.kits)||0)*(parseInt(_o.perKit)||0);
+    if(qtyEl) qtyEl.value=Math.max(0,(parseFloat(_o.qty)||0)+diff);
+  } else
   if(kits>0&&perKit>0){
     const total=kits*perKit;
     const qtyEl=document.getElementById('ii-qty');
     if(qtyEl) qtyEl.value=total;
   }
+  if(typeof _invCostCalc==='function') _invCostCalc();   /* 💰 إجمالي سعر الشراء */
 }
 
 function editInvItem(id){
@@ -23097,6 +23124,7 @@ function editInvItem(id){
   document.getElementById('ii-min').value=i.min||10;
   document.getElementById('ii-exp').value=i.exp||'';
   document.getElementById('ii-sup').value=i.sup||'';
+  { const _pm=document.getElementById('ii-kit-price-m'); if(_pm) _pm.value=i.kitPrice||''; }   /* 💰 آخر سعر كت */
   document.getElementById('m-inv-item').dataset.editId=id;
   document.querySelector('#m-inv-item .mtitle').textContent='🗂️ تعديل مادة';
   if(typeof _invKitReset==='function') _invKitReset(i);   /* 📷 قائمة كتات جديدة فارغة لهذه المادة */
@@ -23118,7 +23146,10 @@ function saveInvItem(){
   let kits=parseInt(document.getElementById('ii-kits').value)||0;
   let perKit=parseInt(document.getElementById('ii-per-kit').value)||0;
   let qty=parseFloat(document.getElementById('ii-qty').value)||0;
-  if(kits>0&&perKit>0) qty=kits*perKit;
+  // ✏️ في التعديل لا نعيد حساب الرصيد من «كتات × تيستات» (كان يمسح المستهلك) —
+  //    الحقل يحمل الرصيد الحالي + الفرق (calcInvQty). الإضافة الجديدة كما كانت.
+  { const _oq=editId?inventory.find(x=>x.id===editId):null;
+    if(kits>0&&perKit>0&&!(_oq&&(parseInt(_oq.kits)||0)>0&&(parseInt(_oq.perKit)||0)>0)) qty=kits*perKit; }
   // 📷 الكتات الممسوحة: الكمية = الرصيد + مجموع تيستات كل كت (يدعم كتاً ناقصاً)
   const _ks=(typeof _invKitApply==='function')?_invKitApply():null;
   if(_ks&&_ks.abort) return;
@@ -23140,6 +23171,25 @@ function saveInvItem(){
     if(_ks.key&&!/^RAW:/.test(_ks.key)&&!item.gtin) item.gtin=_ks.key;
     item.kitList=(item.kitList||[]).concat(_ks.added).slice(-300);
   }
+  // 💰 سعر الكت + سجل المشتريات (حساب الشركة) — المادة بلا كتات/سعر تبقى كما كانت
+  if(typeof _invNewPurchase==='function'){
+    const _price=parseFloat((document.getElementById('ii-kit-price-m')||{}).value)||0;
+    const _kp=_ks?(_ks.kitPrice||_price):_price;
+    if(_kp) item.kitPrice=_kp; else if(_oldInv&&_oldInv.kitPrice) item.kitPrice=_oldInv.kitPrice;
+    let _pur=editId?((typeof _invPW!=='undefined'&&Array.isArray(_invPW))?_invPW:JSON.parse(JSON.stringify(_invPurchasesOf(_oldInv)))):[];
+    _pur=_pur.map(function(p){
+      p=Object.assign({},p);
+      if(p.legacy){ if(!p.kitPrice&&_kp){ p.kitPrice=_kp; p.total=Math.round(_kp*(p.kits||0)*100)/100; } if(!p.sup) p.sup=item.sup; p.id=_uid('pur'); delete p.legacy; }
+      return p;
+    });
+    if(_ks){
+      _pur.push(_invNewPurchase({sup:item.sup, kits:_ks.added.length, perKit:_ks.perKit, tests:_ks.addedTests, kitPrice:_ks.kitPrice, total:_ks.cost, lots:_ks.lots, exp:_ks.exp, src:'scan'}));
+    } else {
+      const _addK=editId?(kits-(parseInt(_oldInv&&_oldInv.kits,10)||0)):kits;
+      if(_addK>0) _pur.push(_invNewPurchase({sup:item.sup, kits:_addK, perKit:perKit, tests:_addK*perKit, kitPrice:_price, total:_addK*_price, src:editId?'manual-add':'manual'}));
+    }
+    if(_pur.length||(_oldInv&&Array.isArray(_oldInv.purchases))) item.purchases=_pur;
+  }
   if(editId){
     const idx=inventory.findIndex(x=>x.id===editId);
     if(idx>-1) inventory[idx]=item;
@@ -23152,6 +23202,7 @@ function saveInvItem(){
   save('inventory',inventory); renderInventory(); closeModal('m-inv-item');
   showNotif('تم',editId?'تم التعديل ✅':'تم الإضافة ✅','success');
   if(_ks&&typeof _invKitReset==='function') _invKitReset(null);
+  if(typeof _invPurchReset==='function') _invPurchReset(null);
 }
 
 function invItemSearch(q){
@@ -23509,7 +23560,7 @@ var InvKit=(function(){
 window.InvKit=InvKit;
 
 /* ── حالة نافذة الإضافة: الكتات الممسوحة في هذه الجلسة ── */
-var _invKit={list:[], per:'', baseQty:0, baseKits:0, editId:'', mergeId:'', merge:true, autoExp:'', last:null};
+var _invKit={list:[], per:'', price:'', baseQty:0, baseKits:0, editId:'', mergeId:'', merge:true, autoExp:'', last:null};
 function _ikEsc(v){ return String(v==null?'':v).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function _ikEl(id){ return document.getElementById(id); }
 function _ikRealKey(k){ return !!k && !/^RAW:/.test(k); }
@@ -23521,11 +23572,14 @@ function _ikFindItem(key){
   return inventory.find(function(i){ return i && (i.gtin===key || (Array.isArray(i.kitList)&&i.kitList.some(function(k){ return k&&k.key===key; }))); })||null;
 }
 function _invKitReset(item){
-  _invKit={list:[], per:item&&item.perKit?String(item.perKit):'', baseQty:0, baseKits:0,
+  _invKit={list:[], per:item&&item.perKit?String(item.perKit):'', price:item&&item.kitPrice?String(item.kitPrice):'', baseQty:0, baseKits:0,
            editId:item?item.id:'', mergeId:'', merge:true, autoExp:'', last:null};
-  ['ii-kits','ii-per-kit','ii-qty'].forEach(function(id){ var e=_ikEl(id); if(e) e.readOnly=false; });
+  ['ii-kits','ii-per-kit','ii-qty','ii-kit-price-m'].forEach(function(id){ var e=_ikEl(id); if(e) e.readOnly=false; });
   var s=_ikEl('ii-kit-scan'); if(s) s.value='';
   var p=_ikEl('ii-kit-per'); if(p) p.value=_invKit.per;
+  var pp=_ikEl('ii-kit-price'); if(pp) pp.value=_invKit.price;
+  if(!item){ var pm=_ikEl('ii-kit-price-m'); if(pm) pm.value=''; }
+  if(typeof _invPurchReset==='function') _invPurchReset(item||null);
   _invKitRender();
   if(!item) setTimeout(function(){ var s2=_ikEl('ii-kit-scan'); if(s2) try{ s2.focus(); }catch(_){} },160);
 }
@@ -23622,11 +23676,12 @@ function _invKitAdd(raw){
         var sp=_ikEl('ii-sup'); if(sp&&!sp.value.trim()&&known.sup) sp.value=known.sup;
         var un=_ikEl('ii-unit'); if(un&&!un.value.trim()&&known.unit) un.value=known.unit;
         if(!_invKit.per&&known.perKit){ _invKit.per=String(known.perKit); var pp=_ikEl('ii-kit-per'); if(pp) pp.value=_invKit.per; }
+        if(!_invKit.price&&known.kitPrice){ _invKit.price=String(known.kitPrice); var px=_ikEl('ii-kit-price'); if(px) px.value=_invKit.price; }
       }
     }
   }
   L.push({key:r.key, gtin:r.gtin||'', lot:r.lot||'', exp:r.exp||'', prod:r.prod||'', serial:r.serial||'',
-          fmt:r.format, raw:String(r.raw||'').slice(0,160), tests:_invKit.per, custom:false, at:new Date().toISOString()});
+          fmt:r.format, raw:String(r.raw||'').slice(0,160), tests:_invKit.per, custom:false, price:_invKit.price, customP:false, at:new Date().toISOString()});
   _invKit.last=r;
   /* تاريخ الانتهاء = الأقرب بين الكتات (لا يكتب فوق تاريخ أدخله المستخدم يدوياً) */
   var exps=L.map(function(k){ return k.exp; }).filter(Boolean).sort();
@@ -23649,6 +23704,18 @@ function _invKitSetOne(i,v){
   var row=_ikEl('ii-kit-r-'+i); if(row) row.style.background=k.custom?'rgba(255,214,10,0.10)':'';
   _invKitTotals();
 }
+/* 💰 سعر الكت: قيمة عامة لكل الكتات + تعديل كت بعينه */
+function _invKitSetPrice(v){
+  _invKit.price=v;
+  _invKit.list.forEach(function(k,i){ if(k.customP) return; k.price=v; var e=_ikEl('ii-kit-p-'+i); if(e) e.value=v; });
+  _invKitTotals();
+}
+function _invKitSetOnePrice(i,v){
+  var k=_invKit.list[i]; if(!k) return;
+  k.price=v; k.customP=(String(v)!==String(_invKit.price));
+  _invKitTotals();
+}
+function _invKitPriceTotal(){ return Math.round(_invKit.list.reduce(function(s,k){ var n=parseFloat(k.price); return s+(isFinite(n)&&n>0?n:0); },0)*100)/100; }
 function _invKitDel(i){ _invKit.list.splice(i,1); if(!_invKit.list.length){ _invKit.mergeId=''; } _invKitRender(); }
 function _invKitClearAll(){ if(!_invKit.list.length) return; if(!confirm('حذف كل الكتات الممسوحة؟')) return; _invKit.list=[]; _invKit.mergeId=''; _invKitRender(); }
 function _invKitTotal(){ return _invKit.list.reduce(function(s,k){ return s+_ikNum(k.tests); },0); }
@@ -23656,15 +23723,20 @@ function _invKitTotal(){ return _invKit.list.reduce(function(s,k){ return s+_ikN
 function _invKitSync(){
   var n=_invKit.list.length, kE=_ikEl('ii-kits'), pE=_ikEl('ii-per-kit'), qE=_ikEl('ii-qty');
   [kE,pE,qE].forEach(function(e){ if(e) e.readOnly=!!n; });
-  if(!n) return;
+  if(!n){ var pm0=_ikEl('ii-kit-price-m'); if(pm0) pm0.readOnly=false; if(typeof _invCostCalc==='function') _invCostCalc(); return; }
   if(kE) kE.value=_invKit.baseKits+n;
   if(pE) pE.value=_invKit.per||'';
   if(qE) qE.value=_invKit.baseQty+_invKitTotal();
+  var pm=_ikEl('ii-kit-price-m'); if(pm){ pm.readOnly=true; pm.value=_invKit.price||''; }
+  var ct=_ikEl('ii-cost-total'); if(ct){ var c=_invKitPriceTotal(); ct.value=c?(typeof _rpFmt==='function'?_rpFmt(c):c):''; }
+  var cl=_ikEl('ii-cost-lbl'); if(cl) cl.textContent='سعر الكتات الممسوحة';
 }
 function _invKitTotals(){
   var n=_invKit.list.length, tot=_invKitTotal(), miss=_invKit.list.filter(function(k){ return !_ikNum(k.tests); }).length;
   var t=_ikEl('ii-kit-tot');
+  var _cost=_invKitPriceTotal();
   if(t) t.innerHTML='📦 عدد الكتات: <b style="color:var(--primary)">'+n+'</b> &nbsp;·&nbsp; 🧪 إجمالي التيستات: <b style="color:var(--success);font-size:14px">'+tot+'</b>'
+    +(_cost?' &nbsp;·&nbsp; 💰 إجمالي السعر: <b style="color:var(--warning);font-size:14px" dir="ltr">'+(typeof _rpFmt==='function'?_rpFmt(_cost):_cost)+'</b>':'')
     +(_invKit.baseQty&&!_invKit.mergeId?' &nbsp;·&nbsp; <span style="color:var(--text2)">الرصيد بعد الإضافة: <b>'+(_invKit.baseQty+tot)+'</b></span>':'')
     +(miss?'<div style="color:var(--danger);font-weight:800;margin-top:4px">⚠️ '+miss+' كت بلا عدد تيستات — أدخل «تيستات / كت»</div>':'');
   var mg=_ikEl('ii-kit-merge-after');
@@ -23689,7 +23761,7 @@ function _invKitRender(){
   }
   var L=_invKit.list;
   list.innerHTML=L.length?('<div style="margin-top:10px;max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:8px">'
-      +'<table class="tbl" style="font-size:11.5px;margin:0"><thead><tr><th>#</th><th>LOT</th><th>الانتهاء</th><th>S/N</th><th style="width:96px">تيستات</th><th></th></tr></thead><tbody>'
+      +'<table class="tbl" style="font-size:11.5px;margin:0"><thead><tr><th>#</th><th>LOT</th><th>الانتهاء</th><th>S/N</th><th style="width:86px">تيستات</th><th style="width:110px">سعر الكت</th><th></th></tr></thead><tbody>'
       +L.map(function(k,i){
         var expd=k.exp&&k.exp<=today;
         return '<tr id="ii-kit-r-'+i+'"'+(k.custom?' style="background:rgba(255,214,10,0.10)"':'')+'><td>'+(i+1)+'</td>'
@@ -23697,6 +23769,7 @@ function _invKitRender(){
           +'<td dir="ltr" style="'+(expd?'color:var(--danger);font-weight:800':'')+'">'+_ikEsc(k.exp||'—')+(expd?' ⚠️':'')+'</td>'
           +'<td dir="ltr" style="color:var(--text2)">'+_ikEsc(k.serial||'—')+'</td>'
           +'<td><input class="fc" id="ii-kit-t-'+i+'" type="number" min="0" value="'+_ikEsc(k.tests)+'" style="padding:4px 6px;height:auto;font-weight:800" oninput="_invKitSetOne('+i+',this.value)" title="عدّل إن كان هذا الكت ناقصاً"></td>'
+          +'<td><input class="fc" id="ii-kit-p-'+i+'" type="number" min="0" step="any" value="'+_ikEsc(k.price)+'" style="padding:4px 6px;height:auto;font-weight:800'+(k.customP?';color:var(--warning)':'')+'" oninput="_invKitSetOnePrice('+i+',this.value)" title="سعر هذا الكت إن اختلف"></td>'
           +'<td><button type="button" class="btn btn-sm btn-d" onclick="_invKitDel('+i+')" title="حذف هذا الكت">✕</button></td></tr>';
       }).join('')+'</tbody></table></div>'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">'
@@ -23716,6 +23789,14 @@ function _invKitTryMerge(editId){
   it.kitList=(Array.isArray(it.kitList)?it.kitList:[]).concat(k.added).slice(-300);
   /* تاريخ الانتهاء: إن كان القديم فارغاً أو منتهياً يأخذ أقرب تاريخ للكتات الجديدة، وإلا الأقرب بينهما */
   if(k.exp){ if(!it.exp||it.exp<=_ikToday()||k.exp<it.exp) it.exp=k.exp; }
+  /* 💰 عملية شراء في حساب الشركة */
+  if(typeof _invNewPurchase==='function'){
+    var _sp=((_ikEl('ii-sup')||{}).value||'').trim();
+    if(_sp) it.sup=_sp;
+    if(k.kitPrice) it.kitPrice=k.kitPrice;
+    _invMaterialize(it);
+    it.purchases.push(_invNewPurchase({sup:_sp||it.sup||'', kits:k.added.length, perKit:k.per, tests:k.total, kitPrice:k.kitPrice, total:k.cost, lots:k.lots, exp:k.exp, src:'scan-merge'}));
+  }
   var _m=_ikEl('m-inv-item'); if(_m) delete _m.dataset.editId;
   var _sd=_ikEl('inv-search-drop'); if(_sd) _sd.style.display='none';
   save('inventory',inventory); renderInventory(); closeModal('m-inv-item');
@@ -23730,15 +23811,421 @@ function _invKitCollect(){
   if(miss){ showNotif('عدد التيستات','أدخل عدد التيستات لكل كت ('+miss+' كت بلا عدد)','error'); var p=_ikEl('ii-kit-per'); if(p) try{ p.focus(); }catch(_){} return null; }
   var exps=L.map(function(k){ return k.exp; }).filter(Boolean).sort();
   var key=(L.find(function(k){ return _ikRealKey(k.key); })||L[0]||{}).key||'';
+  var cost=_invKitPriceTotal(), gp=parseFloat(_invKit.price)||0;
+  var lots=[]; L.forEach(function(k){ if(k.lot&&lots.indexOf(k.lot)<0) lots.push(k.lot); });
   return { total:_invKitTotal(), per:_ikNum(_invKit.per), key:key, exp:exps[0]||'',
-    added:L.map(function(k){ return {key:k.key, gtin:k.gtin, lot:k.lot, exp:k.exp, serial:k.serial, tests:_ikNum(k.tests), raw:k.raw, at:k.at}; }) };
+    cost:cost, kitPrice:gp||(L.length?Math.round(cost/L.length*100)/100:0), lots:lots.join(', '),
+    added:L.map(function(k){ var pr=parseFloat(k.price); return {key:k.key, gtin:k.gtin, lot:k.lot, exp:k.exp, serial:k.serial, tests:_ikNum(k.tests), price:(isFinite(pr)&&pr>0?pr:0), raw:k.raw, at:k.at}; }) };
 }
 /* يُستدعى من saveInvItem بعد حساب الكمية اليدوية — null إن لا كتات ممسوحة (سلوك قديم حرفياً) */
 function _invKitApply(){
   if(!_invKit.list.length) return null;
   var k=_invKitCollect(); if(!k) return {abort:true};
-  return { qty:_invKit.baseQty+k.total, kits:_invKit.baseKits+k.added.length, perKit:k.per, key:k.key, added:k.added };
+  return { qty:_invKit.baseQty+k.total, kits:_invKit.baseKits+k.added.length, perKit:k.per, key:k.key, added:k.added,
+           addedTests:k.total, cost:k.cost, kitPrice:k.kitPrice, lots:k.lots, exp:k.exp };
 }
+
+/* ══════════════════════════════════════════════════════════════════
+ * 🏭 مشتريات الكواشف وحسابات الشركات (الموردين)
+ * ──────────────────────────────────────────────────────────────────
+ * كل إضافة كتات للمخزون = «عملية شراء» تُحفظ داخل المادة نفسها:
+ *   item.purchases = [{ id, date, sup, kits, tests, perKit, kitPrice, total,
+ *                       lots, exp, by, at, src, payments:[{pid,date,amount,total,by,note,at}] }]
+ * المدفوع = مجموع payments · المتبقي = total − المدفوع.
+ * التسديد (كلي/جزئي) يُوزَّع على مشتريات الشركة غير المسددة — الأقدم أولاً.
+ * التخزين داخل مجموعة inventory الموجودة (نفس الحفظ والمزامنة) — بلا مجموعة جديدة.
+ * المواد القديمة (قبل هذه الإضافة) التي لها «عدد كتات» تظهر كعملية شراء
+ * بلا تاريخ، وتتحوّل لسجل حقيقي عند أول تعديل/تسديد عليها.
+ * ══════════════════════════════════════════════════════════════════ */
+function _supR2(n){ return Math.round((parseFloat(n)||0)*100)/100; }
+function _supNum(v){ var n=parseFloat(v); return isFinite(n)?n:0; }
+function _supKey(s){ var t=String(s||'').trim().replace(/\s+/g,' ').toLowerCase(); return t||'__none'; }
+function _supName(s){ var t=String(s||'').trim().replace(/\s+/g,' '); return t||'بدون مورد'; }
+function _supToday(){ return new Date().toISOString().slice(0,10); }
+function _supUser(){ try{ return (typeof _rpUser==='function')?_rpUser():''; }catch(e){ return ''; } }
+function _purPaid(p){ return _supR2((p&&Array.isArray(p.payments)?p.payments:[]).reduce(function(s,x){ return s+_supNum(x.amount); },0)); }
+function _purDue(p){ return Math.max(0,_supR2(_supNum(p.total)-_purPaid(p))); }
+/* مشتريات مادة — حقيقية أو «قديمة» مُستنتجة من عدد الكتات (لا تُكتب إلا عند الحاجة) */
+function _invPurchasesOf(it){
+  if(!it) return [];
+  if(Array.isArray(it.purchases)) return it.purchases;
+  var k=parseInt(it.kits,10)||0;
+  if(k>0){
+    var pk=parseInt(it.perKit,10)||0, pr=_supNum(it.kitPrice);
+    return [{id:'legacy-'+it.id, date:'', sup:it.sup||'', kits:k, perKit:pk, tests:pk*k, kitPrice:pr, total:_supR2(k*pr), lots:'', exp:it.exp||'', legacy:true, payments:[]}];
+  }
+  return [];
+}
+/* تحويل المُستنتج إلى سجل حقيقي داخل المادة */
+function _invMaterialize(it){
+  if(!it||Array.isArray(it.purchases)) return it&&it.purchases;
+  it.purchases=_invPurchasesOf(it).map(function(p){ var q=Object.assign({},p); q.id=_uid('pur'); return q; });
+  return it.purchases;
+}
+function _invNewPurchase(o){
+  return { id:_uid('pur'), date:o.date||_supToday(), sup:String(o.sup||'').trim(), kits:o.kits||0, perKit:o.perKit||0,
+    tests:o.tests||0, kitPrice:_supR2(o.kitPrice), total:_supR2(o.total), lots:o.lots||'', exp:o.exp||'',
+    by:_supUser(), at:new Date().toISOString(), src:o.src||'manual', payments:[] };
+}
+/* كل المشتريات عبر المخزون (مع المادة) */
+function _supAllPurchases(){
+  var out=[];
+  (Array.isArray(typeof inventory!=='undefined'?inventory:null)?inventory:[]).forEach(function(it){
+    if(!it) return;
+    _invPurchasesOf(it).forEach(function(p){ out.push({it:it, p:p, sup:p.sup||it.sup||''}); });
+  });
+  return out;
+}
+/* قائمة الشركات المعروفة (للاقتراح أثناء الكتابة) */
+function _supNames(){
+  var m={};
+  _supAllPurchases().forEach(function(x){ var k=_supKey(x.sup); if(k!=='__none') m[k]=_supName(x.sup); });
+  (inventory||[]).forEach(function(it){ if(it&&it.sup){ var k=_supKey(it.sup); if(!m[k]) m[k]=_supName(it.sup); } });
+  return Object.keys(m).map(function(k){ return m[k]; }).sort(function(a,b){ return a.localeCompare(b,'ar'); });
+}
+function _supFillDatalist(){
+  var dl=document.getElementById('ii-sup-list'); if(!dl) return;
+  dl.innerHTML=_supNames().map(function(n){ return '<option value="'+_ikEsc(n)+'"></option>'; }).join('');
+}
+
+/* ── تسديد: يوزّع المبلغ على المشتريات غير المسددة (الأقدم أولاً) ── */
+function _supPay(supKey, amount, opt){
+  opt=opt||{}; amount=_supR2(amount);
+  if(!(amount>0)) return {ok:false, error:'أدخل مبلغاً صحيحاً'};
+  var list=[];
+  (inventory||[]).forEach(function(it){
+    if(!it) return;
+    var ps=_invPurchasesOf(it);
+    ps.forEach(function(p){
+      if(_supKey(p.sup||it.sup)!==supKey) return;
+      if(opt.filter&&!opt.filter(p,it)) return;
+      if(_purDue(p)<=0) return;
+      list.push({it:it,p:p});
+    });
+  });
+  var due=_supR2(list.reduce(function(s,x){ return s+_purDue(x.p); },0));
+  if(!list.length||due<=0) return {ok:false, error:'لا يوجد مبلغ مستحق لهذه الشركة ضمن العرض الحالي'};
+  if(amount>due+0.001) return {ok:false, error:'المبلغ أكبر من المستحق ('+_rpFmt(due)+')'};
+  /* المُستنتجة تتحوّل لسجلات حقيقية قبل كتابة الدفعة */
+  list.forEach(function(x){
+    if(x.p.legacy&&!Array.isArray(x.it.purchases)){
+      var idx=_invPurchasesOf(x.it).indexOf(x.p); _invMaterialize(x.it); x.p=x.it.purchases[Math.max(0,idx)];
+    }
+  });
+  list.sort(function(a,b){ return String(a.p.date||'').localeCompare(String(b.p.date||'')) || String(a.p.at||'').localeCompare(String(b.p.at||'')); });
+  var pid=_uid('spay'), left=amount, date=opt.date||_supToday(), parts=[];
+  list.forEach(function(x){
+    if(left<=0) return;
+    var take=_supR2(Math.min(_purDue(x.p),left)); if(take<=0) return;
+    if(!Array.isArray(x.p.payments)) x.p.payments=[];
+    x.p.payments.push({pid:pid, date:date, amount:take, total:amount, by:_supUser(), note:String(opt.note||'').slice(0,200), at:new Date().toISOString()});
+    left=_supR2(left-take); parts.push({item:x.it.name, pdate:x.p.date, amount:take});
+  });
+  save('inventory',inventory);
+  return {ok:true, pid:pid, parts:parts, dueBefore:due, dueAfter:_supR2(due-amount)};
+}
+/* كل الدفعات (مجمّعة برقم الدفعة) */
+function _supPayments(supKey){
+  var m={};
+  _supAllPurchases().forEach(function(x){
+    if(supKey&&_supKey(x.sup)!==supKey) return;
+    (x.p.payments||[]).forEach(function(y){
+      var o=m[y.pid]||(m[y.pid]={pid:y.pid, date:y.date, total:0, by:y.by, note:y.note, at:y.at, sup:_supName(x.sup), supKey:_supKey(x.sup), parts:[]});
+      o.total=_supR2(o.total+_supNum(y.amount)); o.parts.push({item:x.it.name, pdate:x.p.date, amount:_supNum(y.amount)});
+    });
+  });
+  return Object.keys(m).map(function(k){ return m[k]; }).sort(function(a,b){ return String(b.date).localeCompare(String(a.date))||String(b.at).localeCompare(String(a.at)); });
+}
+function _supUndoPayment(pid){
+  var n=0;
+  (inventory||[]).forEach(function(it){
+    if(!it||!Array.isArray(it.purchases)) return;
+    it.purchases.forEach(function(p){
+      if(!Array.isArray(p.payments)) return;
+      var b=p.payments.length; p.payments=p.payments.filter(function(y){ return y.pid!==pid; }); n+=b-p.payments.length;
+    });
+  });
+  if(n) save('inventory',inventory);
+  return n;
+}
+/* رصيد الشركة الكلي (كل الفترات) */
+function _supBalance(supKey){
+  var t=0,p=0;
+  _supAllPurchases().forEach(function(x){ if(_supKey(x.sup)!==supKey) return; t+=_supNum(x.p.total); p+=_purPaid(x.p); });
+  return {total:_supR2(t), paid:_supR2(p), due:_supR2(t-p)};
+}
+
+/* ══ نافذة المادة: سجل مشتريات المادة (في التعديل) ══ */
+var _invPW=null;   /* نسخة عمل من مشتريات المادة المفتوحة — تُكتب عند الحفظ */
+function _invPurchReset(item){
+  _invPW=item?JSON.parse(JSON.stringify(_invPurchasesOf(item))):null;
+  _invPurchRender();
+  _supFillDatalist();
+}
+function _invPurchRender(){
+  var box=document.getElementById('ii-purch-box'); if(!box) return;
+  var L=_invPW||[];
+  if(!_invPW||!L.length){ box.innerHTML=''; return; }
+  var cur=(typeof _rpCur==='function')?_rpCur():'';
+  var tot=0, paid=0;
+  box.innerHTML='<div style="background:rgba(255,214,10,0.05);border:1px solid var(--border);border-radius:9px;padding:12px;margin-bottom:12px">'
+    +'<div style="font-size:11px;color:var(--warning);font-weight:800;margin-bottom:8px">🧾 سجل مشتريات هذه المادة <span style="color:var(--text2);font-weight:600">(تصحيح السعر/الشركة/التاريخ — لا يغيّر الرصيد)</span></div>'
+    +'<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px"><table class="tbl" style="font-size:11.5px;margin:0;min-width:720px"><thead><tr>'
+    +'<th>التاريخ</th><th>الشركة</th><th>كتات</th><th>تيستات</th><th>سعر الكت</th><th>الإجمالي</th><th>المسدَّد</th><th></th></tr></thead><tbody>'
+    +L.map(function(p,i){
+      var pd=_purPaid(p); tot+=_supNum(p.total); paid+=pd;
+      return '<tr><td><input class="fc" type="date" value="'+_ikEsc(p.date||'')+'" style="padding:3px 4px;height:auto;width:128px" onchange="_invPurchEdit('+i+',\'date\',this.value)"></td>'
+        +'<td><input class="fc" list="ii-sup-list" value="'+_ikEsc(p.sup||'')+'" style="padding:3px 6px;height:auto;width:120px" onchange="_invPurchEdit('+i+',\'sup\',this.value)"></td>'
+        +'<td>'+(p.kits||0)+'</td><td>'+(p.tests||0)+'</td>'
+        +'<td><input class="fc" type="number" min="0" value="'+_ikEsc(p.kitPrice||'')+'" style="padding:3px 6px;height:auto;font-weight:800;width:100px" onchange="_invPurchEdit('+i+',\'kitPrice\',this.value)"></td>'
+        +'<td dir="ltr" style="font-weight:800" id="ii-pw-t-'+i+'">'+_rpFmt(p.total)+'</td>'
+        +'<td dir="ltr" style="color:var(--success)">'+(pd?_rpFmt(pd):'—')+'</td>'
+        +'<td><button type="button" class="btn btn-sm btn-d" title="حذف عملية الشراء من الحسابات" onclick="_invPurchDel('+i+')">✕</button></td></tr>';
+    }).join('')+'</tbody></table></div>'
+    +'<div style="font-size:11.5px;margin-top:6px">الإجمالي: <b dir="ltr">'+_rpFmt(tot)+'</b> '+_ikEsc(cur)+' · المسدَّد: <b style="color:var(--success)" dir="ltr">'+_rpFmt(paid)+'</b> · المتبقي: <b style="color:var(--danger)" dir="ltr">'+_rpFmt(tot-paid)+'</b></div></div>';
+}
+function _invPurchEdit(i,f,v){
+  var p=_invPW&&_invPW[i]; if(!p) return;
+  if(f==='kitPrice'){
+    var pr=_supR2(v), t=_supR2(pr*(p.kits||0)), pd=_purPaid(p);
+    if(t<pd){ showNotif('تنبيه','الإجمالي الجديد أقل من المسدَّد لهذه العملية ('+_rpFmt(pd)+') — تم الإبقاء على السعر السابق','warning'); _invPurchRender(); return; }
+    p.kitPrice=pr; p.total=t;
+  } else if(f==='date'){ p.date=v||''; }
+  else if(f==='sup'){ p.sup=String(v||'').trim(); }
+  p.legacy=false;
+  _invPurchRender();
+}
+function _invPurchDel(i){
+  var p=_invPW&&_invPW[i]; if(!p) return;
+  var pd=_purPaid(p);
+  if(!confirm('حذف عملية الشراء ('+(p.kits||0)+' كت · '+_rpFmt(p.total)+') من حسابات الشركة؟'+(pd?'\n\n⚠️ عليها تسديدات بقيمة '+_rpFmt(pd)+' ستُحذف معها.':'')+'\n\n(رصيد التيستات في المخزون لا يتغيّر)')) return;
+  _invPW.splice(i,1); _invPurchRender();
+}
+/* سعر الكت + إجمالي الشراء في قسم «حساب الكمية» */
+function _invCostCalc(){
+  var tEl=document.getElementById('ii-cost-total'); if(!tEl) return;
+  var n=(typeof _invKit!=='undefined'&&_invKit.list)?_invKit.list.length:0;
+  var v;
+  if(n){ v=_invKitPriceTotal(); }
+  else {
+    var kits=parseInt((document.getElementById('ii-kits')||{}).value,10)||0;
+    var pr=_supNum((document.getElementById('ii-kit-price-m')||{}).value);
+    var ed=document.getElementById('m-inv-item').dataset.editId;
+    var old=ed?(inventory||[]).find(function(x){ return x&&x.id===ed; }):null;
+    var add=old?Math.max(0,kits-(parseInt(old.kits,10)||0)):kits;
+    v=_supR2(add*pr);
+    var lb=document.getElementById('ii-cost-lbl'); if(lb) lb.textContent=old?'سعر الكتات المضافة':'إجمالي سعر الشراء';
+  }
+  tEl.value=v?_rpFmt(v):'';
+}
+
+/* ══ تقرير الشركات (الموردين) ══ */
+window._rpSupF={sup:'', item:''};
+function _rpSupRows(S){
+  var out=[];
+  _supAllPurchases().forEach(function(x){
+    var d=x.p.date||'';
+    if(!S.all&&!S.has(d)) return;
+    out.push({it:x.it, p:x.p, item:x.it.name||'-', itemKey:_supKey(x.it.name), sup:_supName(x.sup), supKey:_supKey(x.sup),
+      date:d, kits:x.p.kits||0, tests:x.p.tests||0, kitPrice:_supNum(x.p.kitPrice), total:_supNum(x.p.total),
+      paid:_purPaid(x.p), due:_purDue(x.p), lots:x.p.lots||'', exp:x.p.exp||'', legacy:!!x.p.legacy});
+  });
+  out.sort(function(a,b){ return String(b.date).localeCompare(String(a.date)); });
+  return out;
+}
+function _supStatus(total,paid){ var due=_supR2(total-paid); return due<=0?(total>0?'مدفوع':'بلا سعر'):(paid>0?'مطلوب (جزئي)':'غير مدفوع'); }
+function _rpBuildSupDef(def,S){
+  var F=window._rpSupF||{sup:'',item:''}, cur=def.cur;
+  var all=_rpSupRows(S);
+  var R=all.filter(function(r){ return (!F.sup||r.supKey===F.sup)&&(!F.item||r.itemKey===F.item); });
+  var supLbl=F.sup?(all.concat(_rpSupRows({all:true,has:function(){return true;}})).find(function(r){ return r.supKey===F.sup; })||{sup:F.sup}).sup:'';
+  var itemLbl=F.item?((all.find(function(r){ return r.itemKey===F.item; })||{item:F.item}).item):'';
+  def.supAll=all; def.supRows=R; def.supLbl=supLbl; def.itemLbl=itemLbl;
+  def.title='🏭 تقرير الشركات'+(supLbl?' — '+supLbl:'')+(itemLbl?' — '+itemLbl:'')+' — '+S.label;
+  var T={kits:0,tests:0,total:0,paid:0,due:0};
+  R.forEach(function(r){ T.kits+=r.kits; T.tests+=r.tests; T.total+=r.total; T.paid+=r.paid; T.due+=r.due; });
+  ['total','paid','due'].forEach(function(k){ T[k]=_supR2(T[k]); });
+  function grp(keyF,nameF){
+    var m=new Map();
+    R.forEach(function(r){ var k=keyF(r), o=m.get(k); if(!o){ o={key:k,name:nameF(r),items:new Set(),sups:new Set(),kits:0,tests:0,total:0,paid:0,due:0,n:0,last:'',min:null,max:null,lastPrice:0,lots:new Set()}; m.set(k,o); }
+      o.items.add(r.itemKey); o.sups.add(r.supKey); o.kits+=r.kits; o.tests+=r.tests; o.total+=r.total; o.paid+=r.paid; o.due+=r.due; o.n++;
+      if(r.date>=o.last){ o.last=r.date; o.lastPrice=r.kitPrice; }
+      if(r.kitPrice>0){ o.min=o.min===null?r.kitPrice:Math.min(o.min,r.kitPrice); o.max=o.max===null?r.kitPrice:Math.max(o.max,r.kitPrice); }
+      if(r.lots) String(r.lots).split(/[,،]\s*/).forEach(function(l){ if(l) o.lots.add(l); }); });
+    return Array.from(m.values()).sort(function(a,b){ return b.total-a.total||String(a.name).localeCompare(String(b.name),'ar'); });
+  }
+  var detailCols=[{h:'#',type:'num'},{h:'التاريخ',type:'date'},{h:'التحليل / المادة',type:'bold'},{h:'الشركة',type:'center'},{h:'الكتات',type:'num'},{h:'تيستات/كت',type:'num'},
+    {h:'التيستات',type:'num'},{h:'سعر الكت',type:'money'},{h:'الإجمالي',type:'money'},{h:'المسدَّد',type:'money'},{h:'المتبقي',type:'money'},{h:'الحالة',type:'status'},{h:'LOT',type:'center'},{h:'الانتهاء',type:'date'}];
+  var detailRows=R.map(function(r,i){ return [i+1, r.date||'(قديم بلا تاريخ)', r.item, r.sup, r.kits, r.p.perKit||'', r.tests, r.kitPrice, r.total, r.paid, r.due, _supStatus(r.total,r.paid), r.lots||'-', r.exp||'-']; });
+  var detailTot=['المجموع','','','',T.kits,'',T.tests,'',T.total,T.paid,T.due,'','',''];
+  def.rowKeys=[];
+  if(F.sup&&F.item){
+    def.columns=detailCols; def.rows=detailRows; def.totals=detailTot;
+  } else if(F.sup){
+    var G=grp(function(r){ return r.itemKey; },function(r){ return r.item; });
+    def.columns=[{h:'#',type:'num'},{h:'التحليل / المادة',type:'bold'},{h:'عمليات الشراء',type:'num'},{h:'الكتات',type:'num'},{h:'التيستات',type:'num'},
+      {h:'آخر سعر كت',type:'money'},{h:'متوسط سعر الكت',type:'money'},{h:'الإجمالي',type:'money'},{h:'المسدَّد',type:'money'},{h:'المتبقي',type:'money'},{h:'الحالة',type:'status'},{h:'آخر شراء',type:'date'},{h:'LOT',type:'center'}];
+    def.rows=G.map(function(o,i){ return [i+1,o.name,o.n,o.kits,o.tests,o.lastPrice,o.kits?_supR2(o.total/o.kits):0,_supR2(o.total),_supR2(o.paid),_supR2(o.due),_supStatus(o.total,o.paid),o.last||'-',Array.from(o.lots).slice(0,6).join('، ')||'-']; });
+    def.rowKeys=G.map(function(o){ return {k:'item',v:o.key,n:o.name}; });
+    def.totals=['المجموع','',R.length,T.kits,T.tests,'','',T.total,T.paid,T.due,'','',''];
+  } else if(F.item){
+    var G2=grp(function(r){ return r.supKey; },function(r){ return r.sup; });
+    def.columns=[{h:'#',type:'num'},{h:'الشركة',type:'bold'},{h:'عمليات الشراء',type:'num'},{h:'الكتات',type:'num'},{h:'التيستات',type:'num'},
+      {h:'أقل سعر كت',type:'money'},{h:'أعلى سعر كت',type:'money'},{h:'متوسط سعر الكت',type:'money'},{h:'الإجمالي',type:'money'},{h:'المسدَّد',type:'money'},{h:'المتبقي',type:'money'},{h:'آخر شراء',type:'date'}];
+    def.rows=G2.map(function(o,i){ return [i+1,o.name,o.n,o.kits,o.tests,o.min==null?'':o.min,o.max==null?'':o.max,o.kits?_supR2(o.total/o.kits):0,_supR2(o.total),_supR2(o.paid),_supR2(o.due),o.last||'-']; });
+    def.rowKeys=G2.map(function(o){ return {k:'sup',v:o.key,n:o.name}; });
+    def.totals=['المجموع','',R.length,T.kits,T.tests,'','','',T.total,T.paid,T.due,''];
+  } else {
+    var G3=grp(function(r){ return r.supKey; },function(r){ return r.sup; });
+    def.columns=[{h:'#',type:'num'},{h:'الشركة',type:'bold'},{h:'أنواع التحاليل',type:'num'},{h:'عمليات الشراء',type:'num'},{h:'الكتات',type:'num'},{h:'التيستات',type:'num'},
+      {h:'الإجمالي',type:'money'},{h:'المسدَّد',type:'money'},{h:'المتبقي',type:'money'},{h:'الحالة',type:'status'},{h:'آخر شراء',type:'date'}];
+    def.rows=G3.map(function(o,i){ return [i+1,o.name,o.items.size,o.n,o.kits,o.tests,_supR2(o.total),_supR2(o.paid),_supR2(o.due),_supStatus(o.total,o.paid),o.last||'-']; });
+    def.rowKeys=G3.map(function(o){ return {k:'sup',v:o.key,n:o.name}; });
+    def.totals=['المجموع','',new Set(R.map(function(r){return r.itemKey;})).size,R.length,T.kits,T.tests,T.total,T.paid,T.due,'',''];
+  }
+  def.summary=[];
+  if(!F.sup) def.summary.push(['عدد الشركات',new Set(R.map(function(r){return r.supKey;})).size,'num','var(--primary)']);
+  if(!F.item) def.summary.push(['أنواع التحاليل',new Set(R.map(function(r){return r.itemKey;})).size,'num','var(--secondary)']);
+  def.summary.push(['عدد الكتات',T.kits,'num','#60a5fa'],['عدد التيستات',T.tests,'num','#a78bfa'],
+    ['إجمالي المشتريات',T.total,'money','var(--warning)'],['المسدَّد',T.paid,'money','var(--success)'],['المتبقي (مطلوب للشركات)',T.due,'money','var(--danger)']);
+  if(T.tests) def.summary.push(['متوسط كلفة التيست',_supR2(T.total/T.tests),'money','var(--text)']);
+  if(F.sup){ var B=_supBalance(F.sup); def.summary.push(['رصيد الشركة الكلي (كل الفترات)',B.due,'money','var(--danger)']); }
+  if(R.some(function(r){ return r.legacy; })) def.note='ℹ️ «قديم بلا تاريخ» = مواد أُدخلت قبل تفعيل سجل المشتريات — تظهر في «كل الفترات» فقط. أدخل سعر الكت من تعديل المادة.';
+  /* أوراق Excel إضافية: التفاصيل الكاملة + التسديدات */
+  def.extra=[];
+  if(!(F.sup&&F.item)) def.extra.push({name:'تفاصيل المشتريات', title:'🧾 تفاصيل المشتريات — '+def.title.replace(/^🏭 /,''), columns:detailCols, rows:detailRows, totals:detailTot});
+  var PY=_supPayments(F.sup||'').filter(function(p){ return S.all||S.has(p.date); });
+  /* مع فلتر تحليل: نُظهر من كل دفعة الجزء الخاص بهذا التحليل فقط */
+  if(F.item) PY=PY.map(function(p){ var q=Object.assign({},p); q.parts=p.parts.filter(function(x){ return _supKey(x.item)===F.item; }); q.total=_supR2(q.parts.reduce(function(s,x){ return s+x.amount; },0)); return q; }).filter(function(p){ return p.total>0; });
+  def.supPays=PY;
+  if(PY.length) def.extra.push({name:'التسديدات', title:'💳 التسديدات — '+(supLbl||'كل الشركات')+' — '+S.label,
+    columns:[{h:'#',type:'num'},{h:'التاريخ',type:'date'},{h:'الشركة',type:'bold'},{h:'المبلغ',type:'money'},{h:'ملاحظة'},{h:'المستخدم',type:'center'}],
+    rows:PY.map(function(p,i){ return [i+1,p.date,p.sup,p.total,p.note||'-',p.by||'-']; }),
+    totals:['المجموع','','',_supR2(PY.reduce(function(s,p){return s+p.total;},0)),'','']});
+  return def;
+}
+/* شريط الفلاتر + التسديد */
+function _rpSupFilterHTML(def){
+  var F=window._rpSupF||{}, all=_rpSupRows({all:true,has:function(){return true;}}), cur=def.cur;
+  var sups={}, items={};
+  all.forEach(function(r){ sups[r.supKey]=r.sup; if(!F.sup||r.supKey===F.sup) items[r.itemKey]=r.item; });
+  var so=Object.keys(sups).sort(function(a,b){ return sups[a].localeCompare(sups[b],'ar'); });
+  var io=Object.keys(items).sort(function(a,b){ return items[a].localeCompare(items[b]); });
+  var sel='width:auto;min-width:180px;padding:7px 10px;font-size:12.5px;font-weight:700';
+  var h='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +'<span style="font-size:12px;font-weight:900;color:var(--text2)">🏭 الشركة:</span>'
+    +'<select class="fc" style="'+sel+'" onchange="_rpSupSet(\'sup\',this.value)"><option value="">الكل</option>'
+    +so.map(function(k){ return '<option value="'+_rpEsc(k)+'"'+(F.sup===k?' selected':'')+'>'+_rpEsc(sups[k])+'</option>'; }).join('')+'</select>'
+    +'<span style="font-size:12px;font-weight:900;color:var(--text2)">🧪 التحليل:</span>'
+    +'<select class="fc" style="'+sel+'" onchange="_rpSupSet(\'item\',this.value)"><option value="">الكل</option>'
+    +io.map(function(k){ return '<option value="'+_rpEsc(k)+'"'+(F.item===k?' selected':'')+'>'+_rpEsc(items[k])+'</option>'; }).join('')+'</select>'
+    +((F.sup||F.item)?'<button class="btn btn-sm btn-s" onclick="window._rpSupF={sup:\'\',item:\'\'};_rpShown=500;_rpRenderReportModal()">↩️ الكل</button>':'')
+    +'<span style="font-size:11px;color:var(--text2)">اضغط على أي سطر للتفاصيل</span></div>';
+  if(F.sup){
+    var due=_supR2((def.supRows||[]).reduce(function(s,r){ return s+r.due; },0));
+    var B=_supBalance(F.sup);
+    h+='<div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px;background:rgba(0,245,147,0.06);border:1px solid rgba(0,245,147,0.3);border-radius:10px;padding:10px 12px">'
+      +'<div style="min-width:190px"><div style="font-size:12px;font-weight:900">💳 تسديد — '+_rpEsc(def.supLbl)+'</div>'
+      +'<div style="font-size:11px;color:var(--text2);margin-top:2px">المستحق ضمن العرض: <b style="color:var(--danger)" dir="ltr">'+_rpFmt(due)+'</b> '+_rpEsc(cur)
+      +(B.due!==due?' · الرصيد الكلي: <b dir="ltr">'+_rpFmt(B.due)+'</b>':'')+'</div></div>'
+      +'<div class="fg" style="margin-bottom:0"><label class="fl" style="font-size:10px">المبلغ</label><input class="fc" id="sup-pay-amt" type="number" min="0" step="any" value="'+(due>0?due:'')+'" style="width:150px;font-weight:900"'+(due>0?'':' disabled')+'></div>'
+      +'<div class="fg" style="margin-bottom:0"><label class="fl" style="font-size:10px">التاريخ</label><input class="fc" id="sup-pay-date" type="date" value="'+_supToday()+'" style="width:150px"></div>'
+      +'<div class="fg" style="margin-bottom:0;flex:1;min-width:150px"><label class="fl" style="font-size:10px">ملاحظة (رقم الوصل/الفاتورة)</label><input class="fc" id="sup-pay-note" placeholder="اختياري"></div>'
+      +'<button class="btn btn-ok" id="sup-pay-btn" style="font-weight:900" onclick="_rpSupDoPay()"'+(due>0?'':' disabled')+'>💳 تسديد</button></div>';
+  }
+  return h;
+}
+function _rpSupSet(f,v){ var F=window._rpSupF||(window._rpSupF={sup:'',item:''}); F[f]=v||''; if(f==='sup') F.item='';   /* التحليل المختار قد لا يخص الشركة الجديدة */ _rpShown=500; _rpRenderReportModal(); }
+function _rpSupRowClick(i){
+  var def=window._rpLastDef, k=def&&def.rowKeys&&def.rowKeys[i]; if(!k) return;
+  var F=window._rpSupF; F[k.k]=k.v; _rpShown=500; _rpRenderReportModal();
+}
+function _rpSupDoPay(){
+  var F=window._rpSupF||{}, def=window._rpLastDef; if(!F.sup||!def) return;
+  var amt=_supR2((document.getElementById('sup-pay-amt')||{}).value);
+  var date=(document.getElementById('sup-pay-date')||{}).value||_supToday();
+  var note=(document.getElementById('sup-pay-note')||{}).value||'';
+  if(!(amt>0)){ showNotif('المبلغ','أدخل مبلغ التسديد','error'); return; }
+  var S=def.S;
+  var r=_supPay(F.sup, amt, {date:date, note:note, filter:function(p,it){ return (S.all||S.has(p.date||''))&&(!F.item||_supKey(it.name)===F.item); }});
+  if(!r.ok){ showNotif('تعذّر التسديد',r.error,'error'); return; }
+  try{ if(typeof renderInventory==='function') renderInventory(); }catch(e){}
+  _rpRenderReportModal();
+  showNotif('✅ تم التسديد',_rpFmt(amt)+' '+def.cur+' — '+def.supLbl+' · المتبقي '+_rpFmt(r.dueAfter),'success');
+  if(confirm('تم تسديد '+_rpFmt(amt)+' '+def.cur+' لـ '+def.supLbl+'.\nالمتبقي ضمن العرض: '+_rpFmt(r.dueAfter)+'\n\nطباعة وصل التسديد؟')) _supPrintReceipt(r.pid);
+}
+/* قائمة التسديدات أسفل التقرير (عند اختيار شركة) */
+function _rpSupExtraHTML(def){
+  var F=window._rpSupF||{}; if(!F.sup) return '';
+  var PY=def.supPays||[];
+  return '<div style="margin-top:16px;background:var(--bg-glass);border:1px solid var(--border);border-radius:10px;overflow:hidden">'
+    +'<div style="padding:8px 12px;font-size:12px;font-weight:900;color:var(--success);border-bottom:1px solid var(--border)">💳 تسديدات '+_rpEsc(def.supLbl)+' — '+_rpEsc(def.S.label)+'</div>'
+    +(PY.length?('<table class="tbl" style="font-size:12px;margin:0"><thead><tr><th>#</th><th>التاريخ</th><th>المبلغ</th><th>ملاحظة</th><th>المستخدم</th><th></th></tr></thead><tbody>'
+      +PY.map(function(p,i){ return '<tr><td>'+(i+1)+'</td><td dir="ltr">'+_rpEsc(p.date)+'</td><td dir="ltr" style="font-weight:900;color:var(--success)">'+_rpFmt(p.total)+'</td><td>'+_rpEsc(p.note||'-')+'</td><td>'+_rpEsc(p.by||'-')+'</td>'
+        +'<td style="white-space:nowrap"><button class="btn btn-sm btn-s" onclick="_supPrintReceipt(\''+_rpEsc(p.pid)+'\')">🖨️ وصل</button> '
+        +'<button class="btn btn-sm btn-d" title="إلغاء هذا التسديد" onclick="_rpSupUndo(\''+_rpEsc(p.pid)+'\')">↩️</button></td></tr>'; }).join('')
+      +'</tbody></table>'):'<div style="padding:12px;font-size:12px;color:var(--text2)">لا توجد تسديدات في هذه الفترة</div>')
+    +'<div style="padding:8px 12px;border-top:1px solid var(--border)"><button class="btn btn-sm btn-p" onclick="_supPrintStatement()">🖨️ كشف حساب الشركة</button></div></div>';
+}
+function _rpSupUndo(pid){
+  var p=_supPayments('').find(function(x){ return x.pid===pid; }); if(!p) return;
+  if(!confirm('إلغاء تسديد '+_rpFmt(p.total)+' بتاريخ '+p.date+' لـ '+p.sup+'؟\nسيعود المبلغ مستحقاً على المختبر.')) return;
+  _supUndoPayment(pid); _rpRenderReportModal(); showNotif('تم','أُلغي التسديد','success');
+}
+function _supPrintWin(title,body){
+  var lab=(typeof settings!=='undefined'&&settings&&(settings.labName||settings.name))||'MedLab Pro';
+  var html='<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>'+_rpEsc(title)+'</title><style>'
+    +'body{font-family:Cairo,Tahoma,Arial,sans-serif;padding:22px;color:#000;direction:rtl}h2{text-align:center;margin:0 0 4px;color:#1f4e79}'
+    +'.sub{text-align:center;font-size:12px;color:#555;margin-bottom:14px}table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}'
+    +'th{background:#2e75b6;color:#fff;padding:6px;border:1px solid #8ea9db}td{padding:6px;border:1px solid #d0d7e5}td.n{direction:ltr;text-align:center;white-space:nowrap}'
+    +'.box{border:1px solid #bfc9d9;border-radius:8px;padding:10px 14px;margin:8px 0;font-size:13px;line-height:2}.big{font-size:20px;font-weight:900;color:#1f4e79}'
+    +'.sig{display:flex;justify-content:space-between;margin-top:50px;font-size:12px}.sig div{border-top:1px solid #000;padding-top:4px;width:30%;text-align:center}'
+    +'@media print{@page{size:A4;margin:1.2cm}}</style></head><body><h2>'+_rpEsc(title)+'</h2><div class="sub">'+_rpEsc(lab)+' — تاريخ الطباعة: '+_supToday()+'</div>'+body
+    +'<script>window.onload=function(){window.print();}<\/script></body></html>';
+  var w=window.open('','_blank','width=900,height=760');
+  if(!w){ showNotif('تنبيه','يرجى السماح بالنوافذ المنبثقة','warning'); return; }
+  w.document.write(html); w.document.close();
+}
+function _supPrintReceipt(pid){
+  var p=_supPayments('').find(function(x){ return x.pid===pid; }); if(!p) return;
+  var cur=_rpCur(), B=_supBalance(p.supKey);
+  _supPrintWin('وصل تسديد',
+    '<div class="box">رقم الوصل: <b>'+_rpEsc(String(p.pid).slice(-8).toUpperCase())+'</b> &nbsp;·&nbsp; التاريخ: <b>'+_rpEsc(p.date)+'</b><br>'
+    +'سُدِّد إلى الشركة: <b>'+_rpEsc(p.sup)+'</b><br>المبلغ: <span class="big">'+_rpFmt(p.total)+' '+_rpEsc(cur)+'</span>'
+    +(p.note?'<br>ملاحظة: '+_rpEsc(p.note):'')+'<br>بواسطة: '+_rpEsc(p.by||'-')+'</div>'
+    +'<table><thead><tr><th>#</th><th>المادة / التحليل</th><th>تاريخ الشراء</th><th>المبلغ المُسدَّد منها</th></tr></thead><tbody>'
+    +p.parts.map(function(x,i){ return '<tr><td class="n">'+(i+1)+'</td><td>'+_rpEsc(x.item)+'</td><td class="n">'+_rpEsc(x.pdate||'-')+'</td><td class="n">'+_rpFmt(x.amount)+'</td></tr>'; }).join('')
+    +'</tbody></table><div class="box">رصيد الشركة المتبقي حالياً (كل الفترات): <b>'+_rpFmt(B.due)+' '+_rpEsc(cur)+'</b></div>'
+    +'<div class="sig"><div>المحاسب</div><div>المستلم (الشركة)</div><div>المدير</div></div>');
+}
+function _supPrintStatement(){
+  var def=window._rpLastDef, F=window._rpSupF||{}; if(!def||!F.sup) return;
+  var cur=def.cur, S=def.S, ev=[];
+  _rpSupRows(S).filter(function(r){ return r.supKey===F.sup&&(!F.item||r.itemKey===F.item); })
+    .forEach(function(r){ ev.push({d:r.date, t:'شراء: '+r.item+' — '+r.kits+' كت × '+_rpFmt(r.kitPrice)+(r.lots?' (LOT '+r.lots+')':''), dr:r.total, cr:0}); });
+  (def.supPays||[]).forEach(function(p){ ev.push({d:p.date, t:'تسديد'+(p.note?' — '+p.note:''), dr:0, cr:p.total}); });
+  ev.sort(function(a,b){ return String(a.d).localeCompare(String(b.d)); });
+  var bal=0, td=0, tc=0;
+  var rows=ev.map(function(e,i){ bal=_supR2(bal+e.dr-e.cr); td+=e.dr; tc+=e.cr;
+    return '<tr><td class="n">'+(i+1)+'</td><td class="n">'+_rpEsc(e.d||'-')+'</td><td>'+_rpEsc(e.t)+'</td><td class="n">'+(e.dr?_rpFmt(e.dr):'')+'</td><td class="n">'+(e.cr?_rpFmt(e.cr):'')+'</td><td class="n"><b>'+_rpFmt(bal)+'</b></td></tr>'; }).join('');
+  var B=_supBalance(F.sup);
+  _supPrintWin('كشف حساب — '+def.supLbl,
+    '<div class="box">الشركة: <b>'+_rpEsc(def.supLbl)+'</b>'+(def.itemLbl?' · التحليل: <b>'+_rpEsc(def.itemLbl)+'</b>':'')+' · الفترة: <b>'+_rpEsc(S.label)+'</b></div>'
+    +'<table><thead><tr><th>#</th><th>التاريخ</th><th>البيان</th><th>مشتريات (له)</th><th>تسديد (منه)</th><th>الرصيد</th></tr></thead><tbody>'+rows
+    +'<tr><td colspan="3"><b>المجموع</b></td><td class="n"><b>'+_rpFmt(td)+'</b></td><td class="n"><b>'+_rpFmt(tc)+'</b></td><td class="n"><b>'+_rpFmt(_supR2(td-tc))+'</b></td></tr></tbody></table>'
+    +'<div class="box">المتبقي للشركة في هذه الفترة: <span class="big">'+_rpFmt(_supR2(td-tc))+' '+_rpEsc(cur)+'</span><br>رصيد الشركة الكلي (كل الفترات): <b>'+_rpFmt(B.due)+' '+_rpEsc(cur)+'</b></div>'
+    +'<div class="sig"><div>المحاسب</div><div>ممثل الشركة</div><div>المدير</div></div>');
+}
+/* رسالة حذف مادة لها مشتريات/تسديدات (حساب الشركة يتأثر) */
+function _invDelMsg(id){
+  var it=(inventory||[]).find(function(x){ return x&&x.id===id; }); if(!it) return '';
+  var ps=_invPurchasesOf(it); if(!ps.length) return '';
+  var t=0,pd=0; ps.forEach(function(p){ t+=_supNum(p.total); pd+=_purPaid(p); });
+  if(!t&&!pd) return '';
+  return 'حذف «'+it.name+'»؟\n\n⚠️ لهذه المادة مشتريات بقيمة '+_rpFmt(t)+(pd?' وتسديدات بقيمة '+_rpFmt(pd):'')+' في حساب الشركة — ستُحذف من تقارير الشركات.';
+}
+window._rpSupSet=_rpSupSet; window._rpSupRowClick=_rpSupRowClick; window._rpSupDoPay=_rpSupDoPay;
+window._supPrintReceipt=_supPrintReceipt; window._supPrintStatement=_supPrintStatement; window._rpSupUndo=_rpSupUndo;
 
 // ── خصم تلقائي من المخزون عند الطباعة ────────────────────
 function deductInventoryOnPrint(req){
@@ -23818,7 +24305,7 @@ function checkInventoryAlerts(){
   }
 }
 
-function deleteInvItem(id){if(confirm('حذف؟')){inventory=inventory.filter(i=>i.id!==id);save('inventory',inventory);renderInventory();}}
+function deleteInvItem(id){if(confirm((typeof _invDelMsg==='function'?_invDelMsg(id):'')||'حذف؟')){inventory=inventory.filter(i=>i.id!==id);save('inventory',inventory);renderInventory();}}
 
 function saveInvoice(){const pid=document.getElementById('inv-pt').value;const pt=patients.find(p=>p.id===pid);invoices.push({id:'INV-'+((typeof _devNo==='function'&&_devNo()>1)?_devNo()+'-':'')+(1000+invoices.length+1)+(invoices.some(function(x){return x.id==='INV-'+(1000+invoices.length+1);})?'-'+Date.now().toString(36).slice(-4):''),patientId:pid,patientName:pt?pt.name:'-',total:parseFloat(document.getElementById('inv-total').value)||0,insType:document.getElementById('inv-ins').value,insAmt:parseFloat(document.getElementById('inv-ins-amt').value)||0,status:document.getElementById('inv-status').value,date:new Date().toISOString().split('T')[0]});(function(i){var t=i.total,st=i.status,pa=0;if(st==='مدفوعة')pa=t;else if(st==='جزئية'){pa=Math.min(Math.max(0,parseFloat((document.getElementById('inv-paid-amt')||{}).value)||0),t);if(pa>=t){i.status='مدفوعة';pa=t;}else if(pa<=0){i.status='معلقة';}}i.paidAmt=pa;i.payments=pa>0?[{amt:pa,date:i.date,ts:Date.now(),by:(typeof _rpUser==='function'?_rpUser():''),note:'عند الإنشاء'}]:[];})(invoices[invoices.length-1]);save('invoices',invoices);renderInvoices();closeModal('m-invoice');showNotif('تم','تم حفظ الفاتورة ✅','success');}
 function loadInvPtDropdown(){const sel=document.getElementById('inv-pt');if(sel)sel.innerHTML=patients.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');}
@@ -24866,6 +25353,9 @@ function _rpBuildDef(type){
     def.rows=CR.map(function(c,i){ return [i+1, c.req.patientName||'-', c.req.patientId||'-', c.req.orderNo||c.req.id, c.test.nameEn||c.test.code, String(c.val), c.test.unit||'-', c.test.ref||'-', c.hi?'مرتفع جداً':'منخفض جداً', c.date]; });
     def.summary=[['إجمالي النتائج الحرجة',CR.length,'num','var(--danger)'],['⬆️ مرتفعة جداً',CR.filter(function(c){return c.hi;}).length,'num','var(--danger)'],['⬇️ منخفضة جداً',CR.filter(function(c){return !c.hi;}).length,'num','var(--warning)']];
     def.reqIds=CR.map(function(c){ return c.req.id; });
+  } else if(type==='suppliers'){
+    /* 🏭 الشركات — المشتريات والتسديد */
+    _rpBuildSupDef(def, S);
   }
   return def;
 }
@@ -25023,6 +25513,7 @@ function _rpBuildTestDetail(def, D){
 function exportReport(type){
   window._rpPayFilter='all';
   window._rpTestFilter='';   /* 🧪 تقرير التحاليل يفتح دائماً على «الكل» */
+  window._rpSupF={sup:'',item:''};   /* 🏭 تقرير الشركات يفتح على «الكل» */
   _rpCurType=type; _rpShown=500;
   _rpRenderReportModal();
 }
@@ -25039,6 +25530,7 @@ function _rpRenderReportModal(){
       +part.map(function(r,ri){
         var click=(def.type==='critical'&&def.reqIds)?' style="cursor:pointer" onclick="try{openViewResultsModal(\''+_rpEsc(def.reqIds[ri])+'\')}catch(e){}"':'';
         if(def.type==='tests'&&def.testIds) click=' style="cursor:pointer" title="عرض تفاصيل هذا التحليل" onclick="_rpOpenTestRow('+ri+')"';
+        if(def.type==='suppliers'&&def.rowKeys&&def.rowKeys[ri]) click=' style="cursor:pointer" title="عرض التفاصيل" onclick="_rpSupRowClick('+ri+')"';
         return '<tr'+click+'>'+def.columns.map(function(c,ci){ return _rpCellHTML(r[ci],c.type); }).join('')+'</tr>';
       }).join('')
       +(def.totals&&!rest?'<tr style="background:rgba(0,212,255,0.08)">'+def.columns.map(function(c,ci){ var v=def.totals[ci]; return (v===''||v==null)?'<td></td>':(typeof v==='number'?'<td dir="ltr" style="font-weight:900;color:var(--primary);white-space:nowrap">'+_rpFmt(v)+'</td>':'<td style="font-weight:900">'+_rpEsc(v)+'</td>'); }).join('')+'</tr>':'')
@@ -25066,8 +25558,10 @@ function _rpRenderReportModal(){
       +RpPeriod.barHTML('rpm')
       +(type==='revenue'?_rpPayFilterHTML():'')
       +(type==='tests'?_rpTestFilterHTML():'')
+      +(type==='suppliers'?_rpSupFilterHTML(def):'')
       +_rpSummaryHTML(def.summary||[],cur)+breakdown
       +'<div style="overflow-x:auto">'+table+'</div>'
+      +(type==='suppliers'?_rpSupExtraHTML(def)+(def.note?'<div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.8">'+_rpEsc(def.note)+'</div>':''):'')
       +(type==='revenue'?'<div style="font-size:11px;color:var(--text2);margin-top:10px;line-height:1.8">ℹ️ «غير مفوتر» = تحاليل زرع/إدرار/خروج/منوي أُدخلت من أقسامها مباشرة بلا طلب ولا فاتورة — تُحسب بسعر التحليل في قاعدة التحاليل. الفواتير المرتبطة بطلبات محذوفة مستبعدة.'+((window._rpPayFilter==='cash'||window._rpPayFilter==='electronic')?'<br>💳 عند الفلترة تُعرض الفواتير التي فيها تحصيل بهذه الطريقة فقط (الفاتورة المختلطة تظهر في الاثنتين مع مبلغ كل طريقة)، وتُستبعد السجلات «غير المفوترة» لأنه لا تحصيل لها. الدفعات القديمة بلا طريقة تُحتسب نقدية.':'')+'</div>':'')
     +'</div>'
     +'<div class="mftr" style="flex-shrink:0;display:flex;gap:8px;flex-wrap:wrap">'
@@ -29452,17 +29946,130 @@ function getAdminUsers(){
 function saveAdminUsers(users){
   _fbUsersCache = users;
   localStorage.setItem(ADMIN_KEY, JSON.stringify(users));
-  if(fbReady && fbDb && users.length > 0){
-    // ✅ احفظ كلمة المرور مشفّرة (SHA-256) في DB
-    const obj = {};
-    users.forEach(u => { obj[u.username] = u; });
+  // 🔒 الكتابة على قائمة المستخدمين للأدمن فقط (قواعد Firebase ترفض غيره أصلاً) —
+  //    لا نرسل من حاسبات المختبرات نسخة القائمة المحلية إطلاقاً.
+  if(fbReady && fbDb && users.length > 0 && _isFbAdmin()){
+    const obj = {}, pw = {};
+    users.forEach(u => {
+      const o = Object.assign({}, u); delete o._fbNoPw;
+      if(window._pwMoved){
+        // بعد الترحيل: كلمة المرور تُحفظ في admin/pw (غير مقروءة) ولا تبقى في سجل المستخدم
+        if(o.password){ pw[o.username] = o.password; }
+        delete o.password;
+      }
+      obj[u.username] = o;
+    });
     fbDb.ref('admin/users').set(obj).catch(e => console.error('saveAdminUsers error:', e));
+    if(window._pwMoved && Object.keys(pw).length) _pwWriteMany(pw);
   }
+}
+/* ═══════════ 🔒 حماية حسابات المختبرات ═══════════
+   • حاسبة المختبر تقرأ وتراقب حسابها فقط: admin/users/<اسمها> — لا قائمة كل المختبرات.
+   • الأدمن (حساب البريد الحقيقي) وحده يقرأ القائمة كاملة.
+   • بعد «ترحيل كلمات المرور» من لوحة الأدمن: البصمة (SHA-256) تُنقل إلى admin/pw غير المقروءة،
+     والتحقق عند الدخول يتم على الخادم: admin/chk/<user> لا تُقبل كتابتها إلا إذا طابقت البصمة.
+   • الدخول بدون إنترنت وتعدد المستخدمين على الحاسبة نفسها يبقيان كما هما (بصمة محلية بعد أول دخول ناجح). */
+function _isFbAdmin(){
+  try{ const u = fbAuth && fbAuth.currentUser; return !!(u && !u.isAnonymous && u.email === _svcEm()); }catch(e){ return false; }
+}
+function _usersTarget(){
+  if(window._loginUname) return window._loginUname;
+  try{ const s = getSession(); return (s && s.username) || ''; }catch(e){ return ''; }
+}
+function _fbKeyOk(k){ return typeof k==='string' && k.length>0 && k.length<=128 && !/[.#$\[\]\/]/.test(k); }
+/* دمج سجل مستخدم واحد في الكاش المحلي (لا يُمسح الآخرون) — مع إبقاء البصمة المحلية إن لم يحملها السجل */
+function _mergeUserIntoCache(uname, rec){
+  let users; try{ users = JSON.parse(localStorage.getItem(ADMIN_KEY)||'[]'); }catch(e){ users = []; }
+  if(!Array.isArray(users)) users = [];
+  const idx = users.findIndex(u => u && u.username === uname);
+  if(rec){
+    const nu = Object.assign({}, rec, {username: rec.username || uname});
+    nu._fbNoPw = !rec.password;                            // السجل على الخادم بلا بصمة ⇒ التحقق يتم على الخادم
+    if(!nu.password && idx >= 0 && users[idx].password) nu.password = users[idx].password;
+    if(idx >= 0) users[idx] = nu; else users.push(nu);
+  } else if(idx >= 0){
+    users.splice(idx, 1);                                  // حُذف الحساب من الخادم
+  }
+  _fbUsersCache = users;
+  localStorage.setItem(ADMIN_KEY, JSON.stringify(users));
+  return users;
+}
+/* يحفظ بصمة كلمة المرور محلياً بعد تحقق ناجح (للدخول بدون إنترنت لاحقاً) */
+function _cacheLocalPw(uname, h){
+  const users = getAdminUsers(); const u = users.find(x => x.username === uname);
+  if(u && u.password !== h){ u.password = h; _fbUsersCache = users; localStorage.setItem(ADMIN_KEY, JSON.stringify(users)); }
+}
+/* 🧹 مرة واحدة: إزالة حسابات المختبرات الأخرى من الكاش المحلي لهذه الحاسبة
+   (تُبقى الحسابات التي لها بيانات على هذه الحاسبة + الجلسة الحالية) */
+function _pruneUsersCacheOnce(){
+  try{
+    if(localStorage.getItem('medlab_users_pruned_v1')) return;
+    if(_isFbAdmin()) return;
+    let users = JSON.parse(localStorage.getItem(ADMIN_KEY)||'[]'); if(!Array.isArray(users) || !users.length){ localStorage.setItem('medlab_users_pruned_v1','1'); return; }
+    const keep = {}; const s = getSession(); if(s && s.username) keep[s.username] = 1;
+    const saved = localStorage.getItem('mlab_saved_username'); if(saved) keep[saved] = 1;
+    for(let i=0;i<localStorage.length;i++){ const k = localStorage.key(i)||''; const m = k.match(/^mlab2_(.+?)_(settings|patients|requests|invoices)$/); if(m) keep[m[1]] = 1; }
+    const left = users.filter(u => u && keep[u.username]);
+    if(left.length){ _fbUsersCache = left; localStorage.setItem(ADMIN_KEY, JSON.stringify(left)); }
+    localStorage.setItem('medlab_users_pruned_v1','1');
+  }catch(e){}
+}
+/* تحقق كلمة المرور على الخادم (بعد الترحيل): نجاح الكتابة = كلمة مرور صحيحة */
+async function _serverCheckPw(uname, pass){
+  if(!_fbKeyOk(uname)) return {ok:false, wrong:true};
+  const h = await hashPassword(pass);
+  try{ if(fbAuth && !fbAuth.currentUser) await fbAuth.signInAnonymously(); }catch(e){}
+  const w = fbDb.ref('admin/chk/'+uname).set({h:h, ts:firebase.database.ServerValue.TIMESTAMP});
+  const t = new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')), 9000));
+  try{ await Promise.race([w, t]); return {ok:true, h:h}; }
+  catch(e){
+    const code = String((e && (e.code||e.message))||'');
+    if(/permission/i.test(code)) return {ok:false, wrong:true};
+    return {ok:false, net:true};
+  }
+}
+/* أدوات الأدمن: كتابة/نقل/حذف البصمات في admin/pw */
+function _pwWriteMany(map){
+  if(!(fbReady && fbDb && _isFbAdmin())) return Promise.resolve();
+  const up = {};
+  return Promise.all(Object.keys(map).map(async k => { let v = map[k]; if(v && v.length < 60) v = await hashPassword(v); if(v) up[k] = v; }))
+    .then(() => Object.keys(up).length ? fbDb.ref('admin/pw').update(up) : null)
+    .catch(e => console.error('pw write', e));
+}
+function _pwMove(oldU, newU){
+  if(!(window._pwMoved && fbReady && fbDb && _isFbAdmin()) || !oldU || !newU || oldU===newU) return Promise.resolve();
+  return fbDb.ref('admin/pw/'+oldU).once('value').then(sn => {
+    const v = sn.val(); const up = {}; up['admin/pw/'+oldU] = null; up['admin/chk/'+oldU] = null;
+    if(v) up['admin/pw/'+newU] = v;
+    return fbDb.ref().update(up);
+  }).catch(e => console.error('pw move', e));
+}
+function _pwRemove(uname){
+  if(!(fbReady && fbDb && _isFbAdmin()) || !_fbKeyOk(uname)) return;
+  const up = {}; up['admin/pw/'+uname] = null; up['admin/chk/'+uname] = null;
+  fbDb.ref().update(up).catch(()=>{});
+}
+function _loadPwMovedFlag(){
+  if(!(fbReady && fbDb)) return Promise.resolve(false);
+  return fbDb.ref('admin/pwMoved').once('value').then(sn => { window._pwMoved = sn.val() === true; return window._pwMoved; }).catch(() => false);
 }
 
 function loadUsersFromFirebase(){
   return new Promise(resolve => {
     if(!fbReady || !fbDb){ resolve(false); return; }
+    if(!_isFbAdmin()){
+      // 🔒 حاسبة مختبر: اقرأ حساب هذا المستخدم فقط
+      _pruneUsersCacheOnce();
+      const un = _usersTarget();
+      if(!_fbKeyOk(un)){ resolve(false); return; }
+      fbDb.ref('admin/users/'+un).once('value').then(snap => {
+        _mergeUserIntoCache(un, snap.val());
+        _fbUsersLoaded = true;
+        resolve(true);
+      }).catch(e => { console.warn('loadUser failed:', e); resolve(false); });
+      return;
+    }
+    _loadPwMovedFlag();
     fbDb.ref('admin/users').once('value').then(snap => {
       const raw = snap.val();
       if(raw){
@@ -29478,11 +30085,11 @@ function loadUsersFromFirebase(){
       }
       // Firebase فارغ — جرب المحلي
       const local = JSON.parse(localStorage.getItem(ADMIN_KEY)||'[]');
-      if(local.length > 0){
+      if(local.length > 0 && _isFbAdmin()){
         // ✅ المحلي فيه بيانات — استخدمه وارفعه لـ Firebase
         _fbUsersCache = local;
         const obj = {};
-        local.forEach(u => { obj[u.username] = u; });
+        local.forEach(u => { const o = Object.assign({}, u); delete o._fbNoPw; if(window._pwMoved) delete o.password; obj[u.username] = o; });
         fbDb.ref('admin/users').set(obj);
         console.log('✅ رُحّل', local.length, 'مستخدم من المحلي إلى Firebase');
       } else {
@@ -29504,9 +30111,20 @@ function loadUsersFromFirebase(){
   });
 }
 
+let _usersListenRef = null;
 function listenUsersChanges(){
   if(!fbReady || !fbDb) return;
-  fbDb.ref('admin/users').on('value', snap => {
+  if(_usersListenRef){ try{ _usersListenRef.off(); }catch(e){} _usersListenRef = null; }
+  if(!_isFbAdmin()){
+    // 🔒 حاسبة مختبر: مراقبة حساب هذا المستخدم فقط (تمديد، تعطيل، صلاحيات…)
+    const un = _usersTarget();
+    if(!_fbKeyOk(un)) return;
+    _usersListenRef = fbDb.ref('admin/users/'+un);
+    _usersListenRef.on('value', snap => { _mergeUserIntoCache(un, snap.val()); }, () => {});
+    return;
+  }
+  _usersListenRef = fbDb.ref('admin/users');
+  _usersListenRef.on('value', snap => {
     const raw = snap.val();
     if(raw){
       const users = _usersObjToArr(raw);
@@ -29683,6 +30301,7 @@ function fixLoginAccount(){
     // محاولة تحميل من Firebase
     if(navigator.onLine){
       try{
+        window._loginUname = uname;
         await loadFirebase();
         await loadUsersFromFirebase();
       }catch(e){}
@@ -29769,7 +30388,7 @@ function doLogin(){
           document.getElementById('login-screen').classList.add('hidden');
           document.getElementById('admin-panel').classList.add('show');
           listenUsersChanges();
-          return loadUsersFromFirebase().then(()=>renderAdminUsers());
+          return _loadPwMovedFlag().then(()=>loadUsersFromFirebase()).then(()=>renderAdminUsers());
         })
         .catch(()=>{
           if(btn){ btn.textContent='🔐 تسجيل الدخول'; btn.disabled=false; }
@@ -29809,16 +30428,26 @@ function doLogin(){
       if(!done){ done=true; _tryLocalCache('timeout'); }
     }, 6000);
 
+    window._loginUname = uname;
     loadFirebase().then(ok => {
       if(ok){ listenUsersChanges(); }
       return loadUsersFromFirebase();
     }).then(async () => {
       if(done) return; done=true; clearTimeout(timer);
-      if(btn){ btn.textContent='🔐 تسجيل الدخول'; btn.disabled=false; }
       const users = getAdminUsers();
       const user  = users.find(u => u.username===uname);
-      if(!user){ err.textContent='❌ اسم المستخدم "'+uname+'" غير موجود — تحقق من الكتابة أو تواصل مع المدير'; err.style.display='block'; return; }
-      const passOk = await checkPassword(pass, user.password);
+      if(!user){ if(btn){ btn.textContent='🔐 تسجيل الدخول'; btn.disabled=false; } err.textContent='❌ اسم المستخدم "'+uname+'" غير موجود — تحقق من الكتابة أو تواصل مع المدير'; err.style.display='block'; return; }
+      let passOk;
+      if(user._fbNoPw || !user.password){
+        // 🔒 بعد الترحيل لا تُرسل البصمة للحاسبات — التحقق على الخادم
+        const r = await _serverCheckPw(uname, pass);
+        if(r.net){ _tryLocalCache('error'); return; }
+        passOk = r.ok;
+        if(r.ok) _cacheLocalPw(uname, r.h);
+      } else {
+        passOk = await checkPassword(pass, user.password);
+      }
+      if(btn){ btn.textContent='🔐 تسجيل الدخول'; btn.disabled=false; }
       if(!passOk){ err.textContent='❌ كلمة المرور غير صحيحة — جرّب مرة أخرى أو اضغط "إصلاح الحساب"'; err.style.display='block'; return; }
       // ── إذا كلمة المرور نص صريح قديم — رحّلها لـ hash تلقائياً ──
       if(user.password && user.password.length < 60){
@@ -29847,6 +30476,7 @@ function _checkRealInternet(){
 
 // دالة موحدة لإكمال تسجيل الدخول — فورية لا تنتظر Firebase
 function _finalizeLogin(uname, user){
+  window._loginUname = '';
   // ── تحقق من التعطيل أولاً ──────────────────────────────
   if(user && user.disabled){
     document.getElementById('login-screen').classList.add('hidden');
@@ -30039,6 +30669,7 @@ function adminDeleteUser(uname){
     fbDb.ref('admin/users/'+uname).remove();
     fbDb.ref('dir/'+uname).remove();
     fbDb.ref('sessions/'+uname).remove();
+    _pwRemove(uname);
   }
   const dir = getLabDirectory(); delete dir[uname]; saveLabDirectory(dir);
   renderAdminUsers();
@@ -30142,8 +30773,9 @@ function forceSyncToFirebase(){
   el.textContent = '⏳ جاري الرفع...\n';
   loadFirebase().then(ok => {
     if(!ok){ el.textContent += '❌ تعذر الاتصال بـ Firebase'; return; }
-    const obj = {};
-    local.forEach(u => { obj[u.username] = u; });
+    const obj = {}, _pw = {};
+    local.forEach(u => { const o = Object.assign({}, u); delete o._fbNoPw; if(window._pwMoved){ if(o.password) _pw[o.username] = o.password; delete o.password; } obj[u.username] = o; });
+    if(Object.keys(_pw).length) _pwWriteMany(_pw);
     fbDb.ref('admin/users').set(obj).then(() => {
       _fbUsersCache = local;
       el.textContent = '✅ تم رفع ' + local.length + ' مستخدم إلى Firebase!\n';
@@ -30393,6 +31025,7 @@ async function saveAdminEditUser(oldUname){
     if(newUname && newUname !== oldUname){
       fbDb.ref('sessions/'+newUname).remove();
       fbDb.ref('admin/users/'+oldUname).remove();
+      if(!newPass) _pwMove(oldUname, newUname); else _pwRemove(oldUname);
     }
   }
   // مسح الـ tokens المحلية لإجبار إعادة تسجيل الدخول
@@ -49188,6 +49821,32 @@ function _gdDeobfuscate(b64){
 function _gdSavePassword(pw){ try{ localStorage.setItem(_gdPassKey(), _gdObfuscate(pw)); }catch(e){} }
 function _gdGetPassword(){ var v = localStorage.getItem(_gdPassKey()); return v ? _gdDeobfuscate(v) : ''; }
 function _gdHasElectron(){ return !!(window.IS_ELECTRON && window.electronAPI && window.electronAPI.gdriveStatus); }
+function _gdEsc(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+// ترجمة أخطاء العملية الرئيسية إلى رسائل واضحة
+function _gdErrText(err){
+  var m=String(err||'خطأ');
+  if(m==='not_linked') return 'الحساب غير مربوط';
+  if(m==='no_password') return 'لم تُحدَّد كلمة مرور التشفير';
+  if(m==='busy') return 'توجد نسخة قيد الرفع الآن — انتظر حتى تكتمل';
+  if(m==='link_expired') return 'انتهت صلاحية الربط من جهة Google — أعد ربط الحساب';
+  if(/net_timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|ENETUNREACH|socket hang up/i.test(m)) return 'تعذّر الاتصال بـ Google (الإنترنت ضعيف أو مقطوع) — أعد المحاولة لاحقاً';
+  if(m==='upload_session_lost') return 'انقطع الرفع عدة مرات — أعد المحاولة';
+  return m;
+}
+// شريط تقدّم الرفع (يعمل إن كان preload يدعم gdrive:progress)
+function _gdProgUI(p){
+  var box=document.getElementById('gdrive-linked-box'); if(!box) return;
+  var el=document.getElementById('gdrive-prog');
+  if(!el){ el=document.createElement('div'); el.id='gdrive-prog'; el.style.cssText='font-size:12px;margin:10px 0;padding:10px 14px;border-radius:8px;background:rgba(66,133,244,0.08);border:1px solid rgba(66,133,244,0.3);display:none';
+    var ref=document.getElementById('gdrive-last-info'); if(ref&&ref.parentNode) ref.parentNode.insertBefore(el, ref.nextSibling); else box.appendChild(el); }
+  if(!p){ el.style.display='none'; return; }
+  var pct=(p.total?Math.round((p.sent||0)/p.total*100):0), mb=function(b){ return (b/1048576).toFixed(2)+' MB'; };
+  var txt = p.phase==='build'?'⏳ تجهيز بيانات النسخة…' : p.phase==='compress'?'🗜️ ضغط النسخة وتشفيرها…' : p.phase==='upload'?('☁️ جارٍ الرفع… '+pct+'% ('+mb(p.sent||0)+' من '+mb(p.total||0)+')') : p.phase==='done'?'✅ اكتمل الرفع' : p.phase==='download'?'⬇️ جارٍ تنزيل النسخة…' : p.phase==='error'?('❌ '+_gdErrText(p.error)):'';
+  el.style.display=txt?'block':'none';
+  el.innerHTML=txt+(p.phase==='upload'?'<div style="height:6px;background:rgba(255,255,255,0.08);border-radius:4px;margin-top:6px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:#4285f4;transition:width .2s"></div></div>':'');
+  if(p.phase==='done'||p.phase==='error'){ clearTimeout(window._gdProgT); window._gdProgT=setTimeout(function(){ _gdProgUI(null); }, 6000); }
+}
+(function(){ try{ if(window.electronAPI && typeof window.electronAPI.onGdriveProgress==='function') window.electronAPI.onGdriveProgress(_gdProgUI); }catch(e){} })();
 
 // ════════════════════════════════════════════════════════════════════
 //  تهيئة القسم + تحديث الحالة
@@ -49247,12 +49906,13 @@ async function refreshGDriveStatus(){
       }
       _gdRefreshLastBackupInfo();
       _gdStartAutoScheduler();
-    } else if(savedEmail){
+    } else if(savedEmail || (st && st.reason)){
       // مربوط سابقاً لكن العملية الرئيسية لا تُرجع الرمز ⟵ لا نُخفي شيئاً بصمت
       if(linkBtn)   linkBtn.style.display   = 'block';
       if(linkedBox) linkedBox.style.display = 'none';
       if(statusEl)  statusEl.innerHTML =
-        '⚠️ انقطع الربط بحساب <b>'+savedEmail+'</b> — لم تُستعَد صلاحية الوصول عند التشغيل.'+
+        '⚠️ انقطع الربط'+(savedEmail?' بحساب <b>'+_gdEsc(savedEmail)+'</b>':'')+' — '+
+        (st && st.reason ? _gdEsc(st.reason) : 'لم تُستعَد صلاحية الوصول عند التشغيل.')+
         '<br>اضغط «ربط Google Drive» لإعادة التفعيل.';
     } else {
       if(linkBtn)   linkBtn.style.display   = 'block';
@@ -49419,8 +50079,16 @@ async function gdriveBackupNow(silent){
     if(!silent) showNotif('غير متاح','يعمل في نسخة سطح المكتب فقط','warning');
     return false;
   }
+  // قفل الواجهة: لا تُطلق نسخة ثانية (يدوية/تلقائية) أثناء رفع جارٍ
+  if(window._gdUiBusy){ if(!silent) showNotif('قيد التنفيذ','⏳ توجد نسخة قيد الرفع الآن — انتظر حتى تكتمل','info'); return false; }
+  window._gdUiBusy = true;
+  try{ return await _gdBackupNowInner(silent); }
+  finally{ window._gdUiBusy = false; }
+}
+async function _gdBackupNowInner(silent){
   // تأكد من الربط
   var st = await window.electronAPI.gdriveStatus();
+  if(st && st.busy){ if(!silent) showNotif('قيد التنفيذ','⏳ توجد نسخة قيد الرفع الآن — انتظر حتى تكتمل','info'); return false; }
   if(!st || !st.linked){
     if(!silent) showNotif('غير مرتبط','اربط حساب Google Drive أولاً','warning');
     return false;
@@ -49434,11 +50102,13 @@ async function gdriveBackupNow(silent){
   }
 
   if(!silent) showNotif('جارٍ النسخ','⏳ يتم بناء النسخة ورفعها إلى Google Drive...','info');
+  if(!silent) _gdProgUI({phase:'build'});
 
   try{
     // ابنِ النسخة الكاملة عبر دالة تطبيقك الموجودة
     var backupObj = await _fsaBuildFullBackup();
-    var payload = JSON.stringify(backupObj);
+    var _gdLastBuilt = backupObj;
+    var payload = null;
     var meta = {
       version:   (backupObj._version || '1.0.0'),
       patients:  (backupObj._stats && backupObj._stats.patients)  || 0,
@@ -49447,31 +50117,34 @@ async function gdriveBackupNow(silent){
       userPrefix:(backupObj._userPrefix || DB._pfx()),
     };
 
-    var res = await window.electronAPI.gdriveBackup({
-      payload:  payload,
+    payload = null; backupObj = null;
+    // مهلة أمان شاملة: الواجهة لا تبقى «صافنة» مهما حدث (العملية الرئيسية لها مهلها الخاصة أيضاً)
+    var _gdTO = new Promise(function(r){ setTimeout(function(){ r({ok:false, error:'استغرق الرفع وقتاً طويلاً جداً — تحقّق من الإنترنت وأعد المحاولة'}); }, 45*60*1000); });
+    var res = await Promise.race([window.electronAPI.gdriveBackup({
+      payload:  JSON.stringify(_gdLastBuilt),
       password: pw,
       meta:     meta,
       fileName: _gdFileName(),
-    });
+    }), _gdTO]);
+    _gdLastBuilt = null;
 
     if(res && res.ok){
       localStorage.setItem(_gdLastKey(), new Date().toISOString());
       if(!silent){
         var sizeMB = (res.size/1024/1024).toFixed(2);
-        showNotif('تم النسخ','✅ رُفعت النسخة إلى Google Drive بنجاح ('+sizeMB+' MB)','success');
+        showNotif('تم النسخ','✅ رُفعت النسخة إلى Google Drive بنجاح ('+sizeMB+' MB'+(res.rawSize?(' بعد الضغط من '+(res.rawSize/1048576).toFixed(1)+' MB'):'')+')','success');
       }
       _gdRefreshLastBackupInfo();
       _gdUpdateAutoStatus();
       return true;
     } else {
-      var err = (res && res.error) || 'خطأ';
-      if(err === 'not_linked') err = 'الحساب غير مربوط';
-      if(err === 'no_password') err = 'لم تُحدَّد كلمة مرور التشفير';
-      if(!silent) showNotif('فشل النسخ','❌ '+err,'error');
+      var err = _gdErrText((res && res.error) || 'خطأ');
+      if(!silent){ showNotif('فشل النسخ','❌ '+err,'error'); _gdProgUI({phase:'error', error:(res&&res.error)||'خطأ'}); }
+      if(res && res.error==='link_expired') refreshGDriveStatus();
       return false;
     }
   }catch(e){
-    if(!silent) showNotif('فشل النسخ','❌ '+e.message,'error');
+    if(!silent){ showNotif('فشل النسخ','❌ '+_gdErrText(e.message),'error'); _gdProgUI(null); }
     return false;
   }
 }
@@ -49524,6 +50197,7 @@ async function _gdDoRestore(pw){
       if(err === 'no_backup')     err = 'لا توجد نسخة محفوظة على هذا الحساب';
       if(err === 'wrong_password')err = 'كلمة المرور غير صحيحة — تعذّر فكّ التشفير';
       if(err === 'not_linked')    err = 'الحساب غير مربوط';
+      err = _gdErrText(err);
       showNotif('فشل الاسترجاع','❌ '+err,'error');
       return;
     }
@@ -50673,12 +51347,13 @@ async function saveChangePw(){
 
   const hashedPw = await hashPassword(newPw);
   users[idx].password = hashedPw;
+  if(window._pwMoved && fbReady && fbDb && _isFbAdmin()){ fbDb.ref('admin/pw/'+_chpwTargetUser).set(hashedPw); }
   saveAdminUsers(users);
 
   // تسجيل الخروج من جميع الأجهزة
   if(fbReady && fbDb){
     fbDb.ref('sessions/'+_chpwTargetUser).remove();
-    fbDb.ref('admin/users/'+_chpwTargetUser+'/password').set(hashedPw);
+    if(!window._pwMoved) fbDb.ref('admin/users/'+_chpwTargetUser+'/password').set(hashedPw);
   }
 
   // مسح token المحلي
@@ -64003,6 +64678,623 @@ if(typeof module!=='undefined') module.exports=GLC;
 
 </script>
 
+<script>
+/* ═══════════ 📥 GreenLab Tests Import v1 — استيراد قاعدة التحاليل من Green Lab System ═══════════
+   يستورد من ملف Access (accdb/zip) جدول التحاليل test_tbl:
+   الوحدة · القيم الطبيعية (ذكور/إناث/أعمار) · المجموعة الأساسية والفرعية · السعر
+   القواعد:
+   • التحليل الموجود في ميدلاب وغير الموجود في الملف ⇐ يبقى كما هو.
+   • التحليل المطابق (نفسه أو بتسمية مختلفة) ⇐ تُحدَّث بياناته من الملف في نفس السجل
+     (نفس المعرّف والكود ⇒ لا تنقطع النتائج السابقة ولا ربط الأجهزة).
+   • التحليل غير الموجود ⇐ يُضاف مرة واحدة فقط (لا تكرار).
+   • المكوّنات الفرعية لفحص موجود (نقاط GTT، أجزاء الرحلان، مستضدات Widal…) ⇐ تُتجاوز.
+   • CBC والفحوص الخاصة (إدرار/خروج/منوي/زرع) والتحاليل المحسوبة ⇐ السعر فقط.
+   يعتمد على GLA (قارئ Access) و GLM (مطابقة الأسماء) من وحدة استيراد Green Lab.
+   لا يُكتب أي شيء قبل ضغط «بدء الاستيراد»، ويُحفظ قبلها نسخة للتراجع.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+var GLT = (function(){
+  'use strict';
+
+  /* مطابقة مُراجَعة يدوياً لقاعدة Green Lab القياسية (614 تحليل):
+     tcode: [الاسم المتوقَّع, 'u' تحديث | 's' تجاوز, الهدف أو سبب التجاوز, الهدف]
+     تُستعمل فقط إذا تطابق اسم التحليل في الملف مع الاسم المتوقَّع حرفياً،
+     وإلا تُستعمل المطابقة الآلية (GLM). */
+  var CUR = {1:["urine", "u", "gue001"],2:["stool", "u", "gse001"],3:["cbc", "u", "h001"],4:["fbs", "u", "c001"],5:["2h.ppg", "u", "c004"],6:["rbs", "u", "c002"],7:["esr", "u", "h016"],8:["b. urea", "u", "c012"],9:["s.creatinine", "u", "c013"],10:["uric acid", "u", "c015"],11:["cholesterol", "u", "c006"],12:["triglycerides", "u", "c007"],13:["hdl-cholesterol", "u", "c008"],14:["ldl-cholesterol", "u", "c009"],15:["vldl-cholesterol", "u", "c010"],16:["sgpt (alt)", "u", "c016"],17:["sgot (ast)", "u", "c017"],18:["ggt", "u", "c019"],19:["alk.phosphatase", "u", "c018"],20:["bilirubin (total)", "u", "c020"],21:["bilirubin (direct)", "u", "c021"],22:["bilirubin (indirect)", "u", "c022"],23:["albumin", "u", "c024"],24:["globulin", "u", "c025"],25:["albumin / globulin ratio", "u", "calc011"],26:["total protein", "u", "c023"],27:["calcium (total)", "u", "c029"],28:["calcium (ionized)", "u", "bc080"],29:["sodium ( na+ )", "u", "c026"],30:["potassium ( k+ )", "u", "c027"],31:["phosphorus", "u", "c031"],32:["s.chloride (cl)", "u", "c028"],33:["hgb", "u", "h002"],34:["o'solivan test", "n"],35:["hba1c", "u", "c003"],36:["cpk", "u", "c037"],37:["ck-mb", "u", "c038"],38:["ldh", "u", "c036"],39:["troponin i stat", "u", "c039"],40:["troponin t", "u", "new005"],41:["fsh", "u", "hr014"],42:["lh", "u", "hr013"],43:["progesterone", "u", "hr018"],44:["prolactin", "u", "hr012"],45:["testosterone (total)", "u", "hr015"],47:["parathormone (pth)", "u", "hr021"],49:["cortisol (am)", "u", "sp003"],50:["cortisol (pm)", "u", "sp004"],51:["estradiol (e2)", "u", "hr017"],52:["growth hormone", "u", "hr010"],53:["dhea", "u", "gls127"],55:["hgb indices", "s", "P", "h007"],56:["wbcs and differential", "s", "P", "h005"],57:["17-oh progestrone", "u", "hx004"],58:["afp", "u", "tm004"],59:["cea", "u", "tm003"],60:["ca15.3", "u", "tm007"],61:["ca125", "u", "tm005"],62:["ca19.9", "u", "tm006"],63:["psa (total )", "u", "tm001"],65:["magnesium", "u", "c030"],66:["drugs of abuse", "u", "gls006"],67:["blood grouping", "u", "h037"],68:["blood gases", "s", "P", "abg001"],69:["ph", "s", "B", "abg001"],70:["pao2", "s", "B", "abg003"],71:["paco2", "s", "B", "abg002"],72:["o2 saturation", "s", "B", "abg006"],73:["hco3", "s", "B", "abg004"],74:["so2", "s", "B", "abg006"],75:["base excess", "s", "B", "abg005"],76:["cross matching", "u", "h039"],77:["glucose tolerance curve", "u", "calc_gtt"],78:["gtt - fbg", "s", "P", ""],79:["ggt - 30 min", "s", "P", ""],80:["ggt - 60 min", "s", "P", ""],81:["ggt - 90 min", "s", "P", ""],82:["ggt - 120 min", "s", "P", ""],83:["ggt - 150 min", "s", "P", ""],84:["ggt - 180 min", "s", "P", ""],85:["crabamazepine (tegretol)", "u", "tdm005"],86:["digoxin (lanoxin)", "u", "tdm001"],87:["phenytoin (epanutin)", "u", "tdm004"],88:["bleeding time (bt)", "u", "h030"],89:["clotting time (ct)", "u", "h031"],92:["abo", "u", "h037"],93:["rh", "u", "h038"],95:["ferritin", "u", "h023"],96:["transferrin", "u", "c051"],97:["tibc", "u", "h024"],98:["hct", "u", "h003"],99:["wbcs", "u", "h005"],100:["platelets (plts)", "u", "h006"],101:["reticulocytes", "u", "h017"],102:["g6pd", "u", "h036"],103:["fibrinogen", "u", "h021"],104:["d-dimer", "u", "h022"],105:["direct coomb's test", "u", "h040"],106:["indirect coomb's test", "u", "h041"],107:["albumin / creatinine ratio", "u", "calc009"],108:["total ige", "u", "im010"],109:["herpes simplex i igm", "u", "gls189"],110:["herpes simplex ii igm", "u", "gls190"],111:["herpes simplex i igg", "u", "inf018"],112:["herpes simplex ii igg", "u", "inf019"],113:["cmv igm", "u", "add012"],114:["cmv igg", "u", "add011"],115:["rubella igm", "u", "add014"],116:["rubella igg", "u", "add013"],117:["toxoplasma igm", "u", "add010"],118:["toxoplasma igg", "u", "add009"],119:["esr (1st hr)", "u", "h016"],120:["esr (2nd hr)", "s", "P", "h016"],121:["tramadole", "u", "gls007"],122:["mariguana", "u", "gls008"],123:["cannabinoids", "u", "gls008"],124:["opitates", "u", "gls009"],125:["cocaine", "u", "gls010"],126:["barbiturates", "u", "gls011"],127:["benzodiazipines", "u", "gls012"],128:["amphetamine", "u", "gls013"],129:["tricyclic antidepressants (tca)", "u", "gls014"],130:["phencyclidine (pcp)", "u", "gls015"],131:["hb electrophoresis", "u", "h035"],132:["hb ( a1 )", "s", "P", "h035"],133:["hb ( a2 )", "s", "P", "h035"],134:["hb ( f )", "s", "P", "h035"],135:["hb ( c )", "s", "P", "h035"],136:["hb ( s )", "s", "P", "h035"],137:["protein electrophoresis", "u", "l2l036"],138:["albumin (pro.e)", "s", "P", "l2l036"],139:["alpha-1 globulin (pro.e)", "s", "P", "l2l036"],140:["alpha-2 globulin (pro.e)", "s", "P", "l2l036"],141:["beta globulin (pro.e)", "s", "P", "l2l036"],142:["gamma globulin (pro.e)", "s", "P", "l2l036"],143:["prothrombin time", "u", "h018"],145:["pt conc", "s", "P", "h018"],148:["pt control", "s", "P", "h018"],149:["isi", "s", "P", "h018"],150:["widal test", "u", "l2l081"],151:["typhi (h)", "s", "P", "l2l081"],152:["typhi (o)", "s", "P", "l2l081"],153:["paratyphi (a)", "s", "P", "l2l081"],154:["paratyphi (b)", "s", "P", "l2l081"],155:["brucella test", "u", "inf008"],156:["b.abortus", "s", "P", "inf008"],157:["b.melitenesis", "s", "P", "inf008"],158:["weil felix test", "u", "gls200"],159:["proteus ox19", "s", "P", ""],160:["proteus ox2", "s", "P", ""],161:["proteus oxk", "s", "P", ""],162:["glucose in urine (fbg)", "u", "u004"],163:["acetone in urine (fbg)", "u", "gls002"],164:["glucose in urine (ppbg)", "u", "u004"],165:["acetone in urine (ppbg)", "u", "gls002"],166:["glucose in urine (rbg)", "u", "u004"],167:["acetone in urine (rbg)", "u", "gls002"],168:["h.pylori ag stool", "u", "inf016"],169:["h.pylori igm", "u", "gls187"],170:["h.pylori igg", "u", "inf020"],171:["schistosomiasis ag", "u", "gls186"],172:["schistosomiasis ab titre (iha)", "u", "inf055"],173:["fasciolasis ab titre", "u", "gls177"],174:["aso titer", "u", "im011"],175:["crp", "u", "c032"],176:["rf", "u", "im003"],177:["rose waaler", "u", "im003"],178:["anti-dna (d.s)", "u", "im013"],179:["monospot (infectious mononucleosis)", "u", "inf023"],180:["rpr/vdrl", "u", "inf006"],182:["ama", "u", "gls130"],183:["asma", "u", "l2l029"],184:["lkm ab", "u", "l2l027"],185:["anti-sperm ab (igm)", "u", "gls164"],186:["anti-sperm ab (igg)", "u", "gls163"],187:["anti-phospholipid igm", "u", "imx011"],188:["anti-phospholipid igg", "u", "imx012"],189:["hbs ag", "u", "inf001"],190:["hbs ab", "u", "inf002"],191:["hbc ag", "u", "inf003"],192:["hbe ag", "u", "inf_hbe_ag"],193:["hbe ab", "u", "inf_hbe_ab"],194:["hiv ab", "u", "inf005"],195:["hav - igm", "u", "vr037"],196:["hcv - ab", "u", "inf004"],197:["pcr (hcv-rna) quantitative", "u", "pcr002"],198:["ebv - igg", "u", "vr010"],199:["ebv - igm", "u", "vr011"],200:["tb - ab", "u", "gls188"],201:["pregnancy (urine)", "u", "sp007c"],202:["pregnancy (serum)", "u", "sp007b"],203:["pathology ( small specimen )", "u", "l2l084"],204:["pathology ( medium specimen )", "u", "l2l083"],205:["pathology ( large specimen )", "u", "l2l082"],206:["tuberculin test", "u", "gls168"],207:["urine specific gravity", "s", "P", "gue001"],208:["ceruloplasmin", "u", "c049"],209:["osmotic fragility", "u", "h042"],210:["sfa", "u", "semen001"],211:["urine culture", "u", "u008"],212:["stool culture", "u", "mb002"],213:["pus culture", "u", "gls201"],214:["sputum culture", "u", "mb006"],215:["blood culture", "u", "mb001"],216:["breast discharge culture", "u", "gls202"],217:["eye culture", "u", "gls203"],218:["ear culture", "u", "l2l049"],219:["pus from wond culture", "u", "gls201"],220:["nasal swab culture", "u", "l2l050"],221:["throat swab culture", "u", "l2l051"],222:["prostatic secreation culture culture", "u", "gls204"],223:["vaginal swab culture", "u", "l2l052"],224:["urethral swab culture", "u", "l2l053"],225:["gum discharge culture", "u", "gls205"],226:["synovial fluid culture", "u", "l2l055"],227:["semen culture", "u", "l2l054"],228:["sputum for acid fast bacelli", "u", "mb005"],229:["lupus anticoagulant", "u", "h054"],230:["anti-cardiolipin igm", "u", "imx016"],231:["anti-cardiolipin igg", "u", "imx015"],232:["amyloid a", "u", "gls156"],233:["anti-mullerian hormone (amh)", "u", "hr025"],234:["tpha", "u", "add002"],235:["bun (blood urea nitrogin)", "u", "c011"],236:["ammonia", "u", "sp008"],237:["anti-hcv igm", "u", "gls197"],238:["insulin ab", "u", "gls157"],239:["t-uptake", "u", "gls129"],240:["c-peptide", "u", "hr024"],241:["gastrin", "u", "hr032"],242:["anti-keratin ab (aka)", "u", "gls158"],243:["anti-ccp", "u", "im004"],244:["calprotectin (stool)", "u", "l2l092"],245:["calprotectin (plasma)", "u", "gls159"],246:["schistosomiasis ab (elisa)", "u", "inf055"],248:["total t3", "u", "hr005"],249:["total t4", "u", "hr004"],250:["free t3", "u", "hr003"],251:["free t4", "u", "hr002"],252:["tsh", "u", "hr001"],253:["anti-thyroglobulin-ab", "u", "hr007"],254:["anti-peroxidase-ab", "u", "hr006"],255:["microalbuminurea", "u", "u006"],256:["vma", "u", "hr040"],257:["beta-hcg quantitative", "u", "tm022"],258:["anti-ssa (ro)", "u", "im015"],259:["anti-ssa (ro)", "u", "im015"],260:["lactoferrin", "u", "gls161"],261:["homa-ir", "u", "calc001"],262:["17-keto-steroids", "u", "gls125"],263:["total lipids", "u", "gls072"],264:["cholesterol / hdl", "u", "calc006"],265:["cd4 / cd8", "u", "gls019"],266:["m2pk (stool)", "u", "gls111"],267:["m2pk (edta)", "u", "gls112"],268:["fructoseamine", "u", "gls003"],269:["5-nucleotidase", "u", "gls075"],271:["lipase", "u", "c035"],272:["pancreatic amylase", "u", "gls093"],273:["fructose in semen", "u", "gls207"],275:["anti-sperm ab (iga)", "u", "gls162"],276:["anti dna (le cells)", "u", "gls165"],277:["varicella (chickenpox) igg", "u", "vr016"],278:["varicella (chickenpox) igm", "u", "vr017"],279:["zinc", "u", "v010"],280:["fecal occult blood", "u", "s002"],281:["anti microsomal antibody", "u", "hr006"],282:["anti thrombin iii", "u", "h049"],283:["anti diuretic hormone", "u", "hr031"],284:["anti centromere antibodies", "u", "gls166"],285:["anti-rnp", "u", "gls167"],286:["anti (scl -70)", "u", "im017"],287:["anti smooth muscle antibody", "u", "l2l029"],288:["anti reticulin", "u", "gls146"],289:["anti- jo1", "u", "im018"],290:["anti parietal cell antibody (apa)", "u", "l2l023"],291:["anti-gliadin iga", "u", "imx013"],292:["anti-gliadin igg", "u", "imx014"],293:["ast/alt ratio", "u", "gls074"],294:["ambeic antibody", "u", "gls175"],295:["b2 microglobulin (serum)", "u", "tm020"],296:["b2 microglobulin (urine)", "u", "gls095"],297:["biotin", "u", "vm024"],298:["cd2", "u", "gls020"],299:["cd3", "u", "gls021"],300:["cd4", "u", "gls022"],301:["cd5", "u", "gls023"],302:["cd7", "u", "gls024"],303:["cd8", "u", "gls025"],304:["cd10", "u", "gls026"],305:["cd13", "u", "gls027"],306:["cd14", "u", "gls028"],307:["cd15", "u", "gls029"],308:["cd16", "u", "gls030"],309:["cd19", "u", "gls031"],310:["cd20", "u", "gls032"],311:["cd22", "u", "gls033"],312:["cd23", "u", "gls034"],313:["cd30", "u", "gls035"],314:["cd33", "u", "gls036"],315:["cd34", "u", "gls037"],316:["cd38", "u", "gls038"],317:["cd41a", "u", "gls039"],318:["cd45", "u", "gls040"],319:["cd55", "u", "gls041"],320:["cd56", "u", "gls042"],321:["cd59", "u", "gls043"],322:["cd61", "u", "gls044"],323:["cd62b", "u", "gls045"],324:["cd64", "u", "gls046"],325:["cd79a", "u", "gls047"],326:["cd79b", "u", "gls048"],327:["cd103", "u", "gls049"],328:["cd117", "u", "gls050"],329:["cd138", "u", "gls051"],330:["fmc-7", "u", "gls052"],331:["glycophorin a", "u", "gls053"],332:["hla-dr", "u", "gls054"],333:["igm", "u", "gls055"],334:["igg", "u", "gls056"],335:["kappa", "u", "gls057"],336:["lambda", "u", "gls058"],337:["mpo", "u", "gls059"],338:["zap-70", "u", "gls060"],339:["tdt", "u", "gls061"],340:["creatinine clearance", "u", "gls001"],341:["serum creatinine (creat.c)", "s", "P", "c013"],342:["urine creatinine (creat.c)", "s", "P", "u003"],343:["urine volume (creat.c)", "u", "gls071"],344:["creatinine clearance (creat.c)", "u", "gls001"],345:["pcr for factor v (leiden gene mutation)", "u", "h052"],346:["pcr for (mthfr)", "u", "l2l068"],347:["bilirubin in urine", "s", "P", "gue001"],348:["hdv-ag", "u", "gls198"],349:["pcr for cmv", "u", "pcr004"],350:["pcr for ebv", "u", "pcr005"],351:["pcr for alpha-globin gene mutation", "u", "gls076"],352:["pcr for beta-globin gene mutation", "u", "gls077"],353:["pcr for chromosome y micro-deletion", "u", "gls078"],354:["pcr for (cftr)", "u", "l2l061"],355:["pcr for (fmf)", "u", "l2l062"],356:["pcr for prothrombin gene mutation", "u", "h053"],357:["pcr (hbv-dna) quantitative", "u", "pcr001"],358:["pcr for (21-b hydroxylase)", "u", "gls079"],359:["pcr for (tpmt)", "u", "gls080"],360:["pcr for cytochrome (cyp2c19)", "u", "gls081"],361:["pcr for cytochrome (cyp2d6)", "u", "gls082"],362:["pcr for hla-b27", "u", "l2l063"],363:["pcr for hla-b5", "u", "gls083"],364:["pcr for hla-b51", "u", "l2l064"],365:["pcr for hla-b57", "u", "gls084"],366:["pcr for hla-dq2 / dq8", "u", "l2l066"],367:["pcr for jak ii (v617f)gene mutation quantitative", "u", "gls085"],368:["pcr for pmrara", "u", "gls086"],369:["pcr for toxoplasma gondii", "u", "gls087"],370:["nk cells", "u", "gls062"],371:["androstenedione", "u", "hr020"],372:["dht", "u", "gls128"],373:["estriol (e3)", "u", "hx003"],374:["inhibin a", "u", "tm207"],375:["inhibin b", "u", "hr045"],376:["5-hiaa", "u", "gls103"],377:["acid phosphatase", "u", "gls104"],378:["afp-l3", "u", "gls105"],379:["ca 242", "u", "gls106"],380:["ca 72.4", "u", "tm008"],381:["ca - 50", "u", "tmx010"],382:["calcitonin", "u", "hr029"],383:["chromogranin a", "u", "tm024"],384:["cyfra 21", "u", "tm015"],385:["nmp-22", "u", "gls107"],386:["nse (neuron specific enulase)", "u", "tm010"],387:["pro-grp", "u", "gls108"],388:["pivka ii (protein-induced vitamin k antagonist ii)", "u", "tm014"],389:["prostatic acid phosphatase (mass)", "u", "gls109"],390:["scc ag (squamous cell carcinoma antigen)", "u", "tm011"],391:["thyroglobulin", "u", "tm018"],392:["acetylcholine receptor ab", "u", "l2l013"],393:["anti -ama m2", "u", "l2l028"],394:["anti- dfs-70", "u", "gls131"],395:["anti-myeloperoxidase", "u", "gls132"],396:["anti-proteinase-3", "u", "gls133"],397:["anti-asialoglycoprotein receptor ( asgpr)( igg)", "u", "gls134"],398:["anti-intrinsic factor (ab) (igg)", "u", "gls135"],399:["anti-saccharomyces cerevisiae ab (asca-iga)", "u", "gls136"],400:["anti-saccharomyces cerevisiae ab (asca-igg)", "u", "gls137"],401:["anti-canalicular ab", "u", "gls138"],402:["anti-desmoglein-1 igg", "u", "gls139"],403:["anti-desmoglein-3 igg", "u", "gls140"],404:["anti- dgp", "u", "gls141"],405:["anti-gbm", "u", "im020"],406:["anti-gad", "u", "l2l021"],407:["anti-histones", "u", "gls142"],408:["anti-islet cell ab (anti ica)", "u", "gls143"],409:["anti-mcv", "u", "gls144"],410:["anti-neuronal-ab", "u", "l2l031"],411:["anti-perinuclear factor (apf)", "u", "gls145"],412:["anti-reticulin ab", "u", "gls146"],413:["anti-ribosomal p protein", "u", "gls147"],414:["anti-smith (anti-sm)", "u", "im014"],415:["anti-striated muscle antibodies", "u", "l2l024"],416:["anti-topo-i/scl-70", "u", "im017"],417:["b2-glycoprotein igg", "u", "l2l018"],418:["b2-glycoprotein igm", "u", "l2l019"],419:["casein igg", "u", "gls148"],420:["c-reactive protein (nephlometric quantitative)", "u", "c032"],421:["endomysial ab. (ema)", "u", "l2l025"],422:["gluten igg", "u", "gls149"],423:["lca-ab", "u", "gls150"],424:["ovary-ab", "u", "gls151"],425:["rheumatoid factor (nephlometric quantitative)", "u", "im003"],426:["thyroid anti-microsomal ab", "u", "hr006"],429:["valproic acid (depakene )", "u", "tdm002"],430:["lithium", "u", "tdm003"],431:["methotrexate", "u", "gls100"],432:["sirolimus (rapamune)", "u", "gls101"],433:["cyclosporin (sandimmune)", "u", "tdm006"],434:["tacrolimus", "u", "tdm007"],435:["vancomycin", "u", "tdm008"],436:["theophylline", "u", "gls102"],437:["activated protein-c resistance", "u", "gls191"],438:["alpha-1-antitrypsin (serum)", "u", "l2l035"],439:["alpha-1-antitrypsin (stool)", "u", "gls192"],440:["anti-thrombin iii", "u", "h049"],441:["bence jonce protein", "u", "l2l012"],442:["c1-esterase inhibitor", "u", "gls193"],443:["cold agglutinins", "u", "gls194"],444:["complement 3 (c3)", "u", "im005"],445:["complement 4 (c4)", "u", "im006"],446:["complement haemolytic dose – 50 (ch50)", "u", "gls195"],447:["cryoglobulin", "u", "gls196"],448:["erythropoietin (epo)", "u", "hr030"],449:["factor ii", "u", "gls115"],450:["factor v", "u", "gls116"],451:["factor vii", "u", "gls117"],452:["factor viii", "u", "h050"],453:["factor ix", "u", "h051"],454:["factor x", "u", "gls118"],455:["factor xi", "u", "gls119"],456:["factor xii", "u", "gls120"],457:["factor xiii", "u", "gls121"],458:["factor viii inhibitor", "u", "gls122"],459:["folic acid (serum)", "u", "v003"],460:["folic acid (rbcs)", "u", "h045"],461:["free protein s", "u", "gls096"],462:["ham's test", "u", "gls097"],463:["haptoglobin", "u", "h028"],464:["homocysteine", "u", "sp001"],465:["immunoglobulin-iga", "u", "im008"],466:["immunoglobulin-igg", "u", "im007"],467:["immunoglobulin-igg1", "u", "gls152"],468:["immunoglobulin-igg2", "u", "gls153"],469:["immunoglobulin-igg3", "u", "gls154"],470:["immunoglobulin-igg4", "u", "gls155"],471:["immunoglobulin-igm", "u", "im009"],472:["platelet function", "u", "gls113"],473:["protein c", "u", "h047"],474:["protein s", "u", "h048"],475:["phenyl ketonuria (pku)", "u", "gls098"],476:["sickling test", "u", "h034"],477:["soluble transferrin receptor", "u", "gls099"],478:["thrombin time", "u", "gls114"],479:["25 - oh vitamin d3", "u", "v001"],480:["vitamin-b12", "u", "v002"],481:["von-willebrand factor (activity)", "u", "gls123"],482:["von-willebrand factor (concentration)", "u", "gls124"],483:["entamoeba histolytica ab", "u", "gls175"],484:["entamoeba histolytica ag", "u", "gls176"],485:["fasciola ab (iha)", "u", "gls177"],486:["fasciola ab (elisa)", "u", "gls178"],487:["filarial ab", "u", "gls179"],488:["giardia lamblia ag", "u", "gls180"],489:["hydatid ab. (iha )", "u", "gls181"],490:["hydatid ab. ( elisa )", "u", "gls182"],491:["leishmania ab", "u", "inf032"],492:["malaria falciparum ab", "u", "gls183"],493:["malaria ag", "u", "inf007"],494:["malaria film", "u", "h043"],495:["toxocara canis ab", "u", "gls184"],496:["trichinella spiralis ab", "u", "gls185"],497:["angiotensin converting enzyme (ace)", "u", "imx010"],498:["aldolase", "u", "gls088"],499:["cholinesterase", "u", "bc060"],500:["lactate", "u", "c041"],501:["pyruvate", "u", "bc072"],502:["lactate / pyruvate ratio", "u", "gls089"],503:["myoglobin", "u", "c040"],504:["bone alkaline phosphatase", "u", "gls090"],505:["dpd", "u", "gls091"],506:["osteocalcin", "u", "gls092"],507:["aldosterone", "u", "hr022"],508:["renin activity", "u", "hr023"],509:["aldosterone / renin ratio", "u", "gls063"],510:["catecholamines ( blood )", "u", "gls064"],511:["catecholamines ( urine)", "u", "gls065"],512:["metanephrine", "u", "gls066"],513:["anti-diuretic hormone (adh)", "u", "hr031"],514:["leptin", "u", "bc067"],515:["fib-4", "u", "calc020"],516:["il-6", "u", "new002"],517:["procalcitonin pct-q", "u", "c043"],518:["apolipoprotein a 1", "u", "c047"],519:["apolipoprotein b", "u", "c048"],520:["lipoprotein (a)", "u", "c046"],521:["bile acids", "u", "bc074"],522:["citrate in urine", "u", "bc026"],523:["gfr by cystatin c", "u", "gls070"],524:["dysmorphic rbcs", "u", "gls069"],525:["metabolic screen", "u", "gls068"],526:["urea clearance", "u", "gls067"],527:["bicarbonate", "u", "c042"],528:["copper", "u", "v011"],529:["pancreatic elastase", "u", "gls094"],530:["pro-bnp", "u", "c045"],531:["ph", "u", "abg001"],532:["reducing substances", "u", "l2l094"],533:["acrosin activity", "u", "gls214"],534:["alpha – glucosidase", "u", "gls208"],535:["hypo-osmotic swelling test (hos test)", "u", "gls209"],536:["mar test (direct )", "u", "gls210"],537:["mar test (indirect )", "u", "gls211"],538:["peroxidase test (leuco screen)", "u", "gls212"],539:["vital stain (eosin-nigrosin test)", "u", "gls213"],540:["dna fragmentation index (dfi)", "u", "l2l090"],541:["f.psa/t.psa ratio", "u", "gls110"],542:["cortisol", "u", "hr008"],543:["blood group", "u", "h037"],544:["risk i", "u", "calc006"],545:["risk ii", "u", "gls073"],546:["covid - igg", "u", "vr003"],547:["covid-igm", "u", "vr004"],600:["stone", "u", "l2l089"],601:["morphine (mop)", "u", "gls016"],602:["3,4-methylendioxymethamphetamine (mdma)", "u", "gls017"],603:["buprenorphine (bup)", "u", "gls018"],650:["eag", "u", "gls005"],651:["fasting insulin", "u", "c005"],652:["insulin sensitivity", "u", "gls004"],680:["csf", "u", "gls215"],681:["typhoid igm", "u", "im012"],682:["typhoid igg", "u", "im012b"],683:["h.pylori in blood (ab)", "u", "inf020"],684:["pcv", "u", "h003"],685:["hb", "u", "h002"],900:["histopathology report", "u", "l2l082"],904:["s.mg", "u", "c030"],905:["scales of skin for koh", "u", "l2l057"],906:["cbc", "u", "h001"],909:["rose bengal test", "u", "l2l080"],910:["anti tissue iga", "u", "im019"],911:["anti tissue igg", "u", "im019g"],913:["ama", "u", "gls130"],914:["hav -ab", "u", "vr038"],915:["acth", "u", "hr028"],916:["anti s dna ab", "u", "gls169"],921:["insulin - like growth factor -1 (igf-1)", "u", "hr011"],922:["gram stain for g c", "u", "mb004"],923:["anti ds dna ab", "u", "im013"],924:["attg- iga", "u", "im019"],925:["anti - ro", "u", "im015"],926:["anti - la", "u", "im016"],927:["s.phosphate", "u", "c031"],928:["crp titer", "u", "c032"],929:["anti- lkm-1ab", "u", "l2l027"],930:["rf titer", "u", "im003"],931:["17-oh progesterone", "u", "hx004"],933:["anti -tpo", "u", "hr006"],934:["hbs ag titer", "u", "gls199"],1100:["blood film", "u", "h032"],1101:["egfr", "u", "c014"],1102:["albumin ( urine )", "u", "u006"],1103:["creatinine ( urine )", "u", "u003"],1104:["protein 24hr urine", "u", "u007"],1105:["protein / creatinine ratio", "u", "u005"],1106:["fsh / lh ratio", "u", "gls126"],1107:["uibc", "u", "h026"],1108:["transferrin saturation", "u", "h027"],1111:["inr", "u", "h020"],1112:["urea (urine)", "u", "l2l011"],1113:["anti hav igg", "u", "vr038"],1114:["anti hav igm", "u", "vr037"],1115:["pt", "u", "h018"],1116:["ptt", "u", "h019"],1117:["hbs titer", "u", "inf002"],1150:["urea breath test", "u", "l2l077"],1151:["urine volume /24hr", "u", "gls071"],1152:["urine protein", "u", "u002"],1153:["hcv titer", "u", "inf004"],1154:["brucella igg", "u", "inf047"],1155:["brucella igm", "u", "inf048"],1156:["dhea-s", "u", "hr019"],1157:["screen test for syphlis", "u", "add002"],1158:["anti ss -dna", "u", "gls169"],1159:["anti ds -ana", "u", "im013"],1160:["anti -nucleosomes (nu)", "u", "gls170"],1161:["anti -pcna", "u", "gls171"],1162:["anti - cenp b", "u", "gls166"],1163:["anti - ui snrnp", "u", "gls167"],1164:["anti - pm/sc1", "u", "gls172"],1165:["anti - mi 2", "u", "gls173"],1166:["anti - ku", "u", "gls174"],1167:["h.pylori (igm)", "u", "gls187"],1168:["anti tg", "u", "hr007"],1171:["anti-beta2 glycoprotein igm", "u", "l2l019"],1172:["anti-beta2 glycoprotein igg", "u", "l2l018"],1173:["anti - ro (ss-a52)", "u", "gls160"],1174:["anti - ro (ss-a 60)", "u", "im015"],1175:["anti la ( ss - b)", "u", "im016"],1176:["anti thyroid peroixdase ab", "u", "hr006"],1177:["hair for koh", "u", "gls206"],1178:["anti cardiolipin igm", "u", "imx016"],1179:["anti cardiolipin igg", "u", "imx015"],1181:["ss - b ( ssb)", "u", "im016"],1182:["sm (sm)", "u", "im014"],46:["testosterone (free)", "u", "hr016"],48:["acth (am)", "u", "hr028"],64:["psa (free)", "u", "tm002"],94:["iron (fe)", "u", "h025"],181:["ana", "u", "im001"],247:["amylase", "u", "c034"],274:["acth (pm)", "u", "hr028"],427:["tissue transglutaminase (iga)", "u", "im019"],428:["tissue transglutaminase (igg)", "u", "im019g"],912:["insulin", "u", "c005"],1169:["hiv titer", "u", "inf005"],1170:["tpha igg - syphilis", "u", "add002"],1180:["ss - a native ( 60 kda ) (ssa)", "u", "im015"]};
+  /* تحاليل مصنّفة خطأً في الملف الأصلي ⇐ تبقى مجموعتها في ميدلاب */
+  var KEEPCAT = {203:1,204:1,205:1,206:1,228:1,244:1,246:1,260:1,282:1,283:1,531:1};
+  var SKIP_TXT = {P:'جزء من فحص موجود في ميدلاب', B:'مكوّن فرعي — قيمه في الملف غير صالحة، يبقى كما في ميدلاب',
+                  SUB:'تحليل فرعي (جزء من فحص) في الملف'};
+
+  var SUBMAP = {'haematology':['Hematology','Haematology'],'microbiology':['Microbiology','Microbiology'],
+    'liver functions':['Biochemistry','Liver Functions'],'kidney functions':['Biochemistry','Kidney Functions'],
+    'diabetes profile':['Biochemistry','Diabetes Profile'],'lipid profile':['Biochemistry','Lipid Profile'],
+    'electrolytes':['Biochemistry','Electrolytes'],'cardiac profile':['Biochemistry','Cardiac Profile'],
+    'tumor markers':['Tumor Markers','Tumor Markers'],'drugs of abuse':['Infections','Drugs Of Abuse'],
+    'therapeutic drugs':['Biochemistry','Therapeutic Drugs'],'coagulation profile':['Hematology','Coagulation Profile'],
+    'torch screen':['Infections','TORCH Screen'],'serology':['Immunology','Serology'],'virology':['Infections','Virology'],
+    'molecular biology':['Microbiology','Molecular Biology'],'pregnancy tests':['Infections','Pregnancy Tests'],
+    'erythrocyte sedimentation rate':['Hematology','Erythrocyte Sedimentation Rate'],
+    'fertility hormones':['Hormones','Fertility Hormones'],'suprarenal hormones':['Hormones','Suprarenal Hormones'],
+    'vitamins':['Vitamins & Minerals','Vitamins'],'thyroid hormones':['Hormones','Thyroid Hormones'],
+    'parathyroid hormones':['Hormones','Parathyroid Hormones'],'flow cytometry':['Hematology','Flow Cytometry'],
+    'bacteria':['Infections','Bacteria'],'pancereatic profile':['Biochemistry','Pancreatic Profile'],
+    'pancreatic profile':['Biochemistry','Pancreatic Profile'],'seminal fluid':['Semen','Semen Analysis'],
+    'iron tests':['Hematology','Iron Tests'],'widal test':['Immunology','Widal Test'],'brucella test':['Immunology','Brucella Test'],
+    'pitutary hormones':['Hormones','Pituitary Hormones'],'pituitary hormones':['Hormones','Pituitary Hormones'],
+    'blood gases':['Blood Gases','Blood Gases'],'hb electrophoreses':['Hematology','Hb Electrophoreses'],
+    'creatinine clearance':['Blood Gases','Creatinine Clearance'],'protein electrophoresis':['Biochemistry','Protein Electrophoresis'],
+    'weil felix test':['Immunology','Weil Felix Test'],'prothrombin test':['Hematology','Coagulation Profile'],
+    'parasitic tests':['Infections','Parasitic Tests'],'blood group':['Hematology','Blood Group'],
+    'blood picture':['Hematology','Blood Picture'],'tests for blood diseases':['Hematology','Tests For Blood Diseases'],
+    'sarcoidosis':['Biochemistry','Sarcoidosis'],'myopathy':['Biochemistry','Myopathy'],'osteoporosis':['Biochemistry','Osteoporosis'],
+    'hypertension':['Biochemistry','Hypertension'],'diabetes insipidus':['Hormones','Diabetes Insipidus'],
+    'obesity':['Biochemistry','Obesity'],'test for shock investigation':['Biochemistry','Test For Shock Investigation'],
+    'liver pathology scoring':['Biochemistry','Liver Pathology Scoring'],'autoimmunity':['Immunology','Autoimmunity']};
+  var MAINMAP = {BIOCHEMISTRY:'Biochemistry',HAEMATOLOGY:'Hematology',HEMATOLOGY:'Hematology',HORMONES:'Hormones',
+    IMMUNOLOGY:'Immunology',MICROBIOLOGY:'Microbiology'};
+
+  /* ───── أدوات ───── */
+  function s(v){ return (v===null||v===undefined)?'':String(v); }
+  function tr(v){ return s(v).replace(/[‎‏‪-‮﻿]/g,'').replace(/\s+/g,' ').trim(); }
+  function first(v){ return tr(s(v).split(/\r?\n/)[0]); }
+  function nm(v){ return first(v).toLowerCase(); }
+  function num(v){ if(v===null||v===undefined||v==='') return null; var n=Number(v); return isFinite(n)?n:null; }
+  function txt(v){ return s(v).replace(/\r\n?/g,'\n').split('\n').map(function(x){ return x.replace(/[ \t]+/g,' ').trim(); }).filter(Boolean).join('\n'); }
+  function h32(str){ var h=5381,i=String(str).length; while(i) h=((h*33)^String(str).charCodeAt(--i))>>>0; return h>>>0; }
+  function _nz(v){ if(v===undefined||v===null||v==='') return null; if(Array.isArray(v)&&!v.length) return null; return v; }
+  function same(a,b){ return JSON.stringify(_nz(a))===JSON.stringify(_nz(b)); }
+  function fix(n){ return n===null?null:Number(Number(n).toPrecision(10)); }
+
+  function mapCat(main, sub){
+    var k=tr(sub).toLowerCase(), mc=MAINMAP[tr(main).toUpperCase()];
+    if(k==='miscellaneous'){
+      if(!mc || mc==='Biochemistry') return {cat:'Biochemistry', sub:'Miscellaneous'};
+      return {cat:mc, sub:'Other '+mc};
+    }
+    if(SUBMAP[k]) return {cat:SUBMAP[k][0], sub:SUBMAP[k][1]};
+    return null;
+  }
+  function isCBC(t){
+    try{ if(typeof _cbcIsCbcTest==='function') return !!_cbcIsCbcTest(t); }catch(e){}
+    return !!(t && (t.id==='h001' || String(t.code||'').trim().toUpperCase()==='CBC'));
+  }
+  function refTypeOf(t){
+    try{ if(typeof _refTypeOf==='function') return _refTypeOf(t); }catch(e){}
+    return (t&&t.refType)||'simple';
+  }
+
+  /* ───── ① القراءة ───── */
+  async function readRaw(db, onStep){
+    var tabs=db.tables();
+    var tt=tabs['test_tbl'];
+    if(!tt) throw new Error('لا يوجد جدول التحاليل (test_tbl) في هذا الملف — اختر ملف قاعدة بيانات Green Lab System');
+    if(tt.linked) throw new Error('هذا ملف واجهة البرنامج فقط — الجداول مرتبطة بملف آخر: '+tt.db+' — اختر ملف database.accdb');
+    if(onStep) await onStep('test_tbl',0,4);
+    var T=db.readTable('test_tbl')||[];
+    var normals=[];
+    for(var i=0;i<2;i++){
+      var nn=['normals_tbl','other_normals_tbl'][i], t=tabs[nn];
+      if(onStep) await onStep(nn,1+i,4);
+      if(t && !t.linked){ try{ normals=normals.concat(db.readTable(nn)||[]); }catch(e){} }
+    }
+    var orders={};
+    if(onStep) await onStep('test_order_tbl',3,4);
+    var to=tabs['test_order_tbl'];
+    if(to && !to.linked){
+      try{ (db.readTable('test_order_tbl',['tcode'])||[]).forEach(function(r){ if(r.tcode!=null) orders[r.tcode]=(orders[r.tcode]||0)+1; }); }catch(e){}
+    }
+    var lab='';
+    try{ var sg=tabs['settings_general_tbl']; if(sg && !sg.linked) lab=((db.readTable('settings_general_tbl',['lab_name'])||[])[0]||{}).lab_name||''; }catch(e){}
+    return {tests:T, normals:normals, orders:orders, labName:lab, labTag:h32(tr(lab)||'greenlab').toString(36).slice(0,5)};
+  }
+
+  /* ───── القيم الطبيعية من صف الملف ───── */
+  function pair(lo,hi){
+    lo=fix(num(lo)); hi=fix(num(hi));
+    if((lo===null||lo===0) && (hi===null||hi===0)) return [null,null];
+    if(hi!==null && hi>=9999) return [lo,null];                /* «أكثر من …» */
+    if(hi===null || lo===null) return [lo,hi];
+    if(hi<=lo) return [null,null];                              /* بيانات غير منطقية */
+    return [lo,hi];
+  }
+  /* تصحيح أخطاء كتابة واضحة في وحدات الملف (حرف l بدل I …) دون تغيير الوحدة نفسها */
+  function normUnit(u){
+    var x=tr(u); if(!x) return '';
+    return x.replace(/\b([µμu]?)lU\//g,'$1IU/').replace(/^Ul\//,'IU/').replace(/pmoI\//g,'pmol/').replace(/μ/g,'µ');
+  }
+  function unitOfAge(u){ return {years:'year',year:'year',months:'month',month:'month',days:'day',day:'day'}[s(u).toLowerCase().trim()]||'year'; }
+  function rangeOf(row, normalsByCode){
+    var M=pair(row.lmale,row.hmale), F=pair(row.lfemale,row.hfemale);
+    var rm=txt(row.rmale), rf=txt(row.rfemale);
+    if(!rf) rf=rm; if(!rm) rm=rf;
+    var mNull=(M[0]===null&&M[1]===null), fNull=(F[0]===null&&F[1]===null);
+    if(fNull && !mNull && rm===rf) F=M.slice();
+    if(mNull && !fNull && rm===rf) M=F.slice();
+    mNull=(M[0]===null&&M[1]===null); fNull=(F[0]===null&&F[1]===null);
+    var ages=[];
+    if(/age/i.test(s(row.normal_type)) && normalsByCode[row.tcode]){
+      normalsByCode[row.tcode].forEach(function(n){
+        ages.push({from:num(n.from)||0, fromUnit:unitOfAge(n.Ageunit), to:num(n.to)!=null?num(n.to):999, toUnit:unitOfAge(n.Ageunit),
+          sex:/^m/i.test(s(n.Gender))?'male':(/^f/i.test(s(n.Gender))?'female':'both'), min:fix(num(n.Low)), max:fix(num(n.High)), ref:tr(n.Reference)});
+      });
+    }
+    var hasNum=!mNull||!fNull||ages.length>0, hasText=!!(rm||rf);
+    var diff=(M[0]!==F[0]||M[1]!==F[1]||rm!==rf);
+    var out={unit:normUnit(row.unit), hasNum:hasNum, hasText:hasText, hasRange:hasNum||hasText,
+      minVal:M[0], maxVal:M[1], minF:F[0], maxF:F[1], ageRanges:ages,
+      refType: ages.length?'gender-age':(diff?'gender':'simple'),
+      ref: (rm===rf)?rm:('M: '+rm+' | F: '+rf), refM: diff?rm:'', refF: diff?rf:''};
+    if(ages.length){ out.minVal=ages[0].min; out.maxVal=ages[0].max; out.minF=ages[0].min; out.maxF=ages[0].max; }
+    return out;
+  }
+  function priceOf(row, opts){
+    var p=num(row.patient_price);
+    if(p===null || p<=0) return null;
+    if(opts.k1000 && p<1000) p=p*1000;
+    return Math.round(p*100)/100;
+  }
+  function richness(row){
+    var r=rangeOf(row,{});
+    return (r.unit?1:0)+(r.hasNum?2:0)+(r.hasText?1:0)+((num(row.patient_price)||0)>0?1:0);
+  }
+
+  /* ───── ② التخطيط (بلا كتابة) ───── */
+  function plan(raw, catalog){
+    var byId={}; (catalog||[]).forEach(function(t){ if(t&&t.id) byId[t.id]=t; });
+    var idx=null, items=[];
+    (raw.tests||[]).forEach(function(r){
+      var name=first(r.test);
+      if(!name || /[\u0000-\u0008]/.test(name)) return;
+      var it={tcode:r.tcode, name:name, row:r, orders:raw.orders[r.tcode]||0, sub:!!r.sub_test, rich:richness(r),
+        action:'', target:'', how:'', score:0, reason:'', partOf:''};
+      /* تحليل أُضيف سابقاً من نفس الملف (استيراد المرضى أو استيراد سابق) ⇐ نفس السجل */
+      var prevId='custom-gl-'+raw.labTag+'-'+r.tcode;
+      var cur=CUR[r.tcode];
+      if(byId[prevId]){ it.action='update'; it.target=prevId; it.how='prev'; it.score=100; }
+      else if(cur && cur[0]===nm(r.test)){
+        if(cur[1]==='s'){ it.action='skip'; it.reason=SKIP_TXT[cur[2]]||''; it.partOf=cur[3]||''; it.how='curated'; }
+        else if(cur[1]==='n'){ it.action='new'; it.how='curated'; }
+        else if(byId[cur[2]]){ it.action='update'; it.target=cur[2]; it.how='curated'; it.score=100; }
+      }
+      if(!it.action){
+        if(it.sub){ it.action='skip'; it.reason=SKIP_TXT.SUB; it.how='auto'; }
+        else {
+          if(!idx) idx=GLM.indexCatalog(catalog);
+          var b=GLM.best(name, idx);
+          if(b.test && b.score>=0.35){ it.action='update'; it.target=b.test.id; it.how='auto'; it.score=Math.round(b.score*100); }
+          else { it.action='new'; it.how='auto'; it.score=Math.round((b.score||0)*100); }
+        }
+      }
+      items.push(it);
+    });
+    resolve(items);
+    return {items:items, labName:raw.labName, labTag:raw.labTag, normals:raw.normals};
+  }
+  /* عدة أسطر في الملف لنفس التحليل ⇐ يُعتمد الأكثر استخداماً (ثم الأكمل بيانات)، والبقية تُدمج */
+  function resolve(items){
+    items.forEach(function(it){ it.merged=''; });
+    var groups={};
+    items.forEach(function(it){
+      var key=null;
+      if(it.action==='update') key='u:'+it.target;
+      else if(it.action==='new') key='n:'+((typeof GLM!=='undefined'&&GLM.clean)?GLM.clean(it.name):nm(it.name));
+      if(key) (groups[key]||(groups[key]=[])).push(it);
+    });
+    Object.keys(groups).forEach(function(k){
+      var g=groups[k]; if(g.length<2) return;
+      g.sort(function(a,b){ return (b.orders-a.orders)||(b.rich-a.rich)||((a.sub?1:0)-(b.sub?1:0))||(a.tcode-b.tcode); });
+      for(var i=1;i<g.length;i++){ g[i].merged=g[0].tcode; }
+    });
+  }
+
+  /* ───── ③ حساب التغييرات على تحليل موجود ───── */
+  function changesFor(t, it, opts, normalsByCode){
+    var row=it.row, set={}, del=[], list=[];
+    var protectedT = isCBC(t) || !!t.isSpecialExam || t.calcFormula==='gtt';
+    function put(f, v, label){ if(!same(t[f],v)){ set[f]=v; list.push({f:f, label:label||f, from:t[f], to:v}); } }
+    if(opts.price){ var p=priceOf(row,opts); if(p!==null) put('price',p,'السعر'); }
+    if(!protectedT){
+      if(opts.ranges){
+        var R=rangeOf(row, normalsByCode), pn=(refTypeOf(t)==='pos-neg');
+        var curUnit=tr(t.unit);
+        /* الوحدة تُحدَّث فقط مع مدى رقمي (وحدات الملف بلا أرقام غير موثوقة) أو إن كانت فارغة في ميدلاب */
+        var unitOk=!!R.unit && (R.hasNum || !curUnit);
+        if(R.hasRange && !(pn && !R.hasNum)){
+          if(unitOk) put('unit',R.unit,'الوحدة');
+          set.refType=R.refType;
+          if(refTypeOf(t)!==R.refType) list.push({f:'refType',label:'نوع القيم',from:refTypeOf(t),to:R.refType});
+          put('minVal',R.minVal,'Min'); put('maxVal',R.maxVal,'Max');
+          put('minF',R.minF,'Min ♀'); put('maxF',R.maxF,'Max ♀');
+          put('ref',R.ref,'القيم الطبيعية'); put('refM',R.refM,'نص ♂'); put('refF',R.refF,'نص ♀');
+          if(R.ageRanges.length) put('ageRanges',R.ageRanges,'حسب العمر');
+          else if(t.ageRanges && t.ageRanges.length){ del.push('ageRanges'); list.push({f:'ageRanges',label:'حسب العمر',from:t.ageRanges.length+' نطاق',to:'—'}); }
+          if(pn){ if(t.qualOptions) del.push('qualOptions'); if(t.qualDefault) del.push('qualDefault'); }
+        } else if(unitOk && !pn) put('unit',R.unit,'الوحدة');
+      }
+      if(opts.cats && !t.isCalc && !(KEEPCAT[it.tcode] && it.how==='curated')){
+        var mc=mapCat(row.main,row.sub);
+        if(mc){ put('cat',mc.cat,'المجموعة'); put('subCat',mc.sub,'المجموعة الفرعية'); }
+      }
+      if(opts.names && it.name && !/^(fbs|fbg|fasting blood (sugar|glucose))$/i.test(t.code||'')) put('nameEn',it.name,'الاسم');
+    }
+    return {set:set, del:del, list:list, protectedT:protectedT};
+  }
+
+  /* ───── ④ تحليل جديد ───── */
+  function genCode(name, used){
+    var m=name.match(/\(([A-Za-z0-9][A-Za-z0-9\-\/ ]{1,10})\)\s*$/), base=(m && !/urine|stool|serum|plasma|blood|ifat|elisa|iha|total|rapid/i.test(m[1]))?m[1]:name;
+    var c=base.toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    if(c.length>16){ var w=c.split('-'), o=''; for(var i=0;i<w.length;i++){ if((o?o.length+1:0)+w[i].length>16) break; o+=(o?'-':'')+w[i]; } c=o||c.slice(0,16); }
+    c=c||'GL'; var cc=c, n=2;
+    while(used[cc]){ cc=c.slice(0,13)+'-'+n; n++; }
+    used[cc]=1; return cc;
+  }
+  function timeOf(d){ d=num(d)||0; if(d<=0) return 'Same day'; if(d===1) return '1 day'; if(d>14) return ''; return d+' days'; }
+  function newTest(it, labTag, opts, normalsByCode, usedCodes){
+    var row=it.row, R=rangeOf(row, normalsByCode), mc=mapCat(row.main,row.sub);
+    if(!mc){ var m=MAINMAP[tr(row.main).toUpperCase()]; mc=m?{cat:m,sub:'Other '+m}:{cat:'Special',sub:'Other Special'}; }
+    var notes=[]; if(tr(row.tube)) notes.push('Sample: '+tr(row.tube)); if(/^send ?out$/i.test(tr(row.log))) notes.push('Send-out');
+    var t={id:'custom-gl-'+labTag+'-'+row.tcode, code:genCode(it.name,usedCodes), nameEn:it.name, nameShort:'',
+      cat:mc.cat, subCat:mc.sub, unit:R.unit||(R.hasNum?'':'qualitative'),
+      minVal:R.minVal, maxVal:R.maxVal, minF:R.minF, maxF:R.maxF, ageRanges:R.ageRanges, refType:R.refType,
+      ref:R.ref, refM:R.refM, refF:R.refF, time:timeOf(row.dtime), price:priceOf(row,opts)||0,
+      notes:notes.join(' · '), glImported:true, _updatedAt:Date.now()};
+    if(!R.hasNum && t.unit==='qualitative' && /^(negative|positive|absent|undetectable|non[- ]?reactive)$/i.test(R.ref||'')){
+      t.refType='pos-neg'; t.qualOptions=['Negative','Positive']; t.qualDefault=/^positive$/i.test(R.ref)?'Positive':'Negative';
+    }
+    return t;
+  }
+  function normalsIndex(normals){ var o={}; (normals||[]).forEach(function(n){ if(n&&n.tcode!=null) (o[n.tcode]||(o[n.tcode]=[])).push(n); }); return o; }
+
+  return {readRaw:readRaw, plan:plan, resolve:resolve, changesFor:changesFor, newTest:newTest, mapCat:mapCat,
+          normalsIndex:normalsIndex, rangeOf:rangeOf, priceOf:priceOf, CUR:CUR, first:first};
+})();
+if(typeof module!=='undefined') module.exports=GLT;
+
+
+/* ══════════════════════════════════════════════════════════════════
+   📥 واجهة استيراد التحاليل (داخل قاعدة التحاليل)
+   ══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var ST={plan:null, fileName:'', overrides:{}, filter:'all', busy:false, done:false};
+  window._gltState=ST;
+  var UNDO_KEY='glTestImportUndo';
+  function $(id){ return document.getElementById(id); }
+  function esc(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmt(n){ try{ return Number(n||0).toLocaleString('en-US'); }catch(e){ return String(n); } }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms||0); }); }
+  function notif(t,m,k){ try{ showNotif(t,m,k||'info'); }catch(e){ console.log(t,m); } }
+  function catalog(){ return (typeof tests!=='undefined' && Array.isArray(tests))?tests:[]; }
+  function byId(id){ return catalog().find(function(t){ return t && t.id===id; }); }
+  function pk(k){ return DB._pfx()+k; }
+  function opts(){
+    var g=function(id,d){ var e=$(id); return e?!!e.checked:d; };
+    return {ranges:g('glt-o-ranges',true), cats:g('glt-o-cats',true), price:g('glt-o-price',true), k1000:g('glt-o-k1000',true),
+            names:g('glt-o-names',false), backup:g('glt-o-backup',true)};
+  }
+
+  function ensureModal(){
+    if($('m-glt')) return;
+    var d=document.createElement('div');
+    d.className='moverlay'; d.id='m-glt';
+    d.innerHTML='<div class="modal wide" style="max-width:1100px;width:96vw">'+
+      '<div class="mhdr"><div class="mtitle">📥 استيراد التحاليل من Green Lab System</div><button class="mclose" onclick="gltClose()">×</button></div>'+
+      '<div class="mbody" style="direction:rtl">'+
+        '<div style="font-size:12px;color:var(--text2);line-height:1.9;margin-bottom:10px">'+
+          'يُقرأ جدول التحاليل من ملف <b style="color:var(--text)">database.accdb</b> (أو نسخته المضغوطة <b style="color:var(--text)">zip</b>) ويُستورد منه: '+
+          '<b style="color:var(--text)">الوحدة · القيم الطبيعية · المجموعة الأساسية والفرعية · السعر</b>.<br>'+
+          '• التحليل الموجود في ميدلاب بنفس الاسم أو باسم مختلف ⇐ <b style="color:var(--success)">تُحدَّث بياناته من الملف</b> (نفس السجل، فلا تنقطع النتائج السابقة ولا ربط الأجهزة).<br>'+
+          '• التحليل غير الموجود ⇐ <b style="color:#fbbf24">يُضاف مرة واحدة</b> · تحاليل ميدلاب غير الموجودة في الملف ⇐ <b>تبقى كما هي</b>.</div>'+
+        '<input type="file" id="glt-file" accept=".accdb,.mdb,.zip" style="display:none" onchange="gltFileChosen(this)">'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<button class="btn btn-p btn-lg" style="flex:1;min-width:240px" onclick="gltPick()">📂 اختيار ملف قاعدة البيانات (accdb / zip)</button>'+
+          '<button class="btn btn-lg" id="glt-undo-btn" style="display:none" onclick="gltUndo()">↩️ تراجع عن آخر استيراد تحاليل</button>'+
+        '</div>'+
+        '<div id="glt-prog" style="display:none;margin-top:12px"><div style="height:8px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden"><div id="glt-prog-bar" style="height:100%;width:0;background:linear-gradient(90deg,#00d4ff,#00f593);transition:width .2s"></div></div><div id="glt-prog-text" style="font-size:11.5px;color:var(--text2);margin-top:6px"></div></div>'+
+        '<div id="glt-preview" style="margin-top:12px"></div>'+
+      '</div></div>';
+    document.body.appendChild(d);
+  }
+  async function refreshUndoBtn(){
+    var b=$('glt-undo-btn'); if(!b) return;
+    try{ var u=await IDB.get(pk(UNDO_KEY)); b.style.display=(u && Array.isArray(u.tests) && u.tests.length)?'':'none';
+      if(u && u.at) b.title='نسخة ما قبل الاستيراد: '+new Date(u.at).toLocaleString('ar-IQ'); }catch(e){ b.style.display='none'; }
+  }
+  function setProg(p,t){
+    var box=$('glt-prog'); if(!box) return; box.style.display='block';
+    var b=$('glt-prog-bar'); if(b) b.style.width=Math.max(0,Math.min(100,p))+'%';
+    var x=$('glt-prog-text'); if(x) x.textContent=t||'';
+  }
+
+  window.gltOpen=function(){
+    if(typeof GLA==='undefined' || typeof GLM==='undefined'){ notif('خطأ','وحدة قراءة ملفات Access غير محمّلة','error'); return; }
+    ensureModal(); openModal('m-glt'); refreshUndoBtn();
+  };
+  window.gltClose=function(){ if(ST.busy) return; closeModal('m-glt'); };
+  window.gltPick=function(){ if(ST.busy) return; var i=$('glt-file'); if(i){ i.value=''; i.click(); } };
+
+  window.gltFileChosen=async function(inp){
+    var f=inp&&inp.files&&inp.files[0]; if(!f||ST.busy) return;
+    ST.busy=true; ST.plan=null; ST.overrides={}; ST.done=false; ST.fileName=f.name; ST.filter='all';
+    var pv=$('glt-preview'); if(pv) pv.innerHTML='';
+    var t0=Date.now();
+    try{
+      setProg(3,'قراءة الملف ('+(f.size/1048576).toFixed(1)+' MB)…'); await sleep(30);
+      var bytes=new Uint8Array(await f.arrayBuffer());
+      if(bytes.length>4 && bytes[0]===0x50 && bytes[1]===0x4b && bytes[2]===0x03 && bytes[3]===0x04){
+        setProg(8,'فك الضغط…'); await sleep(30);
+        var ex=await GLA.extractAccessFromZip(bytes); bytes=ex.bytes; ST.fileName=f.name+' ← '+ex.name;
+      }
+      setProg(15,'فتح قاعدة البيانات…'); await sleep(30);
+      var db=new GLA.AccessDB(bytes);
+      var raw=await GLT.readRaw(db, async function(n,i,c){ setProg(18+Math.round(i/c*60),'قراءة '+n+'…'); await sleep(0); });
+      db=null; bytes=null;
+      if(!raw.tests.length) throw new Error('جدول التحاليل في هذا الملف فارغ');
+      setProg(82,'مطابقة التحاليل مع قاعدة ميدلاب…'); await sleep(30);
+      ST.plan=GLT.plan(raw, catalog());
+      ST.nidx=GLT.normalsIndex(raw.normals);
+      setProg(100,'اكتملت القراءة خلال '+Math.round((Date.now()-t0)/1000)+' ثانية ✅');
+      render();
+    }catch(e){
+      console.error('[GLT] read',e); setProg(0,'');
+      if(pv) pv.innerHTML='<div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:10px;padding:14px;color:var(--danger);font-size:13px;line-height:1.9">❌ '+esc(e&&e.message||e)+'</div>';
+    }finally{ ST.busy=false; }
+  };
+
+  /* الإجراء الفعلي بعد التعديل اليدوي */
+  function eff(it){
+    if(!ST.overrides.hasOwnProperty(it.tcode)) return {action:it.action, target:it.target, manual:false};
+    var v=ST.overrides[it.tcode];
+    if(v==='__new__') return {action:'new', target:'', manual:true};
+    if(v==='__skip__') return {action:'skip', target:'', manual:true};
+    return {action:'update', target:v, manual:true};
+  }
+  /* إعادة حساب الدمج بعد التعديلات اليدوية */
+  function effItems(){
+    var P=ST.plan; if(!P) return [];
+    var list=P.items.map(function(it){ var e=eff(it); return Object.assign({},it,{action:e.action,target:e.target,manual:e.manual}); });
+    GLT.resolve(list);
+    return list;
+  }
+  function summarize(list,o){
+    var s={update:0,changed:0,nochange:0,newT:0,skip:0,merged:0,missing:0};
+    list.forEach(function(it){
+      if(it.merged){ s.merged++; return; }
+      if(it.action==='skip'){ s.skip++; return; }
+      if(it.action==='new'){ s.newT++; return; }
+      var t=byId(it.target); if(!t){ s.missing++; return; }
+      s.update++; var c=GLT.changesFor(t,it,o,ST.nidx||{}); it._ch=c; if(c.list.length) s.changed++; else s.nochange++;
+    });
+    return s;
+  }
+  function box(v,l,c){ return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:9px 6px;text-align:center"><div style="font-size:18px;font-weight:900;color:'+(c||'var(--primary)')+'">'+fmt(v)+'</div><div style="font-size:10.5px;color:var(--text2)">'+l+'</div></div>'; }
+  function opt(id,label,checked,hint){ return '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="'+id+'"'+(checked?' checked':'')+' onchange="gltRerender()" style="margin-top:3px"> <span>'+label+(hint?' <span style="color:var(--text2)">'+hint+'</span>':'')+'</span></label>'; }
+
+  function render(){
+    var pv=$('glt-preview'), P=ST.plan; if(!pv||!P) return;
+    var keep=opts(), list=effItems(), s=summarize(list,keep);
+    var curated=P.items.filter(function(i){ return i.how==='curated'; }).length;
+    var h='<div style="font-size:12px;color:var(--text2);margin:4px 0 10px">📄 '+esc(ST.fileName)+(P.labName?' · 🏥 '+esc(P.labName):'')+
+      ' · '+fmt(P.items.length)+' تحليل في الملف'+(curated?' · مطابقة مُراجَعة لقاعدة Green Lab القياسية ('+fmt(curated)+')':'')+'</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:8px;margin-bottom:12px">'+
+      box(s.changed,'تحليل موجود يُحدَّث','var(--success)')+box(s.nochange,'موجود ومطابق (بلا تغيير)','var(--text2)')+
+      box(s.newT,'تحليل جديد يُضاف','#fbbf24')+box(s.merged,'مكرر في الملف (يُدمج)','#a78bfa')+box(s.skip,'جزء من فحص (يُتجاوز)','#94a3b8')+
+      (s.missing?box(s.missing,'هدف غير موجود','var(--danger)'):'')+'</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:6px 18px;font-size:12.5px;margin-bottom:12px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:10px;padding:10px 12px">'+
+      opt('glt-o-ranges','📏 تحديث الوحدة والقيم الطبيعية',keep.ranges)+
+      opt('glt-o-cats','🗂️ تحديث المجموعة الأساسية والفرعية',keep.cats)+
+      opt('glt-o-price','💰 تحديث الأسعار',keep.price,'(السعر الصفري في الملف لا يغيّر السعر الحالي)')+
+      opt('glt-o-k1000','✖️1000 الأسعار الأقل من 1000 مكتوبة بالآلاف',keep.k1000,'(مثال: 40 ⇐ 40,000)')+
+      opt('glt-o-names','✏️ استبدال اسم التحليل باسم الملف',keep.names,'(غير مستحسن — أسماء ميدلاب موحّدة)')+
+      opt('glt-o-backup','💾 تنزيل نسخة من قاعدة التحاليل قبل الاستيراد',keep.backup)+'</div>';
+    h+='<div style="font-size:11.5px;color:var(--text2);line-height:1.8;margin-bottom:8px">🔒 CBC والفحوص الخاصة (إدرار · خروج · منوي · زرع) يُحدَّث سعرها فقط · التحاليل المحسوبة تبقى في مجموعتها · الكود والمعرّف لا يتغيّران أبداً.</div>';
+    h+='<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:10px 0 8px"><div style="font-size:13px;font-weight:800;flex:1">🔗 نتيجة المطابقة</div>'+
+      ['all:الكل','chg:تحديث','new:جديد','merged:مكرر','skip:متجاوز','low:مطابقة آلية < 60%'].map(function(x){ var p=x.split(':');
+        return '<button class="btn btn-sm '+(ST.filter===p[0]?'btn-p':'')+'" style="padding:4px 10px;font-size:11px" onclick="gltFilter(\''+p[0]+'\')">'+p[1]+'</button>'; }).join('')+
+      '<input class="fc" id="glt-q" placeholder="بحث…" value="'+esc(ST.q||'')+'" oninput="gltSearch(this.value)" style="width:150px;padding:4px 8px;font-size:12px;direction:ltr"></div>';
+    h+='<div id="glt-map" style="max-height:440px;overflow:auto;border:1px solid var(--border);border-radius:10px"></div>';
+    var go=s.changed+s.newT;
+    h+='<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">'+
+      '<button class="btn btn-ok btn-lg" id="glt-start" style="flex:1;min-width:220px" onclick="gltStart()"'+((go&&!ST.done)?'':' disabled')+'>'+(ST.done?'✅ تم الاستيراد':'🚀 بدء الاستيراد ('+fmt(s.changed)+' تحديث · '+fmt(s.newT)+' جديد)')+'</button>'+
+      '<button class="btn btn-lg" onclick="gltReset()">إلغاء</button></div><div id="glt-result" style="margin-top:12px"></div>';
+    pv.innerHTML=h;
+    renderMap(list);
+  }
+  window.gltRerender=function(){ if(!ST.busy) render(); };
+  window.gltFilter=function(f){ ST.filter=f; render(); };
+  window.gltSearch=function(q){ ST.q=q; renderMap(effItems(), true); };
+  window.gltReset=function(){ if(ST.busy) return; ST.plan=null; ST.overrides={}; var p=$('glt-preview'); if(p) p.innerHTML=''; var g=$('glt-prog'); if(g) g.style.display='none'; };
+
+  function fv(v){
+    if(v===null||v===undefined||v==='') return '—';
+    if(Array.isArray(v)) return v.length+' نطاق';
+    return String(v).replace(/\n/g,' / ');
+  }
+  function renderMap(list, keepSummary){
+    var wrap=$('glt-map'); if(!wrap) return;
+    if(keepSummary) summarize(list, opts());
+    var q=(ST.q||'').toLowerCase().trim();
+    var rows=list.filter(function(it){
+      if(q && (it.name+' '+(byId(it.target)||{}).nameEn).toLowerCase().indexOf(q)<0) return false;
+      switch(ST.filter){
+        case 'chg': return !it.merged && it.action==='update' && it._ch && it._ch.list.length;
+        case 'new': return !it.merged && it.action==='new';
+        case 'merged': return !!it.merged;
+        case 'skip': return !it.merged && it.action==='skip';
+        case 'low': return it.how==='auto' && it.action==='update' && !it.manual && it.score<60;
+      }
+      return true;
+    });
+    var th='padding:7px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2,#0d1526);z-index:1';
+    var h='<table style="width:100%;border-collapse:collapse;font-size:11.5px"><thead><tr>'+
+      '<th style="'+th+';text-align:left">الاسم في Green Lab</th><th style="'+th+'">الطلبات</th>'+
+      '<th style="'+th+'">الإجراء</th><th style="'+th+';text-align:left">في ميدلاب</th><th style="'+th+';text-align:right">التغييرات</th><th style="'+th+'"></th></tr></thead><tbody>';
+    rows.slice(0,800).forEach(function(it){
+      var t=it.target?byId(it.target):null, act, tgt='', ch='';
+      if(it.merged){ var w=ST.plan.items.find(function(x){ return x.tcode===it.merged; });
+        act='<span style="color:#a78bfa">مكرر</span>'; tgt='<span style="color:var(--text2)">يُعتمد «'+esc(w?w.name:it.merged)+'»</span>'; }
+      else if(it.action==='skip'){ var po=it.partOf?byId(it.partOf):null;
+        act='<span style="color:#94a3b8">تجاوز</span>'; tgt='<span style="color:var(--text2)">'+esc(it.reason||'')+(po?' — '+esc(po.nameEn):'')+'</span>'; }
+      else if(it.action==='new'){ act='<span style="color:#fbbf24">➕ جديد</span>';
+        var nt=GLT.newTest(it, ST.plan.labTag, opts(), ST.nidx||{}, {});
+        tgt='<span style="color:#fbbf24">'+esc(nt.cat+' / '+nt.subCat)+'</span>';
+        ch=esc([nt.unit, GLT.first(nt.ref), nt.price?fmt(nt.price):''].filter(Boolean).join(' · ')); }
+      else if(!t){ act='<span style="color:var(--danger)">غير موجود</span>'; }
+      else {
+        var badge=it.manual?'<span style="color:#38bdf8">يدوي</span>':(it.how==='curated'?'مُراجَعة':(it.how==='prev'?'سابق':it.score+'%'));
+        act='<span style="color:var(--success)">تحديث</span><br><span style="font-size:10px;color:'+(it.how==='auto'&&!it.manual&&it.score<60?'#f97316':'var(--text2)')+'">'+badge+'</span>';
+        tgt=esc(t.nameEn)+(t.isSpecialExam||(t.id==='h001')?' <span title="محمي: السعر فقط">🔒</span>':'');
+        var c=it._ch||{list:[]};
+        ch=c.list.length? c.list.map(function(x){ return '<div><span style="color:var(--text2)">'+esc(x.label)+':</span> <span style="text-decoration:line-through;opacity:.6">'+esc(fv(x.from))+'</span> ← <b>'+esc(fv(x.to))+'</b></div>'; }).join('')
+          : '<span style="color:var(--text2)">بلا تغيير</span>';
+      }
+      h+='<tr data-glt="'+it.tcode+'" style="border-bottom:1px solid rgba(255,255,255,0.05);vertical-align:top">'+
+        '<td style="padding:6px 7px;direction:ltr;text-align:left">'+esc(it.name)+'<div style="font-size:9.5px;color:var(--text2)">#'+esc(it.tcode)+(it.sub?' · sub':'')+'</div></td>'+
+        '<td style="padding:6px;text-align:center;color:var(--text2)">'+fmt(it.orders)+'</td>'+
+        '<td style="padding:6px;text-align:center;white-space:nowrap">'+act+'</td>'+
+        '<td class="glt-tgt" style="padding:6px 7px;direction:ltr;text-align:left">'+tgt+'</td>'+
+        '<td style="padding:6px 7px;font-size:10.5px;line-height:1.6;direction:ltr;text-align:left">'+ch+'</td>'+
+        '<td style="padding:6px;text-align:center"><button class="btn btn-sm" style="padding:2px 8px" title="تغيير المطابقة" onclick="gltEdit(this)">✏️</button></td></tr>';
+    });
+    if(!rows.length) h+='<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text2)">لا توجد عناصر</td></tr>';
+    if(rows.length>800) h+='<tr><td colspan="6" style="padding:10px;text-align:center;color:var(--text2)">… '+fmt(rows.length-800)+' عنصر آخر — استخدم البحث</td></tr>';
+    wrap.innerHTML=h+'</tbody></table>';
+  }
+  window.gltEdit=function(btn){
+    var tr=btn.closest('tr'); if(!tr||ST.busy||ST.done) return;
+    var code=tr.getAttribute('data-glt'), it=ST.plan.items.find(function(x){ return String(x.tcode)===code; }); if(!it) return;
+    var cell=tr.querySelector('.glt-tgt'); if(!cell||cell.querySelector('select')) return;
+    var e=eff(it), cur=e.action==='update'?e.target:(e.action==='new'?'__new__':'__skip__');
+    var L=catalog().filter(function(t){ return t&&t.id; }).slice().sort(function(a,b){ return String(a.nameEn).localeCompare(String(b.nameEn)); });
+    cell.innerHTML='<select class="fc" style="padding:4px 6px;font-size:12px;direction:ltr;max-width:320px">'+
+      '<option value="__new__"'+(cur==='__new__'?' selected':'')+'>➕ إضافة كتحليل جديد</option>'+
+      '<option value="__skip__"'+(cur==='__skip__'?' selected':'')+'>⛔ تجاوز (لا يُستورد)</option>'+
+      L.map(function(t){ return '<option value="'+esc(t.id)+'"'+(t.id===cur?' selected':'')+'>'+esc(t.nameEn)+(t.code&&t.code!=='N/A'?' ['+esc(t.code)+']':'')+'</option>'; }).join('')+'</select>';
+    var sel=cell.querySelector('select'); sel.focus();
+    sel.onchange=function(){
+      var orig=it.action==='update'?it.target:(it.action==='new'?'__new__':'__skip__');
+      if(sel.value===orig) delete ST.overrides[it.tcode]; else ST.overrides[it.tcode]=sel.value;
+      render();
+    };
+    sel.onblur=function(){ setTimeout(function(){ if(!ST.busy) renderMap(effItems(),true); },200); };
+  };
+
+  /* ───── الحفظ المُنتظَر + التحقق ───── */
+  async function persistTests(){
+    save('tests', tests);                               /* الكاش + سجل العمليات + المزامنة السحابية + LAN */
+    try{ if(typeof _idbCancelPending==='function') _idbCancelPending(pk('tests')); }catch(e){}
+    var ok=await IDB.set(pk('tests'), tests);
+    if(ok===false) return {ok:false, why:'فشل الكتابة'};
+    var got=await IDB.get(pk('tests'));
+    if(!Array.isArray(got)) return {ok:false, why:'تعذّرت القراءة بعد الحفظ'};
+    var a=new Set(got.map(function(t){ return t&&t.id; })), miss=tests.filter(function(t){ return t&&!a.has(t.id); }).length;
+    return {ok:miss===0 && got.length===tests.length, stored:got.length, expected:tests.length};
+  }
+  function dl(name, obj){
+    var b=new Blob([JSON.stringify(obj)],{type:'application/json'}), a=document.createElement('a');
+    a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click();
+    setTimeout(function(){ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} },4000);
+  }
+  function clone(x){ return JSON.parse(JSON.stringify(x)); }
+
+  window.gltStart=async function(){
+    if(ST.busy||!ST.plan||ST.done) return;
+    var o=opts(), list=effItems(), s=summarize(list,o);
+    if(!(s.changed+s.newT)){ notif('تنبيه','لا يوجد ما يُستورد','warning'); return; }
+    if(!confirm('سيتم تحديث '+fmt(s.changed)+' تحليل موجود وإضافة '+fmt(s.newT)+' تحليل جديد في قاعدة التحاليل.\n\n'+
+      '• تحاليل ميدلاب غير الموجودة في الملف تبقى كما هي.\n• يمكنك التراجع لاحقاً بزر «↩️ تراجع».\n\nهل تريد المتابعة؟')) return;
+    ST.busy=true; var btn=$('glt-start'); if(btn) btn.disabled=true;
+    var t0=Date.now();
+    try{
+      setProg(5,'حفظ نسخة التراجع…'); await sleep(20);
+      var snap={at:Date.now(), file:ST.fileName, tests:clone(tests), customSubCats:clone(typeof customSubCats!=='undefined'?customSubCats:{})};
+      var sok=await IDB.set(pk(UNDO_KEY), snap);
+      if(sok===false && !confirm('تعذّر حفظ نسخة التراجع داخل البرنامج. هل تريد المتابعة؟')){ ST.busy=false; if(btn) btn.disabled=false; return; }
+      if(o.backup){ var d=new Date(); dl('MedLab_Tests_BEFORE_GreenLab_'+d.toISOString().slice(0,10)+'_'+String(d.getHours()).padStart(2,'0')+'-'+String(d.getMinutes()).padStart(2,'0')+'.json', {tests:snap.tests, customSubCats:snap.customSubCats, at:d.toISOString()}); }
+
+      setProg(30,'تطبيق التغييرات…'); await sleep(20);
+      var now=Date.now(), rep={updated:0, added:0, fields:0, subcats:[]};
+      var usedCodes={}; tests.forEach(function(t){ if(t&&t.code) usedCodes[String(t.code).toUpperCase()]=1; });
+      var index=new Map(); tests.forEach(function(t,i){ if(t&&t.id) index.set(t.id,i); });
+      var needSub={};
+      list.forEach(function(it){
+        if(it.merged || it.action==='skip') return;
+        if(it.action==='update'){
+          var i=index.get(it.target); if(i===undefined) return;
+          var c=GLT.changesFor(tests[i], it, o, ST.nidx||{});
+          if(!c.list.length) return;
+          var nt=Object.assign({}, tests[i], c.set);
+          c.del.forEach(function(f){ delete nt[f]; });
+          nt._updatedAt=now; nt.glTestImport=ST.plan.labTag;
+          tests[i]=nt; rep.updated++; rep.fields+=c.list.length;
+          if(c.set.cat||c.set.subCat) needSub[nt.cat+'\u0001'+nt.subCat]=1;
+        } else if(it.action==='new'){
+          var t=GLT.newTest(it, ST.plan.labTag, o, ST.nidx||{}, usedCodes);
+          if(index.has(t.id)) return;                       /* حماية إضافية من التكرار */
+          tests.push(t); index.set(t.id, tests.length-1); rep.added++;
+          needSub[t.cat+'\u0001'+t.subCat]=1;
+        }
+      });
+      /* المجاميع الفرعية الجديدة القادمة من الملف (مثل Hypertension / Myopathy) */
+      try{
+        Object.keys(needSub).forEach(function(k){
+          var p=k.split('\u0001'), cat=p[0], sub=p[1]; if(!cat||!sub) return;
+          var have=(typeof getSubCats==='function')?getSubCats(cat):((SUB_CATS[cat]||[]));
+          if(have.indexOf(sub)<0){ (customSubCats[cat]||(customSubCats[cat]=[])).push(sub); rep.subcats.push(cat+' / '+sub); }
+        });
+        if(rep.subcats.length && typeof saveCustomSubCats==='function') saveCustomSubCats();
+      }catch(e){ console.warn('[GLT] subcats',e); }
+
+      setProg(70,'حفظ قاعدة التحاليل…'); await sleep(20);
+      var v=await persistTests();
+      setProg(95,'تحديث الواجهة…'); await sleep(10);
+      ['buildTestCatTabs','renderTestsDB','updateDbStats','updateBadges'].forEach(function(fn){ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+      try{ localStorage.setItem('medlab_greenlab_tests_import_last', JSON.stringify({at:new Date().toISOString(), file:ST.fileName, lab:ST.plan.labName, updated:rep.updated, added:rep.added, verify:v})); }catch(e){}
+      setProg(100,'اكتمل خلال '+Math.round((Date.now()-t0)/1000)+' ثانية');
+      ST.done=true; render();
+      var res=$('glt-result');
+      if(res) res.innerHTML='<div style="background:rgba(0,245,147,0.06);border:1.5px solid rgba(0,245,147,0.3);border-radius:12px;padding:14px;font-size:12.5px;line-height:2">'+
+        '<div style="font-size:15px;font-weight:900;color:var(--success)">✅ اكتمل استيراد التحاليل</div>'+
+        'تحاليل موجودة حُدِّثت: <b>'+fmt(rep.updated)+'</b> ('+fmt(rep.fields)+' حقل) · تحاليل جديدة أُضيفت: <b>'+fmt(rep.added)+'</b>'+
+        (rep.subcats.length?'<br>مجاميع فرعية جديدة: '+esc(rep.subcats.join(' · ')):'')+
+        '<br>'+(v.ok?'<span style="color:var(--success)">🔒 تم التحقق: '+fmt(v.stored)+' تحليل محفوظ فعلياً في قاعدة البيانات</span>'
+          :'<span style="color:var(--danger)">⚠️ تحقق الحفظ: '+esc(v.why||(v.stored+' / '+v.expected))+' — لا تغلق البرنامج، أعد تحميل الصفحة وتحقق من قاعدة التحاليل.</span>')+
+        '<br><span style="color:var(--text2)">للتراجع عن هذا الاستيراد بالكامل: زر «↩️ تراجع عن آخر استيراد تحاليل».</span></div>';
+      refreshUndoBtn();
+      notif(v.ok?'تم':'تنبيه', v.ok?('حُدِّث '+rep.updated+' وأُضيف '+rep.added+' تحليل ✅'):'اكتمل الاستيراد مع تحذير في التحقق', v.ok?'success':'warning');
+    }catch(e){
+      console.error('[GLT] commit',e);
+      var r=$('glt-result'); if(r) r.innerHTML='<div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:10px;padding:14px;color:var(--danger);font-size:13px">❌ توقف الاستيراد: '+esc(e&&e.message||e)+'<br>يمكنك استعادة الحالة السابقة بزر «↩️ تراجع».</div>';
+      notif('خطأ','توقف استيراد التحاليل: '+(e&&e.message||e),'error');
+      refreshUndoBtn();
+    }finally{ ST.busy=false; }
+  };
+
+  window.gltUndo=async function(){
+    if(ST.busy) return;
+    var u=null; try{ u=await IDB.get(pk(UNDO_KEY)); }catch(e){}
+    if(!u || !Array.isArray(u.tests) || !u.tests.length){ notif('تنبيه','لا توجد نسخة للتراجع','warning'); return; }
+    if(!confirm('استعادة قاعدة التحاليل كما كانت قبل آخر استيراد ('+new Date(u.at).toLocaleString('ar-IQ')+')؟\n\nأي تعديل على التحاليل بعد ذلك الاستيراد سيُلغى.')) return;
+    ST.busy=true;
+    try{
+      tests.splice(0, tests.length); Array.prototype.push.apply(tests, u.tests);
+      if(u.customSubCats && typeof customSubCats!=='undefined'){
+        Object.keys(customSubCats).forEach(function(k){ delete customSubCats[k]; });
+        Object.assign(customSubCats, u.customSubCats);
+        try{ saveCustomSubCats(); }catch(e){}
+      }
+      var v=await persistTests();
+      if(v.ok){ try{ await IDB.del(pk(UNDO_KEY)); }catch(e){} }
+      ['buildTestCatTabs','renderTestsDB','updateDbStats'].forEach(function(fn){ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+      ST.plan=null; ST.done=false; var p=$('glt-preview'); if(p) p.innerHTML=''; var g=$('glt-prog'); if(g) g.style.display='none';
+      notif(v.ok?'تم':'تنبيه', v.ok?'تمت استعادة قاعدة التحاليل ✅':'تمت الاستعادة مع تحذير في التحقق', v.ok?'success':'warning');
+    }catch(e){ notif('خطأ','تعذّر التراجع: '+(e&&e.message||e),'error'); }
+    finally{ ST.busy=false; refreshUndoBtn(); }
+  };
+})();
+</script>
+
 <!-- ══════ 📣 شرائح الإعلانات (مرتبطة بلوحة الأدمن — promos) ══════ -->
 <style>
 /* ══════════════════════════════════════════════════════════════
@@ -64758,6 +66050,97 @@ body.light-mode #mls-root table.mls-t th{background:#fff}
 #mls-root .mls-qc b{color:var(--danger)}
 #mls-root .mls-sgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
 @media(max-width:900px){#mls-root .mls-qs{grid-template-columns:1fr}}
+/* 💬 المراسلات */
+#mls-root .mls-chat{display:grid;grid-template-columns:310px 1fr;gap:12px;height:max(460px,calc(100vh - 250px))}
+#mls-root .mls-clistw{display:flex;flex-direction:column;gap:8px;min-height:0}
+#mls-root .mls-clist{flex:1;overflow:auto;display:flex;flex-direction:column;gap:6px;padding:2px}
+#mls-root .mls-cli{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;border:1px solid var(--border);background:var(--bg-card);cursor:pointer;text-align:right;font-family:inherit;color:var(--text);transition:border-color .15s,background .15s}
+#mls-root .mls-cli:hover{border-color:var(--primary)}
+#mls-root .mls-cli.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,var(--bg-card))}
+#mls-root .mls-cli.un .mls-clast{color:var(--text);font-weight:700}
+#mls-root .mls-cav{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(135deg,#14B39C,#0A5F66)}
+#mls-root .mls-cmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#mls-root .mls-ctop{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+#mls-root .mls-ctop b{font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mls-root .mls-ctop small{color:var(--text2);font-size:10.5px;white-space:nowrap}
+#mls-root .mls-clast{font-size:11.5px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mls-root .mls-cbadge{background:var(--danger);color:#fff;border-radius:99px;min-width:19px;height:19px;padding:0 5px;font-size:10.5px;font-weight:800;display:inline-grid;place-items:center;flex:none}
+#mls-root .mls-cpane{display:flex;flex-direction:column;min-height:0;border:1px solid var(--border);border-radius:var(--mls-r);background:var(--bg-card);overflow:hidden}
+#mls-root .mls-chead{display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border)}
+#mls-root .mls-chtt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.35}
+#mls-root .mls-chtt b{font-size:13.5px}
+#mls-root .mls-chtt small{color:var(--text2);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mls-root .mls-cback{display:none}
+#mls-root .mls-typing{color:var(--success);font-weight:700;display:inline-flex;gap:3px;align-items:center}
+#mls-root .mls-typing i{width:4px;height:4px;border-radius:50%;background:currentColor;animation:mlsdot 1.2s infinite}
+#mls-root .mls-typing i:nth-child(2){animation-delay:.2s}#mls-root .mls-typing i:nth-child(3){animation-delay:.4s}
+@keyframes mlsdot{0%,60%,100%{opacity:.25}30%{opacity:1}}
+@keyframes mlspop{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+#mls-root .mls-cmsgs{flex:1;overflow:auto;padding:10px 14px;display:flex;flex-direction:column;gap:5px;background:color-mix(in srgb,var(--primary) 3%,transparent)}
+#mls-root .mls-chello{margin:auto;text-align:center;color:var(--text2);font-size:12px;max-width:340px;line-height:1.8;font-size:26px}
+#mls-root .mls-chello b{display:block;font-size:14px;color:var(--text)}
+#mls-root .mls-chello{font-size:12.5px}
+#mls-root .mls-cday{text-align:center;margin:8px 0 2px}
+#mls-root .mls-cday span{font-size:10.5px;color:var(--text2);border:1px solid var(--border);padding:2px 10px;border-radius:99px;background:var(--bg-card)}
+#mls-root .mls-bub{max-width:76%;padding:7px 11px 4px;border-radius:15px;font-size:13px;line-height:1.6;display:flex;flex-direction:column;animation:mlspop .16s ease-out}
+#mls-root .mls-bub .bt{white-space:pre-wrap;overflow-wrap:anywhere}
+#mls-root .mls-bub .bm{font-size:10px;opacity:.75;align-self:flex-end;direction:ltr;display:flex;gap:4px;align-items:center}
+#mls-root .mls-bub.them{align-self:flex-start;background:var(--bg-glass);border:1px solid var(--border);border-start-start-radius:5px}
+#mls-root .mls-bub.me{align-self:flex-end;background:linear-gradient(135deg,var(--primary),var(--primary-dark,var(--primary)));color:#002b3a;border-start-end-radius:5px}
+body.light-mode #mls-root .mls-bub.me{color:#fff}
+#mls-root .mls-bub.fail{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger);cursor:pointer}
+#mls-root .mls-bub .tk{font-weight:800;letter-spacing:-3px}
+#mls-root .mls-bub.me .tk.rd{color:#0B5FD9}
+body.light-mode #mls-root .mls-bub.me .tk.rd{color:#9BE7FF}
+#mls-root .mls-clast .tk.rd{color:#2E9BF0}
+#mls-root .mls-ccomp{border-top:1px solid var(--border);padding:8px 10px}
+#mls-root .mls-cqr{display:flex;gap:6px;overflow-x:auto;padding-bottom:7px;scrollbar-width:thin}
+#mls-root .mls-cqr button{flex:none;padding:4px 11px;border-radius:99px;border:1px solid var(--border);background:var(--bg-glass);color:var(--primary);font-weight:700;font-size:11.5px;cursor:pointer;font-family:inherit;white-space:nowrap}
+#mls-root .mls-cqr button:hover{border-color:var(--primary)}
+#mls-root .mls-crow{display:flex;gap:8px;align-items:flex-end}
+#mls-root .mls-crow textarea{flex:1;resize:none;min-height:40px;max-height:140px;line-height:1.5;border-radius:20px;padding:9px 14px}
+#mls-root .mls-crow .btn{height:40px;width:44px;border-radius:50%;padding:0;font-size:16px;transform:scaleX(-1)}
+/* ⭐ التقييمات */
+#mls-root .mls-stars{color:#F5B301;letter-spacing:1px;font-size:15px;white-space:nowrap}
+#mls-root .mls-stars i{font-style:normal;color:var(--border)}
+#mls-root .mls-rd{display:flex;align-items:center;gap:8px;font-size:11.5px;margin:3px 0}
+#mls-root .mls-rd span:first-child{width:30px;color:var(--text2)}
+#mls-root .mls-rd .bar{flex:1;height:7px;border-radius:99px;background:var(--bg-glass);overflow:hidden;border:1px solid var(--border)}
+#mls-root .mls-rd .bar i{display:block;height:100%;background:#F5B301}
+#mls-root .mls-rtag{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700;margin:2px 0}
+#mls-root .mls-rtag.pos{background:color-mix(in srgb,var(--success) 16%,transparent);color:var(--success)}
+#mls-root .mls-rtag.neg{background:color-mix(in srgb,var(--danger) 14%,transparent);color:var(--danger)}
+#mls-root .mls-rate.lo{border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+#mls-root .mls-rate.hi{border-color:color-mix(in srgb,var(--success) 35%,transparent)}
+@media (max-width:800px){
+ #mls-root .mls-chat{grid-template-columns:1fr;height:calc(100vh - 210px);min-height:420px}
+ #mls-root .mls-chat.has-open .mls-clistw{display:none}
+ #mls-root .mls-chat:not(.has-open) .mls-cpane{display:none}
+ #mls-root .mls-cback{display:inline-flex}
+ #mls-root .mls-bub{max-width:86%}
+}
+/* 📱 إعدادات المتجر + باقي التبويبات على الهاتف */
+#mls-root .mls-grid2.mls-gset{grid-template-columns:1fr 330px}
+@media (max-width:900px){#mls-root .mls-grid2.mls-gset{grid-template-columns:1fr}}
+@media (max-width:700px){
+ #mls-root .mls-top{gap:8px}
+ #mls-root .mls-title{flex:1 1 100%;min-width:0;font-size:15px}
+ #mls-root .mls-tab{padding:9px 11px;font-size:12px}
+ #mls-root .mls-card{padding:12px 11px}
+ #mls-root .mls-row{gap:0 8px}
+ #mls-root .mls-row>.fg{flex:1 1 100%;min-width:0;max-width:none!important}
+ #mls-root .mls-row>.fg input[type=file]{max-width:100%!important}
+ #mls-root .mls-li{flex-wrap:wrap}
+ #mls-root .mls-li .t{min-width:60%}
+ #mls-root .mls-acts .btn{flex:1 1 auto}
+ #mls-root .mls-publish{flex-wrap:wrap;bottom:6px}
+ #mls-root .mls-publish .btn{flex:1 1 100%}
+ #mls-root .mls-due{flex-wrap:wrap;padding:13px}
+ #mls-root .mls-orders,#mls-root .mls-bimgs{grid-template-columns:1fr}
+ #mls-root .mls-chips .mls-chip{flex:1 1 auto;text-align:center}
+ #mls-root .mls-code{font-size:19px;letter-spacing:3px}
+ #mls-root .fc{font-size:16px}  /* يمنع تكبير iOS التلقائي عند الكتابة */
+}
 </style>
 <script>
 /* ══════════════════════════════════════════════════════════════════════
@@ -64805,7 +66188,8 @@ var AR_SEC = [
 
 /* ───────── حالة الوحدة ───────── */
 var M = { app:null, db:null, uid:null, sid:null, conn:false, owner:false, err:'', orders:{}, tab:'orders', filter:'new', ctl:{}, dues:null, bimg:null,
-          q:'', sec:null, catQ:'', busy:{}, timer:null, lastNew:0, refs:[], seen:{}, pkSel:[] };
+          q:'', sec:null, catQ:'', busy:{}, timer:null, lastNew:0, refs:[], seen:{}, pkSel:[],
+          cx:{}, chatOid:null, cq:'', rf:'all', rtNew:0, skew:0, ordLoaded:false };
 
 /* ───────── أدوات ───────── */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -64851,7 +66235,13 @@ function secKey(name){ var h=5381, s=String(name); for(var i=0;i<s.length;i++) h
 function autoSec(name){ for(var i=0;i<AR_SEC.length;i++){ if(AR_SEC[i][0].test(name)) return {n:AR_SEC[i][1], ic:AR_SEC[i][2]}; } return {n:'', ic:'flask'}; }
 async function sha256Hex(s){ var b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0');}).join(''); }
 function TS(){ return firebase.database.ServerValue.TIMESTAMP; }
-function logKey(){ return 'mlstore_log_'+M.sid; }
+// ⭐ سجلّ طلبات المتجر يُحفظ تحت بادئة المستخدم (mlab2_<user>_mlsLog_<sid>) ليدخل تلقائياً
+//    في النسخة الاحتياطية JSON ويُستعاد معها — مع ترحيل تلقائي لمرة واحدة من المفتاح القديم.
+function logKey(){
+  var nk=DB._pfx()+'mlsLog_'+M.sid, ok='mlstore_log_'+M.sid;
+  try{ var old=localStorage.getItem(ok); if(old!==null){ if(localStorage.getItem(nk)===null) localStorage.setItem(nk,old); localStorage.removeItem(ok); } }catch(e){}
+  return nk;
+}
 function getLog(){ try{ return JSON.parse(localStorage.getItem(logKey())||'{}'); }catch(e){ return {}; } }
 function putLog(oid,o){ try{ var L=getLog(); L[oid]=o; var ks=Object.keys(L); if(ks.length>400){ ks.sort(function(a,b){return (L[a].ts||0)-(L[b].ts||0);}); ks.slice(0,ks.length-400).forEach(function(k){delete L[k];}); } localStorage.setItem(logKey(),JSON.stringify(L)); }catch(e){} }
 function defStore(){
@@ -64903,7 +66293,7 @@ async function connect(){
     if(!auth.currentUser) await auth.signInAnonymously();
     M.uid=auth.currentUser.uid; M.db=M.app.database();
     detach();
-    M.sid=c.sid; M.orders={};
+    M.sid=c.sid; M.orders={}; M.cx={}; M.ordLoaded=false;
     await M.db.ref('stores/'+c.sid+'/owner/'+M.uid).set(c.secret);   // تسجيل هذه الحاسبة كمالك (يتحقق منه الخادم بالمفتاح السري)
     M.owner=true; M.err='';
     attach();
@@ -64922,7 +66312,10 @@ function attach(){
   var oref=M.db.ref(base+'/orders');
   oref.on('child_added', function(s){ onOrder(s.key, s.val(), true); });
   oref.on('child_changed', function(s){ onOrder(s.key, s.val(), false); });
-  oref.on('child_removed', function(s){ delete M.orders[s.key]; refresh(); });
+  oref.on('child_removed', function(s){ delete M.orders[s.key]; refresh();
+    if(RX_OID.test(s.key)){ M.db.ref(base+'/cx/'+s.key).remove().catch(function(){}); }   // 💬 حذف الطلب ⇒ تُحذف محادثته من الخادم (تبقى محفوظة محلياً)
+  });
+  oref.once('value', function(){ M.ordLoaded=true; });
   var aref=M.db.ref(base+'/ack');
   aref.on('child_added', function(s){ onAck(s.key); });
   var tref=M.db.ref('ctl/'+M.sid);
@@ -64930,6 +66323,16 @@ function attach(){
   var cref=M.db.ref('.info/connected');
   cref.on('value', function(s){ var v=s.val()===true; if(v!==M.online){ M.online=v; if(isShown()) renderTop(); } });
   M.refs=[oref,aref,tref,cref];
+  // 💬 المراسلة + ⭐ التقييمات (كلاهما فارغ عادةً — يُحذف كل عنصر بعد استلامه)
+  var xref=M.db.ref(base+'/cx');
+  xref.on('child_added', function(s){ onCx(s.key, s.val()); });
+  xref.on('child_changed', function(s){ onCx(s.key, s.val()); });
+  xref.on('child_removed', function(s){ delete M.cx[s.key]; });
+  var rref=M.db.ref(base+'/rt');
+  rref.on('child_added', function(s){ onRate(s.key, s.val()); });
+  var kref=M.db.ref('.info/serverTimeOffset');
+  kref.on('value', function(s){ M.skew=+s.val()||0; });
+  M.refs.push(xref, rref, kref);
 }
 function onOrder(oid,o,added){
   if(!RX_OID.test(oid) || !o || typeof o!=='object') return;
@@ -64957,6 +66360,7 @@ function refresh(){
 }
 function updBadge(){
   var n=Object.keys(M.orders).filter(function(k){return M.orders[k].st==='new';}).length;
+  try{ if(M.sid) n+=chatUnread(); }catch(e){}   // + الرسائل غير المقروءة
   var b=document.getElementById('nb-mystore');
   if(b){ b.textContent=n; b.style.display=n?'':'none'; }
 }
@@ -65268,7 +66672,7 @@ async function sendResult(oid){
 
 /* ───────── التنظيف الدوري (يُبقي الخادم شبه فارغ) ───────── */
 async function cleanup(){
-  if(!M.conn) return; ledHeal(); var c=cfg(), now=Date.now(), ret=Math.max(1,Math.min(14,+(c.info&&c.info.ret)||3))*864e5;
+  if(!M.conn) return; ledHeal(); try{ chatCleanup(); }catch(e){} var c=cfg(), now=Date.now(), ret=Math.max(1,Math.min(14,+(c.info&&c.info.ret)||3))*864e5;
   var ks=Object.keys(M.orders);
   for(var i=0;i<ks.length;i++){ var oid=ks[i], o=M.orders[oid], u=o.upd||o.ts||0;
     try{
@@ -65276,6 +66680,241 @@ async function cleanup(){
       else if(o.st==='ready' && o.rs && now-u>ret){ await M.db.ref('stores/'+M.sid+'/res/'+o.rs).remove(); await oref(oid).update({msg:'انتهت مدة تنزيل النتيجة. تواصل مع المختبر لإعادة إرسالها.', upd:TS()}); }
     }catch(e){}
   }
+}
+
+
+/* ═══════════ 💬 المراسلة مع المراجعين  +  ⭐ تقييمات الساحبين ═══════════
+   • كل رسالة/تقييم يصل يُحفظ محلياً (تحت بادئة المستخدم ⇒ يدخل في النسخة
+     الاحتياطية JSON) ثم يُحذف من الخادم بعد ثوانٍ (مهلة تسمح لبقية حاسبات
+     المختبر المتصلة باستلامه أيضاً).
+   • ما لا يُفتح خلال 48 ساعة يُحذف من الخادم في التنظيف الدوري.
+   • مستمعان فقط (cx و rt) وكلاهما فارغ في الحالة الطبيعية ⇒ حمل شبه معدوم. */
+var RX_MID=/^[A-Za-z0-9_-]{6,30}$/, CHAT_TTL=48*3600e3, RM_DELAY=20000;
+var LQUICK=['الساحب في الطريق إليك الآن 🛵','سنتصل بك خلال دقائق لتأكيد الموعد','يرجى الصيام 8–12 ساعة قبل السحب','تم إرسال النتيجة إلى التطبيق ✅','شكراً لثقتكم بنا 🌷'];
+function chatKey(){ return DB._pfx()+'mlsChat_'+M.sid; }
+function rateKey(){ return DB._pfx()+'mlsRates_'+M.sid; }
+function getChats(){ try{ var v=JSON.parse(localStorage.getItem(chatKey())||'{}'); return (v&&typeof v==='object')?v:{}; }catch(e){ return {}; } }
+function putChats(C){ try{ var ks=Object.keys(C); if(ks.length>300){ ks.sort(function(a,b){return (C[a].lt||0)-(C[b].lt||0);}); ks.slice(0,ks.length-300).forEach(function(k){delete C[k];}); } localStorage.setItem(chatKey(),JSON.stringify(C)); }catch(e){} }
+function getRates(){ try{ var v=JSON.parse(localStorage.getItem(rateKey())||'{}'); return (v&&typeof v==='object')?v:{}; }catch(e){ return {}; } }
+function putRates(R){ try{ var ks=Object.keys(R); if(ks.length>2000){ ks.sort(function(a,b){return (R[a].ts||0)-(R[b].ts||0);}); ks.slice(0,ks.length-2000).forEach(function(k){delete R[k];}); } localStorage.setItem(rateKey(),JSON.stringify(R)); }catch(e){} }
+function sNow(){ return Date.now()+(M.skew||0); }
+function chatUnread(){ var C=getChats(); return Object.keys(C).reduce(function(s,k){ return s+(+C[k].un||0); },0); }
+function chatViewing(oid){ return isShown() && M.tab==='chat' && M.chatOid===oid && !document.hidden; }
+function ordInfo(oid){ return M.orders[oid] || getLog()[oid] || {}; }
+
+function onCx(oid, th){
+  if(!RX_OID.test(oid) || !th || typeof th!=='object') return;
+  M.cx[oid]=th;
+  var C=getChats(), c=C[oid]||(C[oid]={ms:[],un:0,lt:0}), o=ordInfo(oid), viewing=chatViewing(oid);
+  if(!Array.isArray(c.ms)) c.ms=[];
+  if(o.nm) c.nm=String(o.nm).slice(0,80); if(o.ph) c.ph=String(o.ph).slice(0,20);
+  var m=(th.m&&typeof th.m==='object')?th.m:{}, fresh=0, ch=false;
+  Object.keys(m).forEach(function(id){
+    var v=m[id]; if(!RX_MID.test(id) || !v || typeof v.t!=='string') return;
+    var x=c.ms.find(function(y){return y.id===id;});
+    if(v.f==='p'){ if(!x){ c.ms.push({id:id, f:'p', t:v.t.slice(0,1000), ts:+v.ts||Date.now()}); fresh++; } schedRm('cx/'+oid+'/m/'+id); }
+    else if(v.f==='l'){
+      if(!x){ c.ms.push({id:id, f:'l', t:v.t.slice(0,1000), ts:+v.ts||Date.now(), st:'sent'}); ch=true; }   // أرسلتها حاسبة أخرى في المختبر
+      else{ if(x.st==='sending'||x.st==='fail'){ x.st='sent'; ch=true; } if(typeof v.ts==='number' && x.ts!==v.ts){ x.ts=v.ts; ch=true; } }
+    }
+  });
+  c.ms.forEach(function(x){ if(x.f==='l' && x.st==='sent' && !m[x.id]){ x.st='dlv'; ch=true; } });   // اختفت ⇒ استلمها المراجع
+  var rp=+th.rp||0; if(rp) c.ms.forEach(function(x){ if(x.f==='l' && (x.st==='sent'||x.st==='dlv') && rp>=x.ts){ x.st='read'; ch=true; } });
+  if(fresh){ c.ms.sort(function(a,b){return a.ts-b.ts;}); if(c.ms.length>300) c.ms=c.ms.slice(-300); if(!viewing) c.un=(+c.un||0)+fresh; c.lt=Date.now(); }
+  if(fresh||ch) putChats(C);
+  if(fresh){ if(viewing) markRead(oid); else msgAlert(oid,c); }
+  chatRefresh(oid);
+}
+function schedRm(path){
+  M._rm=M._rm||{}; if(M._rm[path]) return;
+  M._rm[path]=setTimeout(function(){ delete M._rm[path]; if(M.conn) M.db.ref('stores/'+M.sid+'/'+path).remove().catch(function(){}); }, RM_DELAY);
+}
+function ping(){
+  try{ var C=new (window.AudioContext||window.webkitAudioContext)(), t=C.currentTime, o=C.createOscillator(), g=C.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(1046,t); o.frequency.exponentialRampToValueAtTime(1568,t+.12);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.18,t+.02); g.gain.exponentialRampToValueAtTime(0.0001,t+.35);
+    o.connect(g); g.connect(C.destination); o.start(t); o.stop(t+.4); setTimeout(function(){ try{C.close();}catch(e){} },800); }catch(e){}
+}
+function msgAlert(oid,c){
+  var cf=cfg(), last=c.ms.filter(function(x){return x.f==='p';}).pop();
+  if(!cf || cf.sound!==false) ping();
+  notif('💬 رسالة من '+(c.nm||'مراجع'), last?last.t.slice(0,90):'', 'info');
+  try{ if(document.hidden && 'Notification' in window && Notification.permission==='granted'){ new Notification('رسالة من '+(c.nm||'مراجع'), {body:last?last.t.slice(0,120):''}); } }catch(e){}
+  updBadge();
+}
+function markRead(oid){
+  var C=getChats(), c=C[oid]; if(c && c.un){ c.un=0; putChats(C); updBadge(); }
+  if(!M.conn || !M.cx[oid]) return;
+  M._rl=M._rl||{}; if(Date.now()-(M._rl[oid]||0)<3000) return; M._rl[oid]=Date.now();
+  M.db.ref('stores/'+M.sid+'/cx/'+oid+'/rl').set(TS()).catch(function(){});
+}
+function chatSend(oid, text){
+  text=String(text||'').trim().slice(0,1000); if(!text || !RX_OID.test(oid)) return;
+  if(!M.conn) return notif('غير متصل','تحقّق من الإنترنت','error');
+  var ref=M.db.ref('stores/'+M.sid+'/cx/'+oid+'/m').push(), id=ref.key;
+  var C=getChats(), c=C[oid]||(C[oid]={ms:[],un:0,lt:0}), o=ordInfo(oid);
+  if(o.nm) c.nm=o.nm; if(o.ph) c.ph=o.ph;
+  c.ms.push({id:id, f:'l', t:text, ts:sNow(), st:'sending'}); c.lt=Date.now(); putChats(C); chatPaint(oid,true);
+  ref.set({f:'l', t:text, ts:TS()}).then(function(){
+    var C2=getChats(), x=C2[oid] && C2[oid].ms.find(function(y){return y.id===id;}); if(x && x.st==='sending'){ x.st='sent'; putChats(C2); chatPaint(oid,false); }
+  }).catch(function(e){
+    var C2=getChats(), x=C2[oid] && C2[oid].ms.find(function(y){return y.id===id;}); if(x){ x.st='fail'; putChats(C2); chatPaint(oid,false); }
+    notif('تعذّر الإرسال', (e&&e.code==='PERMISSION_DENIED')?'تحقّق من تحديث قواعد Firebase للمتجر':'تحقّق من الاتصال', 'error');
+  });
+}
+function chatTyping(oid){
+  if(!M.conn || !RX_OID.test(oid)) return; M._tl=M._tl||0; if(Date.now()-M._tl<3500) return; M._tl=Date.now();
+  M.db.ref('stores/'+M.sid+'/cx/'+oid+'/tl').set(TS()).catch(function(){});
+}
+function onRate(oid, v){
+  if(!RX_OID.test(oid) || !v || typeof v!=='object') return;
+  var s=Math.round(+v.s||0); if(!(s>=1 && s<=5)){ schedRm('rt/'+oid); return; }
+  var R=getRates(), o=ordInfo(oid);
+  if(!R[oid]){
+    R[oid]={s:s, g:String(v.g||'').split('|').map(function(t){return t.trim().slice(0,40);}).filter(Boolean).slice(0,8), c:String(v.c||'').slice(0,400),
+      by:String(v.by||o.by||'').slice(0,80), nm:String(o.nm||'').slice(0,80), ph:String(o.ph||'').slice(0,20), ts:+v.ts||Date.now()};
+    putRates(R); if(!(isShown() && M.tab==='rates')) M.rtNew=(M.rtNew||0)+1;
+    var cf=cfg(); if(!cf || cf.sound!==false) ping();
+    notif('⭐ تقييم جديد '+'★'.repeat(s)+'☆'.repeat(5-s), (R[oid].by?'الساحب: '+R[oid].by+' — ':'')+(R[oid].nm||'')+(R[oid].c?' — '+R[oid].c.slice(0,60):''), s>=4?'success':'warning');
+    if(isShown() && M.tab==='rates') render(); else updTabs();
+  }
+  schedRm('rt/'+oid);
+}
+/* تنظيف المحادثات: رسائل لم تُفتح خلال 48 ساعة + محادثات طلبات حُذفت */
+function chatCleanup(){
+  if(!M.conn) return; var base='stores/'+M.sid, now=sNow();
+  Object.keys(M.cx).forEach(function(oid){
+    var th=M.cx[oid]||{}, m=th.m||{};
+    if(M.ordLoaded && !M.orders[oid]){ M.db.ref(base+'/cx/'+oid).remove().catch(function(){}); return; }
+    Object.keys(m).forEach(function(id){ var v=m[id]; if(v && typeof v.ts==='number' && now-v.ts>CHAT_TTL) M.db.ref(base+'/cx/'+oid+'/m/'+id).remove().catch(function(){}); });
+  });
+}
+
+/* ── الواجهة: المراسلات ── */
+function tickHtml(st){
+  if(st==='sending') return '<span class="tk" title="جاري الإرسال">🕓</span>';
+  if(st==='fail') return '<span class="tk bad" title="فشل الإرسال">⚠️</span>';
+  if(st==='read') return '<span class="tk rd" title="قرأها المراجع">✓✓</span>';
+  if(st==='dlv') return '<span class="tk" title="وصلت لهاتف المراجع">✓✓</span>';
+  return '<span class="tk" title="أُرسلت — بانتظار أن يفتح المراجع التطبيق">✓</span>';
+}
+function hmL(ts){ try{ return new Date(ts).toLocaleTimeString('ar-IQ',{hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
+function dayL(ts){ var d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.getDate()-1);
+  if(d.toDateString()===t.toDateString()) return 'اليوم'; if(d.toDateString()===y.toDateString()) return 'أمس';
+  try{ return d.toLocaleDateString('ar-IQ',{day:'numeric',month:'long'}); }catch(e){ return d.toDateString(); } }
+function chatThreads(){
+  var C=getChats(), ids={}, out=[];
+  Object.keys(C).forEach(function(k){ if(RX_OID.test(k) && (C[k].ms||[]).length) ids[k]=1; });
+  Object.keys(M.orders).forEach(function(k){ var st=M.orders[k].st; if(['rejected','cancelled'].indexOf(st)<0) ids[k]=1; });
+  if(M.chatOid) ids[M.chatOid]=1;
+  Object.keys(ids).forEach(function(k){ var c=C[k]||{ms:[],un:0}, o=ordInfo(k), last=(c.ms||[])[(c.ms||[]).length-1];
+    out.push({oid:k, c:c, o:o, nm:c.nm||o.nm||'مراجع', last:last, t:(last&&last.ts)||c.lt||o.upd||o.ts||0}); });
+  var q=(M.cq||'').trim().toLowerCase();
+  if(q) out=out.filter(function(r){ return (r.nm+' '+(r.o.ph||r.c.ph||'')+' '+shortNo(r.oid)).toLowerCase().indexOf(q)>=0; });
+  out.sort(function(a,b){ return ((b.c.un?1:0)-(a.c.un?1:0)) || (b.t-a.t); });
+  return out;
+}
+function chatListHtml(){
+  var rows=chatThreads();
+  if(!rows.length) return '<div class="mls-empty" style="padding:30px 10px"><b>لا توجد محادثات</b>تظهر هنا رسائل المراجعين فور وصولها، ويمكنك بدء محادثة من بطاقة أي طلب.</div>';
+  return rows.slice(0,150).map(function(r){
+    var o=r.o, st=ST[o.st]||null;
+    return '<button class="mls-cli'+(M.chatOid===r.oid?' on':'')+(r.c.un?' un':'')+'" data-x="copen" data-o="'+r.oid+'">'+
+      '<span class="mls-cav">'+esc(String(r.nm).trim().charAt(0)||'م')+'</span>'+
+      '<span class="mls-cmain"><span class="mls-ctop"><b>'+esc(r.nm)+'</b><small>'+(r.t?ago(r.t):'')+'</small></span>'+
+      '<span class="mls-clast">'+(r.last?(r.last.f==='l'?tickHtml(r.last.st)+' ':'')+esc(r.last.t.slice(0,60)):'<i class="mls-muted">#'+shortNo(r.oid)+(st?' · '+st[0]:'')+'</i>')+'</span></span>'+
+      (r.c.un?'<span class="mls-cbadge">'+r.c.un+'</span>':'')+'</button>';
+  }).join('');
+}
+function chatMsgsHtml(oid){
+  var c=getChats()[oid];
+  if(!c || !(c.ms||[]).length) return '<div class="mls-chello">💬<b>ابدأ المحادثة</b>تصل رسالتك إلى تطبيق المراجع فوراً، وتظهر علامة ✓✓ عند استلامها و<span style="color:#2E9BF0">✓✓</span> عند قراءتها.</div>';
+  var out='', lastDay='';
+  c.ms.forEach(function(x){
+    var dl=dayL(x.ts); if(dl!==lastDay){ out+='<div class="mls-cday"><span>'+esc(dl)+'</span></div>'; lastDay=dl; }
+    out+='<div class="mls-bub '+(x.f==='l'?'me':'them')+(x.st==='fail'?' fail':'')+'"'+(x.st==='fail'?' data-x="cretry" data-o="'+oid+'" data-m="'+esc(x.id)+'" title="اضغط لإعادة الإرسال"':'')+'><span class="bt">'+esc(x.t)+'</span><span class="bm">'+hmL(x.ts)+(x.f==='l'?' '+tickHtml(x.st):'')+'</span></div>';
+  });
+  return out;
+}
+function chatHeadHtml(oid){
+  var c=getChats()[oid]||{}, o=ordInfo(oid), st=ST[o.st], tp=+((M.cx[oid]||{}).tp)||0;
+  var typing=tp && (sNow()-tp)<6000;
+  var live=!!M.orders[oid];
+  return '<button class="btn btn-s btn-sm mls-cback" data-x="cback">→</button>'+
+    '<span class="mls-cav">'+esc(String(c.nm||o.nm||'م').trim().charAt(0))+'</span>'+
+    '<div class="mls-chtt"><b>'+esc(c.nm||o.nm||'مراجع')+'</b><small>'+(typing?'<span class="mls-typing">يكتب الآن<i></i><i></i><i></i></span>':
+      '#'+shortNo(oid)+(st?' · '+st[0]:'')+(o.by?' · الساحب: '+esc(o.by):'')+(o.ph||c.ph?' · <span dir="ltr">'+esc(o.ph||c.ph)+'</span>':''))+'</small></div>'+
+    (live?'<button class="btn btn-s btn-sm" data-x="cgo" data-o="'+oid+'" title="عرض الطلب">🧾 الطلب</button>':'');
+}
+function chatHtml(){
+  var oid=M.chatOid, live=oid && !!M.orders[oid];
+  return '<div class="mls-chat'+(oid?' has-open':'')+'">'+
+    '<div class="mls-clistw"><input class="fc" data-x="cq" placeholder="🔍 اسم، هاتف، أو رقم الطلب" value="'+esc(M.cq||'')+'"><div class="mls-clist" id="mls-clist">'+chatListHtml()+'</div></div>'+
+    '<div class="mls-cpane">'+(oid?
+      '<div class="mls-chead" id="mls-chead">'+chatHeadHtml(oid)+'</div>'+
+      '<div class="mls-cmsgs" id="mls-cmsgs">'+chatMsgsHtml(oid)+'</div>'+
+      (live?'<div class="mls-ccomp"><div class="mls-cqr">'+LQUICK.map(function(q,i){return '<button data-x="cq1" data-i="'+i+'">'+esc(q)+'</button>';}).join('')+'</div>'+
+        '<div class="mls-crow"><textarea class="fc" id="mls-cin" data-x="cin" rows="1" maxlength="1000" placeholder="اكتب رسالة للمراجع…" title="Enter للإرسال — Shift+Enter لسطر جديد"></textarea><button class="btn btn-p" data-x="csend" title="إرسال">➤</button></div></div>'
+       :'<div class="mls-info" style="margin:10px">انتهى هذا الطلب وحُذف من الخادم — المحادثة محفوظة للعرض فقط على هذه الحاسبة.</div>')
+      :'<div class="mls-empty" style="margin:auto"><b>اختر محادثة</b>رسائل المراجعين تصل هنا فوراً مع تنبيه صوتي.</div>')+
+    '</div></div>';
+}
+function chatScrollEnd(){ var el=document.getElementById('mls-cmsgs'); if(el) el.scrollTop=el.scrollHeight; }
+function chatPaint(oid, toEnd){
+  if(!isShown() || M.tab!=='chat') return;
+  var l=document.getElementById('mls-clist'); if(l) l.innerHTML=chatListHtml();
+  if(M.chatOid!==oid) return;
+  var el=document.getElementById('mls-cmsgs'); if(!el) return;
+  var near=el.scrollHeight-el.scrollTop-el.clientHeight<140;
+  el.innerHTML=chatMsgsHtml(oid);
+  var h=document.getElementById('mls-chead'); if(h) h.innerHTML=chatHeadHtml(oid);
+  if(near||toEnd) chatScrollEnd();
+}
+function chatRefresh(oid){
+  updBadge();
+  if(isShown() && M.tab==='chat'){ chatPaint(oid,false); var tp=+((M.cx[oid]||{}).tp)||0; clearTimeout(M._typT); if(tp && sNow()-tp<6000) M._typT=setTimeout(function(){ chatPaint(oid,false); },6200); }
+  else updTabs();
+}
+function updTabs(){
+  var r=root(); if(!r) return;
+  var b=r.querySelector('.mls-tab[data-v="chat"]'); if(b){ var n=chatUnread(); b.innerHTML='💬 المراسلات'+(n?'<b>'+n+'</b>':''); }
+  var b2=r.querySelector('.mls-tab[data-v="rates"]'); if(b2){ b2.innerHTML='⭐ التقييمات'+(M.rtNew?'<b>'+M.rtNew+'</b>':''); }
+}
+
+/* ── الواجهة: التقييمات ── */
+function starsHtml(s){ s=Math.round(+s||0); return '<span class="mls-stars">'+'★'.repeat(s)+'<i>'+'★'.repeat(5-s)+'</i></span>'; }
+function ratesHtml(){
+  var R=getRates(), all=Object.keys(R).map(function(k){ return Object.assign({oid:k},R[k]); }).sort(function(a,b){return b.ts-a.ts;});
+  if(!all.length) return '<div class="mls-empty"><b>لا توجد تقييمات بعد</b>بعد وصول النتيجة إلى تطبيق المراجع تظهر له نافذة لتقييم الساحب بالنجوم، ويصل التقييم هنا فوراً ويُحفظ على هذه الحاسبة.</div>';
+  var f=M.rf||'all', list=all.filter(function(r){ return f==='all' || (f==='hi'?r.s>=4:r.s<=3); });
+  var avg=all.reduce(function(s,r){return s+r.s;},0)/all.length, pos=all.filter(function(r){return r.s>=4;}).length;
+  var by={}; all.forEach(function(r){ var k=r.by||'— بدون اسم —'; var b=by[k]||(by[k]={n:0,s:0,tags:{}}); b.n++; b.s+=r.s; (r.g||[]).forEach(function(t){ b.tags[t]=(b.tags[t]||0)+1; }); });
+  var col=Object.keys(by).map(function(k){ var b=by[k]; return {k:k,n:b.n,a:b.s/b.n,tags:Object.keys(b.tags).sort(function(x,y){return b.tags[y]-b.tags[x];}).slice(0,3)}; }).sort(function(a,b){return b.n-a.n;});
+  var dist=[5,4,3,2,1].map(function(s){ var n=all.filter(function(r){return r.s===s;}).length; return '<div class="mls-rd"><span>'+s+' ★</span><span class="bar"><i style="width:'+Math.round(n*100/all.length)+'%"></i></span><span>'+n+'</span></div>'; }).join('');
+  return '<div class="mls-qs">'+
+      '<div class="mls-card mls-q"><div class="mls-qt">متوسط التقييم</div><div class="mls-qv">'+avg.toFixed(1)+' <small class="mls-muted">/ 5</small></div>'+starsHtml(avg)+'</div>'+
+      '<div class="mls-card mls-q"><div class="mls-qt">عدد التقييمات</div><div class="mls-qv">'+all.length+'</div><div class="mls-muted" style="font-size:12px">إيجابية: '+pos+' ('+Math.round(pos*100/all.length)+'%)</div></div>'+
+      '<div class="mls-card mls-q"><div class="mls-qt">التوزيع</div>'+dist+'</div></div>'+
+    '<div class="mls-card"><h4>🛵 أداء الساحبين</h4><div class="mls-scroll" style="max-height:260px"><table class="mls-t"><thead><tr><th>الساحب</th><th>التقييمات</th><th>المتوسط</th><th>الأكثر تكراراً</th></tr></thead><tbody>'+
+      col.map(function(c){ return '<tr><td><b>'+esc(c.k)+'</b></td><td>'+c.n+'</td><td>'+starsHtml(c.a)+' <b>'+c.a.toFixed(1)+'</b></td><td>'+c.tags.map(function(t){return '<span class="mls-rtag '+(RNEG[t]?'neg':'pos')+'">'+esc(t)+'</span>';}).join(' ')+'</td></tr>'; }).join('')+
+    '</tbody></table></div></div>'+
+    '<div class="mls-chips">'+[['all','الكل ('+all.length+')'],['hi','إيجابية 4–5 ★'],['lo','سلبية 1–3 ★']].map(function(x){return '<button class="mls-chip '+(f===x[0]?'on':'')+'" data-x="rf" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'+
+    '<div class="mls-orders">'+list.slice(0,200).map(function(r){
+      return '<div class="mls-ord mls-rate '+(r.s<=2?'lo':r.s>=4?'hi':'')+'"><div class="hd">'+starsHtml(r.s)+'<span class="tm">'+ago(r.ts)+'</span></div>'+
+        '<div class="mls-kv"><span>الساحب</span><b>'+esc(r.by||'—')+'</b><span>المراجع</span><span>'+esc(r.nm||'—')+(r.ph?' <span class="mls-muted" dir="ltr">'+esc(r.ph)+'</span>':'')+'</span><span>الطلب</span><span>#'+shortNo(r.oid)+'</span></div>'+
+        ((r.g||[]).length?'<div>'+r.g.map(function(t){return '<span class="mls-rtag '+(RNEG[t]?'neg':'pos')+'">'+esc(t)+'</span>';}).join(' ')+'</div>':'')+
+        (r.c?'<div class="mls-info">💬 '+esc(r.c)+'</div>':'')+
+        '<div class="mls-acts"><button class="btn btn-s btn-sm" data-x="rdel" data-o="'+r.oid+'">🗑️ حذف من السجل</button></div></div>';
+    }).join('')+'</div>';
+}
+var RNEG={'تأخّر عن الموعد':1,'تعامل غير لائق':1,'ألم أثناء السحب':1,'عدم الالتزام بالنظافة':1,'لم يتصل قبل الوصول':1,'تكرار الوخز':1};
+function chatOpenOid(oid){
+  M.tab='chat'; M.chatOid=oid; render(); markRead(oid);
+  setTimeout(function(){ chatScrollEnd(); var t=document.getElementById('mls-cin'); if(t) t.focus(); },30);
+}
+function chatSendUI(){
+  var t=document.getElementById('mls-cin'); if(!t || !M.chatOid) return;
+  var v=t.value; if(!v.trim()) return; t.value=''; t.style.height=''; chatSend(M.chatOid, v); t.focus();
 }
 
 /* ═══════════════════ الواجهة ═══════════════════ */
@@ -65297,8 +66936,11 @@ function render(){
   var c=cfg();
   if(!c){ r.innerHTML=setupHtml(); return; }
   var nNew=Object.keys(M.orders).filter(function(k){return M.orders[k].st==='new';}).length;
-  var tabs=[['orders','الطلبات'+(nNew?'<b>'+nNew+'</b>':'')],['catalog','التحاليل والأسعار'],['offers','العروض والخصومات'],['dues','الإحصائيات والمستحقات'],['settings','إعدادات المتجر']];
-  var body = M.tab==='catalog'?catalogHtml(): M.tab==='offers'?offersHtml(): M.tab==='settings'?settingsHtml(): M.tab==='dues'?duesHtml(): ordersHtml();
+  var nUn=chatUnread();
+  var tabs=[['orders','الطلبات'+(nNew?'<b>'+nNew+'</b>':'')],['chat','💬 المراسلات'+(nUn?'<b>'+nUn+'</b>':'')],['rates','⭐ التقييمات'+(M.rtNew?'<b>'+M.rtNew+'</b>':'')],['catalog','التحاليل والأسعار'],['offers','العروض والخصومات'],['dues','الإحصائيات والمستحقات'],['settings','إعدادات المتجر']];
+  var body = M.tab==='catalog'?catalogHtml(): M.tab==='offers'?offersHtml(): M.tab==='settings'?settingsHtml(): M.tab==='dues'?duesHtml(): M.tab==='chat'?chatHtml(): M.tab==='rates'?ratesHtml(): ordersHtml();
+  // لا نفقد ما يكتبه المستخدم في المراسلة عند إعادة الرسم (وصول طلب/تحديث)
+  var cin=document.getElementById('mls-cin'), cinV=cin?cin.value:'', cinF=cin&&document.activeElement===cin;
   if(M.ctl && M.ctl.off) body='<div class="mls-warn" style="margin-bottom:12px;font-size:12.5px">⛔ <b>متجرك موقوف من الإدارة</b>'+(M.ctl.why?' — '+esc(M.ctl.why):'')+'. لا يستطيع المراجعون إرسال طلبات جديدة حتى يُعاد التفعيل. الطلبات الحالية تستمر طبيعياً.</div>'+body;
   var keep=r.querySelector('.mls-scroll'); var sc=keep?keep.scrollTop:0;
   var keepBar=r.querySelector('.mls-secbar'); var barL=keepBar?keepBar.scrollLeft:null;
@@ -65310,6 +66952,7 @@ function render(){
   if(M.tab==='catalog') bindSecBar(r, barL);
   if(M.tab==='settings') drawQR();
   if(M.tab==='dues') drawDuesChart();
+  if(M.tab==='chat'){ var ci=document.getElementById('mls-cin'); if(ci && cinV){ ci.value=cinV; } if(ci && cinF) ci.focus(); chatScrollEnd(); }
 }
 function setupHtml(){
   return '<div class="mls-top"><div class="mls-title">🛵 طلبات المتجر — ميدلاب هوم</div></div>'+
@@ -65360,7 +67003,8 @@ function orderCard(o){
     if(req && ['onway','collected','inlab','accepted','ready'].indexOf(o.st)>=0) acts.push('<button class="btn btn-s btn-sm" data-x="openreq"'+D+'>🧪 فتح النتائج</button>');
     if(req && ['collected','inlab','accepted','onway'].indexOf(o.st)>=0) acts.push('<button class="btn btn-ok btn-sm" data-x="send"'+D+(busy?' disabled':'')+'>'+(busy?'⏳ جاري التحضير…':'📄 إرسال النتيجة')+'</button>');
     if(o.st==='ready') acts.push('<button class="btn btn-s btn-sm" data-x="send"'+D+(busy?' disabled':'')+'>'+(busy?'⏳…':'🔁 إعادة إرسال النتيجة')+'</button>');
-    acts.push('<button class="btn btn-s btn-sm" data-x="msg"'+D+'>💬 رسالة</button>');
+    var _un=((getChats()[oid]||{}).un)||0;
+    acts.push('<button class="btn btn-s btn-sm" data-x="copen"'+D+'>💬 مراسلة'+(_un?' <b class="mls-cbadge">'+_un+'</b>':'')+'</button>');
     acts.push('<button class="btn btn-s btn-sm" data-x="wa"'+D+'>واتساب</button>');
     if(['done','rejected','cancelled'].indexOf(o.st)>=0) acts.push('<button class="btn btn-s btn-sm" data-x="del"'+D+'>🗑️ حذف من الخادم</button>');
     if(o.st==='new') acts.push('<button class="btn btn-s btn-sm" data-x="block"'+D+' title="منع هذا الرقم من الطلب">🚫 حظر</button>');
@@ -65697,7 +67341,7 @@ function settingsHtml(){
   var areas=(I.ars||[]).map(function(a,i){return '<div class="mls-li"><span class="t"><b>'+esc(a.n)+'</b> — '+(a.f?money(a.f):'مجاناً')+'</span><button class="btn btn-d btn-sm" data-x="ardel" data-i="'+i+'">حذف</button></div>';}).join('');
   var blk=c.blkList||[];
   function inp(k,label,ph,type,extra){ return '<div class="fg"><label class="fl">'+label+'</label><input class="fc" data-x="inf" data-k="'+k+'" type="'+(type||'text')+'" value="'+esc(I[k]==null?'':I[k])+'" placeholder="'+esc(ph||'')+'" '+(extra||'')+'></div>'; }
-  return '<div class="mls-grid2" style="grid-template-columns:1fr 330px">'+
+  return '<div class="mls-grid2 mls-gset">'+
   '<div>'+
     '<div class="mls-card"><h4>🏥 بيانات المختبر في التطبيق</h4>'+
       '<div class="mls-row">'+inp('nm','اسم المختبر','','text','maxlength="80"')+inp('ph','هاتف الاتصال','07XXXXXXXXX','tel','dir="ltr"')+inp('wa','رقم واتساب','07XXXXXXXXX','tel','dir="ltr"')+'</div>'+
@@ -65767,11 +67411,19 @@ function onClick(e){
   var el=e.target.closest('[data-x]'); if(!el || !root().contains(el)) return;
   var x=el.getAttribute('data-x'), c=cfg(), oid=el.getAttribute('data-o'), i=+el.getAttribute('data-i');
   if(oid && !RX_OID.test(oid)) return;
-  if(['tvis','sh','cpon','bnon','pkon','sound','logo','inf','url','tp','tdp','tpr','td','sn','sic','sdp','so','dg','q','catq','pkq','bimgadd','bimgto','dfrom','dto'].indexOf(x)>=0) return; // تُعالج في change/input
+  if(['tvis','sh','cpon','bnon','pkon','sound','logo','inf','url','tp','tdp','tpr','td','sn','sic','sdp','so','dg','q','catq','pkq','bimgadd','bimgto','dfrom','dto','cq','cin'].indexOf(x)>=0) return; // تُعالج في change/input
   e.preventDefault();
   switch(x){
     case 'enable': enableStore(); break;
-    case 'tab': M.tab=el.getAttribute('data-v'); if(M.tab==='dues') loadDues(); if(M.tab==='offers') M.bimg=null; render(); break;
+    case 'tab': M.tab=el.getAttribute('data-v'); if(M.tab==='dues') loadDues(); if(M.tab==='offers') M.bimg=null; if(M.tab==='rates') M.rtNew=0; render(); if(M.tab==='chat' && M.chatOid) markRead(M.chatOid); break;
+    case 'copen': chatOpenOid(oid); break;
+    case 'cback': M.chatOid=null; render(); break;
+    case 'cgo': M.tab='orders'; M.filter=(FILTERS.find(function(f){ return f[2].indexOf((M.orders[oid]||{}).st)>=0; })||FILTERS[0])[0]; M.q=shortNo(oid); render(); break;
+    case 'csend': chatSendUI(); break;
+    case 'cq1': { var tq=document.getElementById('mls-cin'); if(tq){ tq.value=LQUICK[i]||''; chatSendUI(); } break; }
+    case 'cretry': { var mid=el.getAttribute('data-m'), C0=getChats(), c0=C0[oid], x0=c0&&c0.ms.find(function(y){return y.id===mid;}); if(x0){ c0.ms=c0.ms.filter(function(y){return y.id!==mid;}); putChats(C0); chatSend(oid,x0.t); } break; }
+    case 'rf': M.rf=el.getAttribute('data-v'); render(); break;
+    case 'rdel': if(confirm('حذف هذا التقييم من سجل هذه الحاسبة؟')){ var R0=getRates(); delete R0[oid]; putRates(R0); render(); } break;
     case 'bimgdel': if(!confirm('حذف هذه الصورة من التطبيق؟')) break; M.bimg.splice(i,1); saveBimg().then(function(){ notif('تم','حُذفت الصورة من تطبيق المراجعين','success'); render(); }).catch(function(){ notif('خطأ','تعذّر الحذف','error'); }); break;
     case 'duesre': M.dues=null; loadDues(true); render(); break;
     case 'dpre': M.dr={pre:el.getAttribute('data-v')}; render(); break;
@@ -65832,11 +67484,13 @@ function onInput(e){
   var t=el.getAttribute('data-t'), n=el.getAttribute('data-v'), val=el.type==='checkbox'?el.checked:el.value;
   function T(){ return c.tst[t]=c.tst[t]||{}; } function SC(){ return c.sec[n]=c.sec[n]||{}; }
   // حقول البحث: نتجاهل change (يُطلق عند فقدان التركيز) حتى لا تُعاد بناء القائمة أثناء النقر عليها
-  if((x==='q'||x==='catq'||x==='pkq') && e.type!=='input') return;
+  if((x==='q'||x==='catq'||x==='pkq'||x==='cq') && e.type!=='input') return;
   switch(x){
     case 'q': M.q=val; clearTimeout(M._qt); M._qt=setTimeout(function(){ render(); var q=root().querySelector('[data-x="q"]'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} },250); return;
     case 'catq': M.catQ=val; clearTimeout(M._qt); M._qt=setTimeout(function(){ render(); var q=root().querySelector('[data-x="catq"]'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} },300); return;
     case 'pkq': { var sg=document.getElementById('pk-sug'); if(sg) sg.innerHTML=testOptions(val); return; }
+    case 'cq': M.cq=val; var cl=document.getElementById('mls-clist'); if(cl) cl.innerHTML=chatListHtml(); return;
+    case 'cin': if(e.type!=='input') return; el.style.height='auto'; el.style.height=Math.min(140,el.scrollHeight)+'px'; if(M.chatOid) chatTyping(M.chatOid); return;
     case 'tvis': T().h=val?0:1; el.closest('tr').classList.toggle('off',!val); break;
     case 'tp': if(val===''||val==null) delete T().p; else T().p=Math.max(0,+val); break;
     case 'tdp': if(val==='') delete T().dp; else T().dp=Math.max(0,Math.min(90,+val)); break;
@@ -65879,6 +67533,8 @@ function init(){
   r.addEventListener('click', onClick);
   r.addEventListener('input', onInput);
   r.addEventListener('change', onInput);
+  r.addEventListener('keydown', function(e){ if(e.target && e.target.id==='mls-cin' && e.key==='Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); chatSendUI(); } });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden && isShown() && M.tab==='chat' && M.chatOid) markRead(M.chatOid); });
   try{ if(typeof pages==='object' && pages && !Array.isArray(pages)) pages['mystore']=['طلبات المتجر','الرئيسية / طلبات المتجر — ميدلاب هوم']; }catch(e){}
   tick(); setInterval(tick, 4000);
   setInterval(function(){ cleanup(); }, 30*60000);
@@ -67314,6 +68970,23 @@ FACE.load = function(prog){
     }
     prog && prog(96,'تهيئة المعالج…');
     try{ var c=document.createElement('canvas'); c.width=c.height=160; await withTimeout(fa.detectSingleFace(c, new fa.TinyFaceDetectorOptions({inputSize:160})), 15000); }catch(e){ console.warn('[ATT] warmup', e); }
+    /* ⚡ تسخين شبكتي المعالم والبصمة أيضاً (كانت تُبنى عند أول وجه فتتجاوز المهلة على الحاسبات الضعيفة)
+       + قياس زمن معالجة إطار كامل ⇒ المهَل وحجم المعالجة يتكيّفان مع سرعة الجهاز */
+    try{
+      prog && prog(97,'تهيئة نماذج البصمة…');
+      var wc=document.createElement('canvas'); wc.width=wc.height=150; var wg=wc.getContext('2d'); wg.fillStyle='#888'; wg.fillRect(0,0,150,150);
+      var t0=performance.now();
+      if(fa.nets.faceLandmark68Net.detectLandmarks) await withTimeout(fa.nets.faceLandmark68Net.detectLandmarks(wc), 40000);
+      if(fa.nets.faceRecognitionNet.computeFaceDescriptor) await withTimeout(fa.nets.faceRecognitionNet.computeFaceDescriptor(wc), 40000);
+      var t1=performance.now();
+      if(fa.nets.faceLandmark68Net.detectLandmarks) await withTimeout(fa.nets.faceLandmark68Net.detectLandmarks(wc), 20000);
+      if(fa.nets.faceRecognitionNet.computeFaceDescriptor) await withTimeout(fa.nets.faceRecognitionNet.computeFaceDescriptor(wc), 20000);
+      var t2=performance.now();
+      var c2=document.createElement('canvas'); c2.width=640; c2.height=480;
+      await withTimeout(fa.detectSingleFace(c2, new fa.TinyFaceDetectorOptions({inputSize:320})), 20000);
+      FACE.ms = Math.round((t2-t1) + (performance.now()-t2));        // زمن تقريبي لإطار كامل (كشف + معالم + بصمة)
+      console.log('[ATT] backend='+FACE.backend+' · frame≈'+FACE.ms+'ms (first build '+Math.round(t1-t0)+'ms)');
+    }catch(e){ console.warn('[ATT] warmup2', e); }
     FACE.ready = true; prog && prog(100,'جاهز');
   })().catch(function(e){ FACE.loading=null; throw e; });
   return FACE.loading;
@@ -67324,15 +68997,63 @@ function withTimeout(pr, ms){
     Promise.resolve(pr).then(function(v){ clearTimeout(t); res(v); }, function(e){ clearTimeout(t); rej(e); });
   });
 }
-function detOpts(size){ var fa=window.faceapi; return new fa.TinyFaceDetectorOptions({inputSize: size || +D.set.inputSize || 320, scoreThreshold: 0.45}); }
-function detectOne(input, size){
+function detOpts(size, thr){ var fa=window.faceapi; return new fa.TinyFaceDetectorOptions({inputSize: size || +D.set.inputSize || 320, scoreThreshold: thr || 0.45}); }
+/* ⚙️ تشغيل آمن على الحاسبات الضعيفة:
+   • المهلة = max(الأساس، 4 × متوسط زمن الإطار على هذا الجهاز) ⇒ لا رفض لإطار سليم لأن الجهاز بطيء.
+   • استدعاء انتهت مهلته يبقى يعمل في الخلفية — ننتظره قبل بدء استدعاء جديد (بدل تراكمها وتجمّد المعالج).
+   • متوسط متحرك لزمن الإطار (FACE.ms) يُستخدم لتكييف حجم المعالجة. */
+function _faceTmo(base){ return Math.max(base, Math.round((FACE.ms||0)*4)); }
+function _faceRun(fn, base){
+  var start=function(){
+    var t0=performance.now(), p=Promise.resolve().then(fn);
+    FACE.inflight=p;
+    p.then(function(){ var dt=performance.now()-t0; FACE.ms = FACE.ms ? Math.round(FACE.ms*0.75+dt*0.25) : Math.round(dt); }, function(){})
+     .then(function(){ if(FACE.inflight===p) FACE.inflight=null; });
+    return withTimeout(p, _faceTmo(base));
+  };
+  if(FACE.inflight){ var prev=FACE.inflight; return withTimeout(prev.catch(function(){}), _faceTmo(base)).catch(function(){}).then(start); }
+  return start();
+}
+function detectOne(input, size, thr){
   var fa=window.faceapi;
-  return withTimeout(fa.detectSingleFace(input, detOpts(size)).withFaceLandmarks().withFaceDescriptor(), 6000);
+  return _faceRun(function(){ return fa.detectSingleFace(input, detOpts(size, thr)).withFaceLandmarks().withFaceDescriptor(); }, 6000);
 }
 /* كشف سريع: الوجه + المعالم فقط (بدون شبكة البصمة الثقيلة) — لمراقبة الرمش بمعدل إطارات عالٍ */
 function detectLM(input, size){
   var fa=window.faceapi;
-  return withTimeout(fa.detectSingleFace(input, detOpts(size)).withFaceLandmarks(), 4000);
+  return _faceRun(function(){ return fa.detectSingleFace(input, detOpts(size)).withFaceLandmarks(); }, 4000);
+}
+/* حجم المعالجة في شاشة الحضور: إعداد المستخدم، مع تخفيض تلقائي إن كان الجهاز بطيئاً جداً */
+function kioskSize(){ var s=+D.set.inputSize||320; if(FACE.ms>1600 && s>224) return 224; if(FACE.ms>900 && s>256) return 256; return s; }
+/* 🔎 جودة صورة الوجه: الإضاءة (متوسط السطوع) والحدّة (تباين لابلاس) على قصاصة 96×96 رمادية */
+var _fqc=null, _fqg=null;
+function faceQuality(src, box){
+  try{
+    if(!_fqc){ _fqc=document.createElement('canvas'); _fqc.width=_fqc.height=96; _fqg=_fqc.getContext('2d',{willReadFrequently:true}); }
+    var x=box.x+box.width*0.15, y=box.y+box.height*0.1, w=box.width*0.7, h=box.height*0.8;
+    _fqg.drawImage(src, x, y, w, h, 0, 0, 96, 96);
+    var d=_fqg.getImageData(0,0,96,96).data, N=96*96, g=new Float32Array(N), sum=0, i;
+    for(i=0;i<N;i++){ g[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2]; sum+=g[i]; }
+    var lum=sum/N, ls=0, ls2=0, n=0;
+    for(var yy=1;yy<95;yy++) for(var xx=1;xx<95;xx++){ i=yy*96+xx; var L=4*g[i]-g[i-1]-g[i+1]-g[i-96]-g[i+96]; ls+=L; ls2+=L*L; n++; }
+    var m=ls/n; return {lum:lum, sharp:ls2/n-m*m};
+  }catch(e){ return {lum:128, sharp:999}; }
+}
+/* 🧭 اتجاه الرأس من المعالم: yaw (يمين/يسار) و pitch (أعلى/أسفل) نسبةً لعرض العينين */
+function headPose(pts){
+  try{
+    var eL=pts[36], eR=pts[45], n=pts[30], mx=(eL.x+eR.x)/2, my=(eL.y+eR.y)/2, ed=Math.hypot(eR.x-eL.x, eR.y-eL.y)||1;
+    return {yaw:(n.x-mx)/ed, pitch:(n.y-my)/ed};
+  }catch(e){ return {yaw:0, pitch:0.5}; }
+}
+/* 🧹 إزالة العينات الشاذة (وجه آخر عبر الإطار، ضبابية شديدة…) — تُبقي المتّسق منها */
+function dropOutliers(list){
+  if(list.length<4) return {keep:list.map(function(_,i){return i;}), dropped:0};
+  var med=list.map(function(a,i){ var ds=list.filter(function(_,j){return j!==i;}).map(function(b){ return dist(a,b); }); return _med(ds); });
+  var all=_med(med), keep=[];
+  med.forEach(function(m,i){ if(!(m>0.55 && m>all*1.6)) keep.push(i); });
+  if(keep.length<2) keep=list.map(function(_,i){return i;});
+  return {keep:keep, dropped:list.length-keep.length};
 }
 function dist(a,b){ var s=0, n=Math.min(a.length,b.length); for(var i=0;i<n;i++){ var d=a[i]-b[i]; s+=d*d; } return Math.sqrt(s); }
 /** أفضل تطابق مع هامش تمييز بين الموظفين */
@@ -67683,7 +69404,7 @@ async function kioskTick(){
   KS.busy=true;
   try{
     if(KS.live){ await liveStep(v); return; }
-    var det = await detectOne(v);
+    var det = await detectOne(v, kioskSize());
     if(!KS.on) return;
     if(!det){ drawBox(null); KS.track=null; liveStop(); KS.unknown=0; camMsg(faceCount()?'قف أمام الكاميرا…':'لا توجد بصمات وجه مسجّلة بعد'); return; }
     var box=det.detection.box, vw=v.videoWidth||640;
@@ -67805,47 +69526,73 @@ function enPreview(){
 }
 function enProgress(){
   var n=EN.samples.length, p=$('att-en-prog'); if(p) p.style.width=Math.min(100,n/5*100)+'%';
-  var sh=$('att-en-shots'); if(sh){ var is=sh.querySelectorAll('i'); for(var i=0;i<is.length;i++){ if(EN.thumbs[i]){ is[i].style.backgroundImage='url(\''+EN.thumbs[i]+'\')'; is[i].classList.add('ok'); } } }
+  var sh=$('att-en-shots'); if(sh){ var is=sh.querySelectorAll('i'); for(var i=0;i<is.length;i++){ if(EN.thumbs[i]){ is[i].style.backgroundImage='url(\''+EN.thumbs[i]+'\')'; is[i].classList.add('ok'); } else { is[i].style.backgroundImage=''; is[i].classList.remove('ok'); } } }
   var sv=$('att-en-save'); if(sv) sv.disabled = n<1;
 }
 ATT.enrollCapture = function(){
   if(!EN.stream){ notif('الكاميرا','الكاميرا غير متاحة — ارفع صوراً بدلاً من ذلك','warning'); return; }
   if(EN.on) return;
-  EN.on=true; EN.samples=[]; EN.thumbs=[]; EN.lastT=0; enProgress();
+  EN.on=true; EN.samples=[]; EN.thumbs=[]; EN.lastT=0; EN.poses=[]; EN.blurN=0; EN.sharpMin=14; EN.base=null; EN.photoCM=false; enProgress();
   var go=$('att-en-go'); if(go){ go.disabled=true; go.textContent='⏳ جارِ الالتقاط…'; }
   var v=$('att-en-video'), started=Date.now();
+  /* ⏱️ المهلة الكلية تتكيّف مع سرعة الجهاز (كانت 25 ث ثابتة ⇒ تفشل على الحاسبات الضعيفة قبل اكتمال 5 عينات) */
+  var budget=Math.max(30000, Math.min(150000, (FACE.ms||1000)*16));
+  /* حجم الكشف لا يؤثر على دقة البصمة (تُحسب من صورة الكاميرا الأصلية بعد المحاذاة) ⇒ نخفّفه على الأجهزة البطيئة */
+  var dsz = FACE.ms>1500 ? 256 : FACE.ms>800 ? 320 : 416;
+  var GUIDE=['انظر مباشرة إلى الكاميرا','أدِر رأسك قليلاً إلى اليمين','أدِر رأسك قليلاً إلى اليسار','ارفع ذقنك قليلاً','اخفض رأسك قليلاً'];
   var step=async function(){
     if(!EN.on) return;
-    if(Date.now()-started>25000){ enDone(false); return; }
+    if(Date.now()-started>budget){ enDone(EN.samples.length>=3); return; }
     try{
-      var d=await detectOne(v, 416);
+      var d=await detectOne(v, dsz, 0.4);
+      if(!EN.on) return;
       var msg=$('att-en-msg'), ring=$('att-en-ring');
       if(!d){ if(msg) msg.textContent='لا يوجد وجه — انظر إلى الكاميرا'; if(ring) ring.classList.remove('ok'); }
       else{
-        var b=d.detection.box, vw=v.videoWidth||640;
+        var b=d.detection.box, vw=v.videoWidth||640, q=faceQuality(v, b), ps=headPose(d.landmarks.positions);
         if(b.width < vw*0.2){ if(msg) msg.textContent='🔍 اقترب من الكاميرا'; if(ring) ring.classList.remove('ok'); }
-        else if(d.detection.score < 0.6){ if(msg) msg.textContent='💡 حسّن الإضاءة على الوجه'; }
+        else if(q.lum < 45){ if(msg) msg.textContent='💡 الإضاءة ضعيفة — وجّه ضوءاً نحو الوجه'; if(ring) ring.classList.remove('ok'); }
+        else if(q.lum > 225){ if(msg) msg.textContent='☀️ الإضاءة قوية جداً على الوجه — ابتعد عن مصدر الضوء'; if(ring) ring.classList.remove('ok'); }
+        else if(d.detection.score < 0.55){ if(msg) msg.textContent='💡 حسّن الإضاءة على الوجه'; }
+        else if(Math.abs(ps.yaw) > 0.42){ if(msg) msg.textContent='↩️ أدِر وجهك نحو الكاميرا أكثر'; }
+        else if(q.sharp < EN.sharpMin){
+          /* صورة مهزوزة: نرفضها، ونخفّف الشرط تدريجياً لكاميرات الحاسبات الضعيفة (حتى لا يتوقف الالتقاط) */
+          if(++EN.blurN>=6){ EN.sharpMin=Math.max(3, EN.sharpMin*0.6); EN.blurN=0; }
+          if(msg) msg.textContent='✋ ثبّت رأسك لحظة — الصورة مهزوزة';
+        }
         else{
+          EN.blurN=0;
           if(ring) ring.classList.add('ok');
-          // عينات متنوعة: نتجاهل المطابقة التامة للعينة السابقة إلا إذا ثبت الموظف طويلاً
-          var tooSimilar = EN.samples.some(function(s){ return dist(s, d.descriptor) < 0.05; }) && (Date.now()-EN.lastT < 1200);
-          if(!tooSimilar && Date.now()-EN.lastT > 380){
-            EN.samples.push(packDesc(d.descriptor));
-            var th=snapFace(v, b, 96); EN.thumbs.push(th); if(!EN.photo) EN.photo=snapFace(v, b, 160);
+          if(!EN.base) EN.base=ps;
+          /* تنوّع حقيقي في الزوايا: نقبل العينة إن كانت زاويتها جديدة، أو مختلفة بوضوح في البصمة */
+          var bin=(ps.yaw>0.1?'R':ps.yaw<-0.1?'L':'C')+((ps.pitch-EN.base.pitch)>0.08?'D':(ps.pitch-EN.base.pitch)<-0.08?'U':'M');
+          var minD=EN.samples.length?Math.min.apply(null, EN.samples.map(function(s0){ return dist(s0, d.descriptor); })):1;
+          var gap=Date.now()-EN.lastT;
+          var accept = gap>380 && (EN.poses.indexOf(bin)<0 || minD>0.1 || (gap>2500 && minD>0.04) || gap>4000);   // لا توقّف إن لم يحرّك رأسه (أو الجهاز بطيء)
+          if(accept){
+            EN.samples.push(packDesc(d.descriptor)); EN.poses.push(bin);
+            var th=snapFace(v, b, 96); EN.thumbs.push(th); if(!EN.photo || (bin==='CM' && !EN.photoCM)){ EN.photo=snapFace(v, b, 160); if(bin==='CM') EN.photoCM=true; }
             EN.lastT=Date.now(); enProgress();
-            if(msg) msg.textContent='✅ عينة '+EN.samples.length+' من 5 — حرّك رأسك قليلاً';
+            if(msg) msg.textContent='✅ عينة '+EN.samples.length+' من 5'+(EN.samples.length<5?' — '+GUIDE[EN.samples.length]:'');
             beep('in');
-          } else if(msg) msg.textContent='↔️ حرّك رأسك قليلاً…';
+          } else if(msg) msg.textContent='↔️ '+GUIDE[Math.min(EN.samples.length,4)];
         }
       }
-    }catch(e){ console.warn(e); }
+    }catch(e){ console.warn('[ATT] enroll', e && e.message); }
     if(EN.samples.length>=5){ enDone(true); return; }
-    setTimeout(step, 120);
+    setTimeout(step, FACE.ms>1200 ? 30 : 120);
   };
   step();
 };
 function enDone(ok){
   EN.on=false;
+  /* 🧹 تنقية: حذف العينات الشاذة قبل الحفظ */
+  try{
+    var od=dropOutliers(EN.samples);
+    if(od.dropped){ EN.samples=od.keep.map(function(i){ return EN.samples[i]; }); EN.thumbs=od.keep.map(function(i){ return EN.thumbs[i]; }).filter(Boolean); enProgress(); }
+  }catch(_){}
+  if(!EN.photo && EN.thumbs.length){ EN.photo=EN.thumbs[0]; }
+  if(ok && EN.samples.length<3) ok=false;
   var go=$('att-en-go'); if(go){ go.disabled=false; go.textContent='🔄 إعادة الالتقاط'; }
   var msg=$('att-en-msg');
   if(msg) msg.textContent = ok ? '✅ تم التقاط البصمة بنجاح — اضغط «حفظ البصمة»' : (EN.samples.length ? ('تم التقاط '+EN.samples.length+' عينات — يمكنك الحفظ أو الإعادة') : '⚠️ لم يُلتقط وجه واضح — حاول مع إضاءة أفضل');
