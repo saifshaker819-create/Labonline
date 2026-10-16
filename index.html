@@ -7051,9 +7051,10 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                 </div>
                 <div style="margin-top:12px;padding-top:12px;border-top:1px dashed rgba(255,180,0,0.35)">
                   <div style="font-size:11px;color:var(--text2);line-height:1.9;margin-bottom:8px">
-                    <b style="color:#ff6b6b">إعادة ترقيم شاملة:</b> يمنح كل مريض قديم رقماً جديداً أصلياً (يبدأ من ١٠٠٠٠١) ويحدّث باركوده وكل طلباته وفواتيره ونتائجه المرتبطة تلقائياً، دون أي تداخل. مفيد للتخلّص نهائياً من الأرقام القديمة. <b>يُنصح بأخذ نسخة احتياطية أولاً.</b>
+                    <b style="color:#00c46a">🧬 توحيد الأرقام وحذف المرضى المكررين:</b> يدمج النسخ المكررة للمريض نفسه (تطابق تام بالزيارات والنتائج فقط)، ويوحّد أرقام الملفات والطلبات القديمة على أرقام <b>الحاسبة رقم ١</b> في كل الحاسبات. نفّذه على الحاسبة ١ أولاً ثم على البقية. يحفظ نسخة احتياطية تلقائياً ويمكن التراجع.<br>
+                    <span style="color:#ff6b6b">⛔ الترقيم المنفصل لكل حاسبة (من ١٠٠٠٠١) أُوقف — كان يعطي المريض نفسه رقماً مختلفاً في كل حاسبة.</span>
                   </div>
-                  <button class="btn btn-d" style="width:100%" onclick="renumberAllPatients()">🔄 إعادة ترقيم كل المرضى بأرقام جديدة</button>
+                  <button class="btn btn-ok" style="width:100%" onclick="MLU.open()">🧬 توحيد الأرقام وحذف المرضى المكررين</button>
                 </div>
                 <div id="barcode-diag-out" style="display:none;margin-top:12px;background:rgba(0,0,0,0.25);border-radius:8px;padding:10px;font-size:11px;font-family:'Courier New',monospace;color:var(--text);max-height:260px;overflow:auto;direction:ltr;text-align:left;white-space:pre-wrap"></div>
               </div>
@@ -14944,7 +14945,7 @@ function renderPatients(filter='all',srch='',_overridePts=null){
       if(!visited) return false;
     }
     if(filter==='today') return p.lastVisit===today||p.registered===today;
-    if(_srchLower) return((p.name||'')+(p.phone||'')+(p.id||'')).toLowerCase().includes(_srchLower);
+    if(_srchLower) return((p.name||'')+(p.phone||'')+(p.id||'')+(p._oldIds||'')).toLowerCase().includes(_srchLower);
     return true;
   });
   const _countLbl=document.getElementById('pts-count-lbl'); if(_countLbl) _countLbl.textContent=filteredPatients.length+' مريض';
@@ -16079,7 +16080,7 @@ function renderRequestsFiltered(filter='today',srch=''){
   else if(filter==='inprogress') list=list.filter(r=>r.status==='inprogress');
   else if(filter==='done') list=list.filter(r=>r.status==='done');
   else if(filter==='devnew') list=list.filter(r=>_reqShowsInDevicePanel(r));
-  if(srch){const q=srch.trim().toLowerCase();list=list.filter(r=>(r.patientName||'').toLowerCase().includes(q)||(r.id||'').toLowerCase().includes(q)||String(r.orderNo||'').toLowerCase().includes(q));}
+  if(srch){const q=srch.trim().toLowerCase();list=list.filter(r=>(r.patientName||'').toLowerCase().includes(q)||(r.id||'').toLowerCase().includes(q)||String(r.orderNo||'').toLowerCase().includes(q)||String(r._oldIds||'').toLowerCase().includes(q));}
   if(!list.length){
     let _emptyMsg=filter==='devnew'
       ? 'لا يوجد مرضى اليوم بنتائج أجهزة بانتظار الطباعة'
@@ -71040,6 +71041,78 @@ function detSid(o){
 }
 function sidFor(o){ return (orgOf(o) || o._dev) ? detSid(o) : newSid(); }
 SX.newSid = newSid; SX.detSid = detSid;
+
+/* ── 🧬 بصمة الشخص والزيارة (تطابق تام فقط) ── */
+function normName(s){
+  return String(s||'').replace(/[\u064B-\u065F\u0670\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي')
+    .replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/[^\u0600-\u06FFA-Za-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim().toLowerCase();
+}
+/* زيارة = التاريخ + التحاليل + كل النتائج المُدخلة — أي اختلاف ⇒ زيارة مختلفة */
+function visitFp(r){
+  if(!r || typeof r !== 'object') return '';
+  var d = String(r.date || '').slice(0,10);
+  var t = (Array.isArray(r.tests) ? r.tests.map(String).sort().join(',') : '');
+  var res = r.results && typeof r.results === 'object' ? Object.keys(r.results).filter(function(k){ var v=r.results[k]; return v!==undefined && v!==null && String(v).trim()!==''; })
+            .sort().map(function(k){ return k+'='+String(r.results[k]).trim(); }).join(';') : '';
+  if(!d && !t) return '';
+  /* R = دليل قوي: نتيجة رقمية واحدة على الأقل أو نتيجتان فأكثر · E = بلا نتائج أو نتيجة نوعية واحدة (مثل Negative) */
+  var vals = r.results && typeof r.results === 'object' ? Object.keys(r.results).map(function(k){ return r.results[k]; }).filter(function(v){ return v!==undefined && v!==null && String(v).trim()!==''; }) : [];
+  var strong = vals.length >= 2 || vals.some(function(v){ return /\d/.test(String(v)); });
+  return (strong ? 'R' : 'E') + h53(d+'|'+t+'|'+res, 11);
+}
+function phoneN(p){ var x=String(p||'').replace(/\D/g,''); if(x.indexOf('964')===0) x='0'+x.slice(3); return x.length>=7 ? x.slice(-10) : ''; }
+/* ملفان متوافقان: لا تعارض في الجنس أو الهاتف أو سنة الميلاد (الحقل الفارغ لا يُعدّ تعارضاً) */
+function profileOk(a, b){
+  if(a.gender && b.gender && a.gender !== b.gender) return false;
+  var pa=phoneN(a.phone), pb=phoneN(b.phone); if(pa && pb && pa !== pb) return false;
+  if(a.birthYear && b.birthYear && String(a.birthYear) !== String(b.birthYear)) return false;
+  return true;
+}
+/* تطابق الزيارات: زيارة واحدة على الأقل متطابقة تماماً (تاريخ + تحاليل + كل قيم النتائج) وفيها نتائج،
+   أو زيارتان متطابقتان على الأقل. الزيارات الأخرى لكل نسخة (أُضيفت بعد الانقسام) لا تمنع التطابق. */
+function sharedVisits(A, B){
+  var ca={}, cb={}, i, k, sh=0, shR=0;
+  for(i=0;i<A.length;i++) ca[A[i]]=(ca[A[i]]||0)+1;
+  for(i=0;i<B.length;i++) cb[B[i]]=(cb[B[i]]||0)+1;
+  for(k in ca) if(cb[k]){ var n=Math.min(ca[k],cb[k]); sh+=n; if(k.charAt(0)==='R') shR+=n; }
+  return {all:sh, withRes:shR};
+}
+function visitsMatch(A, B){
+  if(!A || !B || !A.length || !B.length) return false;
+  var x = sharedVisits(A, B);
+  return x.withRes >= 1 || x.all >= 2;
+}
+SX.sharedVisits = sharedVisits;
+SX.normName = normName; SX.visitFp = visitFp; SX.profileOk = profileOk; SX.visitsMatch = visitsMatch; SX.phoneN = phoneN;
+
+/* ── أسماء بديلة: شخص واحد وصل برقمَي مزامنة (حاسبتان رقّتاه كلٌّ على حدة) ── */
+function aliasKey(){ return pfx() + 'msid_alias'; }
+var _alias = null;
+function aliasMap(){ if(_alias && _alias.__p === pfx()) return _alias; try{ _alias = JSON.parse(localStorage.getItem(aliasKey())||'{}') || {}; }catch(e){ _alias = {}; } _alias.__p = pfx(); return _alias; }
+SX.resolve = function(col, sid){
+  if(!sid) return sid; var m = aliasMap()[col]; if(!m) return sid;
+  var seen = 0; while(m[sid] && seen++ < 8) sid = m[sid];
+  return sid;
+};
+SX.alias = function(col, from, to){
+  if(!from || !to || from === to) return;
+  var a = aliasMap(); (a[col] || (a[col] = {}))[from] = to;
+  try{ var o = {}; Object.keys(a).forEach(function(k){ if(k !== '__p') o[k] = a[k]; }); localStorage.setItem(aliasKey(), JSON.stringify(o)); }catch(e){}
+  try{ if(window.MSync && MSync._forget) MSync._forget(col, from); }catch(e){}
+};
+/* يضيف معرّفات للأرشيف المحلي (بعد التوحيد) حتى لا تُعامل كسجلات جديدة */
+SX.markLegacy = function(col, ids){
+  var L = S.legacy[col] || (S.legacy[col] = new Set());
+  (ids||[]).forEach(function(id){ if(id != null) L.add(String(id)); });
+  S.legacyDirty[col] = 1; scheduleLegacySave();
+};
+/* بصمات زيارات المريض المحلية (الأرشيف فقط — بلا رقم مزامنة) */
+function localVfps(pid){
+  var a = getArr('requests'), out = [];
+  for(var i=0;i<a.length;i++){ var r=a[i]; if(r && String(r.patientId)===String(pid) && !r._sid){ var f=visitFp(r); if(f) out.push(f); } }
+  return out;
+}
+SX.localVfps = localVfps;
 SX.isSid = function(x){ return typeof x === 'string' && /^[SL][0-9a-z]/.test(x) && x.length >= 10; };
 
 /* المصفوفة الحيّة لكل مجموعة (المتغيّرات العامة للبرنامج) */
@@ -71101,7 +71174,12 @@ function ensureSid(col, rec){
   if(!rec || typeof rec !== 'object' || rec._sid) return false;
   if(rec.id == null || rec.id === '') return false;
   var prev = S.sidById[col] && S.sidById[col][String(rec.id)];
-  rec._sid = prev || (isLegacy(col, rec) ? detSid(rec) : sidFor(rec));
+  if(prev){ var _holder = index(col).bySid[prev]; if(_holder && _holder !== rec) prev = null; }   // الرقم ما زال على سجل آخر ⇒ لا يُكرَّر
+  var _leg = isLegacy(col, rec);
+  rec._sid = prev || (_leg ? detSid(rec) : sidFor(rec));
+  /* 🧬 مريض قديم يُرسَل لأول مرة ⇒ يحمل بصمات زياراته القديمة ليُطابَق عند الحاسبات الأخرى
+     مع ملفه هناك (حتى لو اختلف رقم الملف) — تطابق تام بالزيارات لا بالاسم وحده */
+  if(col === 'patients' && _leg && !rec._vfp){ try{ var _v = localVfps(rec.id); if(_v.length) rec._vfp = _v.slice(-60); }catch(e){} }
   (S.sidById[col] || (S.sidById[col] = {}))[String(rec.id)] = rec._sid;
   SX.touch(col);
   return true;
@@ -71144,21 +71222,30 @@ window._sidOnSave = function(k, arr){
   SX.touch(k);
   if(!S.ready || S.pfx !== pfx()) return null;
   var L = S.legacy[k] || (S.legacy[k] = new Set());
-  var map = S.sidById[k] || (S.sidById[k] = {});
-  var stamped = [], fresh = [], seen = {}, i, o, id;
+  var prev = S.sidById[k] || {};
+  var map = {}, present = {}, stamped = [], fresh = [], i, o, id;
+  /* المرور الأول: السجلات التي تحمل رقماً */
   for(i=0;i<arr.length;i++){
     o = arr[i];
-    if(!o || typeof o !== 'object') continue;
-    if(o._sid){
-      if(o.id != null){ seen[String(o.id)] = 1; if(map[String(o.id)] !== o._sid) map[String(o.id)] = o._sid; }
-      if((LINK_P[k] && o._pidAt !== o.patientId && o.patientId != null) || (LINK_R[k] && o._ridAt !== o.reqId && o.reqId != null)){
-        if(linkFix(k, o)) stamped.push(o);
-      }
-      continue;
+    if(!o || typeof o !== 'object' || !o._sid) continue;
+    present[o._sid] = 1;
+    if(o.id != null) map[String(o.id)] = o._sid;
+    if(k === 'patients' && o._vfp === undefined && o._sid.charAt(0) === 'L'){
+      try{ o._vfp = localVfps(o.id).slice(-60); stamped.push(o); }catch(e){}
     }
+    if((LINK_P[k] && o._pidAt !== o.patientId && o.patientId != null) || (LINK_R[k] && o._ridAt !== o.reqId && o.reqId != null)){
+      if(linkFix(k, o)) stamped.push(o);
+    }
+  }
+  /* المرور الثاني: السجلات بلا رقم */
+  for(i=0;i<arr.length;i++){
+    o = arr[i];
+    if(!o || typeof o !== 'object' || o._sid) continue;
     if(o.id == null || o.id === '') continue;
     id = String(o.id);
-    if(map[id]){ o._sid = map[id]; seen[id] = 1; linkFix(k, o); stamped.push(o); continue; }   // رقم سقط أثناء تعديل ⇒ يُستعاد
+    /* رقم سقط أثناء تعديل أعاد بناء السجل ⇒ يُستعاد — فقط إن لم يعد ذلك الرقم موجوداً على سجل آخر */
+    var pv = prev[id];
+    if(pv && !present[pv]){ o._sid = pv; present[pv] = 1; map[id] = pv; linkFix(k, o); stamped.push(o); continue; }
     if(L.has(id)) continue;
     var org = orgOf(o);
     if(org && org < S.T0 - OLD_MS){ L.add(id); S.legacyDirty[k] = 1; continue; }  // سجل قديم ⇒ أرشيف
@@ -71174,12 +71261,11 @@ window._sidOnSave = function(k, arr){
   for(i=0;i<fresh.length;i++){
     o = fresh[i];
     o._sid = sidFor(o);
-    map[String(o.id)] = o._sid; seen[String(o.id)] = 1;
+    map[String(o.id)] = o._sid;
     linkFix(k, o);
     stamped.push(o);
   }
-  /* سجلات حُذفت ⇒ لا يُعاد رقمها لسجل آخر يحمل الرقم الظاهر نفسه مستقبلاً */
-  for(id in map){ if(!seen[id]) delete map[id]; }
+  S.sidById[k] = map;
   if(Object.keys(S.legacyDirty).length) scheduleLegacySave();
   return stamped;
 };
@@ -71201,8 +71287,12 @@ function fixLinksLater(col, sid, nid){
         var a = getArr(tc);
         for(var i=0;i<a.length;i++){
           var r = a[i]; if(!r || typeof r !== 'object') continue;
-          if(j.col === 'patients' && r._psid === j.sid && r.patientId !== j.nid){ r.patientId = j.nid; r._pidAt = j.nid; (byCol[tc]||(byCol[tc]=[])).push(r); }
-          if(j.col === 'requests' && r._rsid === j.sid && r.reqId !== j.nid){ r.reqId = j.nid; r._ridAt = j.nid; (byCol[tc]||(byCol[tc]=[])).push(r); }
+          if(j.col === 'patients' && r._psid && SX.resolve('patients', r._psid) === SX.resolve('patients', j.sid) && String(r.patientId) !== j.nid){
+            r.patientId = j.nid; r._pidAt = j.nid; r._psid = SX.resolve('patients', j.sid);
+            try{ var _pp = index('patients').byId[j.nid]; if(_pp && _pp.name) r.patientName = _pp.name; }catch(e){}
+            (byCol[tc]||(byCol[tc]=[])).push(r);
+          }
+          if(j.col === 'requests' && r._rsid && SX.resolve('requests', r._rsid) === SX.resolve('requests', j.sid) && String(r.reqId) !== j.nid){ r.reqId = j.nid; r._ridAt = j.nid; r._rsid = SX.resolve('requests', j.sid); (byCol[tc]||(byCol[tc]=[])).push(r); }
         }
       });
     });
@@ -71210,14 +71300,62 @@ function fixLinksLater(col, sid, nid){
   }, 900);
 }
 /* ctx اختياري: {bySid, byId} يُحدَّث أثناء دفعة واحدة */
+/* 🧬 مطابقة مريض وارد بملف محلي (رقم ملف مختلف) — تطابق تام بالزيارات القديمة + لا تعارض في الملف */
+var _pidx = null;
+function personIndex(){
+  var a = getArr('patients');
+  if(_pidx && _pidx.arr === a && _pidx.len === a.length && _pidx.ver === (S.ver.patients||0) && _pidx.rver === (S.ver.requests||0)) return _pidx;
+  var byName = {}, vf = {};
+  for(var i=0;i<a.length;i++){ var p=a[i]; if(!p || p.id==null) continue; var n=normName(p.name); if(!n) continue; (byName[n]||(byName[n]=[])).push(p); }
+  var r = getArr('requests');
+  for(i=0;i<r.length;i++){ var q=r[i]; if(!q || q._sid || q.patientId==null) continue; var f=visitFp(q); if(f) (vf[String(q.patientId)]||(vf[String(q.patientId)]=[])).push(f); }
+  _pidx = {arr:a, len:a.length, ver:(S.ver.patients||0), rver:(S.ver.requests||0), byName:byName, vf:vf};
+  return _pidx;
+}
+function matchPerson(rec){
+  if(!Array.isArray(rec._vfp) || !rec._vfp.length) return null;
+  var P = personIndex(), cands = P.byName[normName(rec.name)] || [], ok = [];
+  for(var i=0;i<cands.length;i++){
+    var c = cands[i];
+    if(c._sid === rec._sid) return c;
+    if(!profileOk(c, rec)) continue;
+    var mine = (P.vf[String(c.id)] || []).concat(Array.isArray(c._vfp) ? c._vfp : []);
+    if(visitsMatch(rec._vfp, mine)) ok.push(c);
+  }
+  if(!ok.length) return null;
+  /* أكثر من ملف مطابق تماماً = نسخ مكررة للشخص نفسه هنا ⇒ أقدم/أصغر رقم بشكل ثابت (أداة التوحيد تدمجها لاحقاً) */
+  var me = devId();
+  ok.sort(function(a,b){
+    var ao=(a._dev===me)?1:0, bo=(b._dev===me)?1:0; if(ao!==bo) return bo-ao;          // ملف هذه الحاسبة أولاً
+    var av=(P.vf[String(a.id)]||[]).length, bv=(P.vf[String(b.id)]||[]).length; if(av!==bv) return bv-av;
+    return String(a.id) < String(b.id) ? -1 : 1;
+  });
+  return ok[0];
+}
+SX.matchPerson = matchPerson;
+SX.fixLinksLater = function(col, sid, nid){ fixLinksLater(col, sid, nid); };
+
 SX.adopt = function(col, rec, ctx){
   if(!rec || typeof rec !== 'object' || !rec._sid) return null;
   ctx = ctx || index(col);
+  var _rs = SX.resolve(col, rec._sid);
+  if(_rs !== rec._sid) rec = Object.assign({}, rec, {_sid:_rs});
+  if(col === 'patients' && !ctx.bySid[rec._sid]){
+    var pm = matchPerson(rec);
+    if(pm && pm._sid && pm._sid !== rec._sid){ SX.alias('patients', rec._sid, pm._sid); rec = Object.assign({}, rec, {_sid:pm._sid}); ctx.bySid[pm._sid] = pm; }
+    else if(pm && !pm._sid){ pm._sid = rec._sid; ctx.bySid[rec._sid] = pm; (S.sidById.patients||(S.sidById.patients={}))[String(pm.id)] = rec._sid; SX.touch('patients'); }
+  }
   var out = Object.assign({}, rec);
   var local = ctx.bySid[rec._sid];
   if(local){
     if(local.id != null) out.id = local.id;
-    if(col === 'patients' && local.barcode != null) out.barcode = local.barcode;
+    /* هوية السجل المحلي تبقى كما هي (رقمه، باركوده، منشؤه، أرقامه القديمة) — يتغيّر المحتوى فقط */
+    ['barcode','_org','_dev','regTime','registered','_oldIds','orderNo'].forEach(function(f){
+      if(f === 'orderNo' && col !== 'requests') return;
+      if(f === 'barcode' && col !== 'patients') return;
+      if(local[f] !== undefined && local[f] !== null && local[f] !== '') out[f] = local[f];
+    });
+    if((col === 'patients' || col === 'requests') && rec.id != null && String(local.id) !== String(rec.id)) fixLinksLater(col, rec._sid, String(local.id));
   } else if(out.id != null && out.id !== ''){
     var clash = ctx.byId[String(out.id)];
     /* نفس الكيان لكنه لم يأخذ رقمه هنا بعد (رقم حتمي متطابق) ⇒ هو نفسه، لا إعادة ترقيم */
@@ -71233,6 +71371,8 @@ SX.adopt = function(col, rec, ctx){
       if(col === 'patients' || col === 'requests') fixLinksLater(col, rec._sid, nid);
     }
   }
+  if(out._psid) out._psid = SX.resolve('patients', out._psid);
+  if(out._rsid) out._rsid = SX.resolve('requests', out._rsid);
   if(LINK_P[col] && out._psid){
     var p = index('patients').bySid[out._psid];
     if(p && p.id != null){ out.patientId = p.id; out._pidAt = p.id; }
@@ -71584,7 +71724,7 @@ function fieldsApply(col, sets, dels){
   }
 }
 function isFields(col){ return col==='settings'||col==='big'||col==='docs'||col==='att_settings'; }
-function allCols(){ return REC_KEYS.concat(ATT_REC, ['settings','big','docs','att_settings']); }
+function allCols(){ return REC_KEYS.concat(ATT_REC, ['settings','big','docs','att_settings']); }   /* patients ثم requests أولاً في REC_KEYS */
 function listOf(col){
   if(isFields(col)) return fieldsGet(col).map(function(r){ return {id:r.id, rec:r}; });
   var c=COL(col); if(!c) return [];
@@ -71777,7 +71917,9 @@ function flushLive(){
   if(!S.on || !S.regDone){ return; }       // يُلتقط لاحقاً عبر المؤشّرات
   var peers=onlinePeers(); var q=S.liveQ; S.liveQ={};
   if(!peers.length) return;
-  Object.keys(q).forEach(function(col){
+  /* الملف قبل طلباته، والطلب قبل سجلاته المرتبطة — فيُربط كل شيء بملفه الصحيح فور وصوله */
+  var _ord={patients:0, requests:1};
+  Object.keys(q).sort(function(a,b){ return (_ord[a]!==undefined?_ord[a]:2)-(_ord[b]!==undefined?_ord[b]:2); }).forEach(function(col){
     var rows=rowsFor(col, Object.keys(q[col])); if(!rows.length) return;
     peers.forEach(function(p){ sendRows(p, col, rows); });
   });
@@ -71940,7 +72082,8 @@ function applySidRows(col, rows, meta){
   }
   var changed=[], removed=0;
   rows.forEach(function(r){
-    var sid=r[0], v=r[1], rec=r[2], m=meta[sid], p=pos[sid];
+    var sid=SIDX.resolve(col, r[0]), v=r[1], rec=r[2], m=meta[sid], p=pos[sid];
+    if(rec && rec._sid && rec._sid!==sid) rec=Object.assign({}, rec, {_sid:sid});
     if(rec==null){
       if(!m && !SIDX.isSid(sid)) return;                      // شاهد حذف بمعرّف قديم (حاسبة بإصدار سابق) ⇒ يُتجاهل
       if(m && v<=m[1]) return;
@@ -71955,6 +72098,16 @@ function applySidRows(col, rows, meta){
       /* نفس الكيان موجود هنا ولم يأخذ رقمه بعد (رقم حتمي متطابق) ⇒ تحديث لا إضافة */
       var cl=ctx.byId[String(rec.id)];
       if(cl && !cl._sid && SIDX.detSid(cl)===sid){ var ci=arr.indexOf(cl); if(ci>-1){ cl._sid=sid; ctx.bySid[sid]=cl; pos[sid]=ci; p=ci; } }
+    }
+    if(p===undefined && col==='patients' && SIDX.matchPerson){
+      /* 🧬 نفس الشخص موجود هنا برقم ملف مختلف (تطابق تام بالزيارات) ⇒ تحديث ملفه لا ملف جديد */
+      var pm=SIDX.matchPerson(rec), pi=pm?arr.indexOf(pm):-1;
+      if(pi>-1){
+        if(pm._sid && pm._sid!==sid){ SIDX.alias('patients', sid, pm._sid); sid=pm._sid; rec=Object.assign({}, rec, {_sid:sid}); m=meta[sid]; }
+        else if(!pm._sid){ pm._sid=sid; }
+        ctx.bySid[sid]=pm; pos[sid]=pi; p=pi;
+        if(rec.id!=null && String(rec.id)!==String(pm.id)) SIDX.fixLinksLater('patients', sid, String(pm.id));
+      }
     }
     var local=(p!==undefined)?arr[p]:null;
     var nrec=SIDX.adopt(col, rec, ctx);
@@ -72081,6 +72234,8 @@ function handle(k, m){
       Object.keys(ch.cols).forEach(function(col){ sendRows(peer, col, rowsFor(col, ch.cols[col])); });
       sendTo(peer, 'ok', {upto:upto, n:ch.n}, 0);
       if(!S.hello[peer]) pullFrom(peer);                 // اتجاهان دائماً
+    } else if(MS._handlers && typeof MS._handlers[m.y]==='function'){
+      try{ MS._handlers[m.y](peer, d); }catch(e){ console.warn('[MSync] handler', m.y, e); }
     } else if(m.y==='pj' || m.y==='pa'){
       /* 🖨️ أوامر الطباعة الموجَّهة — لا تُعطِّل طابور الرسائل (المعالجة غير متزامنة) */
       try{ if(window.RPrint) window.RPrint._onCloud(peer, m.y, d, m.s); }catch(e){ console.warn('[MSync] print', e); }
@@ -72316,6 +72471,8 @@ MS._srv = srv;
 MS._send = function(peer, y, payload){ if(!S.on || !S.regDone) return Promise.resolve(false); return sendTo(peer, y, payload, 0).then(function(){ return true; }); };
 MS._name = myName;
 MS._devUpdate = function(o){ try{ if(S.on && S.db && S.regDone && S.me) return ref(S.root+'/dev/'+S.me).update(o).catch(function(){}); }catch(e){} return Promise.resolve(); };
+MS._forget = function(col, sid){ try{ var m=S.meta[col]; if(m && m[sid]){ delete m[sid]; metaSave(col); } }catch(e){} };
+MS._handlers = MS._handlers || {};
 MS._connected = function(){ return !!(S.on && S.connected && S.regDone && S.status==='ok'); };
 MS.status = function(){ return {status:S.status, no:S.no, peers:S.peers, cursors:S.cursors, err:S.err}; };
 
@@ -73146,5 +73303,517 @@ body.light-mode #afo-chip{background:#ffffff;color:#0b1b33;}
   document.addEventListener('click', function(e){
     try{ var t = e.target && e.target.closest && e.target.closest('[onclick*="\'esr\'"]'); if(t) setTimeout(window.esrSinkFill, 200); }catch(_){}
   }, true);
+})();
+</script>
+
+<!-- ══════════ 🧬 MLU — توحيد الأرقام وحذف المرضى المكررين — لا تحذف ══════════ -->
+<style id="mlu-css">
+#mlu-ov{position:fixed;inset:0;z-index:2147482000;background:rgba(2,6,14,0.82);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl;font-family:'Cairo',sans-serif}
+#mlu-box{background:var(--card,#0d1626);color:var(--text,#e8ecef);border:1px solid var(--border,#24324a);border-radius:16px;width:100%;max-width:980px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+body.light-mode #mlu-box{background:#fff;color:#0b1b33}
+#mlu-box .mh{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border,#24324a);font-weight:900;font-size:15px}
+#mlu-box .mb{padding:14px 16px;overflow:auto;flex:1;font-size:12.5px;line-height:1.9}
+#mlu-box .mf{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border,#24324a)}
+#mlu-box .st{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0}
+#mlu-box .st div{background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.25);border-radius:10px;padding:8px 10px;text-align:center}
+#mlu-box .st b{display:block;font-size:18px;color:#00c46a}
+#mlu-box .note{background:rgba(255,180,0,.07);border:1px solid rgba(255,180,0,.35);border-radius:10px;padding:8px 12px;margin:8px 0}
+#mlu-box .ok{background:rgba(0,196,106,.08);border:1px solid rgba(0,196,106,.4);border-radius:10px;padding:8px 12px;margin:8px 0}
+#mlu-box table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px}
+#mlu-box th,#mlu-box td{padding:5px 6px;border-bottom:1px solid rgba(255,255,255,.07);text-align:right;vertical-align:top}
+#mlu-box th{background:rgba(0,140,255,.12)}
+#mlu-box .ids{font-family:monospace;direction:ltr;unicode-bidi:embed}
+</style>
+<script id="mlu-js">
+(function(){
+'use strict';
+var U = window.MLU = {};
+var COLS = ['patients','requests','invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+var LINKED = ['invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+var VOLATILE = {id:1,reqId:1,patientId:1,patientName:1,_updatedAt:1,updatedAt:1,_sid:1,_psid:1,_rsid:1,_pidAt:1,_ridAt:1,_dev:1,_org:1,createdAt:1,ts:1,_oldIds:1};
+
+function X(){ return window.SIDX; }
+function notif(t,m,ty){ try{ showNotif(t,m,ty||'info'); }catch(e){} }
+function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+function pfx(){ try{ return DB._pfx(); }catch(e){ return 'mlab2_'; } }
+function acct(){ try{ return MSync._acct(); }catch(e){ return ''; } }
+function devNo(){ try{ var n=parseInt(localStorage.getItem('lis_device_no')||'0',10); return (n>=1&&n<=99)?n:0; }catch(e){ return 0; } }
+function myDev(){ try{ return localStorage.getItem('lis_lan_devid')||''; }catch(e){ return ''; } }
+function doneKey(){ return 'mlu_done_'+acct(); }
+function get(col){ return X().arr(col); }
+function setArr(col, a){
+  switch(col){
+    case 'patients': patients=a; break;           case 'requests': requests=a; break;
+    case 'invoices': invoices=a; break;           case 'billing': billingRecords=a; break;
+    case 'cultureRecords': cultureRecords=a; break; case 'uaRecords': uaRecords=a; break;
+    case 'stoolExamRecords': stoolExamRecords=a; break; case 'semenRecords': semenRecords=a; break;
+  }
+}
+async function ensureLoaded(){
+  try{ if(typeof loadUARecords==='function') loadUARecords(); }catch(e){}
+  try{ if(typeof loadStoolExamRecords==='function') loadStoolExamRecords(); }catch(e){}
+  try{ if(typeof loadSemenRecords==='function') loadSemenRecords(); }catch(e){}
+  try{ if(typeof loadCultureRecordsFromIDB==='function') await loadCultureRecordsFromIDB(); }catch(e){}
+}
+function addOld(rec, v){ if(v==null||v==='') return; var s=' '+String(v); var cur=rec._oldIds||''; if((cur+' ').indexOf(s+' ')<0) rec._oldIds=(cur+s).slice(-600); }
+var STATUS_RANK = {done:3, inprogress:2, pending:1};
+function hasVal(v){ return v!==undefined && v!==null && String(v).trim()!==''; }
+function contentFp(o){
+  var k = Object.keys(o||{}).filter(function(x){ return !VOLATILE[x]; }).sort();
+  var c = {}; k.forEach(function(x){ c[x]=o[x]; });
+  return JSON.stringify(c);
+}
+
+/* ═════════ التحليل: مجموعات النسخ المكررة (تطابق تام) ═════════ */
+function buildCopies(){
+  var S = X(), P = get('patients'), R = get('requests');
+  var reqBy = {};
+  for(var i=0;i<R.length;i++){ var r=R[i]; if(!r||r.patientId==null) continue; (reqBy[String(r.patientId)]||(reqBy[String(r.patientId)]=[])).push(r); }
+  var copies = [];
+  for(i=0;i<P.length;i++){
+    var p=P[i]; if(!p||p.id==null) continue;
+    var vs = reqBy[String(p.id)]||[], fps=[];
+    vs.forEach(function(r){ var f=S.visitFp(r); if(f) fps.push(f); });
+    if(Array.isArray(p._vfp)) p._vfp.forEach(function(f){ fps.push(f); });
+    copies.push({p:p, n:S.normName(p.name), fps:fps, reqs:vs});
+  }
+  return copies;
+}
+function UF(n){ var a=[]; for(var i=0;i<n;i++) a.push(i); function f(x){ while(a[x]!==x){ a[x]=a[a[x]]; x=a[x]; } return x; } return {find:f, union:function(x,y){ x=f(x); y=f(y); if(x!==y) a[y]=x; }}; }
+
+/* ref (اختياري): مرجع الحاسبة ١ — يُطابَق كل ملف محلي بملفه في المرجع */
+function plan(ref){
+  var S = X(), copies = buildCopies(), byName = {}, i;
+  copies.forEach(function(c, idx){ if(c.n) (byName[c.n]||(byName[c.n]=[])).push(idx); });
+  var uf = UF(copies.length);
+  /* ① مطابقة بالمرجع */
+  var refAssign = {}, refBy = {}, refName = {};
+  if(ref){
+    ref.patients.forEach(function(rp, ri){ if(rp.s) refBy['s:'+rp.s]=ri; (refName[rp.n]||(refName[rp.n]=[])).push(ri); });
+    copies.forEach(function(c, idx){
+      var ri = (c.p._sid && refBy['s:'+S.resolve('patients', c.p._sid)]!==undefined) ? refBy['s:'+S.resolve('patients', c.p._sid)] : undefined;
+      if(ri===undefined){
+        var best=-1, bestN=0, tie=false;
+        (refName[c.n]||[]).forEach(function(rj){
+          var rp=ref.patients[rj];
+          if(!S.profileOk(c.p, {gender:rp.g, phone:rp.ph, birthYear:rp.by})) return;
+          var rf = rp.v.map(function(v){ return v.f; }).filter(Boolean);
+          if(!S.visitsMatch(c.fps, rf)) return;
+          var sh = S.sharedVisits(c.fps, rf).all;
+          if(sh>bestN){ best=rj; bestN=sh; tie=false; } else if(sh===bestN) tie=true;
+        });
+        if(best>-1 && !tie) ri=best;
+      }
+      if(ri!==undefined){ c.ref=ri; if(refAssign[ri]===undefined) refAssign[ri]=idx; else uf.union(refAssign[ri], idx); }
+    });
+  }
+  /* ② مطابقة محلية: نفس الاسم + لا تعارض + زيارة متطابقة تماماً */
+  Object.keys(byName).forEach(function(n){
+    var g = byName[n]; if(g.length<2) return;
+    for(var a=0;a<g.length;a++) for(var b=a+1;b<g.length;b++){
+      var A=copies[g[a]], B=copies[g[b]];
+      if(A.ref!==undefined && B.ref!==undefined && A.ref!==B.ref) continue;   // ملفان مختلفان في المرجع
+      if(!S.profileOk(A.p, B.p)) continue;
+      if(A.p._sid && B.p._sid && S.resolve('patients',A.p._sid)===S.resolve('patients',B.p._sid)){ uf.union(g[a],g[b]); continue; }
+      if(S.visitsMatch(A.fps, B.fps)) uf.union(g[a], g[b]);
+    }
+  });
+  /* المجموعات */
+  var groups = {};
+  copies.forEach(function(c, idx){ var r=uf.find(idx); (groups[r]||(groups[r]=[])).push(c); });
+  var out = [], review = [];
+  Object.keys(groups).forEach(function(k){
+    var g = groups[k];
+    var refs = {}; g.forEach(function(c){ if(c.ref!==undefined) refs[c.ref]=1; });
+    if(Object.keys(refs).length>1){ review.push({name:g[0].p.name, ids:g.map(function(c){ return c.p.id; }), why:'تطابق مع أكثر من ملف في المرجع'}); return; }
+    out.push({copies:g, ref:(Object.keys(refs).length? +Object.keys(refs)[0] : undefined)});
+  });
+  /* قائمة المراجعة: نفس الاسم بملفات متعددة لم تُدمج تلقائياً (لا تطابق تام بالزيارات) */
+  Object.keys(byName).forEach(function(n){
+    var roots = {}; byName[n].forEach(function(idx){ roots[uf.find(idx)]=1; });
+    var rl = Object.keys(roots); if(rl.length<2) return;
+    var ids = [], cnt = [];
+    rl.forEach(function(r){ var g=groups[r]; ids.push(g.map(function(c){ return c.p.id; }).join('+')); cnt.push(g.reduce(function(s,c){ return s+c.reqs.length; },0)); });
+    if(review.length<600) review.push({name:copies[byName[n][0]].p.name, ids:ids, visits:cnt, why:'نفس الاسم — الزيارات غير متطابقة تماماً (قد يكونون أشخاصاً مختلفين)'});
+  });
+  return {groups:out, review:review, ref:ref};
+}
+
+/* ═════════ التنفيذ ═════════ */
+/* الملف الباقي: نسخة هذه الحاسبة الأصلية (زياراتها أُنشئت هنا) ⇒ برقم بلا «~» ⇒ الأكثر زيارات ⇒ الأصغر رقماً */
+function pickKeeper(g){
+  var me = myDev();
+  function own(c){ var n=0; c.reqs.forEach(function(r){ if(r && r._dev===me && !r._sid) n++; }); return n; }
+  var s = g.copies.slice().sort(function(a,b){
+    var ao=own(a), bo=own(b); if(ao!==bo) return bo-ao;
+    var ad=(a.p._dev===me)?1:0, bd=(b.p._dev===me)?1:0; if(ad!==bd) return bd-ad;
+    var at=String(a.p.id).indexOf('~')<0?1:0, bt=String(b.p.id).indexOf('~')<0?1:0; if(at!==bt) return bt-at;
+    if(b.reqs.length!==a.reqs.length) return b.reqs.length-a.reqs.length;
+    return String(a.p.id)<String(b.p.id)?-1:1;
+  });
+  return s[0];
+}
+function mergeVisit(kv, lv, reqMap){
+  var S=X();
+  if(lv.results && typeof lv.results==='object'){ kv.results=kv.results||{}; Object.keys(lv.results).forEach(function(t){ if(!hasVal(kv.results[t]) && hasVal(lv.results[t]) && !(kv._resCleared&&kv._resCleared[t])) kv.results[t]=lv.results[t]; }); }
+  ['resultNotesPer','resultDetails'].forEach(function(f){ if(lv[f] && typeof lv[f]==='object'){ kv[f]=kv[f]||{}; Object.keys(lv[f]).forEach(function(t){ if(kv[f][t]===undefined) kv[f][t]=lv[f][t]; }); } });
+  ['cbcData','doctorName','doctorId','sample','tech','resultDate','resultNotes','orderNo','time','note'].forEach(function(f){ if(!hasVal(kv[f]) && hasVal(lv[f])) kv[f]=lv[f]; });
+  if(lv.printed) kv.printed=true; if(lv.wsPrinted) kv.wsPrinted=true;
+  if((STATUS_RANK[lv.status]||0)>(STATUS_RANK[kv.status]||0)) kv.status=lv.status;
+  addOld(kv, lv.id); if(lv.orderNo && lv.orderNo!==kv.orderNo) addOld(kv, lv.orderNo); if(lv._oldIds) String(lv._oldIds).split(' ').forEach(function(x){ addOld(kv,x); });
+  if(lv._sid){ if(!kv._sid) kv._sid=lv._sid; else S.alias('requests', lv._sid, kv._sid); }
+  reqMap[String(lv.id)] = String(kv.id);
+}
+function mergePatient(kp, lp){
+  ['phone','gender','ageDisplay','ageVal','ageY','ageM','ageD','birthYear','dob','doctorId','doctorName','nameEn','title','insurance','addr','notes'].forEach(function(f){ if(!hasVal(kp[f]) && hasVal(lp[f])) kp[f]=lp[f]; });
+  addOld(kp, lp.id); if(lp._oldIds) String(lp._oldIds).split(' ').forEach(function(x){ addOld(kp,x); });
+  if(lp._sid){ if(!kp._sid) kp._sid=lp._sid; else X().alias('patients', lp._sid, kp._sid); }
+}
+function uniqueId(gen, used){ var id, g=0; do{ id=String(gen()); }while(used[id] && ++g<100000); used[id]=1; return id; }
+
+function execute(pl, onlyGroups){
+  var S=X(), ref=pl.ref, P=get('patients'), R=get('requests');
+  var st={mergedP:0, mergedV:0, movedV:0, refP:0, refV:0, renP:0, renV:0, linked:0};
+  /* المعرّف الأصلي لكل سجل (قبل أي تغيير) + توجيه السجل المدموج إلى السجل الباقي */
+  var origP=new Map(), origR=new Map(), origPidOfReq=new Map(), redirP=new Map(), redirR=new Map();
+  P.forEach(function(p){ if(p) origP.set(p, String(p.id)); });
+  R.forEach(function(r){ if(r){ origR.set(r, String(r.id)); origPidOfReq.set(r, r.patientId==null?null:String(r.patientId)); } });
+  var refPtIds={}, refReqIds={}, refOrd={};
+  if(ref) ref.patients.forEach(function(rp){ refPtIds[String(rp.id)]=1; rp.v.forEach(function(v){ refReqIds[String(v.id)]=1; if(v.on) refOrd[String(v.on)]=1; }); });
+  var refP=new Set(), refR=new Set(), refO=new Set(), absorbed=new Set();
+  (onlyGroups || pl.groups).forEach(function(g){
+    if(g.copies.length<2 && g.ref===undefined) return;
+    var keep = pickKeeper(g), kp = keep.p, kvs = keep.reqs.slice();
+    g.copies.forEach(function(c){
+      if(c===keep) return;
+      var pool = {}; kvs.forEach(function(v){ var f=S.visitFp(v); if(f) (pool[f]||(pool[f]=[])).push(v); });
+      c.reqs.forEach(function(lv){
+        var f=S.visitFp(lv), m=f && pool[f] && pool[f].length ? pool[f].shift() : null;
+        if(m){ mergeVisit(m, lv, {}); redirR.set(lv, m); absorbed.add(m); st.mergedV++; }
+        else { lv.patientName=kp.name||lv.patientName; kvs.push(lv); st.movedV++; }
+      });
+      mergePatient(kp, c.p); redirP.set(c.p, kp); st.mergedP++;
+    });
+    /* هوية المرجع (الحاسبة ١): رقم الملف + أرقام الزيارات المتطابقة */
+    if(g.ref!==undefined && ref){
+      var rp = ref.patients[g.ref];
+      if(String(kp.id)!==String(rp.id)){ addOld(kp, kp.id); kp.id=String(rp.id); st.refP++; }
+      kp.barcode = (rp.b!=null && rp.b!=='') ? rp.b : String(rp.id);
+      refP.add(kp);
+      if(rp.rt) kp.regTime=rp.rt; if(rp.o) kp._org=rp.o; if(rp.d) kp._dev=rp.d; if(rp.reg) kp.registered=rp.reg;
+      if(rp.s){ var rs=S.resolve('patients', rp.s); if(kp._sid && kp._sid!==rs) S.alias('patients', kp._sid, rs); kp._sid=rs; }
+      var rpool = {}; rp.v.forEach(function(v){ if(v.f) (rpool[v.f]||(rpool[v.f]=[])).push(v); });
+      kvs.forEach(function(kv){
+        var f=S.visitFp(kv), rv=f && rpool[f] && rpool[f].length ? rpool[f].shift() : null;
+        if(!rv) return;
+        if(String(kv.id)!==String(rv.id)){ addOld(kv, kv.id); kv.id=String(rv.id); st.refV++; }
+        refR.add(kv);
+        if(rv.on){ if(kv.orderNo && String(kv.orderNo)!==String(rv.on)) addOld(kv, kv.orderNo); kv.orderNo=rv.on; refO.add(kv); }
+        if(rv.c) kv.createdAt=rv.c; if(rv.o) kv._org=rv.o; if(rv.d) kv._dev=rv.d;
+        if(rv.s){ var rq=S.resolve('requests', rv.s); if(kv._sid && kv._sid!==rq) S.alias('requests', kv._sid, rq); kv._sid=rq; }
+      });
+    }
+    kp.visits = kvs.length;
+  });
+  var P2 = P.filter(function(p){ return p && !redirP.has(p); }), R2 = R.filter(function(r){ return r && !redirR.has(r); });
+  /* لا تضارب: أي سجل محلي آخر يحمل رقماً من أرقام المرجع ⇒ رقم جديد بنمط هذه الحاسبة */
+  if(ref){
+    var usedP={}, usedR={}, usedO={};
+    P2.forEach(function(p){ usedP[String(p.id)]=1; }); Object.keys(refPtIds).forEach(function(k){ usedP[k]=1; });
+    R2.forEach(function(r){ usedR[String(r.id)]=1; if(r.orderNo) usedO[String(r.orderNo)]=1; }); Object.keys(refReqIds).forEach(function(k){ usedR[k]=1; }); Object.keys(refOrd).forEach(function(k){ usedO[k]=1; });
+    var sid = ref.sids || {p:{},r:{},o:{}};
+    P2.forEach(function(p){
+      var id=String(p.id);
+      if(!refPtIds[id] || refP.has(p)) return;
+      if(p._sid && sid.p[S.resolve('patients',p._sid)]===id) return;     // السجل نفسه في المرجع (رقم مزامنة واحد)
+      var nid=uniqueId(function(){ return _newPatientId(); }, usedP);
+      addOld(p, id); p.id=nid; if(p.barcode!=null) p.barcode=nid; st.renP++;
+    });
+    R2.forEach(function(r){
+      var id=String(r.id);
+      if(refReqIds[id] && !refR.has(r) && !(r._sid && sid.r[S.resolve('requests',r._sid)]===id)){
+        var nid=uniqueId(function(){ return _newRequestId(); }, usedR);
+        addOld(r, id); r.id=nid; st.renV++;
+      }
+      if(r.orderNo && refOrd[String(r.orderNo)] && !refO.has(r) && !(r._sid && sid.o[S.resolve('requests',r._sid)]===String(r.orderNo)) && typeof _newOrderNo==='function'){
+        var no=uniqueId(function(){ return _newOrderNo(); }, usedO); addOld(r, r.orderNo); r.orderNo=no;
+      }
+    });
+  }
+  /* الأرقام النهائية: كل رقم قديم ⇒ رقم السجل الذي انتهى إليه (مباشرة، بلا سلاسل) */
+  function finP(o){ var g=0; while(redirP.has(o) && g++<20) o=redirP.get(o); return o; }
+  function finR(o){ var g=0; while(redirR.has(o) && g++<20) o=redirR.get(o); return o; }
+  var pFinal={}, rFinal={};
+  origP.forEach(function(oid, o){ pFinal[oid]=String(finP(o).id); });
+  origR.forEach(function(oid, o){ rFinal[oid]=String(finR(o).id); });
+  var ptName={}; P2.forEach(function(p){ ptName[String(p.id)]=p.name; });
+  R2.forEach(function(r){
+    var op=origPidOfReq.get(r);
+    if(op!=null && pFinal[op]!==undefined && pFinal[op]!==String(r.patientId)){ r.patientId=pFinal[op]; if(ptName[r.patientId]) r.patientName=ptName[r.patientId]; }
+  });
+  var absorbedIds={}; absorbed.forEach(function(o){ absorbedIds[String(finR(o).id)]=1; });
+  var out = {patients:P2, requests:R2};
+  LINKED.forEach(function(col){
+    var a = get(col), touched=false, keep=[], seen={};
+    a.forEach(function(o){
+      if(!o || typeof o!=='object'){ keep.push(o); return; }
+      var wasP=false;
+      if(o.reqId!=null && rFinal[String(o.reqId)]!==undefined && rFinal[String(o.reqId)]!==String(o.reqId)){ o.reqId=rFinal[String(o.reqId)]; touched=true; }
+      if(o.patientId!=null && pFinal[String(o.patientId)]!==undefined && pFinal[String(o.patientId)]!==String(o.patientId)){ o.patientId=pFinal[String(o.patientId)]; touched=true; wasP=true; }
+      /* نسخة مكررة من السجل نفسه (جاءت مع زيارة مكررة) — تُزال فقط إن كان المحتوى مطابقاً تماماً، ولا يُمسّ سجل له رقم مزامنة */
+      var key = null;
+      if(!o._sid){
+        if(o.reqId!=null && absorbedIds[String(o.reqId)]) key = String(o.reqId)+'|'+(o.reqTestId||'')+'|'+contentFp(o);
+        else if(o.reqId==null && wasP) key = 'p|'+String(o.patientId)+'|'+contentFp(o);
+      }
+      if(key){ if(seen[key]){ st.linked++; touched=true; return; } seen[key]=1; }
+      keep.push(o);
+    });
+    out[col] = touched ? keep : null;
+  });
+  return {out:out, st:st};
+}
+
+/* ═════════ النسخة الاحتياطية والتراجع ═════════ */
+async function backup(){
+  var snap = {ts:Date.now(), acct:acct(), data:{}};
+  COLS.forEach(function(c){ snap.data[c] = JSON.parse(JSON.stringify(get(c))); });
+  await IDB.set(pfx()+'mlu_backup', snap);
+  var chk = await IDB.get(pfx()+'mlu_backup');
+  if(!chk || !chk.data || !Array.isArray(chk.data.patients) || chk.data.patients.length !== snap.data.patients.length) throw new Error('فشل حفظ النسخة الاحتياطية');
+  return snap;
+}
+function saveAll(out){
+  /* الأرشيف يبقى أرشيفاً (لا يُرسل) — يُسجَّل قبل الحفظ؛ والسجلات ذات رقم المزامنة تُزامَن بأرقامها الجديدة */
+  COLS.forEach(function(c){
+    var a = out[c] || get(c), ids=[]; a.forEach(function(o){ if(o && !o._sid && o.id!=null) ids.push(o.id); }); X().markLegacy(c, ids);
+  });
+  COLS.forEach(function(c){
+    var a = out[c]; if(!a) return;
+    setArr(c, a);
+    try{ save(c, a); }catch(e){ console.warn('[MLU] save', c, e); }
+    try{ X().touch(c); }catch(e){}
+  });
+  try{ renderAll(); }catch(e){} try{ updateDashboard(); updateBadges(); }catch(e){}
+  try{ document.dispatchEvent(new CustomEvent('dp:refresh')); }catch(e){}
+}
+U.undo = async function(){
+  var b = await IDB.get(pfx()+'mlu_backup');
+  if(!b || !b.data){ notif('↩️ تراجع','لا توجد نسخة احتياطية للتوحيد','warning'); return; }
+  if(!confirm('استرجاع البيانات كما كانت قبل آخر توحيد ('+new Date(b.ts).toLocaleString('ar-IQ')+')؟')) return;
+  var out = {}; COLS.forEach(function(c){ if(Array.isArray(b.data[c])) out[c]=b.data[c]; });
+  saveAll(out);
+  try{ localStorage.removeItem(doneKey()); }catch(e){}
+  notif('↩️ تراجع','أُعيدت البيانات كما كانت قبل التوحيد','success'); U.open();
+};
+
+/* ═════════ مرجع الحاسبة ١ ═════════ */
+function buildRef(){
+  var S=X(), P=get('patients'), R=get('requests'), by={};
+  R.forEach(function(r){ if(r && r.patientId!=null) (by[String(r.patientId)]||(by[String(r.patientId)]=[])).push(r); });
+  var sids={p:{}, r:{}, o:{}};
+  var pts = P.filter(function(p){ return p && p.id!=null; }).map(function(p){
+    if(p._sid) sids.p[p._sid]=String(p.id);
+    return {id:String(p.id), b:p.barcode, n:S.normName(p.name), g:p.gender||'', ph:p.phone||'', by:p.birthYear||'', rt:p.regTime||0, o:p._org||0, d:p._dev||'', reg:p.registered||'', s:p._sid||'',
+      v:(by[String(p.id)]||[]).map(function(r){ if(r._sid){ sids.r[r._sid]=String(r.id); if(r.orderNo) sids.o[r._sid]=String(r.orderNo); } return {id:String(r.id), on:r.orderNo||'', f:S.visitFp(r), c:r.createdAt||0, o:r._org||0, d:r._dev||'', s:r._sid||''}; })};
+  });
+  return {v:1, acct:acct(), dev:myDev(), no:devNo(), ts:Date.now(), patients:pts, sids:sids};
+}
+U._ref = null;
+function refOk(ref){ return ref && Array.isArray(ref.patients) && ref.v===1; }
+U.exportRef = function(){
+  if(devNo()!==1){ notif('المرجع','ملف المرجع يُصدَّر من الحاسبة رقم ١ فقط','warning'); return; }
+  var ref = buildRef(), blob = new Blob([JSON.stringify(ref)], {type:'application/json'});
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'medlab-reference-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+};
+U.importRef = function(inp){
+  var f = inp && inp.files && inp.files[0]; if(!f) return;
+  var rd = new FileReader();
+  rd.onload = function(){
+    try{
+      var ref = JSON.parse(rd.result);
+      if(!refOk(ref)) throw new Error('ملف غير صالح');
+      if(ref.acct && acct() && ref.acct!==acct()){ notif('المرجع','الملف لحساب مختبر آخر','error'); return; }
+      U._ref = ref; notif('✅ المرجع','حُمّل مرجع الحاسبة ١: '+ref.patients.length+' ملف','success'); U.open();
+    }catch(e){ notif('المرجع','تعذّر قراءة الملف: '+e.message,'error'); }
+  };
+  rd.readAsText(f);
+};
+/* جلب المرجع من الحاسبة ١ مباشرة عبر السحابة (رسائل مقطّعة مشفّرة — تُحذف لحظة الاستلام) */
+var _rx = {};
+function setupCloud(){
+  if(!window.MSync || !MSync._handlers) return false;
+  MSync._handlers.urq = function(peer, d){
+    if(devNo()!==1) return;
+    if(!localStorage.getItem(doneKey())){ MSync._send(peer, 'urc', {rid:d.rid, err:'not_ready'}); return; }
+    var s = JSON.stringify(buildRef()), CH = 350000, n = Math.ceil(s.length/CH);
+    for(var i=0;i<n;i++) MSync._send(peer, 'urc', {rid:d.rid, i:i, n:n, s:s.slice(i*CH,(i+1)*CH)});
+  };
+  MSync._handlers.urc = function(peer, d){
+    var w = _rx[d.rid]; if(!w) return;
+    if(d.err){ w.rej(new Error(d.err)); delete _rx[d.rid]; return; }
+    w.parts[d.i] = d.s; w.got++; w.n = d.n;
+    if(w.prog) w.prog(w.got, w.n);
+    if(w.got === w.n){ delete _rx[d.rid]; try{ w.res(JSON.parse(w.parts.join(''))); }catch(e){ w.rej(e); } }
+  };
+  return true;
+}
+U.fetchRef = function(){
+  if(!setupCloud()){ notif('المرجع','المزامنة السحابية غير جاهزة','error'); return; }
+  var peers = MSync._peers ? MSync._peers() : {}, me = MSync._me ? MSync._me() : '', target = null;
+  Object.keys(peers).forEach(function(id){ var p=peers[id]; if(id!==me && p && parseInt(p.no,10)===1 && p.on) target=id; });
+  if(!target){ notif('المرجع','الحاسبة رقم ١ غير متصلة الآن — شغّلها أو استخدم «فتح ملف مرجع»','warning'); return; }
+  var rid = 'r'+Date.now().toString(36), box = document.getElementById('mlu-msg');
+  if(box) box.innerHTML = '⏳ جارِ جلب المرجع من الحاسبة ١…';
+  new Promise(function(res, rej){
+    _rx[rid] = {parts:[], got:0, n:0, res:res, rej:rej, prog:function(g,n){ if(box) box.innerHTML='⏳ استلام المرجع: '+g+' / '+n; }};
+    MSync._send(target, 'urq', {rid:rid});
+    setTimeout(function(){ if(_rx[rid]){ delete _rx[rid]; rej(new Error('timeout')); } }, 180000);
+  }).then(function(ref){
+    if(!refOk(ref)) throw new Error('bad');
+    U._ref = ref; notif('✅ المرجع','وصل مرجع الحاسبة ١: '+ref.patients.length+' ملف','success'); U.open();
+  }).catch(function(e){
+    var m = (e && e.message)==='not_ready' ? 'الحاسبة ١ لم تُنفَّذ عليها الأداة بعد — نفّذها هناك أولاً' : 'تعذّر الجلب ('+(e&&e.message||e)+') — جرّب «فتح ملف مرجع»';
+    if(box) box.innerHTML = '⚠️ '+esc(m); notif('المرجع', m, 'warning');
+  });
+};
+setTimeout(setupCloud, 3000);
+
+/* ═════════ الواجهة ═════════ */
+var _last = null;
+function close(){ var o=document.getElementById('mlu-ov'); if(o) o.remove(); }
+U.close = close;
+function shell(body, foot){
+  close();
+  var o = document.createElement('div'); o.id='mlu-ov';
+  o.innerHTML = '<div id="mlu-box"><div class="mh"><span>🧬 توحيد الأرقام وحذف المرضى المكررين</span><button class="btn btn-s btn-sm" onclick="MLU.close()">✕</button></div>'
+    +'<div class="mb">'+body+'<div id="mlu-msg"></div></div><div class="mf">'+foot+'</div></div>';
+  document.body.appendChild(o);
+}
+U.open = function(){
+  var no = devNo(), done = localStorage.getItem(doneKey()), ref = U._ref;
+  var P = get('patients').length, R = get('requests').length;
+  var b = '<div>هذه الحاسبة رقم <b>'+(no||'؟')+'</b> — الملفات: <b>'+P+'</b> · الطلبات: <b>'+R+'</b></div>'
+    +'<div class="note">🔒 <b>القاعدة:</b> لا يُدمج ملفان إلا عند <b>تطابق تام</b>: نفس الاسم، بلا أي تعارض في الجنس/الهاتف/سنة الميلاد، '
+    +'ووجود زيارة متطابقة بكل تفاصيلها (التاريخ + التحاليل + كل قيم النتائج). التشابه بالاسم أو العمر وحده لا يدمج شيئاً — يظهر في قائمة المراجعة فقط.<br>'
+    +'🛟 قبل أي تعديل تُحفظ نسخة كاملة، وزر <b>«تراجع»</b> يعيد كل شيء كما كان.</div>';
+  if(no===1){
+    b += '<div class="ok"><b>الحاسبة ١ = المرجع.</b> ① افحص ثم نفّذ هنا أولاً (تُحذف النسخ المكررة وتبقى أرقام هذه الحاسبة). ② بعدها على الحاسبتين ٢ و٣: «جلب المرجع» ثم فحص وتنفيذ — فتصبح أرقام الملفات والطلبات القديمة نفسها في كل الحاسبات.'
+      +(done?'<br>✅ نُفّذت هنا '+new Date(+done).toLocaleString('ar-IQ')+' — المرجع جاهز للحاسبات الأخرى.':'')+'</div>';
+  } else {
+    b += '<div class="ok">'+(ref?('✅ مرجع الحاسبة ١ محمّل: <b>'+ref.patients.length+'</b> ملف ('+new Date(ref.ts).toLocaleString('ar-IQ')+'). الفحص سيوحّد الأرقام عليه ويحذف المكرر.')
+      :'⚠️ لم يُحمّل مرجع الحاسبة ١ بعد. اضغط «جلب المرجع» (الحاسبة ١ متصلة) أو «فتح ملف مرجع». بدون مرجع يمكن حذف المكرر محلياً فقط، لكن الأرقام لن تتوحّد مع الحاسبة ١.')+'</div>';
+  }
+  var f = '<button class="btn btn-p" onclick="MLU.scan()">🔍 فحص (بدون أي تعديل)</button>';
+  if(no!==1) f += '<button class="btn btn-s" onclick="MLU.fetchRef()">☁️ جلب المرجع من الحاسبة ١</button>'
+    +'<label class="btn btn-s" style="cursor:pointer">📂 فتح ملف مرجع<input type="file" accept=".json,application/json" style="display:none" onchange="MLU.importRef(this)"></label>';
+  else f += '<button class="btn btn-s" onclick="MLU.exportRef()" '+(done?'':'disabled')+'>📤 حفظ ملف المرجع</button>';
+  f += '<button class="btn btn-s" onclick="MLU.undo()">↩️ تراجع عن آخر توحيد</button>';
+  shell(b, f);
+};
+U.scan = async function(){
+  var m = document.getElementById('mlu-msg'); if(m) m.innerHTML='⏳ جارِ الفحص…';
+  await ensureLoaded();
+  setTimeout(function(){
+    try{
+      var ref = (devNo()!==1) ? U._ref : null;
+      var pl = plan(ref);
+      var sim = simulate(pl);
+      _last = pl;
+      var multi = pl.groups.filter(function(g){ return g.copies.length>1; });
+      var b = '<div class="st">'
+        +'<div><b>'+sim.P0+' ← '+sim.P1+'</b>الملفات قبل ← بعد</div>'
+        +'<div><b>'+sim.R0+' ← '+sim.R1+'</b>الطلبات قبل ← بعد</div>'
+        +'<div><b>'+multi.length+'</b>شخص له نسخ مكررة</div>'
+        +'<div><b>'+sim.st.mergedV+'</b>زيارة مكررة تُدمج</div>'
+        +'<div><b>'+sim.st.movedV+'</b>زيارة تُنقل لملفها الصحيح</div>'
+        +(ref?'<div><b>'+(sim.st.refP)+'</b>ملف يأخذ رقم الحاسبة ١</div><div><b>'+(sim.st.refV)+'</b>طلب يأخذ رقم الحاسبة ١</div><div><b>'+(sim.st.renP+sim.st.renV)+'</b>رقم محلي متضارب يُستبدل</div>':'')
+        +'<div><b>'+sim.st.linked+'</b>فاتورة/سجل مكرر مطابق</div>'
+        +'</div>';
+      b += '<div class="note">لن يُحذف أي سجل غير مطابق تماماً. أي زيارة موجودة في نسخة واحدة فقط تُنقل إلى الملف الباقي ولا تُحذف. الأرقام القديمة تُحفظ داخل الملف فيبقى البحث بها ممكناً.</div>';
+      if(multi.length){
+        b += '<div style="font-weight:800;margin-top:8px">نماذج من الدمج (أول ٤٠):</div><table><tr><th>المريض</th><th>النسخ (أرقام الملفات)</th><th>الزيارات</th><th>الرقم الباقي</th></tr>';
+        multi.slice(0,40).forEach(function(g){
+          var k = pickKeeper(g), fin = (g.ref!==undefined && ref) ? ref.patients[g.ref].id : k.p.id;
+          b += '<tr><td>'+esc(k.p.name)+'</td><td class="ids">'+g.copies.map(function(c){ return esc(c.p.id); }).join(' · ')+'</td><td>'+g.copies.map(function(c){ return c.reqs.length; }).join(' · ')+'</td><td class="ids">'+esc(fin)+'</td></tr>';
+        });
+        b += '</table>';
+      }
+      if(pl.review.length){
+        b += '<div style="font-weight:800;margin-top:12px">⚠️ للمراجعة — لم تُدمج تلقائياً ('+pl.review.length+'):</div><table><tr><th>الاسم</th><th>الملفات</th><th>السبب</th><th></th></tr>';
+        pl.review.slice(0,200).forEach(function(r, i){
+          b += '<tr><td>'+esc(r.name)+'</td><td class="ids">'+r.ids.map(esc).join(' · ')+(r.visits?'<br><span style="color:var(--text2)">زيارات: '+r.visits.join(' · ')+'</span>':'')+'</td><td>'+esc(r.why)+'</td>'
+            +'<td><button class="btn btn-s btn-sm" onclick="MLU.mergeReview('+i+')">دمج يدوي</button></td></tr>';
+        });
+        b += '</table>';
+      }
+      var f = (multi.length || (ref && (sim.st.refP||sim.st.refV||sim.st.renP||sim.st.renV)))
+        ? '<button class="btn btn-ok" onclick="MLU.apply()">✅ تنفيذ (مع نسخة احتياطية)</button>' : '<span class="ok" style="margin:0">✅ لا يوجد تكرار مطابق تماماً'+(ref?' ولا أرقام تحتاج توحيداً':'')+'</span>';
+      f += '<button class="btn btn-s" onclick="MLU.open()">رجوع</button>';
+      shell(b, f);
+    }catch(e){ console.error(e); if(m) m.innerHTML='❌ خطأ في الفحص: '+esc(e.message); }
+  }, 30);
+};
+/* معاينة دون تعديل: نفّذ على نسخة عميقة */
+function simulate(pl){
+  var save0 = {}; COLS.forEach(function(c){ save0[c] = get(c); });
+  var clone = {}; COLS.forEach(function(c){ clone[c] = JSON.parse(JSON.stringify(save0[c])); });
+  var aliasBak = null; try{ aliasBak = localStorage.getItem(pfx()+'msid_alias'); }catch(e){}
+  var origAlias = X().alias; X().alias = function(){};
+  var genBak = {p:localStorage.getItem('medlab_pt_counter'), r:localStorage.getItem('medlab_rq_counter'), o:localStorage.getItem('medlab_ord_counter')};
+  try{
+    COLS.forEach(function(c){ setArr(c, clone[c]); });
+    var pl2 = plan(pl.ref);
+    var r = execute(pl2);
+    return {st:r.st, P0:save0.patients.length, R0:save0.requests.length, P1:r.out.patients.length, R1:r.out.requests.length};
+  } finally {
+    COLS.forEach(function(c){ setArr(c, save0[c]); });
+    X().alias = origAlias;
+    try{ if(genBak.p!=null) localStorage.setItem('medlab_pt_counter',genBak.p); if(genBak.r!=null) localStorage.setItem('medlab_rq_counter',genBak.r); if(genBak.o!=null) localStorage.setItem('medlab_ord_counter',genBak.o); }catch(e){}
+    try{ X().touch('patients'); X().touch('requests'); }catch(e){}
+  }
+}
+U.apply = async function(forced){
+  var m = document.getElementById('mlu-msg');
+  if(!forced && !confirm('تنفيذ التوحيد الآن؟\n\nتُحفظ نسخة احتياطية كاملة أولاً، ويمكن التراجع بزر «تراجع».')) return;
+  try{
+    if(m) m.innerHTML='⏳ حفظ نسخة احتياطية…';
+    await ensureLoaded();
+    await backup();
+    if(m) m.innerHTML='⏳ جارِ التوحيد… لا تغلق البرنامج';
+    await new Promise(function(r){ setTimeout(r, 30); });
+    var ref = (devNo()!==1) ? U._ref : null;
+    var pl = plan(ref);
+    var res = execute(pl, forced ? forced(pl) : null);
+    saveAll(res.out);
+    if(!forced) try{ localStorage.setItem(doneKey(), String(Date.now())); }catch(e){}
+    var st = res.st;
+    shell('<div class="ok">✅ تم. دُمج '+st.mergedP+' ملف مكرر و'+st.mergedV+' زيارة مكررة، ونُقلت '+st.movedV+' زيارة إلى ملفها الصحيح'
+      +(ref?'، وتوحّد '+st.refP+' ملف و'+st.refV+' طلب على أرقام الحاسبة ١، واستُبدل '+(st.renP+st.renV)+' رقم متضارب':'')+'، وأُزيل '+st.linked+' سجل مرتبط مكرر مطابق.</div>'
+      +'<div>الملفات الآن: <b>'+get('patients').length+'</b> · الطلبات: <b>'+get('requests').length+'</b></div>'
+      +(devNo()===1?'<div class="note">التالي: على الحاسبتين ٢ و٣ افتح هذه الأداة واضغط «جلب المرجع من الحاسبة ١» ثم فحص وتنفيذ.</div>':''),
+      '<button class="btn btn-p" onclick="MLU.close()">إغلاق</button><button class="btn btn-s" onclick="MLU.undo()">↩️ تراجع</button>');
+    notif('🧬 التوحيد','اكتمل التوحيد','success');
+  }catch(e){
+    console.error(e);
+    if(m) m.innerHTML='❌ توقّف: '+esc(e.message)+' — لم يُغيَّر شيء إن كان الخطأ قبل الحفظ، وإلا استخدم «تراجع».';
+  }
+};
+U._plan = plan; U._execute = execute; U._saveAll = saveAll; U._buildRef = buildRef; U._backup = backup; U._simulate = simulate;
+/* الزر القديم «إعادة ترقيم كل المرضى» كان يرقّم كل حاسبة على حدة ⇒ يُوجَّه للأداة الموحّدة */
+window.renumberAllPatients = function(){ U.open(); };
+/* دمج يدوي لمجموعة من قائمة المراجعة (بقرار المستخدم) */
+U.mergeReview = function(i){
+  var r = _last && _last.review[i]; if(!r) return;
+  var ids = []; r.ids.forEach(function(s){ String(s).split('+').forEach(function(x){ ids.push(x); }); });
+  if(!confirm('دمج هذه الملفات في ملف واحد؟\n'+r.name+'\n'+ids.join(' · ')+'\n\nالزيارات المتطابقة تماماً تُدمج، والباقي يُنقل للملف الباقي. تُحفظ نسخة احتياطية أولاً.')) return;
+  U.apply(function(pl){
+    var set = {}; ids.forEach(function(x){ set[String(x)]=1; });
+    var all = []; pl.groups.forEach(function(g){ if(g.copies.some(function(c){ return set[String(c.p.id)]; })) g.copies.forEach(function(c){ all.push(c); }); });
+    var ref; pl.groups.forEach(function(g){ if(g.ref!==undefined && g.copies.some(function(c){ return set[String(c.p.id)]; })) ref = g.ref; });
+    return [{copies:all, ref:ref}];
+  });
+};
 })();
 </script>
