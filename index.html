@@ -3713,6 +3713,8 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
           <div id="notif-panel-list" style="max-height:224px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--primary) transparent"></div>
         </div>
       </div>
+      <!-- 💬 مساعد ميدلاب (مبرمج) — بجانب الإشعارات -->
+      <button class="hbtn" id="mla-btn" onclick="MLAsk.toggle()" title="مساعد ميدلاب — اسأل عن المرضى والواردات والتقارير">💬</button>
       <!-- 📢 زر المنادات الصوتية (Intercom) — اضغط باستمرار للتحدث للحاسبات المتصلة -->
       <button class="hbtn" id="intercom-btn" title="المنادات الصوتية (اضغط للتحدث)">📢</button>
       <button class="hbtn" onclick="nav('settings')">⚙️</button>
@@ -73892,5 +73894,929 @@ U.mergeReview = function(i){
     return [{copies:all, ref:ref}];
   });
 };
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     💬 مساعد MedLab — مساعد مبرمج (ليس ذكاءً اصطناعياً)
+     • يفهم صيغاً متعددة لنفس السؤال (عربي فصيح/عراقي/إنكليزي + أخطاء إملائية بسيطة)
+     • يقرأ مباشرة من بيانات البرنامج عبر RpData (نفس أرقام قسم التقارير)
+     • نافذة قابلة للسحب + تصغير لفقاعة + سجل محادثات يُحذف تلقائياً بعد ٧ أيام
+     ══════════════════════════════════════════════════════════════════ -->
+<style id="mla-style">
+#mla-root{--mla-bg:#0a1324;--mla-bg2:#0d1a31;--mla-card:rgba(255,255,255,0.045);--mla-card2:rgba(0,212,255,0.07);--mla-line:rgba(0,212,255,0.16);--mla-txt:#eaf6ff;--mla-sub:rgba(234,246,255,0.6);--mla-pri:#00d4ff;--mla-pri2:#7b5cff;--mla-ok:#00e87a;--mla-bad:#ff4d6d;--mla-warn:#ffcc00;--mla-shadow:0 28px 80px rgba(0,0,0,.6);}
+body.light-mode #mla-root{--mla-bg:#ffffff;--mla-bg2:#f3f7fc;--mla-card:#f3f7fc;--mla-card2:#e9f6fc;--mla-line:#d7e2ee;--mla-txt:#0d1b2a;--mla-sub:#5a6a7a;--mla-pri:#0089b8;--mla-pri2:#6a4dff;--mla-ok:#0a9f58;--mla-bad:#d92547;--mla-warn:#b98900;--mla-shadow:0 24px 70px rgba(16,40,70,.22);}
+#mla-root *{box-sizing:border-box}
+#mla-btn{font-size:15px}
+#mla-btn.mla-on{border-color:var(--primary,#00d4ff);box-shadow:0 0 0 3px rgba(0,212,255,.15)}
+.mla-win{position:fixed;z-index:9050;width:min(470px,calc(100vw - 20px));height:min(660px,calc(100vh - 80px));display:none;flex-direction:column;background:var(--mla-bg);border:1px solid var(--mla-line);border-radius:22px;box-shadow:var(--mla-shadow);overflow:hidden;font-family:'Cairo',sans-serif;direction:rtl;color:var(--mla-txt)}
+.mla-win.show{display:flex;animation:mlaIn .2s cubic-bezier(.2,.9,.3,1.2)}
+@keyframes mlaIn{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+.mla-hdr{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:12px 14px;background:linear-gradient(120deg,rgba(0,212,255,.16),rgba(123,92,255,.16));border-bottom:1px solid var(--mla-line);cursor:grab;user-select:none;touch-action:none}
+.mla-hdr.drag{cursor:grabbing}
+.mla-av{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;background:linear-gradient(135deg,var(--mla-pri),var(--mla-pri2));box-shadow:0 4px 14px rgba(0,180,255,.35);flex-shrink:0;color:#fff}
+.mla-ttl{flex:1;min-width:0}
+.mla-ttl b{display:block;font-size:14px;font-weight:900;line-height:1.3}
+.mla-ttl span{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--mla-sub);font-weight:700}
+.mla-ttl span i{width:7px;height:7px;border-radius:50%;background:var(--mla-ok);box-shadow:0 0 6px var(--mla-ok);display:inline-block}
+.mla-hb{width:32px;height:32px;border-radius:10px;border:1px solid var(--mla-line);background:var(--mla-card);color:var(--mla-txt);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;font-family:inherit;transition:.15s;flex-shrink:0}
+.mla-hb:hover{background:var(--mla-card2);border-color:var(--mla-pri);color:var(--mla-pri)}
+.mla-hb.x:hover{border-color:var(--mla-bad);color:var(--mla-bad)}
+.mla-sc{flex-shrink:0;display:flex;gap:6px;padding:9px 12px;overflow-x:auto;border-bottom:1px solid var(--mla-line);background:var(--mla-bg2);scrollbar-width:thin;scrollbar-color:var(--mla-line) transparent}
+.mla-chip{flex-shrink:0;border:1px solid var(--mla-line);background:var(--mla-card);color:var(--mla-txt);border-radius:999px;padding:5px 11px;font-size:11.5px;font-weight:800;font-family:inherit;cursor:pointer;white-space:nowrap;transition:.15s;display:inline-flex;align-items:center;gap:4px}
+.mla-chip:hover{border-color:var(--mla-pri);color:var(--mla-pri);background:var(--mla-card2);transform:translateY(-1px)}
+.mla-chip.fill::after{content:'✎';font-size:10px;opacity:.6}
+.mla-msgs{flex:1;overflow-y:auto;padding:14px 12px 6px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth;scrollbar-width:thin;scrollbar-color:var(--mla-line) transparent}
+.mla-m{display:flex;flex-direction:column;max-width:88%;animation:mlaPop .18s ease}
+@keyframes mlaPop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.mla-m.u{align-self:flex-start}
+.mla-m.b{align-self:flex-end;max-width:94%}
+.mla-m.b:has(.mla-grid),.mla-m.b:has(.mla-list){width:94%}
+.mla-bb{padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.75;font-weight:600;word-wrap:break-word}
+.mla-m.u .mla-bb{background:linear-gradient(135deg,#00a8de,#6a4dff);color:#fff;border-bottom-right-radius:5px}
+.mla-m.b .mla-bb{background:var(--mla-card);border:1px solid var(--mla-line);border-bottom-left-radius:5px}
+.mla-tm{font-size:9.5px;color:var(--mla-sub);margin-top:3px;padding:0 6px;font-weight:700}
+.mla-m.u .mla-tm{text-align:right}.mla-m.b .mla-tm{text-align:left}
+.mla-sys{align-self:center;font-size:10.5px;color:var(--mla-sub);background:var(--mla-card);border:1px dashed var(--mla-line);border-radius:999px;padding:3px 12px;font-weight:700}
+.mla-big{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin:2px 0 6px}
+.mla-big b{font-size:30px;font-weight:900;line-height:1.1;background:linear-gradient(135deg,var(--mla-pri),var(--mla-pri2));-webkit-background-clip:text;background-clip:text;color:transparent;direction:ltr}
+.mla-big span{font-size:12px;color:var(--mla-sub);font-weight:800}
+.mla-q{font-size:11.5px;color:var(--mla-sub);font-weight:800;margin-bottom:2px}
+.mla-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:6px;margin:6px 0 2px}
+.mla-st{background:var(--mla-bg);border:1px solid var(--mla-line);border-radius:11px;padding:6px 9px}
+.mla-st b{display:block;font-size:14.5px;font-weight:900;direction:ltr;text-align:right}
+.mla-st span{font-size:10.5px;color:var(--mla-sub);font-weight:700}
+.mla-up{color:var(--mla-ok)!important}.mla-dn{color:var(--mla-bad)!important}.mla-wr{color:var(--mla-warn)!important}
+.mla-cmp{font-size:11.5px;font-weight:800;margin-top:4px}
+.mla-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.mla-ab{border:1px solid var(--mla-pri);background:transparent;color:var(--mla-pri);border-radius:9px;padding:4px 10px;font-size:11.5px;font-weight:800;font-family:inherit;cursor:pointer;transition:.15s}
+.mla-ab:hover{background:var(--mla-pri);color:#fff}
+.mla-list{margin-top:6px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;scrollbar-width:thin}
+.mla-li{display:flex;align-items:center;gap:8px;background:var(--mla-bg);border:1px solid var(--mla-line);border-radius:10px;padding:6px 9px;font-size:12px}
+.mla-li.ck{cursor:pointer}.mla-li.ck:hover{border-color:var(--mla-pri)}
+.mla-li .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800}
+.mla-li .s{font-size:10.5px;color:var(--mla-sub);font-weight:700;white-space:nowrap}
+.mla-li .v{font-weight:900;direction:ltr;white-space:nowrap}
+.mla-bar{height:5px;border-radius:5px;background:var(--mla-line);overflow:hidden;margin-top:3px}
+.mla-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--mla-pri),var(--mla-pri2));border-radius:5px}
+.mla-ex{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.mla-ex button{border:1px dashed var(--mla-line);background:var(--mla-bg);color:var(--mla-txt);border-radius:8px;padding:3px 9px;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer}
+.mla-ex button:hover{border-color:var(--mla-pri);color:var(--mla-pri)}
+.mla-h4{font-size:12px;font-weight:900;color:var(--mla-pri);margin:8px 0 2px}
+.mla-typing{align-self:flex-end;display:flex;gap:4px;padding:11px 14px;background:var(--mla-card);border:1px solid var(--mla-line);border-radius:16px;border-bottom-left-radius:5px}
+.mla-typing i{width:6px;height:6px;border-radius:50%;background:var(--mla-pri);animation:mlaDot 1s infinite ease-in-out}
+.mla-typing i:nth-child(2){animation-delay:.15s}.mla-typing i:nth-child(3){animation-delay:.3s}
+@keyframes mlaDot{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.mla-sug{flex-shrink:0;display:none;gap:5px;padding:6px 12px 0;overflow-x:auto;scrollbar-width:none}
+.mla-sug.show{display:flex}
+.mla-sug button{flex-shrink:0;border:1px solid var(--mla-line);background:var(--mla-card2);color:var(--mla-pri);border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:800;font-family:inherit;cursor:pointer;white-space:nowrap}
+.mla-sug button:hover{border-color:var(--mla-pri)}
+.mla-in{flex-shrink:0;display:flex;align-items:flex-end;gap:8px;padding:10px 12px 12px}
+.mla-in textarea{flex:1;resize:none;max-height:110px;min-height:42px;border:1.5px solid var(--mla-line);background:var(--mla-card);color:var(--mla-txt);border-radius:14px;padding:9px 13px;font-family:inherit;font-size:13.5px;font-weight:600;outline:none;line-height:1.6;transition:.15s;direction:rtl}
+.mla-in textarea:focus{border-color:var(--mla-pri);box-shadow:0 0 0 3px rgba(0,212,255,.12)}
+.mla-in textarea::placeholder{color:var(--mla-sub)}
+.mla-send{width:42px;height:42px;border-radius:13px;border:none;background:linear-gradient(135deg,var(--mla-pri),var(--mla-pri2));color:#fff;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 14px rgba(0,170,255,.35);transition:.15s}
+.mla-send:hover{transform:scale(1.06)}
+.mla-send svg{transform:scaleX(-1)}
+.mla-hist{position:absolute;inset:63px 0 0 0;background:var(--mla-bg);z-index:50;display:none;flex-direction:column}
+.mla-hist.show{display:flex}
+.mla-hist-h{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--mla-line);font-size:13px;font-weight:900}
+.mla-hist-l{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.mla-hi{display:flex;align-items:center;gap:8px;border:1px solid var(--mla-line);background:var(--mla-card);border-radius:12px;padding:8px 11px;cursor:pointer;transition:.15s}
+.mla-hi:hover,.mla-hi.cur{border-color:var(--mla-pri)}
+.mla-hi .t{flex:1;min-width:0}
+.mla-hi .t b{display:block;font-size:12.5px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mla-hi .t span{font-size:10.5px;color:var(--mla-sub);font-weight:700}
+.mla-hi .d{border:none;background:none;color:var(--mla-sub);cursor:pointer;font-size:14px;padding:2px 4px}
+.mla-hi .d:hover{color:var(--mla-bad)}
+.mla-note{font-size:10.5px;color:var(--mla-sub);text-align:center;padding:8px;font-weight:700}
+.mla-bub{position:fixed;z-index:9060;width:60px;height:60px;border-radius:50%;display:none;align-items:center;justify-content:center;cursor:pointer;background:linear-gradient(135deg,#00c6f5,#6a4dff);box-shadow:0 10px 30px rgba(0,120,255,.45),0 0 0 4px rgba(0,212,255,.15);color:#fff;font-size:26px;user-select:none;touch-action:none;transition:box-shadow .2s}
+.mla-bub.show{display:flex;animation:mlaBub .25s cubic-bezier(.2,.9,.3,1.4)}
+.mla-bub:hover{box-shadow:0 12px 34px rgba(0,120,255,.6),0 0 0 6px rgba(0,212,255,.2)}
+.mla-bub::before{content:'';position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(0,212,255,.45);animation:mlaRing 2.4s infinite}
+@keyframes mlaBub{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
+@keyframes mlaRing{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.35);opacity:0}}
+.mla-bub .cnt{position:absolute;top:-2px;left:-2px;min-width:20px;height:20px;border-radius:10px;background:#ff4d6d;color:#fff;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0 5px;font-family:'Cairo',sans-serif;border:2px solid #0a1324}
+@media (max-width:600px){.mla-win{width:calc(100vw - 12px);height:calc(100vh - 70px);border-radius:18px}}
+</style>
+
+<div id="mla-root">
+  <div class="mla-win" id="mla-win" role="dialog" aria-label="مساعد ميدلاب">
+    <div class="mla-hdr" id="mla-hdr">
+      <div class="mla-av">💬</div>
+      <div class="mla-ttl"><b>مساعد ميدلاب</b><span><i></i>يجيبك من بيانات المختبر مباشرة</span></div>
+      <button class="mla-hb" title="دردشة جديدة" onclick="MLAsk.newChat()">＋</button>
+      <button class="mla-hb" title="المحادثات السابقة (آخر ٧ أيام)" onclick="MLAsk.toggleHist()">🕘</button>
+      <button class="mla-hb" title="تصغير إلى فقاعة" onclick="MLAsk.minimize()">−</button>
+      <button class="mla-hb x" title="إغلاق" onclick="MLAsk.close()">×</button>
+    </div>
+    <div class="mla-sc" id="mla-sc"></div>
+    <div class="mla-msgs" id="mla-msgs"></div>
+    <div class="mla-sug" id="mla-sug"></div>
+    <div class="mla-in">
+      <textarea id="mla-inp" rows="1" placeholder="اكتب سؤالك… مثل: كم مريض اليوم؟"></textarea>
+      <button class="mla-send" title="إرسال" onclick="MLAsk.send()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg></button>
+    </div>
+    <div class="mla-hist" id="mla-hist">
+      <div class="mla-hist-h"><span>🕘 المحادثات السابقة</span><button class="mla-hb" onclick="MLAsk.toggleHist()">×</button></div>
+      <div class="mla-hist-l" id="mla-hist-l"></div>
+      <div class="mla-note">🗑️ تُحذف المحادثات تلقائياً بعد ٧ أيام من آخر استخدام</div>
+    </div>
+  </div>
+  <div class="mla-bub" id="mla-bub" title="مساعد ميدلاب — اضغط للفتح، واسحب للتحريك">💬</div>
+</div>
+
+<script>
+(function(){
+'use strict';
+if(window.MLAsk) return;
+
+/* ════════════════ أدوات عامة ════════════════ */
+var KEEP_MS=7*24*3600*1000, MAX_MSGS=300, MAX_SESS=40;
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function jsq(s){ return esc(String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")); }
+function fmt(n){ try{ return _rpFmt(n); }catch(e){ return (Math.round((+n||0)*100)/100).toLocaleString('en-US'); } }
+function num(n){ return (+n||0).toLocaleString('en-US'); }
+function cur(){ try{ return _rpCur(); }catch(e){ return 'IQD'; } }
+function today(){ try{ return _rpToday(); }catch(e){ return new Date().toISOString().slice(0,10); } }
+function dk(d){ try{ return _rpD(d); }catch(e){ return String(d||'').slice(0,10); } }
+function pad(n){ return ('0'+n).slice(-2); }
+function addDays(iso,n){ var d=new Date(iso+'T00:00:00Z'); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
+function lastDay(y,m){ return new Date(Date.UTC(y,m,0)).getUTCDate(); }
+function mLabel(ym){ try{ return _rpMonthLabel(ym); }catch(e){ return ym; } }
+function arr(a){ return Array.isArray(a)?a:[]; }
+function perm(k){ try{ return typeof hasPermission!=='function' || hasPermission(k); }catch(e){ return true; } }
+function permAny(){ for(var i=0;i<arguments.length;i++) if(perm(arguments[i])) return true; return false; }
+function G(n){
+  try{
+    if(n==='patients') return arr(patients);
+    if(n==='requests') return arr(requests);
+    if(n==='invoices') return arr(invoices);
+    if(n==='tests') return arr(tests);
+    if(n==='inventory') return arr(inventory);
+  }catch(e){}
+  return [];
+}
+function hasRp(){ return typeof RpData!=='undefined' && RpData && typeof RpData.build==='function'; }
+function timeStr(ts){ var d=new Date(ts); return pad(d.getHours())+':'+pad(d.getMinutes()); }
+function dayStr(ts){
+  var d=new Date(ts), n=new Date(), y=new Date(); y.setDate(n.getDate()-1);
+  if(d.toDateString()===n.toDateString()) return 'اليوم '+timeStr(ts);
+  if(d.toDateString()===y.toDateString()) return 'أمس '+timeStr(ts);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+' '+timeStr(ts);
+}
+
+/* ════════════════ التطبيع العربي ════════════════ */
+function norm(s){
+  s=String(s||'');
+  s=s.replace(/[٠-٩]/g,function(d){ return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }).replace(/[۰-۹]/g,function(d){ return '۰۱۲۳۴۵۶۷۸۹'.indexOf(d); });
+  s=s.toLowerCase()
+    .replace(/[\u064B-\u0652\u0640\u0670]/g,'')
+    .replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ة/g,'ه').replace(/ؤ/g,'و').replace(/ئ/g,'ي')
+    .replace(/گ/g,'ك').replace(/چ/g,'ج').replace(/پ/g,'ب').replace(/ڤ/g,'ف').replace(/ژ/g,'ز');
+  s=s.replace(/[؟?!،,:;"'()\[\]{}«»_*#~`|<>=+]/g,' ')
+     .replace(/(^|[^\d])\.|\.(?!\d)/g,'$1 ')
+     .replace(/\s+/g,' ').trim();
+  return s;
+}
+function reEsc(s){ return s.replace(/[.*+?^${}()|[\]\\\/]/g,'\\$&'); }
+var _reCache={};
+/* هل يحتوي النص على إحدى الكلمات؟ يسمح بالسوابق (و، ف، ب، ل، ال، لل…) واللواحق */
+function hasW(t,list){
+  var key=list.join('|'), re=_reCache[key];
+  if(!re){
+    var parts=list.map(function(w){ var exact=/\$$/.test(w); w=norm(w.replace(/\$$/,'')); var e=reEsc(w).replace(/ /g,'\\s+'); return (exact||w.length<=2)?e+'(?=\\s|$)':e; });
+    parts.sort(function(a,b){ return b.length-a.length; });
+    re=_reCache[key]=new RegExp('(?:^|\\s)(?:و|ف|ب|ل|ك)?(?:ال|لل)?(?:'+parts.join('|')+')');
+  }
+  return re.test(t);
+}
+function lev(a,b){
+  if(a===b) return 0; var m=a.length,n=b.length; if(!m) return n; if(!n) return m;
+  if(Math.abs(m-n)>2) return 9;
+  var p=new Array(n+1),c=new Array(n+1),i,j;
+  for(j=0;j<=n;j++) p[j]=j;
+  for(i=1;i<=m;i++){ c[0]=i; for(j=1;j<=n;j++){ c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a.charAt(i-1)===b.charAt(j-1)?0:1)); } var t=p;p=c;c=t; }
+  return p[n];
+}
+
+/* ════════════════ المفردات (مع صيغ مختلفة لنفس المعنى) ════════════════ */
+var W={
+  count:['كم','شكد','شقد','شكثر','جم','عدد','اعداد','احسب','احصي','كميه','قديش','اديش','كام','بيش','how many','count'],
+  patient:['مريض','مرضي','مرضا','مريضه','مراجع','مراجعين','مراجعه','مراجعات','مراجعون','زبون','زباين','زبائن','ناس','شخص','اشخاص','حاله','حالات','نفر','انفار','زوار','زائر','عميل','عملاء','بيشنت','patient','patients','visitors'],
+  revenue:['وارد','واردات','ايراد','ايرادات','دخل','مدخول','مداخيل','مدخولات','فلوس','مبلغ','مبالغ','مبيعات','ربح','ارباح','صندوق','كاش','قبض','قبضنا','محصل','تحصيل','حصلنا','طلعنا','جمعنا','غله','حساب','حسابات','نقود','مصاري','دنانير','دينار','بيع','بعنا','فواتير','فاتوره','revenue','income','money','sales','cash'],
+  report:['تقرير','تقارير','كشف','كشوفات','اسحب','اسحبلي','سحب','اطبع','اطبعلي','طبع','طباعه','استخرج','استخراج','صدر','تصدير','اكسل','اكسيل','excel','xlsx','pdf','report','نزل','نزللي','تنزيل','بيان'],
+  print:['اطبع','اطبعلي','طبع','طباعه','اسحب','اسحبلي','سحب','print'],
+  excel:['اكسل','اكسيل','excel','xlsx','نزل','نزللي','تنزيل','ملف'],
+  show:['اعرض','عرض','افتح','وريني','شوفني','خليني اشوف','show','open'],
+  tests:['تحليل','تحاليل','فحص','فحوصات','فحوص','تست','test','tests','analysis'],
+  requests:['طلب','طلبات','اوردر','اوردرات','order','orders','زياره','زيارات','عينه','عينات','نماذج'],
+  pending:['معلق','معلقه','منتظر','منتظره','انتظار','غير منجز','ما خلص','ماخلص','ما خلصت','ماخلصت','قيد','pending','متاخر','متاخره','ما طلع','ماطلع','ما طلعت','مو جاهز','مو جاهزه','بعدها','ناقص نتائج','بدون نتائج'],
+  done:['منجز','منجزه','جاهز','جاهزه','مكتمل','مكتمله','خلص','خلصت','انتهي','انتهت','طلعت','done','completed','ready'],
+  debt:['الدين','دين$','ديون','متبقي','متبقيه','مطلوب','مطلوبات','اجل','بالاجل','مديون','مديونين','ذمم','ذمه','غير مدفوع','ما دافع','مادافع','ما دافعين','ما مدفوع','باقي عليهم','باقي عليه','due','debt','debts','unpaid'],
+  crit:['حرج','حرجه','حرجة','خطر','خطير','خطيره','غير طبيعي','غير طبيعيه','ابنورمال','abnormal','critical','عالي جدا','مرتفع جدا','نتائج خطيره'],
+  stock:['مخزن','مخزون','مواد','كت','كتات','kit','kits','عدد المواد','نفاد','نافد','نفدت','خلصان','خالص','نواقص','ناقصه','منتهي','منتهيه','صلاحيه','ستوك','stock','inventory','reagent','ريجنت','محاليل'],
+  doctor:['طبيب','اطباء','دكتور','دكاتره','دكتوره','الدكاتره','doctor','doctors','محول','محولين','تحويل','تحويلات','مرسل'],
+  price:['سعر','اسعار','بكم','بيش','ثمن','كلفه','تكلفه','تسعيره','price','cost'],
+  search:['ابحث','بحث','دور','دورلي','فتش','جيب','جيبلي','معلومات','ملف','بيانات','تفاصيل','find','search','وين المريض','منو المريض'],
+  list:['اسماء','اسامي','قائمه','لسته','ليسته','منو','مين','من هم','list','names','عرضلي المرضي','اعرض المرضي'],
+  top:['اكثر','اعلي','افضل','اشهر','الاكثر','top','ترتيب','الاوائل'],
+  fresh:['جديد','جدد','جديده','لاول مره','اول مره','new'],
+  help:['مساعده','ساعدني','شتسوي','شنو تسوي','شنو تكدر','شتكدر','ماذا تستطيع','ماذا تفعل','اوامر','الاوامر','تعليمات','help','شلون استخدم','كيف استخدم','شنو اكدر اسال','ماذا اسال','الخيارات'],
+  greet:['مرحبا','مرحب','هلو','هلا','اهلا','السلام','سلام','صباح','مساء','هاي','hi','hello','hey','شلونك','كيفك','شخبارك','شلونكم'],
+  thanks:['شكرا','مشكور','تسلم','تسلملي','يسلمو','عاشت','عاشت ايدك','الله يخليك','ممنون','thanks','thank','ثانكس','عفيه'],
+  nav:['افتح','افتحلي','روح','روح الي','اذهب','انتقل','ودني','وديني','خذني','حولني','اخذني','go to','open','goto'],
+  compare:['قارن','مقارنه','مقارنة','فرق','compare','vs']
+};
+var VOCAB=(function(){ var s={}; Object.keys(W).forEach(function(k){ W[k].forEach(function(w){ w=norm(w); if(w.indexOf(' ')<0 && w.length>=4) s[w]=1; }); }); return Object.keys(s); })();
+/* تصحيح أخطاء إملائية بسيطة (حرف واحد، أو حرفين للكلمات الطويلة) */
+function fuzz(t){
+  return t.split(' ').map(function(tok){
+    if(tok.length<4 || /\d/.test(tok)) return tok;
+    var base=tok.replace(/^(?:و|ف|ب|ل)?(?:ال|لل)/,'');
+    if(VOCAB.indexOf(tok)>=0 || VOCAB.indexOf(base)>=0) return tok;
+    for(var i=0;i<VOCAB.length;i++){ if(base.indexOf(VOCAB[i])===0) return tok; }
+    var best=null, bd=9;
+    VOCAB.forEach(function(v){ var lim=(v.length>=7?2:1); var d=lev(base,v); if(d<=lim && d<bd){ bd=d; best=v; } });
+    return best||tok;
+  }).join(' ');
+}
+
+/* ════════════════ فهم الفترة الزمنية ════════════════ */
+function mkScope(mode,from,to,label,extra){
+  var o={mode:mode,all:mode==='all',from:from||'',to:to||'',label:label};
+  if(extra) for(var k in extra) o[k]=extra[k];
+  o.has=function(d){ if(o.all) return true; var n=dk(d); if(!n) return false; return (!o.from||n>=o.from)&&(!o.to||n<=o.to); };
+  o.key=mode+'|'+o.from+'|'+o.to;
+  return o;
+}
+function scDay(d,label){ return mkScope('day',d,d,label||('يوم '+d),{day:d}); }
+function scMonth(y,m){ var ym=y+'-'+pad(m); return mkScope('month',ym+'-01',ym+'-'+pad(lastDay(y,m)),'شهر '+mLabel(ym),{month:ym}); }
+function scYear(y){ return mkScope('year',y+'-01-01',y+'-12-31','سنة '+y,{year:String(y)}); }
+function scRange(f,t,label){ return mkScope('range',f,t,label||('من '+f+' إلى '+t)); }
+function scAll(){ return mkScope('all','','','كل الفترات'); }
+function scToday(){ return scDay(today(),'اليوم'); }
+function scThisMonth(){ var T=today(); return scMonth(+T.slice(0,4),+T.slice(5,7)); }
+function weekStart(iso){ var dow=new Date(iso+'T00:00:00Z').getUTCDay(); return addDays(iso,-((dow+1)%7)); } /* الأسبوع يبدأ السبت */
+/* نص قابل لإعادة الفهم — تستخدمه الأزرار */
+function scopeText(S){
+  if(S.mode==='all') return 'كل الفترات';
+  if(S.mode==='day') return S.from;
+  if(S.mode==='month') return 'شهر '+S.month;
+  if(S.mode==='year') return 'سنه '+S.year;
+  return 'من '+S.from+' الى '+S.to;
+}
+var MONTHS=[['كانون الثاني',1],['كانون ثاني',1],['كانون الاول',12],['كانون اول',12],['تشرين الثاني',11],['تشرين ثاني',11],['تشرين الاول',10],['تشرين اول',10],
+  ['شباط',2],['اذار',3],['نيسان',4],['ايار',5],['حزيران',6],['تموز',7],['ايلول',9],['اب',8],
+  ['يناير',1],['فبراير',2],['مارس',3],['ابريل',4],['مايو',5],['يونيو',6],['يونيه',6],['يوليو',7],['يوليه',7],['اغسطس',8],['سبتمبر',9],['اكتوبر',10],['نوفمبر',11],['ديسمبر',12],
+  ['january',1],['february',2],['march',3],['april',4],['june',6],['july',7],['august',8],['september',9],['october',10],['november',11],['december',12],
+  ['jan',1],['feb',2],['mar',3],['apr',4],['may',5],['jun',6],['jul',7],['aug',8],['sept',9],['sep',9],['oct',10],['nov',11],['dec',12]];
+var NUMW={'واحد':1,'اول':1,'اثنين':2,'اثنان':2,'ثنين':2,'ثاني':2,'ثلاثه':3,'ثلاث':3,'ثالث':3,'اربعه':4,'اربع':4,'رابع':4,'خمسه':5,'خمس':5,'خامس':5,'سته':6,'ست':6,'سادس':6,'سبعه':7,'سبع':7,'سابع':7,'ثمانيه':8,'ثمان':8,'ثامن':8,'تسعه':9,'تسع':9,'تاسع':9,'عشره':10,'عشر':10,'عاشر':10,'احدعش':11,'حداعش':11,'احد عشر':11,'اثنعش':12,'ثنعش':12,'اثنا عشر':12};
+function wnum(s){ s=String(s||'').replace(/^ال/,''); if(/^\d+$/.test(s)) return +s; return NUMW[s]||0; }
+function guessYear(m){ var T=today(), Y=+T.slice(0,4), M=+T.slice(5,7); return m>M?Y-1:Y; }
+function parsePeriod(t){
+  var T=today(), Y=+T.slice(0,4), m, i;
+  /* ١) تواريخ كاملة */
+  var dates=[], re=/(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})|(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/g;
+  while((m=re.exec(t))){
+    var y,mo,d; if(m[1]){ y=+m[1]; mo=+m[2]; d=+m[3]; } else { d=+m[4]; mo=+m[5]; y=+m[6]; }
+    if(mo>=1&&mo<=12&&d>=1&&d<=31) dates.push(y+'-'+pad(mo)+'-'+pad(d));
+  }
+  var t2=t.replace(re,' ');
+  if(dates.length>=2){ dates.sort(); return scRange(dates[0],dates[dates.length-1]); }
+  if(dates.length===1) return scDay(dates[0], dates[0]===T?'اليوم':null);
+  /* ٢) شهر/سنة رقمي */
+  m=t2.match(/(?:^|[^\d])(\d{4})[-\/](\d{1,2})(?!\d)/); if(m&&+m[2]>=1&&+m[2]<=12) return scMonth(+m[1],+m[2]);
+  m=t2.match(/(?:^|[^\d])(\d{1,2})[-\/](\d{4})(?!\d)/); if(m&&+m[1]>=1&&+m[1]<=12) return scMonth(+m[2],+m[1]);
+  /* ٣) يوم/شهر بدون سنة (أسلوب عراقي: يوم/شهر) */
+  m=t2.match(/(?:^|[^\d])(\d{1,2})[\/.](\d{1,2})(?![\d\/.])/);
+  if(m&&+m[2]>=1&&+m[2]<=12&&+m[1]>=1&&+m[1]<=31){ var ds=Y+'-'+pad(+m[2])+'-'+pad(+m[1]); if(ds>T) ds=(Y-1)+ds.slice(4); return scDay(ds); }
+  /* ٤) آخر N يوم/أسبوع/شهر */
+  m=t2.match(/(?:^|\s)(?:ب|ل|في|خلال)?\s*(?:ال)?اخر\s+(\S+)\s+(يوم|ايام|اسبوع|اسابيع|شهر|اشهر|شهور)/);
+  if(m){ var n=wnum(m[1]); if(n>0){ var mult=/اسبوع|اسابيع/.test(m[2])?7:(/شهر|اشهر|شهور/.test(m[2])?30:1); var days=Math.min(n*mult,3650); return scRange(addDays(T,-(days-1)),T,'آخر '+n+' '+m[2]); } }
+  if(hasW(t2,['اخر اسبوع','اخر 7 ايام'])) return scRange(addDays(T,-6),T,'آخر ٧ أيام');
+  if(hasW(t2,['اخر شهر','اخر 30 يوم'])) return scRange(addDays(T,-29),T,'آخر ٣٠ يوماً');
+  m=t2.match(/قبل\s+(\S+)\s+(?:يوم|ايام)/); if(m){ var nb=wnum(m[1]); if(nb>0) return scDay(addDays(T,-nb)); }
+  /* ٥) أيام نسبية */
+  if(hasW(t2,['اول امس','اول البارحه','قبل امس','قبل البارحه','قبل يومين','اول البارح'])) return scDay(addDays(T,-2),'أول أمس');
+  if(hasW(t2,['امس','البارحه','البارح','مبارح','يوم امس','yesterday'])) return scDay(addDays(T,-1),'أمس');
+  if(hasW(t2,['اليوم','هسه','هلق','هاليوم','النهارده','الحين','هذا اليوم','اليومي','اليوميه','today'])) return scToday();
+  /* ٦) أسابيع */
+  if(hasW(t2,['الاسبوع الماضي','الاسبوع السابق','الاسبوع اللي فات','الاسبوع الي فات','الاسبوع الفائت','الاسبوع القبل','الاسبوع القبله','last week'])){ var ws=weekStart(T); return scRange(addDays(ws,-7),addDays(ws,-1),'الأسبوع الماضي'); }
+  if(hasW(t2,['هذا الاسبوع','هالاسبوع','الاسبوع الحالي','الاسبوع','اسبوعي','this week'])) return scRange(weekStart(T),T,'هذا الأسبوع');
+  /* ٧) أشهر */
+  if(hasW(t2,['الشهر الماضي','الشهر السابق','الشهر اللي فات','الشهر الي فات','الشهر الفائت','الشهر القبل','الشهر القبله','الشهر المنصرم','last month'])){ var pm=+T.slice(5,7)-1, py=Y; if(pm<1){ pm=12; py--; } var s1=scMonth(py,pm); s1.label='الشهر الماضي ('+mLabel(s1.month)+')'; return s1; }
+  for(i=0;i<MONTHS.length;i++){
+    var nm=MONTHS[i][0], mre=new RegExp('(?:^|\\s)(?:و|ب|ل|لل|في)?(?:شهر\\s+)?(?:ال)?'+reEsc(nm).replace(/ /g,'\\s+')+'(?=\\s|$)(?:\\s*(?:سنه|عام|لسنه|لعام)?\\s*(\\d{4}))?');
+    m=t2.match(mre); if(m){ var mm=MONTHS[i][1]; return scMonth(m[1]?+m[1]:guessYear(mm),mm); }
+  }
+  m=t2.match(/(?:^|\s)(?:و|ب|ل|لل|في)?(?:ال)?شهر\s+(\d{1,2}|[^\s\d]+(?:\s+عشر)?)(?:\s*(?:سنه|عام|لسنه|لعام|[-\/])?\s*(\d{4}))?/);
+  if(m){ var mn=wnum(m[1]); if(mn>=1&&mn<=12) return scMonth(m[2]?+m[2]:guessYear(mn),mn); }
+  if(hasW(t2,['هذا الشهر','هالشهر','الشهر الحالي','الشهر','شهري','this month','month'])) return scThisMonth();
+  /* ٨) سنوات */
+  if(hasW(t2,['السنه الماضيه','السنه السابقه','العام الماضي','السنه اللي فاتت','السنه الي فاتت','العام السابق','last year'])) return scYear(Y-1);
+  m=t2.match(/(?:^|[^\d])(20\d\d)(?!\d)/); if(m) return scYear(+m[1]);
+  if(hasW(t2,['هذه السنه','هالسنه','السنه الحاليه','هاي السنه','العام الحالي','هذا العام','السنه','سنوي','this year'])) return scYear(Y);
+  /* ٩) كل الفترات */
+  if(hasW(t2,['كل الفترات','كل الوقت','من البدايه','منذ البدايه','الاجمالي','الكلي','طول الفتره','لحد الان','الكل','all time'])) return scAll();
+  return null;
+}
+
+/* ════════════════ قراءة البيانات ════════════════ */
+function build(S){ return RpData.build(S); }
+function prevScope(S){
+  if(S.mode==='day') return scDay(addDays(S.from,-1),'اليوم السابق');
+  if(S.mode==='month'){ var y=+S.month.slice(0,4), m=+S.month.slice(5,7)-1; if(m<1){m=12;y--;} return scMonth(y,m); }
+  return null;
+}
+function cmpHTML(a,b,lbl,money){
+  if(b===null||b===undefined) return '';
+  var diff=a-b, pct=b?Math.round(diff/b*100):null;
+  var cls=diff>0?'mla-up':(diff<0?'mla-dn':''), arrow=diff>0?'▲':(diff<0?'▼':'●');
+  return '<div class="mla-cmp '+cls+'">'+arrow+' '+(diff===0?'نفس '+lbl:(diff>0?'أكثر':'أقل')+' من '+lbl+' بـ '+(money?fmt(Math.abs(diff))+' '+esc(cur()):num(Math.abs(diff)))+(pct!==null&&diff!==0?' ('+Math.abs(pct)+'%)':''))+' <span style="color:var(--mla-sub)">— '+lbl+': '+(money?fmt(b):num(b))+'</span></div>';
+}
+function st(v,l,cls){ return '<div class="mla-st"><b class="'+(cls||'')+'">'+v+'</b><span>'+l+'</span></div>'; }
+function acts(list){ return '<div class="mla-acts">'+list.map(function(a){ return '<button class="mla-ab" onclick="'+a[1]+'">'+a[0]+'</button>'; }).join('')+'</div>'; }
+function runBtn(label,cmd){ return [label,"MLAsk.run('"+jsq(cmd)+"')"]; }
+function noPerm(what){ return '🚫 ليس لديك صلاحية الاطلاع على '+what+'. راجع مدير النظام.'; }
+function needData(){ return '⏳ البيانات لم تُحمَّل بعد — سجّل الدخول أولاً ثم أعد السؤال.'; }
+
+/* ── المرضى ── */
+function ansPatients(S,onlyNew){
+  if(!perm('patients')&&!perm('reports')) return noPerm('بيانات المرضى');
+  var D=build(S), PA=RpData.patientsActivity(D);
+  var n=PA.length, nw=PA.filter(function(e){ return e.isNew; }).length;
+  var fem=PA.filter(function(e){ return e.p&&e.p.gender==='female'; }).length;
+  var done=D.reqs.filter(function(r){ return r.status==='done'; }).length;
+  var pend=D.reqs.filter(function(r){ return r.status==='pending'; }).length;
+  var tcount=0; D.reqs.forEach(function(r){ tcount+=arr(r.tests).length; }); tcount+=D.stand.length;
+  var h='<div class="mla-q">👥 عدد المرضى — '+esc(S.label)+'</div>'
+    +(onlyNew?'<div class="mla-big"><b>'+num(nw)+'</b><span>مريض جديد (مسجّل لأول مرة) من أصل '+num(n)+'</span></div>'
+             :'<div class="mla-big"><b>'+num(n)+'</b><span>مريض'+(S.mode==='day'?'':' خلال الفترة')+'</span></div>');
+  var P=prevScope(S);
+  if(P && S.mode==='day' && !onlyNew){ var pn=RpData.patientsActivity(build(P)).length; h+=cmpHTML(n,pn,S.label==='اليوم'?'أمس':'اليوم السابق',false); }
+  h+='<div class="mla-grid">'+st(num(nw),'🆕 مسجّلون جدد','mla-up')+st(num(n-nw),'🔁 مراجعون سابقون')+st(num(D.reqs.length),'📋 طلبات')
+    +st(num(done),'✅ منجزة','mla-up')+st(num(pend),'⏳ معلّقة',pend?'mla-wr':'')+st(num(tcount),'🧪 تحاليل')
+    +st(num(fem),'👩 إناث')+st(num(n-fem),'👨 ذكور')+'</div>';
+  if(S.mode!=='day'){
+    var days=Math.max(1,Math.round((Date.parse((S.to>today()?today():S.to)+'T00:00:00Z')-Date.parse(S.from+'T00:00:00Z'))/864e5)+1);
+    if(S.mode!=='all'&&days>1) h+='<div class="mla-cmp" style="color:var(--mla-sub)">📈 المعدّل اليومي: <b style="color:var(--mla-txt)">'+(Math.round(n/days*10)/10)+'</b> مريض/يوم</div>';
+  }
+  var sx=scopeText(S);
+  h+=acts([runBtn('👥 الأسماء','اسماء المرضى '+sx), runBtn('🖨️ طباعة التقرير','اطبع تقرير المرضى '+sx), runBtn('📊 Excel','اكسل تقرير المرضى '+sx)].concat(perm('billing')||perm('reports')?[runBtn('💰 الواردات','واردات '+sx)]:[]));
+  return h;
+}
+function ansPatientList(S){
+  if(!perm('patients')&&!perm('reports')) return noPerm('بيانات المرضى');
+  var PA=RpData.patientsActivity(build(S));
+  if(!PA.length) return '📭 لا يوجد مرضى في '+esc(S.label)+'.';
+  var lim=60;
+  var h='<div class="mla-q">👥 مرضى '+esc(S.label)+' — '+num(PA.length)+' مريض</div><div class="mla-list">'
+    +PA.slice(0,lim).map(function(e,i){
+      var ck=e.pid?' ck" onclick="MLAsk.openPt(\''+jsq(e.pid)+'\')':'';
+      return '<div class="mla-li'+ck+'"><span class="s">'+(i+1)+'</span><span class="n">'+esc(e.name)+(e.isNew?' <span class="s mla-up">جديد</span>':'')+'</span><span class="s">'+esc((e.tests||[]).slice(0,2).join('، ')||'—')+'</span></div>';
+    }).join('')+'</div>';
+  if(PA.length>lim) h+='<div class="mla-cmp" style="color:var(--mla-sub)">… و '+(PA.length-lim)+' آخرين — اطبع التقرير لرؤية الكل</div>';
+  h+=acts([runBtn('🖨️ طباعة التقرير','اطبع تقرير المرضى '+scopeText(S))]);
+  return h;
+}
+
+/* ── الواردات ── */
+function ansRevenue(S){
+  if(!permAny('billing','reports')) return noPerm('الواردات');
+  var D=build(S), M=RpData.money(D.revenue), c=esc(cur());
+  var h='<div class="mla-q">💰 الواردات — '+esc(S.label)+'</div>'
+    +'<div class="mla-big"><b>'+fmt(M.net)+'</b><span>'+c+' صافي الإيراد</span></div>';
+  var P=prevScope(S);
+  if(P && S.mode==='day'){ var pm=RpData.money(build(P).revenue); h+=cmpHTML(M.net,pm.net,S.label==='اليوم'?'أمس':'اليوم السابق',true); }
+  h+='<div class="mla-grid">'
+    +st(fmt(M.paid),'💵 المحصّل فعلياً','mla-up')
+    +st(fmt(M.due),'⏳ المتبقي على المرضى',M.due>0?'mla-dn':'')
+    +st(fmt(M.pCash),'💴 نقدي')
+    +st(fmt(M.pElec),'💳 إلكتروني')
+    +st(fmt(M.disc),'🏷️ الخصومات',M.disc>0?'mla-wr':'')
+    +st(fmt(M.gross),'🧾 قبل الخصم')
+    +st(num(M.n-M.cUnbilled),'📄 عدد الفواتير')
+    +(M.unbilled?st(fmt(M.unbilled),'🧫 غير مفوتر'):'')
+    +'</div>';
+  if(M.n) h+='<div class="mla-cmp" style="color:var(--mla-sub)">🧾 مدفوعة '+M.cPaid+' · جزئي '+M.cPartial+' · غير مدفوعة '+M.cUnpaid+' — المبالغ بعملة '+c+'</div>';
+  else h+='<div class="mla-cmp" style="color:var(--mla-sub)">📭 لا توجد فواتير في هذه الفترة.</div>';
+  var sx=scopeText(S);
+  h+=acts([runBtn('🖨️ طباعة تقرير الإيرادات','اطبع تقرير الايرادات '+sx), runBtn('📊 Excel','اكسل تقرير الايرادات '+sx), runBtn('💳 الديون','الديون '+sx)]);
+  return h;
+}
+
+/* ── الديون ── */
+function ansDebts(S){
+  if(!permAny('billing','reports')) return noPerm('الحسابات');
+  var D=build(S), map={}, total=0;
+  D.revenue.forEach(function(x){
+    if(x.kind==='unbilled'||!(x.due>0)) return;
+    var k=x.patientId||x.patientName; var e=map[k]||(map[k]={pid:x.patientId,name:x.patientName,due:0,n:0,last:''});
+    e.due+=x.due; e.n++; if(x.date>e.last) e.last=x.date; total+=x.due;
+  });
+  var L=Object.keys(map).map(function(k){ return map[k]; }).sort(function(a,b){ return b.due-a.due; });
+  if(!L.length) return '✅ لا توجد ديون على المرضى في '+esc(S.label)+' — كل الفواتير مسدّدة.';
+  var mx=L[0].due;
+  return '<div class="mla-q">💳 المبالغ المتبقية على المرضى — '+esc(S.label)+'</div>'
+    +'<div class="mla-big"><b class="mla-dn" style="-webkit-text-fill-color:currentColor">'+fmt(total)+'</b><span>'+esc(cur())+' على '+num(L.length)+' مريض</span></div>'
+    +'<div class="mla-list">'+L.slice(0,25).map(function(e){
+      var ck=e.pid?' ck" onclick="MLAsk.openPt(\''+jsq(e.pid)+'\')':'';
+      return '<div class="mla-li'+ck+'" style="flex-direction:column;align-items:stretch;gap:2px"><div style="display:flex;gap:8px"><span class="n">'+esc(e.name)+'</span><span class="v mla-dn">'+fmt(e.due)+'</span></div>'
+        +'<div style="display:flex;justify-content:space-between" class="s"><span>'+e.n+' فاتورة · آخرها '+esc(e.last||'—')+'</span></div><div class="mla-bar"><i style="width:'+Math.max(4,Math.round(e.due/mx*100))+'%"></i></div></div>';
+    }).join('')+'</div>'
+    +(L.length>25?'<div class="mla-cmp" style="color:var(--mla-sub)">… و '+(L.length-25)+' آخرين</div>':'')
+    +acts([runBtn('🖨️ تقرير الإيرادات','اطبع تقرير الايرادات '+scopeText(S))]);
+}
+
+/* ── الطلبات ── */
+function ansRequests(S,which){
+  if(!permAny('requests','results','reports')) return noPerm('الطلبات');
+  var D=build(S), R=D.reqs;
+  var done=R.filter(function(r){ return r.status==='done'; }), pend=R.filter(function(r){ return r.status==='pending'; });
+  var other=R.length-done.length-pend.length;
+  var h='<div class="mla-q">📋 الطلبات — '+esc(S.label)+'</div>'
+    +'<div class="mla-big"><b>'+num(R.length)+'</b><span>طلب</span></div>'
+    +'<div class="mla-grid">'+st(num(done.length),'✅ منجزة','mla-up')+st(num(pend.length),'⏳ معلّقة',pend.length?'mla-wr':'')+(other?st(num(other),'↔️ حالات أخرى'):'')
+    +st(R.length?Math.round(done.length/R.length*100)+'%':'—','📊 نسبة الإنجاز')+'</div>';
+  var show=which==='done'?done:pend;
+  if(show.length){
+    h+='<div class="mla-h4">'+(which==='done'?'✅ آخر الطلبات المنجزة':'⏳ الطلبات المعلّقة')+'</div><div class="mla-list">'
+      +show.slice().reverse().slice(0,15).map(function(r){
+        var fn=which==='done'?'goToPrint':'goToResult';
+        return '<div class="mla-li ck" onclick="MLAsk.go(\''+fn+'\',\''+jsq(r.id)+'\')"><span class="s">'+esc(r.orderNo||r.id)+'</span><span class="n">'+esc(r.patientName||'-')+'</span><span class="s">'+esc(arr(r.testNames).slice(0,2).join('، ')||(arr(r.tests).length+' تحليل'))+'</span></div>';
+      }).join('')+'</div>';
+    if(show.length>15) h+='<div class="mla-cmp" style="color:var(--mla-sub)">… و '+(show.length-15)+' أخرى</div>';
+  }
+  h+=acts([['📋 فتح قسم الطلبات',"MLAsk.nav('requests')"]].concat(which==='done'?[]:[runBtn('✅ المنجزة','الطلبات المنجزة '+scopeText(S))]));
+  return h;
+}
+
+/* ── التحاليل ── */
+function ansTests(S){
+  if(!permAny('reports','requests','results')) return noPerm('إحصائيات التحاليل');
+  var D=build(S), TC=RpData.testCounts(D), total=TC.reduce(function(s,c){ return s+c.n; },0);
+  if(!total) return '📭 لا توجد تحاليل مُجراة في '+esc(S.label)+'.';
+  var top=TC.slice(0,10), mx=top[0].n;
+  return '<div class="mla-q">🧪 التحاليل — '+esc(S.label)+'</div>'
+    +'<div class="mla-big"><b>'+num(total)+'</b><span>تحليل مُجرى · '+num(TC.length)+' نوع · '+num(D.reqs.length)+' طلب</span></div>'
+    +'<div class="mla-h4">🏆 الأكثر طلباً</div><div class="mla-list">'+top.map(function(c,i){
+      return '<div class="mla-li" style="flex-direction:column;align-items:stretch;gap:2px"><div style="display:flex;gap:8px"><span class="s">'+(i+1)+'</span><span class="n" dir="ltr" style="text-align:right">'+esc(c.name)+'</span><span class="v">'+num(c.n)+' مرة</span></div><div class="mla-bar"><i style="width:'+Math.round(c.n/mx*100)+'%"></i></div></div>';
+    }).join('')+'</div>'
+    +acts([runBtn('🖨️ طباعة تقرير التحاليل','اطبع تقرير التحاليل '+scopeText(S))]);
+}
+
+/* ── النتائج الحرجة ── */
+function ansCrit(S){
+  if(!permAny('reports','results')) return noPerm('النتائج');
+  var CR=RpData.criticals(build(S));
+  if(!CR.length) return '✅ لا توجد نتائج حرجة في '+esc(S.label)+'.';
+  var hi=CR.filter(function(c){ return c.hi; }).length;
+  return '<div class="mla-q">⚠️ النتائج الحرجة — '+esc(S.label)+'</div>'
+    +'<div class="mla-big"><b class="mla-dn" style="-webkit-text-fill-color:currentColor">'+num(CR.length)+'</b><span>نتيجة · ⬆️ '+hi+' مرتفعة · ⬇️ '+(CR.length-hi)+' منخفضة</span></div>'
+    +'<div class="mla-list">'+CR.slice(0,15).map(function(c){
+      return '<div class="mla-li ck" onclick="MLAsk.go(\'openViewResultsModal\',\''+jsq(c.req.id)+'\')"><span class="'+(c.hi?'mla-dn':'mla-wr')+'">'+(c.hi?'⬆️':'⬇️')+'</span><span class="n">'+esc(c.req.patientName||'-')+'</span><span class="s" dir="ltr">'+esc(c.test.nameEn||c.test.code)+' = '+esc(c.val)+'</span></div>';
+    }).join('')+'</div>'
+    +acts([runBtn('🖨️ طباعة التقرير','اطبع تقرير النتائج الحرجه '+scopeText(S))]);
+}
+
+/* ── الأطباء ── */
+function ansDoctors(S){
+  if(!permAny('reports','doctors')) return noPerm('بيانات الأطباء');
+  var D=build(S), map={};
+  D.reqs.forEach(function(r){ var n=String(r.doctorName||'').trim(); if(!n) return; var e=map[n]||(map[n]={name:n,n:0,pts:{}}); e.n++; e.pts[r.patientId||r.patientName]=1; });
+  var L=Object.keys(map).map(function(k){ var e=map[k]; e.p=Object.keys(e.pts).length; return e; }).sort(function(a,b){ return b.n-a.n; });
+  if(!L.length) return '📭 لا توجد طلبات مرتبطة بأطباء في '+esc(S.label)+'.';
+  var mx=L[0].n;
+  return '<div class="mla-q">👨‍⚕️ الأطباء الأكثر تحويلاً — '+esc(S.label)+'</div><div class="mla-list">'+L.slice(0,12).map(function(e,i){
+      return '<div class="mla-li" style="flex-direction:column;align-items:stretch;gap:2px"><div style="display:flex;gap:8px"><span class="s">'+(i+1)+'</span><span class="n">'+esc(e.name)+'</span><span class="v">'+e.n+' طلب</span></div><div class="s">'+e.p+' مريض</div><div class="mla-bar"><i style="width:'+Math.round(e.n/mx*100)+'%"></i></div></div>';
+    }).join('')+'</div>'+acts([['📊 مراجعو طبيب معيّن',"MLAsk.nav('reports')"]]);
+}
+
+/* ── المخزون ── */
+function ansStock(){
+  if(!perm('inventory')) return noPerm('المخزون');
+  var inv=G('inventory'), T=today(), soon=addDays(T,30);
+  if(!inv.length) return '📦 لا توجد مواد مسجّلة في المخزون.';
+  var low=inv.filter(function(i){ var q=+i.qty||0; return q<=10||(+i.min>0&&q<=+i.min); });
+  var exp=inv.filter(function(i){ return i.exp&&i.exp<=T; });
+  var near=inv.filter(function(i){ return i.exp&&i.exp>T&&i.exp<=soon; });
+  var h='<div class="mla-q">📦 حالة المخزون</div>'
+    +'<div class="mla-grid">'+st(num(inv.length),'📦 كل المواد')+st(num(low.length),'⚠️ قاربت النفاد',low.length?'mla-dn':'mla-up')
+    +st(num(exp.length),'⛔ منتهية',exp.length?'mla-dn':'mla-up')+st(num(near.length),'⏰ تنتهي خلال ٣٠ يوم',near.length?'mla-wr':'')+'</div>';
+  function lst(title,L,f){ if(!L.length) return ''; return '<div class="mla-h4">'+title+'</div><div class="mla-list">'+L.slice(0,12).map(function(i){ return '<div class="mla-li"><span class="n">'+esc(i.name)+'</span><span class="s">'+f(i)+'</span></div>'; }).join('')+'</div>'; }
+  h+=lst('⚠️ قاربت النفاد',low,function(i){ return 'المتبقي <b class="mla-dn">'+esc(i.qty)+' '+esc(i.unit||'')+'</b>'; });
+  h+=lst('⛔ منتهية الصلاحية',exp,function(i){ return esc(i.exp); });
+  h+=lst('⏰ تنتهي قريباً',near,function(i){ return esc(i.exp); });
+  if(!low.length&&!exp.length&&!near.length) h+='<div class="mla-cmp mla-up">✅ كل المواد بحالة جيدة.</div>';
+  return h+acts([['📦 فتح المخزون',"MLAsk.nav('inventory')"]]);
+}
+
+/* ── سعر تحليل ── */
+var TEST_ALIAS={'سكر':['glucose','fbs','rbs','sugar'],'سكر تراكمي':['hba1c'],'تراكمي':['hba1c'],'دم':['cbc'],'صوره دم':['cbc'],'فيتامين د':['vit d','vitamin d','25'],'فيتامين دي':['vit d','vitamin d'],'فيتامين ب12':['b12'],
+  'غده':['tsh','t3','t4'],'درقيه':['tsh','t3','t4'],'كلس':['calcium','ca'],'كالسيوم':['calcium'],'حديد':['iron','ferritin'],'خزين':['ferritin'],'كوليسترول':['chol'],'دهون':['lipid','tg','chol'],
+  'يوريا':['urea'],'كرياتنين':['creat'],'كليه':['urea','creat','rft'],'كلي':['urea','creat','rft'],'كبد':['alt','ast','lft','gpt','got'],'بول':['gue','urine'],'ادرار':['gue','urine'],'خروج':['gse','stool'],'غائط':['gse','stool'],
+  'حمل':['hcg','pregnancy','beta'],'جرثومه':['pylori'],'تيفو':['widal','typhoid'],'فصيله':['blood group','abo'],'زرع':['culture'],'منوي':['semen'],'سائل منوي':['semen'],'ترسيب':['esr'],'تخثر':['pt','ptt','inr'],'هرمون الحليب':['prolactin'],'حليب':['prolactin'],'يوريك':['uric'],'نقرس':['uric'],'التهاب':['crp','aso'],'روماتزم':['rf','aso']};
+function testKey(t){ return [t.nameEn,t.nameShort,t.nameAr,t.code,t.name,t.nameLatin].filter(Boolean).join(' | '); }
+function findTests(q){
+  var nq=norm(q), cq=nq.replace(/[\s\-_.()\/]+/g,''); if(!cq) return [];
+  var keys=[nq]; Object.keys(TEST_ALIAS).forEach(function(a){ if(nq.indexOf(norm(a))>=0) keys=keys.concat(TEST_ALIAS[a]); });
+  var res=[];
+  G('tests').forEach(function(t){
+    var code=norm(t.code||'').replace(/[\s\-_.()\/]+/g,''), full=norm(testKey(t)), fc=full.replace(/[\s\-_.()\/]+/g,''), sc=0;
+    if(code&&code===cq) sc=100;
+    else keys.forEach(function(k){ var kc=norm(k).replace(/[\s\-_.()\/]+/g,''); if(!kc) return;
+      if(code===kc) sc=Math.max(sc,90); else if(fc.indexOf(kc)===0) sc=Math.max(sc,70); else if(code.indexOf(kc)===0) sc=Math.max(sc,60); else if(fc.indexOf(kc)>=0) sc=Math.max(sc,40); });
+    if(sc) res.push({t:t,sc:sc});
+  });
+  return res.sort(function(a,b){ return b.sc-a.sc || String(a.t.nameEn||'').length-String(b.t.nameEn||'').length; }).map(function(x){ return x.t; });
+}
+function ansPrice(raw){
+  var q=raw;
+  ['شكد سعر','كم سعر','شنو سعر','شقد سعر','سعر','اسعار','بكم','بيش','ثمن','كلفه','تكلفه','تسعيره','price of','price','cost','تحليل','تحاليل','فحص','الفحص','شكد','شقد','كم','هو','شنو','ما هو','لل','ال '].forEach(function(w){ q=(' '+q+' ').replace(new RegExp('\\s(?:و|ب|ل)?(?:ال)?'+reEsc(norm(w)).replace(/ /g,'\\s+')+'(?=\\s)','g'),' ').trim(); });
+  q=q.replace(/^(?:ال)/,'').trim();
+  if(!q) return '🏷️ اكتب اسم التحليل بعد كلمة سعر — مثل: <b>سعر CBC</b> أو <b>سعر فيتامين د</b>'+'<div class="mla-ex">'+['سعر CBC','سعر السكر','سعر فيتامين د','سعر TSH'].map(function(e){ return '<button onclick="MLAsk.run(\''+jsq(e)+'\')">'+esc(e)+'</button>'; }).join('')+'</div>';
+  var L=findTests(q);
+  if(!L.length) return '🔍 لم أجد تحليلاً باسم «<b>'+esc(q)+'</b>» في قائمة التحاليل. جرّب الاسم الإنكليزي أو الكود.';
+  var c=esc(cur());
+  return '<div class="mla-q">🏷️ أسعار التحاليل — «'+esc(q)+'»</div><div class="mla-list">'+L.slice(0,8).map(function(t){
+      return '<div class="mla-li"><span class="s" dir="ltr">'+esc(t.code||'')+'</span><span class="n" dir="ltr" style="text-align:right">'+esc(t.nameEn||t.nameShort||t.name||'')+'</span><span class="v mla-up">'+fmt(t.price)+' '+c+'</span></div>';
+    }).join('')+'</div>'+(L.length>8?'<div class="mla-cmp" style="color:var(--mla-sub)">… و '+(L.length-8)+' نتائج أخرى — اكتب اسماً أدق</div>':'');
+}
+
+/* ── البحث عن مريض ── */
+function ansSearch(raw){
+  if(!perm('patients')) return noPerm('ملفات المرضى');
+  var q=' '+raw+' ';
+  ['ابحث عن','ابحث','بحث عن','بحث','دورلي على','دورلي','دور على','دور','فتش عن','فتش','جيبلي','جيب','معلومات','بيانات','تفاصيل','ملف','المريضه','المريض','مريضه','مريض','المراجع','مراجع','اسمه','اسمها','الاسم','اسم','رقم الهاتف','رقم','هاتف','تلفون','موبايل','عن','لي','وين','منو','find','search','patient'].forEach(function(w){ q=q.replace(new RegExp('\\s'+reEsc(norm(w)).replace(/ /g,'\\s+')+'(?=\\s)','g'),' '); });
+  q=q.replace(/\s+/g,' ').trim();
+  if(!q) return '🔎 اكتب اسم المريض أو رقم ملفه أو هاتفه — مثل: <b>ابحث عن أحمد علي</b>';
+  var digits=q.replace(/\D/g,''), L=[];
+  var P=G('patients');
+  for(var i=P.length-1;i>=0&&L.length<12;i--){
+    var p=P[i]; if(!p) continue;
+    if(norm(p.name).indexOf(q)>=0 || String(p.id||'')===q || (digits.length>=4 && (String(p.phone||'').replace(/\D/g,'').indexOf(digits)>=0 || String(p.id||'').indexOf(digits)>=0))) L.push(p);
+  }
+  if(!L.length) return '🔍 لا يوجد مريض يطابق «<b>'+esc(q)+'</b>».';
+  var R=G('requests'), I=G('invoices');
+  return '<div class="mla-q">🔎 نتائج البحث عن «'+esc(q)+'» — '+L.length+(L.length>=12?'+':'')+'</div><div class="mla-list">'+L.map(function(p){
+      var rs=R.filter(function(r){ return String(r.patientId)===String(p.id); }), last='';
+      rs.forEach(function(r){ var d=dk(r.date); if(d>last) last=d; });
+      var due=0; try{ I.forEach(function(x){ if(String(x.patientId)===String(p.id)) due+=(typeof _invDue==='function'?_invDue(x):0); }); }catch(e){}
+      return '<div class="mla-li ck" style="flex-direction:column;align-items:stretch;gap:2px" onclick="MLAsk.openPt(\''+jsq(p.id)+'\')"><div style="display:flex;gap:8px"><span class="n">'+esc(p.name)+'</span><span class="s" dir="ltr">#'+esc(p.id)+'</span></div>'
+        +'<div class="s" style="display:flex;gap:10px;flex-wrap:wrap"><span>📞 '+esc(p.phone||'—')+'</span><span>🗓️ آخر زيارة '+esc(last||dk(p.registered)||'—')+'</span><span>📋 '+rs.length+' طلب</span>'+(due>0?'<span class="mla-dn">💳 متبقٍ '+fmt(due)+'</span>':'')+'</div></div>';
+    }).join('')+'</div><div class="mla-cmp" style="color:var(--mla-sub)">اضغط على المريض لفتح ملفه</div>';
+}
+
+/* ── التقارير (فتح/طباعة/Excel) ── */
+var RP_NAMES={patients:'تقرير المرضى',revenue:'تقرير الإيرادات',tests:'تقرير التحاليل',critical:'تقرير النتائج الحرجة',suppliers:'تقرير الشركات'};
+function applyRpPeriod(S){
+  var st=RpPeriod.get();
+  if(S.mode==='all') st.mode='all';
+  else if(S.mode==='day'){ st.mode='day'; st.day=S.from; }
+  else if(S.mode==='month'){ st.mode='month'; st.month=S.month; }
+  else if(S.mode==='year'){ st.mode='year'; st.year=S.year; }
+  else { st.mode='range'; st.from=S.from; st.to=S.to; }
+  try{ localStorage.setItem('medlab_rp_period',JSON.stringify(st)); }catch(e){}
+  try{ RpPeriod.syncTop(); }catch(e){}
+}
+function doReport(type,S,action){
+  if(!perm('reports')) return noPerm('التقارير');
+  if(typeof exportReport!=='function'||typeof RpPeriod==='undefined') return '⚠️ قسم التقارير غير متاح في هذه النسخة.';
+  applyRpPeriod(S);
+  try{ exportReport(type); }catch(e){ return '⚠️ تعذّر فتح التقرير: '+esc(e&&e.message||e); }
+  var def=window._rpLastDef, rows=(def&&def.rows)?def.rows.length:0, name=RP_NAMES[type]||'التقرير';
+  if(!rows) return '📭 '+name+' — '+esc(S.label)+': لا توجد بيانات في هذه الفترة.';
+  var msg;
+  if(action==='excel'){ setTimeout(function(){ try{ _rpExcel(); }catch(e){} },250); msg='📊 جاري تنزيل <b>'+name+'</b> بصيغة Excel'; }
+  else if(action==='print'){ setTimeout(function(){ try{ _expReportPrint(); }catch(e){} },300); msg='🖨️ جاري طباعة <b>'+name+'</b>'; }
+  else msg='📄 فتحت لك <b>'+name+'</b>';
+  setTimeout(function(){ MLAsk.minimize(); },action==='open'?150:500);
+  return msg+' — '+esc(S.label)+'<div class="mla-cmp" style="color:var(--mla-sub)">'+num(rows)+' سطر · صغّرت المحادثة لفقاعة حتى ترى التقرير</div>'
+    +acts([runBtn('🖨️ طباعة','اطبع '+name+' '+scopeText(S)),runBtn('📊 Excel','اكسل '+name+' '+scopeText(S))]);
+}
+
+/* ── التنقّل بين الأقسام ── */
+var SECTIONS=[['dashboard',['لوحه التحكم','الرئيسيه','الصفحه الرئيسيه','الداشبورد','dashboard','home']],['patients',['المرضي','المراجعين','سجل المرضي']],['requests',['الطلبات','طلب جديد']],
+  ['results',['النتائج','ادخال النتائج']],['print',['الطباعه','طباعه النتائج']],['invoices',['الفواتير']],['billing',['الحسابات','المحاسبه']],['reports',['التقارير','الاحصائيات']],
+  ['inventory',['المخزون','المخزن','المواد']],['doctors',['الاطباء','الدكاتره']],['settings',['الاعدادات','الضبط']],['tests-db',['قائمه التحاليل','قاعده التحاليل','الاسعار','التحاليل']],
+  ['culture',['الزرع']],['ua',['الادرار','البول']],['stool',['الخروج','الغائط']],['semen',['السائل المنوي','المنوي']],['waitqueue',['الانتظار','قائمه الانتظار','الطابور']],
+  ['mystore',['المتجر','طلبات المتجر']],['quality',['الجوده','qc']],['database',['قاعده البيانات','النسخ الاحتياطي']],['attendance',['الحضور','البصمه']],['packages',['البكجات','الباقات','العروض']]];
+function findSection(rest){
+  rest=' '+rest+' ';
+  ['قسم','صفحه','شاشه','واجهه','لي','الي','علي','على','الى'].forEach(function(w){ rest=rest.replace(new RegExp('\\s'+norm(w)+'(?=\\s)','g'),' '); });
+  rest=rest.replace(/\s+/g,' ').trim(); if(!rest||rest.split(' ').length>3) return null;
+  var r2=rest.replace(/^(?:بال|لل|ال|ل|ب)/,'');
+  for(var i=0;i<SECTIONS.length;i++){
+    for(var j=0;j<SECTIONS[i][1].length;j++){ var a=norm(SECTIONS[i][1][j]), a2=a.replace(/^ال/,''); if(rest===a||r2===a2) return SECTIONS[i]; }
+  }
+  return null;
+}
+
+/* ── تحية / مساعدة ── */
+var EXAMPLES=[
+  ['👥 المرضى',['كم مريض اليوم','شكد مراجع امس','عدد المرضى هذا الاسبوع','اسماء مرضى اليوم','المرضى الجدد الشهر الماضي']],
+  ['💰 الواردات',['كم وارداتنا اليوم','شكد طلعنا امس','ايرادات هذا الشهر','دخل شهر 9','الديون']],
+  ['🖨️ التقارير',['اسحب تقرير المرضى لشهر 9','اطبع تقرير الايرادات الشهر الماضي','اكسل تقرير التحاليل هذه السنه','تقرير المرضى من 2026-10-01 الى 2026-10-15']],
+  ['🧪 أخرى',['الطلبات المعلقة','اكثر التحاليل هذا الشهر','النتائج الحرجة اليوم','سعر CBC','ابحث عن احمد','المخزون','الاطباء الاكثر تحويل','افتح التقارير']]
+];
+function exBtns(list){ return '<div class="mla-ex">'+list.map(function(e){ return '<button onclick="MLAsk.run(\''+jsq(e)+'\')">'+esc(e)+'</button>'; }).join('')+'</div>'; }
+function ansHelp(){
+  return '<div style="font-weight:900;margin-bottom:2px">🤝 أقدر أجاوبك من بيانات المختبر مباشرة</div>'
+    +'<div style="font-size:12px;color:var(--mla-sub)">اكتب بأي صيغة تعجبك — فصحى أو عراقي — وأفهم الفترة الزمنية تلقائياً: اليوم، أمس، هذا الأسبوع، شهر 9، أيلول، الشهر الماضي، سنة 2025، من تاريخ إلى تاريخ…</div>'
+    +EXAMPLES.map(function(g){ return '<div class="mla-h4">'+g[0]+'</div>'+exBtns(g[1]); }).join('')
+    +'<div class="mla-cmp" style="color:var(--mla-sub)">💡 بعد أي جواب تقدر تكتب فترة بس — مثل «وأمس؟» أو «والشهر الماضي» — وأعيد نفس السؤال عليها.</div>';
+}
+function userName(){ try{ var s=getSession&&getSession(); return (s&&(s.displayName||s.name||s.username))||''; }catch(e){ return ''; } }
+function ansGreet(){
+  var h=new Date().getHours(), g=h<12?'صباح الخير ☀️':(h<18?'مساء الخير 🌤️':'مساء النور 🌙'), u=userName();
+  return g+(u?' <b>'+esc(u)+'</b>':'')+' — شلون أكدر أساعدك؟'+exBtns(['كم مريض اليوم','كم وارداتنا اليوم','الطلبات المعلقة','مساعدة']);
+}
+function ansWelcome(){
+  return '👋 أهلاً'+(userName()?' <b>'+esc(userName())+'</b>':'')+'! أنا <b>مساعد ميدلاب</b> — أجاوبك بالأرقام الدقيقة من بيانات البرنامج.'
+    +'<div style="font-size:12px;color:var(--mla-sub);margin-top:3px">استخدم المختصرات بالأعلى، أو اكتب سؤالك بطريقتك.</div>'
+    +exBtns(['كم مريض اليوم','كم وارداتنا اليوم','اسحب تقرير المرضى لهذا الشهر','شنو تكدر تسوي؟']);
+}
+function ansUnknown(t){
+  return '🤔 ما فهمت السؤال تماماً. جرّب إحدى هذه الصيغ:'+exBtns(['كم مريض اليوم','كم وارداتنا اليوم','اسحب تقرير المرضى لشهر 9','الطلبات المعلقة','سعر CBC','ابحث عن احمد','مساعدة']);
+}
+
+/* ════════════════ المحرّك: فهم السؤال ════════════════ */
+var ctx={intent:null,S:null,arg:null};
+function answer(text){
+  var raw=norm(text);
+  if(!raw) return null;
+  var isSearch=hasW(raw,W.search)&&!hasW(raw,W.report);
+  var t=isSearch?raw:fuzz(raw);
+  var S=parsePeriod(raw)||parsePeriod(t);
+  if(!hasRp()) return needData();
+  var I=null, arg=null;
+
+  /* التنقّل: «افتح التقارير»، «روح للمرضى» */
+  if(hasW(t,W.nav)){
+    var rest=t; W.nav.slice().sort(function(a,b){ return b.length-a.length; }).forEach(function(w){ rest=(' '+rest+' ').replace(new RegExp('\\s(?:و|ف)?'+reEsc(norm(w)).replace(/ /g,'\\s+')+'(?=\\s)'),' ').trim(); });
+    var sec=findSection(rest);
+    if(sec){ MLAsk.nav(sec[0]); ctx.intent=null; var pt=$('ptitle'); return '↪️ فتحت لك قسم <b>'+esc((pt&&pt.textContent)||sec[1][0])+'</b>.'; }
+  }
+  var hasPt=hasW(t,W.patient), hasRev=hasW(t,W.revenue), hasTest=hasW(t,W.tests), hasRep=hasW(t,W.report);
+  if(hasW(t,W.help)) I='help';
+  else if(hasRep && (hasPt||hasRev||hasTest||hasW(t,W.crit)||/شركات|موردين|مشتريات/.test(t)||hasW(t,['تقرير','تقارير','كشف']))){
+    var type=hasRev&&!hasPt?'revenue':(hasW(t,W.crit)?'critical':(/شركات|موردين|مشتريات/.test(t)?'suppliers':(hasTest&&!hasPt?'tests':'patients')));
+    var action=hasW(t,W.excel)?'excel':(hasW(t,W.print)?'print':'open');
+    I='report'; arg={type:type,action:action};
+  }
+  else if(hasW(t,W.price)&&!hasRev&&!hasPt) I='price';
+  else if(isSearch && !hasW(t,W.count)) I='search';
+  else if(hasW(t,W.crit)) I='crit';
+  else if(hasW(t,W.stock)&&!hasPt&&!hasRev) I='stock';
+  else if(hasW(t,W.debt)&&!hasW(t,W.pending)) I='debt';
+  else if(hasRev) I='revenue';
+  else if(hasW(t,W.doctor)) I='doctors';
+  else if(hasTest && !hasPt) I='tests';
+  else if(hasW(t,W.list)&&hasPt) I='plist';
+  else if(hasW(t,W.pending)) { I='requests'; arg='pending'; }
+  else if(hasW(t,W.done)&&(hasW(t,W.requests)||hasW(t,['نتائج','نتيجه']))) { I='requests'; arg='done'; }
+  else if(hasW(t,W.requests)) { I='requests'; arg='pending'; }
+  else if(hasPt || (hasW(t,W.count)&&hasW(t,W.fresh))) I='patients';
+  else if(hasW(t,W.thanks)) return 'العفو 🌷 بالخدمة دائماً — اسأل أي وقت.';
+  else if(hasW(t,W.greet)) return ansGreet();
+  else if(S && ctx.intent){ I=ctx.intent; arg=ctx.arg; }   /* متابعة: «وأمس؟» */
+  else if(hasW(t,W.count)&&S) I='patients';
+  else if(/^\d{4,}$/.test(raw.replace(/\s/g,''))) { I='search'; }
+  if(!I) return ansUnknown(raw);
+
+  var defMonth=(I==='report'||I==='tests'||I==='crit'||I==='doctors');
+  if(!S) S=(I==='debt')?scAll():(defMonth?scThisMonth():scToday());
+  ctx={intent:(I==='help'||I==='search'||I==='price'||I==='stock')?null:I,S:S,arg:arg};
+  switch(I){
+    case 'help': return ansHelp();
+    case 'report': return doReport(arg.type,S,arg.action);
+    case 'price': return ansPrice(raw);
+    case 'search': return ansSearch(raw);
+    case 'crit': return ansCrit(S);
+    case 'stock': return ansStock();
+    case 'debt': return ansDebts(S);
+    case 'revenue': return ansRevenue(S);
+    case 'doctors': return ansDoctors(S);
+    case 'tests': return ansTests(S);
+    case 'plist': return ansPatientList(S);
+    case 'requests': return ansRequests(S,arg);
+    case 'patients': return ansPatients(S,hasW(t,W.fresh));
+  }
+  return ansUnknown(raw);
+}
+
+/* ════════════════ التخزين (لكل مستخدم) ════════════════ */
+var store=null, storeKey=null;
+function sKey(){ var u='default'; try{ var s=getSession&&getSession(); if(s&&s.username) u=s.username; }catch(e){} return 'medlab_assistant_v1_'+u; }
+function load(){
+  var k=sKey(); if(store&&storeKey===k) return store;
+  storeKey=k; store=null;
+  try{ store=JSON.parse(localStorage.getItem(k)||'null'); }catch(e){}
+  if(!store||typeof store!=='object') store={sessions:[],cur:null,pos:null,bpos:null,ui:'closed'};
+  if(!Array.isArray(store.sessions)) store.sessions=[];
+  purge();
+  return store;
+}
+function save(){ if(!store) return; try{ localStorage.setItem(storeKey,JSON.stringify(store)); }catch(e){ try{ store.sessions=store.sessions.slice(-10); localStorage.setItem(storeKey,JSON.stringify(store)); }catch(e2){} } }
+function purge(){
+  var lim=Date.now()-KEEP_MS;
+  store.sessions=store.sessions.filter(function(s){ return s&&(s.updated||s.created||0)>=lim; }).slice(-MAX_SESS);
+  if(!store.sessions.some(function(s){ return s.id===store.cur; })) store.cur=null;
+}
+function curSess(){ load(); var s=null; for(var i=0;i<store.sessions.length;i++) if(store.sessions[i].id===store.cur) s=store.sessions[i]; return s; }
+function newSess(){ var s={id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),created:Date.now(),updated:Date.now(),title:'',msgs:[]}; store.sessions.push(s); store.cur=s.id; save(); return s; }
+function pushMsg(r,h,extra){
+  var s=curSess()||newSess();
+  var m={r:r,h:h,t:Date.now()}; if(extra) m.x=extra;
+  s.msgs.push(m); if(s.msgs.length>MAX_MSGS) s.msgs=s.msgs.slice(-MAX_MSGS);
+  s.updated=Date.now(); if(r==='u'&&!s.title) s.title=String(extra||'').slice(0,60);
+  save(); return m;
+}
+
+/* ════════════════ الواجهة ════════════════ */
+var win,msgs,inp,bub,sug,hist;
+function el(){ win=$('mla-win'); msgs=$('mla-msgs'); inp=$('mla-inp'); bub=$('mla-bub'); sug=$('mla-sug'); hist=$('mla-hist'); }
+function msgHTML(m){
+  if(m.r==='s') return '<div class="mla-sys">'+m.h+'</div>';
+  return '<div class="mla-m '+m.r+'"><div class="mla-bb">'+m.h+'</div><div class="mla-tm">'+timeStr(m.t)+'</div></div>';
+}
+function renderMsgs(){
+  var s=curSess();
+  if(!s||!s.msgs.length){ msgs.innerHTML=''; addBot(ansWelcome(),true); return; }
+  var html='', lastDay='';
+  s.msgs.forEach(function(m){ var d=new Date(m.t).toDateString(); if(d!==lastDay){ lastDay=d; html+='<div class="mla-sys">'+dayStr(m.t).replace(/ \d\d:\d\d$/,'')+'</div>'; } html+=msgHTML(m); });
+  msgs.innerHTML=html; scrollEnd();
+}
+function scrollEnd(){ requestAnimationFrame(function(){ msgs.scrollTop=msgs.scrollHeight; }); }
+function addBot(h,noTyping){
+  var m=pushMsg('b',h);
+  msgs.insertAdjacentHTML('beforeend',msgHTML(m)); scrollEnd();
+}
+function addSys(h){ var m=pushMsg('s',h); msgs.insertAdjacentHTML('beforeend',msgHTML(m)); scrollEnd(); }
+var busy=false;
+function ask(text){
+  text=String(text||'').trim(); if(!text||busy) return;
+  if(!win.classList.contains('show')) openWin();
+  var m=pushMsg('u',esc(text),text);
+  msgs.insertAdjacentHTML('beforeend',msgHTML(m)); scrollEnd();
+  busy=true;
+  msgs.insertAdjacentHTML('beforeend','<div class="mla-typing" id="mla-typing"><i></i><i></i><i></i></div>'); scrollEnd();
+  setTimeout(function(){
+    var h; try{ h=answer(text); }catch(e){ console.warn('[MLAsk]',e); h='⚠️ حدث خطأ أثناء قراءة البيانات: '+esc(e&&e.message||e); }
+    var ty=$('mla-typing'); if(ty) ty.remove();
+    busy=false;
+    if(h) addBot(h);
+  },260);
+}
+
+/* ── المختصرات العلوية ── */
+var SHORTCUTS=[
+  ['👥 مرضى اليوم','كم مريض اليوم',0],['💰 واردات اليوم','كم وارداتنا اليوم',0],['⏳ المعلّقة','الطلبات المعلقة اليوم',0],
+  ['🖨️ تقرير مرضى شهر','اطبع تقرير المرضى لشهر ',1],['💵 تقرير إيرادات شهر','اطبع تقرير الايرادات لشهر ',1],
+  ['📅 واردات الشهر','ايرادات هذا الشهر',0],['🔎 بحث عن مريض','ابحث عن ',1],['🏷️ سعر تحليل','سعر تحليل ',1],
+  ['🧪 أكثر التحاليل','اكثر التحاليل هذا الشهر',0],['⚠️ الحرجة','النتائج الحرجة اليوم',0],['💳 الديون','الديون',0],['📦 المخزون','المخزون',0],['❓ مساعدة','مساعدة',0]
+];
+function renderShortcuts(){
+  $('mla-sc').innerHTML=SHORTCUTS.map(function(s,i){ return '<button class="mla-chip'+(s[2]?' fill':'')+'" title="'+esc(s[2]?'يكتب لك: «'+s[1]+'…» ثم أكمل':s[1])+'" onclick="MLAsk.sc('+i+')">'+esc(s[0])+'</button>'; }).join('');
+}
+function useShortcut(i){
+  var s=SHORTCUTS[i]; if(!s) return;
+  if(s[2]){ inp.value=s[1]; autoGrow(); inp.focus(); inp.setSelectionRange(inp.value.length,inp.value.length); updSug(); }
+  else ask(s[1]);
+}
+
+/* ── اقتراحات أثناء الكتابة ── */
+var PHRASES=[].concat.apply([],EXAMPLES.map(function(g){ return g[1]; })).concat(['كم مريض امس','واردات امس','واردات هذا الاسبوع','المرضى الجدد اليوم','الطلبات المنجزة اليوم','تقرير التحاليل هذا الشهر','اطبع تقرير المرضى هذا الشهر','اطبع تقرير المرضى الشهر الماضي']);
+function monthChips(){
+  var T=today(), y=+T.slice(0,4), m=+T.slice(5,7), out=[];
+  for(var i=0;i<6;i++){ var ym=y+'-'+pad(m); out.push([mLabel(ym),String(m)+(i&&m>+T.slice(5,7)?' '+y:(y!==+T.slice(0,4)?' '+y:''))]); m--; if(m<1){ m=12; y--; } }
+  return out;
+}
+function updSug(){
+  var v=inp.value, nv=norm(v), items=[];
+  if(/شهر\s*$/.test(nv)){ items=monthChips().map(function(c){ return {l:'📅 '+c[0],ins:c[1],send:true}; }); }
+  else if(/(?:ابحث عن|بحث عن|دور على|ابحث)\s*$/.test(nv)){
+    var P=G('patients'), seen={}; for(var i=P.length-1;i>=0&&items.length<6;i--){ var p=P[i]; if(p&&p.name&&!seen[p.name]){ seen[p.name]=1; items.push({l:'👤 '+p.name,ins:p.name,send:true}); } }
+  } else if(/(?:سعر تحليل|سعر)\s*$/.test(nv)){
+    ['CBC','Glucose','HbA1c','TSH','Vitamin D','Urea','Creatinine','Lipid'].forEach(function(x){ items.push({l:'🧪 '+x,ins:x,send:true}); });
+  } else if(nv.length>=2){
+    PHRASES.forEach(function(p){ if(items.length<4 && norm(p).indexOf(nv)>=0 && norm(p)!==nv) items.push({l:p,full:p}); });
+  }
+  if(!items.length){ sug.classList.remove('show'); sug.innerHTML=''; return; }
+  sug._items=items;
+  sug.innerHTML=items.map(function(it,i){ return '<button onclick="MLAsk.pickSug('+i+')">'+esc(it.l)+'</button>'; }).join('');
+  sug.classList.add('show');
+}
+function pickSug(i){
+  var it=sug._items&&sug._items[i]; if(!it) return;
+  if(it.full){ inp.value=''; ask(it.full); }
+  else { var v=inp.value.replace(/\s*$/,' ')+it.ins; inp.value=''; ask(v); }
+  autoGrow(); updSug();
+}
+function autoGrow(){ inp.style.height='auto'; inp.style.height=Math.min(110,inp.scrollHeight)+'px'; }
+function send(){ var v=inp.value; inp.value=''; autoGrow(); updSug(); ask(v); }
+
+/* ── النافذة: فتح / تصغير / إغلاق ── */
+function clampPos(x,y,w,h){ var vw=window.innerWidth, vh=window.innerHeight; return {x:Math.max(4,Math.min(x,vw-Math.min(w,vw)-4)), y:Math.max(4,Math.min(y,vh-60))}; }
+function placeWin(){
+  var w=win.offsetWidth||460, h=win.offsetHeight||640, p=store.pos;
+  if(!p){ p={x:(window.innerWidth-w)/2,y:Math.max(10,(window.innerHeight-h)/2)}; }
+  p=clampPos(p.x,p.y,w,h); win.style.left=p.x+'px'; win.style.top=p.y+'px';
+}
+function placeBub(){
+  var p=store.bpos||{x:24,y:window.innerHeight-150};
+  p={x:Math.max(4,Math.min(p.x,window.innerWidth-64)),y:Math.max(4,Math.min(p.y,window.innerHeight-64))};
+  bub.style.left=p.x+'px'; bub.style.top=p.y+'px';
+}
+function setBtn(on){ var b=$('mla-btn'); if(b) b.classList.toggle('mla-on',!!on); }
+function openWin(){
+  load();
+  var wasClosed=!win.classList.contains('show')&&!bub.classList.contains('show');
+  bub.classList.remove('show');
+  win.classList.add('show'); placeWin();
+  if(!curSess()) newSess();
+  renderMsgs();
+  if(wasClosed){ var s=curSess(); if(s&&s.msgs.length>1) addSys('↩️ تابعتُ آخر محادثة — اضغط ＋ لبدء دردشة جديدة'); }
+  store.ui='open'; save(); setBtn(true);
+  setTimeout(function(){ try{ inp.focus(); }catch(e){} },60);
+}
+function minimize(){
+  load(); win.classList.remove('show'); hist.classList.remove('show');
+  placeBub(); bub.classList.add('show'); store.ui='bubble'; save(); setBtn(false);
+}
+function closeAll(){ load(); win.classList.remove('show'); bub.classList.remove('show'); hist.classList.remove('show'); store.ui='closed'; save(); setBtn(false); }
+function toggle(){ if(win.classList.contains('show')) minimize(); else openWin(); }
+function newChat(){ load(); hist.classList.remove('show'); var s=curSess(); if(s&&!s.msgs.some(function(m){ return m.r==='u'; })){ s.msgs=[]; } else newSess(); ctx={intent:null,S:null,arg:null}; renderMsgs(); inp.focus(); }
+
+/* ── سجل المحادثات ── */
+function renderHist(){
+  load();
+  var L=store.sessions.slice().sort(function(a,b){ return (b.updated||0)-(a.updated||0); });
+  $('mla-hist-l').innerHTML=L.length?L.map(function(s){
+    var n=s.msgs.filter(function(m){ return m.r==='u'; }).length, left=Math.max(0,Math.ceil(((s.updated||s.created)+KEEP_MS-Date.now())/864e5));
+    return '<div class="mla-hi'+(s.id===store.cur?' cur':'')+'" onclick="MLAsk.openSess(\''+s.id+'\')"><div class="t"><b>'+esc(s.title||'محادثة جديدة')+'</b><span>'+dayStr(s.updated||s.created)+' · '+n+' سؤال · تُحذف بعد '+left+' يوم</span></div><button class="d" title="حذف" onclick="event.stopPropagation();MLAsk.delSess(\''+s.id+'\')">🗑️</button></div>';
+  }).join(''):'<div class="mla-note">لا توجد محادثات محفوظة</div>';
+}
+function toggleHist(){ if(hist.classList.contains('show')) hist.classList.remove('show'); else { renderHist(); hist.classList.add('show'); } }
+function openSess(id){ load(); store.cur=id; save(); hist.classList.remove('show'); ctx={intent:null,S:null,arg:null}; renderMsgs(); }
+function delSess(id){ load(); store.sessions=store.sessions.filter(function(s){ return s.id!==id; }); if(store.cur===id){ store.cur=null; } save(); renderHist(); if(!store.cur){ newSess(); renderMsgs(); } }
+
+/* ── السحب (النافذة والفقاعة) ── */
+function dragify(handle,target,onEnd,isBub){
+  var sx,sy,ox,oy,moved=false,down=false;
+  handle.addEventListener('pointerdown',function(e){
+    if(e.button!==0) return;
+    if(!isBub && e.target.closest('button')) return;
+    down=true; moved=false; sx=e.clientX; sy=e.clientY; ox=target.offsetLeft; oy=target.offsetTop;
+    try{ handle.setPointerCapture(e.pointerId); }catch(_){}
+    handle.classList.add('drag');
+  });
+  handle.addEventListener('pointermove',function(e){
+    if(!down) return;
+    var dx=e.clientX-sx, dy=e.clientY-sy;
+    if(!moved && Math.abs(dx)+Math.abs(dy)<5) return;
+    moved=true;
+    var w=target.offsetWidth, h=target.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+    var x=Math.max(4,Math.min(ox+dx,vw-w-4)), y=Math.max(4,Math.min(oy+dy,vh-(isBub?h+4:60)));
+    target.style.left=x+'px'; target.style.top=y+'px';
+  });
+  function up(e){ if(!down) return; down=false; handle.classList.remove('drag'); try{ handle.releasePointerCapture(e.pointerId); }catch(_){} onEnd(moved,{x:target.offsetLeft,y:target.offsetTop}); }
+  handle.addEventListener('pointerup',up); handle.addEventListener('pointercancel',up);
+}
+
+/* ── إجراءات من داخل الأجوبة ── */
+function openPt(pid){
+  try{ if(typeof viewPatientFullModal==='function'){ minimize(); viewPatientFullModal(pid); return; } }catch(e){}
+  try{ nav('patients'); var si=$('pts-srch-inp'); if(si){ si.value=pid; renderPatients('all',pid); } minimize(); }catch(e){}
+}
+function go(fn,id){ try{ if(typeof window[fn]==='function'){ minimize(); window[fn](id); } }catch(e){ console.warn('[MLAsk]',e); } }
+function navTo(p){ try{ if(typeof nav==='function'){ nav(p); minimize(); } }catch(e){} }
+
+/* ── التهيئة ── */
+function init(){
+  el(); if(!win) return;
+  renderShortcuts();
+  inp.addEventListener('keydown',function(e){
+    if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); send(); }
+    else if(e.key==='Escape'){ e.preventDefault(); minimize(); }
+  });
+  inp.addEventListener('input',function(){ autoGrow(); updSug(); });
+  dragify($('mla-hdr'),win,function(moved,p){ if(moved){ load(); store.pos=p; save(); } },false);
+  dragify(bub,bub,function(moved,p){ load(); if(moved){ store.bpos=p; save(); } else openWin(); },true);
+  window.addEventListener('resize',function(){ if(!store) return; if(win.classList.contains('show')) placeWin(); if(bub.classList.contains('show')) placeBub(); });
+  try{ load(); if(store.ui==='bubble'||store.ui==='open'){ placeBub(); bub.classList.add('show'); store.ui='bubble'; } }catch(e){}
+  setInterval(function(){ try{ if(store){ var n=store.sessions.length; purge(); if(store.sessions.length!==n) save(); } }catch(e){} },3600*1000);
+}
+
+window.MLAsk={
+  open:openWin, close:closeAll, minimize:minimize, toggle:toggle, newChat:newChat,
+  send:send, run:ask, sc:useShortcut, pickSug:pickSug,
+  toggleHist:toggleHist, openSess:openSess, delSess:delSess,
+  openPt:openPt, go:go, nav:navTo,
+  _answer:answer, _parsePeriod:function(t){ return parsePeriod(norm(t)); }, _norm:norm
+};
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
 </script>
