@@ -6907,9 +6907,10 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                   <div style="font-size:12px;color:var(--text2);line-height:2;margin-bottom:12px">
                     • اختر ملف قاعدة بيانات Green Lab ‏<b style="color:var(--text)">database.accdb</b> أو نسخته المضغوطة <b style="color:var(--text)">zip</b> — لا حاجة لبرنامج Access.<br>
                     • القراءة والمعاينة لا تغيّر أي شيء — الحفظ يبدأ فقط عند ضغط «بدء الاستيراد».<br>
-                    • كل مريض يُنشأ له ملف يضم كل زياراته، ويُدمج مع المريض الموجود في ميدلاب إذا تطابق <b>الاسم الثلاثي والجنس والعمر</b>.<br>
-                    • أرقام الملفات والطلبات تُولَّد بصيغة ميدلاب ولا تتداخل مع الموجود — وإعادة الاستيراد لا تكرر أي زيارة.<br>
-                    • نفّذ الاستيراد على <b>حاسبة واحدة</b> فقط، والحاسبات الأخرى تستلم البيانات عبر المزامنة.
+                    • كل مريض يُنشأ له ملف يضم كل زياراته (تجميع الزيارات بالاسم الثلاثي والجنس والعمر).<br>
+                    • 🔢 <b>أرقام ثابتة:</b> الملفات المستوردة تبدأ من <b style="color:var(--text)">100001</b> والطلبات <b style="color:var(--text)">RQ0-1001</b> — الملف نفسه يعطي الأرقام نفسها على <b>أي حاسبة</b>. استورد الملف نفسه على كل حاسبة فتتطابق الأرقام.<br>
+                    • قبل الاستيراد يسألك البرنامج: <b>حذف البيانات الحالية</b> (استيراد نظيف) أو <b>إبقاؤها</b> مع ترقيم ملفاتها بعد آخر رقم مستورد.<br>
+                    • بعد الاستيراد: كل مريض جديد يأخذ رقم ملف وطلب حسب رقم الحاسبة (1000001… للحاسبة ١، 2000001… للحاسبة ٢) — بلا أي تضارب.
                   </div>
                   <input type="file" id="gl-file" accept=".accdb,.mdb,.zip" style="display:none" onchange="glImportFileChosen(this)">
                   <button class="btn btn-p btn-lg" style="width:100%" onclick="glImportPick()">📂 اختيار ملف قاعدة البيانات (accdb / zip)</button>
@@ -64278,6 +64279,10 @@ var GLC = (function(){
   async function build(raw, plan, ctx, opts, tick){
     opts=opts||{}; tick=tick||function(){ return null; };
     var now=ctx.now||Date.now(), dev=ctx.devNo, lanId=ctx.lanDeviceId||('d'+dev);
+    /* 🔢 ترقيم ثابت (det): الأرقام تُشتق من الملف المستورد وحده — فالملف نفسه يعطي الأرقام نفسها على أي حاسبة:
+       الملفات 100001، 100002 … بترتيب أول زيارة · الطلبات RQ0-1001 … بترتيب الزيارات · لا علاقة لرقم الحاسبة */
+    var DET=!!opts.det;
+    if(DET){ dev=0; lanId='gl'; }
     var catalog=ctx.tests.slice(), catIndex={};
     catalog.forEach(function(t,i){ if(t&&t.id) catIndex[t.id]=i; });
     var mapByName={}; plan.mapping.forEach(function(m){ mapByName[m.name]=m; });
@@ -64291,13 +64296,15 @@ var GLC = (function(){
     var rqIds=new Set((ctx.requests||[]).map(function(r){ return r&&String(r.id); }));
     var invIds=new Set((ctx.invoices||[]).map(function(x){ return x&&String(x.id); }));
     var ptC=ctx.counters.pt||0, rqC=Math.max(1000,ctx.counters.rq||0), invC=Math.max(ctx.counters.inv||0,1000+(ctx.invoices||[]).length);
+    if(DET){ ptC=0; rqC=1000; invC=1000; }
     function newPtId(){
+      if(DET){ var dc; do{ ptC++; dc=String((opts.ptStart||100001)-1+ptC); } while(ptIds.has(dc)); ptIds.add(dc); return dc; }
       var base=dev*1000000, cand;
       do{ ptC++; if(ptC>499999) throw new Error('نفد مدى أرقام الملفات لهذه الحاسبة'); cand=String(base+ptC); } while(ptIds.has(cand));
       ptIds.add(cand); return cand;
     }
     function newRqId(){ var cand; do{ rqC++; cand='RQ'+dev+'-'+rqC; } while(rqIds.has(cand)); rqIds.add(cand); return cand; }
-    function newInvId(){ var cand; do{ invC++; cand='INV-'+invC; } while(invIds.has(cand)); invIds.add(cand); return cand; }
+    function newInvId(){ var cand; do{ invC++; cand=DET?('INV-0-'+invC):('INV-'+invC); } while(invIds.has(cand)); invIds.add(cand); return cand; }
 
     /* ── التحاليل الجديدة للدليل ── */
     var TT={}; (raw.test_tbl||[]).forEach(function(t){ TT[t.tcode]=t; });
@@ -64412,7 +64419,7 @@ var GLC = (function(){
       var k=key3(p.name)+'|'+g;
       (groups[k]||(groups[k]=[])).push({pt:p, birth:ptBirth(p), visits:[], existing:true});
     });
-    var existingKeys=new Set(); (ctx.requests||[]).forEach(function(r){ if(r&&r.glKey) existingKeys.add(r.glKey); });
+    var existingKeys=new Set(); if(!DET) (ctx.requests||[]).forEach(function(r){ if(r&&r.glKey) existingKeys.add(r.glKey); });
     var vids=Object.keys(plan.visits).map(Number).sort(function(a,b){
       var A=plan.visits[a], B=plan.visits[b];
       return (msOf(A.vdate,A.vtime)-msOf(B.vdate,B.vtime)) || (a-b);
@@ -64460,7 +64467,7 @@ var GLC = (function(){
           phone:phone.replace(/[^\d+]/g,''), phoneCC:'964', addr:addr,
           doctorId:lastDr.id, doctorName:lastDr.name, insurance:'', chronic:[], notes:'',
           registered:dateStr(first.vdate), regTime:msOf(first.vdate,first.vtime), visits:0, lastVisit:'', status:'active',
-          _dev:lanId, _org:now, _updatedAt:now, glImport:plan.labTag};
+          _dev:lanId, _org:DET?msOf(first.vdate,first.vtime):now, _updatedAt:now, glImport:plan.labTag};
         outPatients.push(pt); rep.patientsNew++;
       }
       var ptAgeDisp=pt.ageDisplay||'';
@@ -64471,8 +64478,8 @@ var GLC = (function(){
         var req={id:newRqId(), orderNo:'', patientId:pt.id, patientName:pt.name, tests:[], testNames:[], sample:'',
           priority:'Routine', note:lines(visit.note), doctorId:dr.id, doctorName:dr.name, date:vdate,
           time:ctx.fmtTime?ctx.fmtTime(vms):'', status:'pending', results:{}, tech:'', resultDate:vdate,
-          resultNotes:'', resultNotesPer:{}, sideLab:false, printed:true, wsPrinted:true,
-          _dev:lanId, _org:now, _updatedAt:now, glKey:'GL'+plan.labTag+'-'+vid};
+          resultNotes:'', resultNotesPer:{}, sideLab:false, printed:true, wsPrinted:true, createdAt:vms,
+          _dev:lanId, _org:DET?vms:now, _updatedAt:now, glKey:'GL'+plan.labTag+'-'+vid};
         var used={}, spKinds=[], tlist=[], anyMissing=false;
         var addNote=function(tid,txt){ if(!txt) return; req.resultNotesPer[tid]=req.resultNotesPer[tid]?(req.resultNotesPer[tid]+' | '+txt):txt; rep.notes++; };
         for(var ri=0;ri<rows.length;ri++){
@@ -64509,7 +64516,7 @@ var GLC = (function(){
               if(u){
                 var ur={id:'ua-gl'+dev+'-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name,
                   patientAge:ptAgeDisp, patientGender:pt.gender, doctorId:dr.id, doctorName:dr.name, date:vdate,
-                  createdAt:vms, _updatedAt:now, _dev:lanId, _org:now, glImport:plan.labTag};
+                  createdAt:vms, _updatedAt:now, _dev:lanId, _org:DET?vms:now, glImport:plan.labTag};
                 Object.keys(UA_MAP).forEach(function(col){ var x=lines(u[col]); if(x) ur[UA_MAP[col]]=eqNormal(x,(ctx.uaNormals||{})[UA_MAP[col]]); });
                 if(ur.sg===undefined && u.gravity!=null){ var gv=tr(u.gravity); if(/^\d{4}$/.test(gv)) ur.sg=(gv/1000).toFixed(3); else if(gv) ur.sg=gv; }
                 var uNote=[]; if(lines(u.others) && !/^absent$/i.test(lines(u.others))) uNote.push('Others: '+lines(u.others));
@@ -64526,7 +64533,7 @@ var GLC = (function(){
               if(so){
                 var sr={id:'stl-gl'+dev+'-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name,
                   patientAge:ptAgeDisp, patientGender:pt.gender, doctorId:dr.id, doctorName:dr.name, date:vdate,
-                  createdAt:vms, _updatedAt:now, _dev:lanId, _org:now, glImport:plan.labTag};
+                  createdAt:vms, _updatedAt:now, _dev:lanId, _org:DET?vms:now, glImport:plan.labTag};
                 Object.keys(STOOL_MAP).forEach(function(col){ var x=lines(so[col]); if(x) sr[STOOL_MAP[col]]=eqNormal(x,(ctx.stoolNormals||{})[STOOL_MAP[col]]); });
                 var para=[];
                 [['cyst','Cyst'],['troph','Trophozoite'],['ova','Ova'],['larva','Larva'],['worms','Worm']].forEach(function(p){
@@ -64557,7 +64564,7 @@ var GLC = (function(){
                 else {
                   var mr={id:'semen-gl'+dev+'-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name,
                     patientAge:ptAgeDisp, patientGender:pt.gender, patientPhone:pt.phone||'', doctorId:dr.id, doctorName:dr.name,
-                    date:vdate, createdAt:vms, _updatedAt:now, _dev:lanId, _org:now, glImport:plan.labTag};
+                    date:vdate, createdAt:vms, _updatedAt:now, _dev:lanId, _org:DET?vms:now, glImport:plan.labTag};
                   if(tr(se.method)) mr.s_collection=tr(se.method);
                   if(tr(se.color)) mr.s_appearance=tr(se.color);
                   if(tr(se.viscosity)) mr.s_viscosity=tr(se.viscosity);
@@ -64619,7 +64626,7 @@ var GLC = (function(){
                 orgGroup:(ctx.cultGroupOf?ctx.cultGroupOf(org):''), organism:org, gramStain:'', wbc:tr(cu.wbc), sqEpi:'',
                 epithelial:'', pusCells:'', hideDirect:false, colony:tr(cu.count), note:note.join('\n'),
                 antibiotics:(org==='No Growth')?[]:abx, status:org?'done':'pending', createdAt:vms, _updatedAt:now,
-                _dev:lanId, _org:now, glImport:plan.labTag};
+                _dev:lanId, _org:DET?vms:now, glImport:plan.labTag};
               outCult.push(cr); rep.culture++; rep.abx+=cr.antibiotics.length;
               if(org){ req.results[t.id]=org; gotValue=true; }
             }
@@ -64701,7 +64708,7 @@ var GLC = (function(){
           var totalAmt=num(visit.total)||0, rawAmt=num(visit.service_price)||totalAmt;
           outInv.push({id:newInvId(), patientId:pt.id, patientName:pt.name, reqId:req.id, rawTotal:rawAmt,
             discount:rawAmt? Math.round((1-totalAmt/rawAmt)*1000)/10 : 0, total:totalAmt, insType:'', insAmt:0,
-            status:'مدفوعة', date:vdate, glImport:plan.labTag, _updatedAt:now});
+            status:'مدفوعة', date:vdate, glImport:plan.labTag, _updatedAt:now, createdAt:vms, _dev:lanId, _org:DET?vms:now});
           rep.invoices++;
         }
         if(++built%3000===0) await tick('build', built, plan.stats.toImport);
@@ -64727,7 +64734,7 @@ var GLC = (function(){
     rep.unlinkedAbx=(raw.sensitivity_tbl||[]).filter(function(x){ return !cultKeys[x.ID+'|'+x.tcode]; }).length;
     return {patientsNew:outPatients, patientsUpd:updPatients, requests:outReqs, invoices:outInv, ua:outUA, stool:outStool,
       semen:outSemen, culture:outCult, doctorsNew:newDoctors, testsNew:newTests, abxNew:newAbx,
-      counters:{pt:ptC, rq:rqC, inv:invC}, report:rep};
+      counters:{pt:ptC, rq:rqC, inv:invC}, lastPtId:(DET?((opts.ptStart||100001)-1+ptC):0), report:rep};
   }
 
   return {nameParts:nameParts, TABLES:TABLES, readAll:readAll, analyze:analyze, build:build, normAr:normAr, key3:key3, kindOf:kindOf};
@@ -64862,7 +64869,7 @@ if(typeof module!=='undefined') module.exports=GLC;
       _statBox(s.matchedTests,'اسم تحليل مطابق','var(--success)')+_statBox(s.newTests,'تحليل يُضاف للدليل','#fbbf24')+'</div>';
     if(s.alreadyImported){
       h+='<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12px;line-height:1.9">'+
-        '♻️ <b>'+fmt(s.alreadyImported)+'</b> زيارة مستوردة سابقاً من هذا الملف — ستُتجاوز تلقائياً. المتبقي للاستيراد: <b>'+fmt(s.toImport)+'</b></div>';
+        '♻️ <b>'+fmt(s.alreadyImported)+'</b> زيارة من هذا الملف مستوردة سابقاً في هذه الحاسبة — اختر «حذف البيانات الحالية» عند البدء لإعادة استيراد نظيفة بأرقام ثابتة.</div>';
     }
     if(s.orphanTests||s.garbageTests){
       h+='<div style="font-size:11px;color:var(--text2);margin-bottom:10px">ℹ️ سيُستبعد: '+
@@ -64882,7 +64889,7 @@ if(typeof module!=='undefined') module.exports=GLC;
       '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="gl-opt-inv" style="margin-top:3px"> <span>🧾 استيراد مبالغ الزيارات كفواتير <b>مدفوعة</b> بتواريخها <span style="color:var(--text2)">(تُضاف لتقارير الحسابات للسنوات السابقة — البرنامج القديم لا يسجّل حالة الدفع)</span></span></label>'+
       '</div>';
     h+='<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">'+
-      '<button class="btn btn-ok btn-lg" style="flex:1;min-width:200px" id="gl-start-btn" onclick="glImportStart()"'+(s.toImport?'':' disabled')+'>🚀 بدء الاستيراد ('+fmt(s.toImport)+' زيارة)</button>'+
+      '<button class="btn btn-ok btn-lg" style="flex:1;min-width:200px" id="gl-start-btn" onclick="glImportStart()"'+(s.visits?'':' disabled')+'>🚀 بدء الاستيراد ('+fmt(s.visits)+' زيارة)</button>'+
       '<button class="btn btn-lg" onclick="glImportReset()">إلغاء</button></div>';
     h+='<div id="gl-result" style="margin-top:14px"></div>';
     pv.innerHTML=h;
@@ -64998,20 +65005,56 @@ if(typeof module!=='undefined') module.exports=GLC;
   }
 
   /* ─────────── ③ التنفيذ ─────────── */
+  /* ─────────── سؤال قبل الاستيراد: حذف البيانات الحالية أو إبقاؤها ─────────── */
+  function _askMode(counts, prevSame){
+    return new Promise(function(res){
+      var o=document.createElement('div'); o.id='gl-mode-ov';
+      o.style.cssText='position:fixed;inset:0;z-index:100000;background:rgba(3,8,20,0.85);display:flex;align-items:center;justify-content:center;padding:16px;direction:rtl;font-family:Cairo,sans-serif';
+      var btn='padding:12px 16px;border-radius:10px;font-weight:900;font-size:13.5px;cursor:pointer;font-family:inherit;text-align:right;line-height:1.7;width:100%;';
+      o.innerHTML='<div style="background:var(--bg2,#101a2e);color:var(--text,#e8ecef);border:1.5px solid var(--border,#234);border-radius:16px;padding:20px 22px;width:min(620px,96vw)">'+
+        '<div style="font-size:16px;font-weight:900;margin-bottom:8px">📥 يوجد بيانات حالية في هذه الحاسبة</div>'+
+        '<div style="font-size:12.5px;color:var(--text2,#9ab);line-height:1.9;margin-bottom:14px">المرضى: <b>'+fmt(counts.p)+'</b> · الطلبات: <b>'+fmt(counts.r)+'</b> · الفواتير: <b>'+fmt(counts.i)+'</b><br>'+
+        'ملفات المستورد تأخذ أرقاماً ثابتة تبدأ من <b>100001</b> — الأرقام نفسها على أي حاسبة يُستورد فيها الملف نفسه.</div>'+
+        '<div style="display:flex;flex-direction:column;gap:10px">'+
+        '<button id="glm-wipe" style="'+btn+'background:rgba(255,77,109,0.12);border:1.5px solid rgba(255,77,109,0.6);color:inherit">🗑️ <b>نعم — احذف البيانات الحالية واستورد الجديد</b><br><span style="font-weight:600;font-size:11.5px;opacity:.85">يُحذف كل المرضى والطلبات والنتائج والفواتير والحسابات والزرع والإدرار والخروج والمنوي ودفتر الهواتف. تبقى الإعدادات وقاعدة التحاليل والأطباء والمستخدمون كما هي. (تُنزَّل نسخة احتياطية أولاً)</span></button>'+
+        '<button id="glm-keep" '+(prevSame?'disabled ':'')+'style="'+btn+'background:rgba(0,212,255,0.08);border:1.5px solid rgba(0,212,255,0.5);color:inherit;'+(prevSame?'opacity:.45;cursor:not-allowed':'')+'">📌 <b>لا — أبقِ البيانات الحالية</b><br><span style="font-weight:600;font-size:11.5px;opacity:.85">'+
+          (prevSame?'غير متاح: هذا الملف مستورد سابقاً في هذه الحاسبة — استخدم «نعم» لإعادة استيراد نظيفة بلا تكرار.'
+                   :'يُستورد الملف بأرقامه الثابتة (من 100001)، ثم تُرقَّم ملفات المرضى الحاليين بعد آخر رقم مستورد مباشرة، وتنتقل طلباتهم وفواتيرهم معهم.')+'</span></button>'+
+        '<button id="glm-cancel" style="'+btn+'background:transparent;border:1px solid var(--border,#345);color:inherit;text-align:center">إلغاء</button></div></div>';
+      document.body.appendChild(o);
+      function done(v){ o.remove(); res(v); }
+      o.querySelector('#glm-wipe').onclick=function(){ done('wipe'); };
+      o.querySelector('#glm-keep').onclick=function(){ if(!prevSame) done('keep'); };
+      o.querySelector('#glm-cancel').onclick=function(){ done(null); };
+    });
+  }
+  function _addOld(rec, v){ if(v==null||v==='') return; var t=' '+String(v); var c=rec._oldIds||''; if((c+' ').indexOf(t+' ')<0) rec._oldIds=(c+t).slice(-600); }
+
+  /* ─────────── ③ التنفيذ ─────────── */
   window.glImportStart=async function(){
     if(ST.busy || !ST.plan || !ST.raw) return;
     var P=ST.plan;
     var withInv=!!($('gl-opt-inv')||{}).checked, withBackup=!!($('gl-opt-backup')||{}).checked;
-    var msg='سيتم استيراد '+fmt(P.stats.toImport)+' زيارة مع نتائجها إلى قاعدة ميدلاب.\n\n'+
-      '• يُفضَّل تنفيذ الاستيراد على حاسبة واحدة فقط، والبقية تستلم عبر المزامنة.\n'+
-      '• لا تغلق البرنامج حتى تظهر رسالة الانتهاء.\n\nهل تريد المتابعة؟';
-    if(!confirm(msg)) return;
+    /* تحميل كل الأقسام قبل السؤال (حتى تكون الأعداد والحذف/الترقيم شاملة) */
+    try{ if(typeof loadUARecords==='function') loadUARecords(); }catch(e){}
+    try{ if(typeof loadStoolExamRecords==='function') loadStoolExamRecords(); }catch(e){}
+    try{ if(typeof loadSemenRecords==='function') loadSemenRecords(); }catch(e){}
+    try{ if(typeof loadCultureRecordsFromIDB==='function') await loadCultureRecordsFromIDB(); else if(typeof loadCultureRecords==='function') loadCultureRecords(); }catch(e){}
+    var counts={p:patients.length, r:requests.length, i:invoices.length+billingRecords.length};
+    var hasData=!!(patients.length||requests.length||invoices.length||billingRecords.length||uaRecords.length||stoolExamRecords.length||semenRecords.length||cultureRecords.length);
+    var prevSame=requests.some(function(r){ return r && r.glKey && String(r.glKey).indexOf('GL'+P.labTag+'-')===0; });
+    var mode='wipe';
+    if(hasData){
+      mode=await _askMode(counts, prevSame);
+      if(!mode) return;
+      if(mode==='wipe' && !confirm('تأكيد نهائي:\n\nسيُحذف من هذه الحاسبة كل المرضى ('+fmt(counts.p)+') والطلبات ('+fmt(counts.r)+') والنتائج والفواتير والحسابات وسجلات الزرع والإدرار والخروج والمنوي ودفتر الهواتف، ثم يُستورد الملف.\nالإعدادات وقاعدة التحاليل والأطباء تبقى.\n\nمتابعة؟')) return;
+    } else if(!confirm('سيتم استيراد '+fmt(P.stats.visits)+' زيارة بأرقام ثابتة (الملفات من 100001).\n\nلا تغلق البرنامج حتى تظهر رسالة الانتهاء. متابعة؟')) return;
     ST.busy=true; overlay(true);
     var res=$('gl-result'); if(res) res.innerHTML='';
     var btn=$('gl-start-btn'); if(btn) btn.disabled=true;
     var t0=Date.now(), backupName='';
     try{
-      if(withBackup){
+      if(withBackup || (mode==='wipe' && hasData)){
         setProg(2,'إنشاء نسخة احتياطية قبل الاستيراد…'); await sleep(50);
         try{ backupName=await _downloadBackup(); }
         catch(e){
@@ -65020,19 +65063,13 @@ if(typeof module!=='undefined') module.exports=GLC;
           overlay(true);
         }
       }
-      /* تأكد من تحميل سجلات الأقسام الخاصة قبل الإضافة إليها */
-      setProg(6,'تجهيز سجلات الأقسام…'); await sleep(20);
-      try{ if(typeof loadUARecords==='function') loadUARecords(); }catch(e){}
-      try{ if(typeof loadStoolExamRecords==='function') loadStoolExamRecords(); }catch(e){}
-      try{ if(typeof loadSemenRecords==='function') loadSemenRecords(); }catch(e){}
-      try{ if(typeof loadCultureRecordsFromIDB==='function') await loadCultureRecordsFromIDB(); else if(typeof loadCultureRecords==='function') loadCultureRecords(); }catch(e){}
+      setProg(6,'تجهيز…'); await sleep(20);
       if(typeof _idbFlushAll==='function'){ try{ _idbFlushAll(); }catch(e){} await sleep(400); }
 
-      /* بناء السجلات من الحالة الحالية لحظة التنفيذ */
+      /* بناء السجلات من الملف وحده — أرقام ثابتة لا تعتمد على هذه الحاسبة ولا على بياناتها */
       var _tm=Date.now(), _lap=function(l){ console.log('[GL import] '+l+' '+(Date.now()-_tm)+'ms'); _tm=Date.now(); };
-      _lap('prepare');
-      var ctx=_ctx();
-      var out=await GLC.build(ST.raw, P, ctx, {overrides:ST.overrides, invoices:withInv}, async function(stage,i,n){
+      var ctx=_ctx(); ctx.patients=[]; ctx.requests=[]; ctx.invoices=[];
+      var out=await GLC.build(ST.raw, P, ctx, {overrides:ST.overrides, invoices:withInv, det:true, ptStart:100001}, async function(stage,i,n){
         setProg(stage==='patients' ? 8+Math.round(i/Math.max(1,n)*12) : 20+Math.round(i/Math.max(1,n)*45),
           stage==='patients' ? 'مطابقة المرضى وتجميع الزيارات…' : 'بناء الطلبات والنتائج… '+fmt(i)+' / '+fmt(n));
         await sleep(0);
@@ -65040,51 +65077,60 @@ if(typeof module!=='undefined') module.exports=GLC;
       var R=out.report;
       _lap('build');
 
-      /* ── الإضافة إلى الذاكرة ── */
-      setProg(66,'إضافة السجلات…'); await sleep(20);
-      var ids={patients:new Set(), requests:new Set(), invoices:new Set(), uaRecords:new Set(), stoolExamRecords:new Set(), semenRecords:new Set(), cultureRecords:new Set()};
+      setProg(66,'تجهيز السجلات…'); await sleep(20);
       if(out.testsNew.length){ _pushAll(tests, out.testsNew); }
       if(out.doctorsNew.length){ _pushAll(doctors, out.doctorsNew); }
       if(out.abxNew.length && typeof ALL_ABX!=='undefined'){
         out.abxNew.forEach(function(a){ if(!ALL_ABX.find(function(x){ return x.code===a.code; })) ALL_ABX.push(a); });
       }
-      var ptIdx=new Map(); patients.forEach(function(p,i){ if(p) ptIdx.set(String(p.id),i); });
-      out.patientsUpd.forEach(function(u){
-        var i=ptIdx.get(String(u.id));
-        if(i!==undefined){
-          var chg={visits:u.visits, lastVisit:u.lastVisit, _updatedAt:u._updatedAt};
-          if(u.phone && !patients[i].phone) chg.phone=u.phone;
-          Object.assign(patients[i], chg); ids.patients.add(String(u.id));
+      var renumbered=0, keptSynced=0;
+      if(mode==='wipe'){
+        patients=out.patientsNew; requests=out.requests; invoices=out.invoices.slice(); billingRecords=[];
+        uaRecords=out.ua; stoolExamRecords=out.stool; semenRecords=out.semen; cultureRecords=out.culture;
+        try{ save('phoneBook', []); }catch(e){}
+      } else {
+        /* المرضى الحاليون ⇒ أرقام بعد آخر رقم مستورد مباشرة (بالترتيب الزمني لتسجيلهم)
+           مريض جديد مُزامَن برقم حاسبة (مثل 2000015) يبقى برقمه — رقمه لا يتقاطع مع المستورد ويطابق الحاسبات الأخرى */
+        var used=new Set(out.patientsNew.map(function(p){ return String(p.id); }));
+        var next=(out.lastPtId||100000)+1, map={};
+        var ex=patients.filter(function(p){ return p && p.id!=null; }).slice().sort(function(a,b){
+          var ta=+a.regTime||0, tb=+b.regTime||0; if(ta!==tb) return ta-tb; return String(a.id)<String(b.id)?-1:1; });
+        ex.forEach(function(p){
+          var id=String(p.id), devPref=/^\d{7,}$/.test(id) && +id>=1000000;
+          if(p._sid && devPref && !used.has(id)){ keptSynced++; used.add(id); return; }
+          while(used.has(String(next))) next++;
+          var nid=String(next++); used.add(nid);
+          if(nid!==id){ _addOld(p, id); map[id]=nid; p.id=nid; p.barcode=nid; renumbered++; }
+        });
+        var remap=function(list){ list.forEach(function(o){ if(o && o.patientId!=null && map[String(o.patientId)]!==undefined){ o.patientId=map[String(o.patientId)]; } }); };
+        [requests, invoices, billingRecords, uaRecords, stoolExamRecords, semenRecords, cultureRecords].forEach(remap);
+        _pushAll(patients, out.patientsNew); _pushAll(requests, out.requests);
+        if(out.invoices.length) _pushAll(invoices, out.invoices);
+        _pushAll(uaRecords, out.ua); _pushAll(stoolExamRecords, out.stool); _pushAll(semenRecords, out.semen); _pushAll(cultureRecords, out.culture);
+      }
+      /* الأرشيف لا يُرسل للحاسبات الأخرى (كل حاسبة تستورد الملف نفسه فتطلع بالأرقام نفسها) */
+      try{
+        if(window.SIDX){
+          if(mode==='wipe' && SIDX.resetArchive) SIDX.resetArchive();
+          else if(SIDX.markLegacy){
+            [['patients',patients],['requests',requests],['invoices',invoices],['billing',billingRecords],['uaRecords',uaRecords],['stoolExamRecords',stoolExamRecords],['semenRecords',semenRecords],['cultureRecords',cultureRecords]]
+              .forEach(function(x){ SIDX.markLegacy(x[0], x[1].filter(function(o){ return o && !o._sid && o.id!=null; }).map(function(o){ return o.id; })); });
+          }
         }
-      });
-      _pushAll(patients, out.patientsNew); out.patientsNew.forEach(function(p){ ids.patients.add(String(p.id)); });
-      _pushAll(requests, out.requests); out.requests.forEach(function(r){ ids.requests.add(String(r.id)); });
-      if(out.invoices.length){ _pushAll(invoices, out.invoices); out.invoices.forEach(function(r){ ids.invoices.add(String(r.id)); }); }
-      _pushAll(uaRecords, out.ua); out.ua.forEach(function(r){ ids.uaRecords.add(String(r.id)); });
-      _pushAll(stoolExamRecords, out.stool); out.stool.forEach(function(r){ ids.stoolExamRecords.add(String(r.id)); });
-      _pushAll(semenRecords, out.semen); out.semen.forEach(function(r){ ids.semenRecords.add(String(r.id)); });
-      _pushAll(cultureRecords, out.culture); out.culture.forEach(function(r){ ids.cultureRecords.add(String(r.id)); });
+      }catch(e){ console.warn('[GL import] archive mark', e); }
 
-      /* العدادات: الأرقام القادمة تبدأ بعد آخر رقم مستخدم (بلا تداخل) */
-      var setMax=function(key,v){ try{ var c=parseInt(localStorage.getItem(key)||'0',10)||0; if(v>c) localStorage.setItem(key,String(v)); }catch(e){} };
-      setMax('medlab_pt_counter', out.counters.pt);
-      setMax('medlab_rq_counter', out.counters.rq);
-      if(out.invoices.length) setMax('medlab_inv_counter', out.counters.inv);
-
-      /* ── الحفظ المُنتظَر ── */
-      var steps=[['tests',tests,null],['doctors',doctors,null],['patients',patients,ids.patients],['requests',requests,ids.requests],
-        ['uaRecords',uaRecords,ids.uaRecords],['stoolExamRecords',stoolExamRecords,ids.stoolExamRecords],
-        ['semenRecords',semenRecords,ids.semenRecords],['cultureRecords',cultureRecords,ids.cultureRecords]];
-      if(out.invoices.length) steps.push(['invoices',invoices,ids.invoices]);
+      /* ── الحفظ الكامل المُنتظَر ── */
+      var steps=[['tests',tests,null],['doctors',doctors,null],['patients',patients,null],['requests',requests,null],
+        ['invoices',invoices,null],['billing',billingRecords,null],['uaRecords',uaRecords,null],['stoolExamRecords',stoolExamRecords,null],
+        ['semenRecords',semenRecords,null],['cultureRecords',cultureRecords,null]];
       var failed=[];
       for(var si=0;si<steps.length;si++){
         var st=steps[si];
-        if(st[2] && !st[2].size) continue;
-        if(!st[2] && ((st[0]==='tests' && !out.testsNew.length) || (st[0]==='doctors' && !out.doctorsNew.length))) continue;
+        if((st[0]==='tests' && !out.testsNew.length) || (st[0]==='doctors' && !out.doctorsNew.length)) continue;
         setProg(68+Math.round(si/steps.length*24),'حفظ '+st[0]+' في قاعدة البيانات…'); await sleep(10);
         if(st[0]==='cultureRecords') window._cultIdbBusy=(window._cultIdbBusy||0)+1;
         var ok=false;
-        try{ ok=await _persist(st[0], st[1], st[2]); }
+        try{ ok=await _persist(st[0], st[1], null); }
         finally{ if(st[0]==='cultureRecords') window._cultIdbBusy=Math.max(0,(window._cultIdbBusy||1)-1); }
         if(!ok) failed.push(st[0]);
         _lap('persist '+st[0]);
@@ -65092,23 +65138,27 @@ if(typeof module!=='undefined') module.exports=GLC;
       if(out.abxNew.length){
         try{ save('customAbxEntries', ALL_ABX.filter(function(a){ return a.cls==='MISC' && !window._builtinAbxCodes.has(a.code); })); }catch(e){}
       }
+      /* حالة المزامنة: بعد الحذف الشامل لا تُبثّ أي شواهد حذف، ويُعاد طلب السجلات الجديدة (برقم مزامنة) من الحاسبات الأخرى */
+      try{
+        if(mode==='wipe'){
+          if(window.MSync && MSync._resetSidState) MSync._resetSidState();
+          try{ localStorage.setItem('lis_lan_cursors','{}'); }catch(e){}
+        } else if(typeof window._msOnSave==='function'){
+          ['patients','requests','invoices','billing','uaRecords','stoolExamRecords','semenRecords','cultureRecords'].forEach(function(k){ try{ window._msOnSave(k, null, null); }catch(e){} });
+        }
+      }catch(e){ console.warn('[GL import] sync reset', e); }
+      ST._lastMode=mode; ST._renumbered=renumbered; ST._keptSynced=keptSynced;
 
       /* ── التحقق من العدد المحفوظ فعلياً ── */
       setProg(93,'التحقق من الحفظ…'); await sleep(10);
       var checks=[];
       for(var vi=0;vi<steps.length;vi++){
-        if(steps[vi][2] && steps[vi][2].size) checks.push(await _verify(steps[vi][0], steps[vi][1]));
+        if(['patients','requests','invoices','uaRecords','stoolExamRecords','semenRecords','cultureRecords'].indexOf(steps[vi][0])>-1) checks.push(await _verify(steps[vi][0], steps[vi][1]));
       }
       var badChecks=checks.filter(function(c){ return !c.ok; });
       _lap('verify');
 
-      /* ── بث المزامنة للحاسبات الأخرى ── */
-      setProg(96,'إرسال التحديث للحاسبات الأخرى…'); await sleep(10);
-      steps.forEach(function(st){
-        if((st[2] && !st[2].size) || (!st[2] && ((st[0]==='tests' && !out.testsNew.length) || (st[0]==='doctors' && !out.doctorsNew.length)))) return;
-        try{ if(typeof window._lanOnSave==='function') window._lanOnSave(st[0], st[1]); }catch(e){}
-      });
-
+      /* لا بثّ للأرشيف المستورد — كل حاسبة تستورد الملف نفسه فتحصل على الأرقام نفسها */
       _lap('lan');
       /* ── تحديث الواجهة ── */
       ['updateDbStats','updateBadges','buildTestCatTabs','renderTestsDB','renderDoctors'].forEach(function(fn){ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
@@ -65144,6 +65194,8 @@ if(typeof module!=='undefined') module.exports=GLC;
     var h='<div style="background:rgba(0,245,147,0.06);border:1.5px solid rgba(0,245,147,0.3);border-radius:12px;padding:16px">'+
       '<div style="font-size:15px;font-weight:900;color:var(--success);margin-bottom:10px">✅ اكتمل الاستيراد ('+secs+' ثانية)</div>'+
       '<table style="width:100%;font-size:12.5px;border-collapse:collapse">'+
+      row('طريقة الاستيراد', ST._lastMode==='keep' ? ('إبقاء الموجود — أُعيد ترقيم '+fmt(ST._renumbered||0)+' ملف بعد المستورد'+(ST._keptSynced?(' · '+fmt(ST._keptSynced)+' ملف مُزامَن بقي برقمه'):'')) : 'استيراد نظيف (حُذفت البيانات السابقة)')+
+      row('أرقام الملفات المستوردة','100001 – '+String(100000+(R.patientsNew||0)),'var(--primary)')+
       row('ملفات مرضى جديدة',fmt(R.patientsNew))+
       row('مرضى موجودون أُضيفت لهم زيارات',fmt(R.patientsMatched))+
       row('طلبات (زيارات) مستوردة',fmt(R.requests),'var(--success)')+
@@ -71461,6 +71513,18 @@ function finishBoot(p, stamped){
   }
 }
 SX.isReady = function(){ return S.ready && S.pfx === pfx(); };
+/* بعد استيراد نظيف: كل ما في الحاسبة الآن أرشيف محلي (لا يُرسل) — ويُفرَّغ سجل الأسماء البديلة
+   (السجلات الجديدة ذات أرقام المزامنة تعود من الحاسبات الأخرى عبر المزامنة) */
+SX.resetArchive = function(){
+  Object.keys(COLS).forEach(function(c){
+    var a = getArr(c), set = new Set();
+    for(var i=0;i<a.length;i++){ var o=a[i]; if(o && !o._sid && o.id!=null) set.add(String(o.id)); }
+    S.legacy[c] = set; saveLegacy(c);
+    var m = {}; for(i=0;i<a.length;i++){ o=a[i]; if(o && o._sid && o.id!=null) m[String(o.id)] = o._sid; } S.sidById[c] = m;
+    SX.touch(c);
+  });
+  try{ localStorage.removeItem(aliasKey()); }catch(e){} _alias = null;
+};
 SX.stats = function(){
   var o = {};
   Object.keys(COLS).forEach(function(c){ var a = getArr(c), n = 0; for(var i=0;i<a.length;i++) if(a[i] && a[i]._sid) n++; o[c] = {all:a.length, synced:n, archive:(S.legacy[c]?S.legacy[c].size:0)}; });
@@ -72471,6 +72535,19 @@ MS._srv = srv;
 MS._send = function(peer, y, payload){ if(!S.on || !S.regDone) return Promise.resolve(false); return sendTo(peer, y, payload, 0).then(function(){ return true; }); };
 MS._name = myName;
 MS._devUpdate = function(o){ try{ if(S.on && S.db && S.regDone && S.me) return ref(S.root+'/dev/'+S.me).update(o).catch(function(){}); }catch(e){} return Promise.resolve(); };
+/* بعد استيراد نظيف/حذف شامل: لا شواهد حذف تُبثّ للحاسبات الأخرى، ويُعاد طلب كل السجلات
+   ذات رقم المزامنة منها (الطلبات الجديدة التي أُنشئت عندها تعود هنا) */
+MS._resetSidState = function(){
+  try{
+    Object.keys(SIDC).forEach(function(c){
+      var meta={}, list=listOf(c);
+      list.forEach(function(it){ meta[it.id]=[fnv(JSON.stringify(it.rec)), vOf(it.rec), 0]; });
+      S.meta[c]=meta; metaSave(c);
+    });
+    S.cursors={}; saveCursors(); S.lastOk={}; lsSet(lastOkKey(), {}); S.hello={};
+    setTimeout(function(){ onlinePeers().forEach(function(p){ pullFrom(p, true); }); }, 1500);
+  }catch(e){ console.warn('[MSync] reset', e); }
+};
 MS._forget = function(col, sid){ try{ var m=S.meta[col]; if(m && m[sid]){ delete m[sid]; metaSave(col); } }catch(e){} };
 MS._handlers = MS._handlers || {};
 MS._connected = function(){ return !!(S.on && S.connected && S.regDone && S.status==='ok'); };
