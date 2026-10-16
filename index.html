@@ -4035,6 +4035,14 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
               </div>
             </div>
             <button class="btn btn-p btn-lg" style="width:100%;margin-top:8px" onclick="esrAddTimer()">▶️ ابدأ العداد</button>
+            <div class="fg" style="margin-top:14px;margin-bottom:0">
+              <label class="fl">🔊 مخرج صوت الإنذار</label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select class="fc" id="esr-sink-sel" style="flex:1;min-width:0" onchange="esrSinkChange(this.value)" onfocus="esrSinkFill()"><option value="auto">تلقائي — سماعات الحاسبة</option></select>
+                <button class="btn btn-s btn-sm" style="white-space:nowrap" onclick="esrSinkTest()" title="تجربة صوت الإنذار">🔔 تجربة</button>
+              </div>
+              <div id="esr-sink-hint" style="font-size:10.5px;color:var(--text2);margin-top:4px">الإنذار يُسمع دائماً من سماعات الحاسبة لا من الشاشة/التلفاز.</div>
+            </div>
           </div>
         </div>
         <!-- Active timers list -->
@@ -6752,6 +6760,24 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                 <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="wsSpeakToggle(false)">
                   <div id="ws-speak-radio-off" style="width:18px;height:18px;border-radius:50%;border:2px solid var(--primary);background:transparent;flex-shrink:0;display:flex;align-items:center;justify-content:center"><div id="ws-speak-dot-off" style="width:9px;height:9px;border-radius:50%;background:transparent"></div></div>
                   <span style="font-size:13px;font-weight:700">🔇 إيقاف الإشعار الصوتي</span>
+                </div>
+              </div>
+
+              <!-- 🔕 / ⏱️ طريقة المناداة -->
+              <div id="ws-callmode-box" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px dashed var(--border)">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:13px;font-weight:800">🔕 إطفاء المناداة التلقائية</div>
+                    <div style="font-size:11px;color:var(--text2);line-height:1.7">عند التفعيل لا يُنادى أي مريض تلقائياً — النداء فقط من زر <b>«📣 نداء»</b> في واجهة الطلبات.</div>
+                  </div>
+                  <div class="tog" id="ws-autocall-tog" onclick="wsAutoCallOffToggle()" title="إطفاء/تشغيل المناداة التلقائية"><div class="tog-t"></div></div>
+                </div>
+                <div id="ws-delay-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                  <div style="min-width:0;flex:1">
+                    <div style="font-size:13px;font-weight:800">⏱️ المناداة بعد ١٥ ثانية من الطباعة</div>
+                    <div style="font-size:11px;color:var(--text2);line-height:1.7">بعد طباعة النتيجة ينتظر البرنامج ١٥ ثانية ثم يُنادي المريض (زر «نداء» اليدوي يبقى فورياً).</div>
+                  </div>
+                  <div class="tog" id="ws-delay-tog" onclick="wsCallDelayToggle()" title="المناداة بعد ١٥ ثانية"><div class="tog-t"></div></div>
                 </div>
               </div>
 
@@ -10000,6 +10026,13 @@ function _scheduleLegacySnapshot(pk){
 // load/save
 function load(k,def){return DB.get(k)||def;}
 function save(k,v){
+  /* 🆔 رقم المزامنة المخفي: يُختم على السجلات الجديدة قبل الكتابة (ويُضاف للمعدَّلة فتُكتب معها) */
+  try{
+    if(typeof window._sidOnSave==='function'){
+      var _sidSt=window._sidOnSave(k,v);
+      if(_sidSt && _sidSt.length && !_touchedBad[k] && _touched[k] && _touched[k].size){ for(var _si=0;_si<_sidSt.length;_si++) _touchRec(k,_sidSt[_si]); }
+    }
+  }catch(e){}
   /* 📜 سجل العمليات — يلتقط قائمة السجلات المعدّلة قبل أن يستهلكها DB.set */
   try{ if(typeof AuditLog!=='undefined' && AuditLog) AuditLog.onSave(k, v, _touchedBad[k]?null:(_touched[k]?Array.from(_touched[k]):null)); }catch(e){}
   /* ☁️ المزامنة السحابية — تلتقط المعرّفات المعدّلة قبل أن يستهلكها DB.set */
@@ -16989,7 +17022,7 @@ function vrSaveAddedTests(){
   const r=requests.find(x=>x.id===currentReqId);if(!r)return;
   r.tests.forEach(tid=>{
     const el=document.getElementById('vr-rv-'+tid);
-    if(el&&el.value!==undefined&&el.value!=='')r.results[tid]=el.value;
+    if(el) _resSetVal(r, tid, el.value, el);
   });
   saveOne('requests',requests,r);renderAll();
   showNotif('تم','تم حفظ النتائج ✅','success');
@@ -17603,6 +17636,51 @@ function getRefText(test, gender, age, localRef){
 }
 
 
+// ── 🧹 حفظ المسح: إذا مسح المستخدم نتيجة/ملاحظة وتركها فارغة تُحذف من الطلب فعلاً ──
+//    (كان الحقل الفارغ يُتجاهل فتبقى النتيجة الخاطئة القديمة وتظهر عند الطباعة).
+//    الحذف يتم فقط لحقل لمسه المستخدم بنفسه (data-uedit) — فلا تُمسح نتيجة وصلت من جهاز
+//    أو من حاسبة أخرى بعد رسم الشاشة. ويُحفظ «شاهد مسح» حتى لا تُعيدها المزامنة.
+(function(){
+  function _mark(el){ try{ if(el && el.dataset) el.dataset.uedit='1'; }catch(e){} }
+  function _onEdit(e){
+    var t=e.target; if(!t || !t.id) return;
+    var id=t.id, m;
+    if(!/^(vr-)?(rv|rnote)-/.test(id)) return;
+    _mark(t);
+    if((m=id.match(/^(vr-)?rv-(manual|tq|tv)-(.+)$/))) _mark(document.getElementById((m[1]||'')+'rv-'+m[3]));
+  }
+  document.addEventListener('input', _onEdit, true);
+  document.addEventListener('change', _onEdit, true);
+})();
+function _resEdited(el){ try{ return !!(el && el.dataset && el.dataset.uedit==='1'); }catch(e){ return false; } }
+function _resSetVal(req, tid, v, el){
+  if(!req) return;
+  if(!req.results) req.results={};
+  if(v!==undefined && v!==null && v!=='' && v!=='__manual__'){
+    req.results[tid]=v;
+    if(req._resCleared && req._resCleared[tid]) delete req._resCleared[tid];
+    return;
+  }
+  if(!_resEdited(el)) return;
+  var cur=req.results[tid];
+  if(cur===undefined || cur===null || String(cur)==='') return;
+  delete req.results[tid];
+  (req._resCleared||(req._resCleared={}))[tid]=Date.now();
+  req._updatedAt=Date.now();
+}
+function _resSetNote(req, tid, el){
+  if(!req || !el) return;
+  if(!req.resultNotesPer) req.resultNotesPer={};
+  var v=el.value;
+  if(v){ req.resultNotesPer[tid]=v; if(req._noteCleared && req._noteCleared[tid]) delete req._noteCleared[tid]; return; }
+  if(!_resEdited(el)) return;
+  if(req.resultNotesPer[tid]===undefined || req.resultNotesPer[tid]==='') return;
+  delete req.resultNotesPer[tid];
+  (req._noteCleared||(req._noteCleared={}))[tid]=Date.now();
+  req._updatedAt=Date.now();
+}
+window._resSetVal=_resSetVal; window._resSetNote=_resSetNote;
+
 // ── Auto-save صامت عند كل تغيير في النتائج ──────────────
 var _autoSaveTimer=null;
 function _autoSaveResults(){
@@ -17620,9 +17698,9 @@ function _autoSaveResults(){
       if(!sel) return;
       let v=sel.value;
       if(v==='__manual__'){const m=document.getElementById('rv-manual-'+t.id);v=m?m.value:'';}
-      if(v!==undefined&&v!=='') req.results[t.id]=v;
+      _resSetVal(req, t.id, v, sel);
       const noteEl=document.getElementById('rnote-'+t.id);
-      if(noteEl&&noteEl.value) req.resultNotesPer[t.id]=noteEl.value;
+      _resSetNote(req, t.id, noteEl);
     });
     const tech=document.getElementById('res-tech');
     if(tech) req.tech=tech.value;
@@ -17754,7 +17832,7 @@ function _openSpecialExamInline(reqId, examType, testId){
       if(!sel) return;
       let v=sel.value;
       if(v==='__manual__'){const m=document.getElementById('rv-manual-'+t.id);v=m?m.value:'';}
-      if(v!==undefined&&v!=='') req.results[t.id]=v;
+      _resSetVal(req, t.id, v, sel);
     });
     saveOne('requests',requests,req);
   }
@@ -17815,9 +17893,9 @@ function collectResults(){
       const manEl=document.getElementById('rv-manual-'+t.id);
       v = manEl ? manEl.value : '';
     }
-    if(v!==undefined&&v!=='')req.results[t.id]=v;
+    if(sel) _resSetVal(req, t.id, v, sel);
     const noteEl=document.getElementById('rnote-'+t.id);
-    if(noteEl&&noteEl.value)req.resultNotesPer[t.id]=noteEl.value;
+    _resSetNote(req, t.id, noteEl);
   });
   req.tech=document.getElementById('res-tech').value;
   req.resultDate=document.getElementById('res-date').value;
@@ -17884,7 +17962,7 @@ function _vrAutoSave(){
       const el=document.getElementById('vr-rv-'+tid); if(!el) return;
       let v=el.value;
       if(v==='__manual__'){const m=document.getElementById('vr-rv-manual-'+tid);v=m?m.value:'';}
-      if(v!==undefined&&v!=='') r.results[tid]=v;
+      _resSetVal(r, tid, v, el);
     });
     saveOne('requests',requests,r);
   },400);
@@ -28140,8 +28218,33 @@ function _wsInitSettingsUI(){
   wsSpeakToggle(ws.speakEnabled !== false);
   // تحديث واجهة التسجيل الصوتي
   _wsRefreshRecordUI();
+  // 🔕 / ⏱️ طريقة المناداة
+  try{ _wsCallModeUI(); }catch(e){}
   // تحميل قائمة الأطباء
   wsRefreshDoctorList();
+}
+/* 🔕 إطفاء المناداة التلقائية / ⏱️ المناداة بعد ١٥ ثانية — إعداد خاص بكل حاسبة */
+function _wsCallModeUI(){
+  var ws=_wsGetSettings();
+  var a=document.getElementById('ws-autocall-tog'), d=document.getElementById('ws-delay-tog'), row=document.getElementById('ws-delay-row');
+  if(a) a.classList.toggle('on', ws.autoCallOff===true);
+  if(d) d.classList.toggle('on', ws.callDelay15===true);
+  if(row){ row.style.opacity = ws.autoCallOff===true ? '0.45' : ''; row.style.pointerEvents = ws.autoCallOff===true ? 'none' : ''; }
+}
+function _wsCallModeSave(msg){
+  save('settings', settings);
+  _wsCallModeUI();
+  try{ _pushWaitScreenData(); }catch(e){}
+  try{ if(window._tvCastActive) _pushTvCastData(); }catch(e){}
+  showNotif('📺 شاشة الانتظار', msg, 'success');
+}
+function wsAutoCallOffToggle(){
+  var ws=_wsGetSettings(); ws.autoCallOff = !(ws.autoCallOff===true);
+  _wsCallModeSave(ws.autoCallOff ? '🔕 المناداة التلقائية مطفأة — النداء من زر «نداء» في الطلبات فقط' : '🔔 المناداة التلقائية مفعّلة');
+}
+function wsCallDelayToggle(){
+  var ws=_wsGetSettings(); ws.callDelay15 = !(ws.callDelay15===true);
+  _wsCallModeSave(ws.callDelay15 ? '⏱️ يُنادى المريض بعد ١٥ ثانية من الطباعة' : '⚡ يُنادى المريض فور الطباعة');
 }
 
 // تهيئة واجهة إعدادات شاشة الانتظار عند فتح القسم
@@ -34864,6 +34967,7 @@ async function saveCultureEntry(opts){
         if(_old._dev) rec._dev=_old._dev;
         if(!rec.reqId && _old.reqId){ rec.reqId=_old.reqId; rec.reqTestId=_old.reqTestId||''; }
         if(_old._org) rec._org=_old._org;
+        if(_old._sid){ rec._sid=_old._sid; if(_old._psid) rec._psid=_old._psid; if(_old._rsid) rec._rsid=_old._rsid; }   // 🆔 رقم المزامنة المخفي يبقى كما هو
       }
     }
     // ⭐ ختم وقت التعديل — أساس ترجيح الأحدث في الدمج ومزامنة LAN
@@ -43159,8 +43263,8 @@ function openWaitScreen(mode){
   /* أول استقبال: سجّل كل الجاهزين الحاليين دون نطقهم */
   +'doneList.forEach(function(p){ _announcedIds[p.id] = true; });'
   +'_firstSnapshot = false;'
-  +'}else if(_speakEnabled){'
-  /* اكتشف الجاهزين الجدد فقط ونطقهم */
+  +'}else if(_speakEnabled && !e.data.autoOff){'
+  /* اكتشف الجاهزين الجدد فقط ونطقهم (🔕 «إطفاء المناداة التلقائية» ⇒ تُسجَّل فقط بلا نداء) */
   +'doneList.forEach(function(p){'
   +'if(!_announcedIds[p.id]){'
   +'_announcedIds[p.id] = true;'
@@ -43449,7 +43553,8 @@ function wsManualCall(reqId){
     }
     var name = String(r.patientName || '').trim();
     if(!name){ showNotif('تنبيه','لا يوجد اسم للمريض','warning'); return; }
-    /* نفس أثر «حفظ وطباعة»: المريض جاهز */
+    /* نفس أثر «حفظ وطباعة»: المريض جاهز — النداء اليدوي فوري دائماً (لا ينتظر الـ ١٥ ثانية) */
+    try{ if(_wsReadySeen) _wsReadySeen[r.id] = 1; }catch(_){}
     r.wsPrinted = true; r.wsDeviceHold = false; r._updatedAt = Date.now();
     saveOne('requests', requests, r);
     if(typeof updateWaitScreen === 'function') updateWaitScreen();
@@ -43459,14 +43564,54 @@ function wsManualCall(reqId){
   }catch(e){ console.warn('[wsManualCall]', e); }
 }
 
+/* ⏱️ «المناداة بعد ١٥ ثانية»: الطلب الجاهز يُحجب عن قائمة النداء ١٥ ثانية من لحظة جاهزيته
+   ثم يُنادى — على كل شاشات الانتظار (الحجب يبدأ من أول لحظة رُئي فيها جاهزاً على هذه الحاسبة). */
+var _WS_DELAY_MS = 15000;
+var _wsReadySeen = null, _wsHoldT = {};
+function _wsCallHeld(r){
+  try{
+    var ws = (settings && settings.waitScreen) || {};
+    if(!r || !ws.callDelay15 || ws.autoCallOff) return false;
+    var now = Date.now();
+    if(!_wsReadySeen){
+      /* أول تقييم بعد التشغيل/التفعيل: الجاهزون الآن قدامى ⇒ لا حجب ولا نداء متأخر لهم */
+      _wsReadySeen = {};
+      try{ (requests||[]).forEach(function(x){ if(x && x.status==='done' && x.wsPrinted && !(x._updatedAt && now - x._updatedAt < 20000)) _wsReadySeen[x.id] = 1; }); }catch(_){}
+    }
+    var t0 = _wsReadySeen[r.id];
+    if(t0 === undefined){ t0 = _wsReadySeen[r.id] = now; }
+    if(t0 === 1) return false;
+    var left = t0 + _WS_DELAY_MS - now;
+    if(left <= 0) return false;
+    if(!_wsHoldT[r.id]){
+      _wsHoldT[r.id] = setTimeout(function(){
+        delete _wsHoldT[r.id];
+        try{ if(typeof updateWaitScreen==='function') updateWaitScreen(); }catch(_){}
+      }, left + 400);
+    }
+    return true;
+  }catch(e){ return false; }
+}
+window._wsCallHeld = _wsCallHeld;
+
 // ⭐ نداء صريح لحظة الطباعة — لا يعتمد على مقارنة القوائم (doneList) إطلاقاً.
 //    يرسل أمر نداء مباشر لشاشة الانتظار المنبثقة ولشاشة البث اللاسلكي:
 //    الطباعة = النداء، بلا أي احتمال ضياع بسبب أول لقطة أو تكرار المعرّفات.
-function _wsCallPatient(reqId){
+function _wsCallPatient(reqId, _afterDelay){
   try{
     if(!reqId) return;
     var ws = (settings && settings.waitScreen) || {};
     if(ws.speakEnabled === false) return;
+    /* 🔕 المناداة التلقائية مطفأة ⇒ النداء فقط من زر «نداء» في واجهة الطلبات */
+    if(ws.autoCallOff === true) return;
+    /* ⏱️ المناداة بعد ١٥ ثانية من الطباعة */
+    if(ws.callDelay15 === true && !_afterDelay){
+      var _r0 = requests.find(function(x){ return x.id === reqId; });
+      if(_r0) _wsCallHeld(_r0);                          /* يسجّل لحظة الجاهزية إن لم تُسجَّل بعد */
+      var _t0 = (_wsReadySeen && _wsReadySeen[reqId] > 1) ? _wsReadySeen[reqId] : Date.now();
+      setTimeout(function(){ try{ _wsCallPatient(reqId, true); }catch(_){} }, Math.max(0, _t0 + _WS_DELAY_MS - Date.now()));
+      return;
+    }
     var r = requests.find(function(x){ return x.id === reqId; });
     if(!r) return;
     /* 🔕 طلب أُنشئ تلقائياً من الجهاز (LIS-CBC-…) لا يظهر على شاشة الانتظار
@@ -43527,10 +43672,11 @@ function _pushWaitScreenData(){
   }
   // قائمة المرضى الجاهزين (للناطق الصوتي)
   var doneList = filteredReqs
-    .filter(function(r){ return r.status==='done' && _wsIsReady(r); })
+    .filter(function(r){ return r.status==='done' && _wsIsReady(r) && !_wsCallHeld(r); })
     .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
   var ws = (settings&&settings.waitScreen)||{};
   var speakEnabled = ws.speakEnabled !== false;
+  var autoOff = ws.autoCallOff === true;
   try{
     win.postMessage({
       type:'WQ_UPDATE',
@@ -43538,7 +43684,8 @@ function _pushWaitScreenData(){
       cnt: cnt,
       scrollSpeed: _wsGetScrollSpeed(),
       doneList: doneList,
-      speakEnabled: speakEnabled
+      speakEnabled: speakEnabled,
+      autoOff: autoOff
     }, '*');
   }catch(e){}
 }
@@ -43574,10 +43721,11 @@ function _pushTvCastData(){
     });
     // قائمة المرضى الجاهزين (لعرض بطاقة النداء + الصوت في شاشة البث اللاسلكي)
     const doneList = filteredReqs
-      .filter(function(r){ return r.status==='done' && _wsIsReady(r); })
+      .filter(function(r){ return r.status==='done' && _wsIsReady(r) && !_wsCallHeld(r); })
       .map(function(r){ return { id: r.id, name: (r.patientName||'').toString() }; });
     const ws = (settings&&settings.waitScreen)||{};
     const speakEnabled = ws.speakEnabled !== false;
+    const autoOff = ws.autoCallOff === true;
     _lanSendRaw({
       type: 'tvcast_update',
       rows: rows,
@@ -43585,6 +43733,7 @@ function _pushTvCastData(){
       scrollSpeed: _wsGetScrollSpeed(),
       doneList: doneList,
       speakEnabled: speakEnabled,
+      autoOff: autoOff,
       ts: Date.now()
     });
   }catch(e){}
@@ -54296,9 +54445,9 @@ setTimeout(function(){
           if(!sel) return;
           var v=sel.value;
           if(v==='__manual__'){var m=document.getElementById('rv-manual-'+t.id);v=m?m.value:'';}
-          if(v!==undefined&&v!=='') req.results[t.id]=v;
+          if(typeof _resSetVal==='function') _resSetVal(req, t.id, v, sel); else if(v!==undefined&&v!=='') req.results[t.id]=v;
           var noteEl=document.getElementById('rnote-'+t.id);
-          if(noteEl&&noteEl.value) req.resultNotesPer[t.id]=noteEl.value;
+          if(typeof _resSetNote==='function') _resSetNote(req, t.id, noteEl); else if(noteEl&&noteEl.value) req.resultNotesPer[t.id]=noteEl.value;
         });
         var tech=document.getElementById('res-tech');
         if(tech) req.tech=tech.value;
@@ -56919,6 +57068,9 @@ function lisLanStartServer(){
       if(r && r.ok){
         _lanMode = 'server';
         _lanResetGate(); // ⭐ ابدأ مغلقاً حتى تكتمل المصالحة مع أول جهاز
+        /* ⭐ مستمع واحد فقط مهما أُعيد تشغيل السيرفير (الربط الاحتياطي يشغّله ويوقفه تلقائياً)
+           — كان كل تشغيل يضيف مستمعاً جديداً فتُعالَج كل رسالة أكثر من مرة */
+        if(!window._lanMsgBound){ window._lanMsgBound = true;
         window.electronAPI.onLanMessage(function(msg){
           var _raw = (typeof msg==='string' ? msg : msg.data);
           // ⭐ عند اتصال جهاز جديد: أعِد التفاوض من جديد (الأغنى يفوز)
@@ -56942,10 +57094,12 @@ function lisLanStartServer(){
           }catch(e){}
           _lanHandleMessage(_raw);
         });
+        }
         _lanOpenGate(); // لا عملاء بعد → اعمل بحرية؛ سيُعاد التفاوض عند أول اتصال
         _lanUpdateStatus();
         showNotif('🌐 LAN','✅ السيرفير يعمل','success');
-        setInterval(function(){ if(_lanMode==='server') _lanUpdateStatus(); }, 4000);
+        if(!window._lanStIv) window._lanStIv = setInterval(function(){ if(_lanMode==='server') _lanUpdateStatus(); }, 4000);
+        try{ if(window.AFO && AFO._onServerUp) AFO._onServerUp(); }catch(e){}
       } else {
         showNotif('LAN خطأ',(r&&r.error)||'فشل تشغيل السيرفير','error');
       }
@@ -59662,9 +59816,9 @@ function _collectInto(req){
       var m = document.getElementById('rv-manual-' + t.id);
       v = m ? m.value : '';
     }
-    if(v !== undefined && v !== '') req.results[t.id] = v;
+    if(typeof _resSetVal === 'function') _resSetVal(req, t.id, v, sel); else if(v !== undefined && v !== '') req.results[t.id] = v;
     var n = document.getElementById('rnote-' + t.id);
-    if(n && n.value) req.resultNotesPer[t.id] = n.value;
+    if(typeof _resSetNote === 'function') _resSetNote(req, t.id, n); else if(n && n.value) req.resultNotesPer[t.id] = n.value;
   });
 
   var tech = document.getElementById('res-tech'); if(tech) req.tech = tech.value;
@@ -70820,6 +70974,362 @@ if(document.readyState!=='loading') setTimeout(function(){ try{ if(typeof DB!=='
 else document.addEventListener('DOMContentLoaded', function(){ try{ ATT.init(); }catch(e){} });
 })();
 </script>
+<script id="msid-module">
+/* ══════════════════════════════════════════════════════════════════════════
+ * 🆔 MedLab Sync-ID v1 — رقم مزامنة مخفي (_sid) لكل ملف مريض وطلباته
+ * ────────────────────────────────────────────────────────────────────────
+ *  المشكلة: أول لقاء بين الحاسبات كان يرسل الأرشيف كاملاً (٣ حاسبات × ١٦ ألف
+ *  مريض ⇒ ٤٨ ألف عند الجميع).
+ *  القاعدة الجديدة (للمزامنة عبر Firebase وعبر الواي فاي معاً):
+ *   • لا يُزامَن إلا سجل يحمل رقم مزامنة مخفياً _sid.
+ *   • الرقم يُعطى تلقائياً لكل سجل جديد يُنشأ بعد هذا التحديث فقط.
+ *     الأرشيف القديم (لقطة بلحظة التحديث) يبقى محلياً في حاسبته ولا يُرسل.
+ *   • ملف مريض قديم يُستخدم لطلب جديد ⇒ يأخذ رقماً «حتمياً» (مشتقاً من الملف
+ *     نفسه) فيكون الرقم واحداً على كل الحاسبات التي تملك الملف ⇒ لا تكرار.
+ *   • الرقم فريد بين كل الحاسبات والمرضى: رقم الحاسبة + الوقت + بصمة الجهاز.
+ *   • الاستلام: السجل يُطابَق بـ _sid — موجود ⇒ تحديث (لا إضافة)، غير موجود ⇒
+ *     إضافة؛ وإن صادف رقم ملف محلي لكيان آخر يُعاد ترقيم الوارد بلا طمس.
+ *   • روابط الطلب بالمريض تُحفظ بالرقم المخفي أيضاً (_psid / _rsid) فتبقى
+ *     صحيحة حتى لو اختلف رقم الملف الظاهر بين حاسبتين.
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+var SX = window.SIDX = window.SIDX || {};
+var COLS   = {patients:1, requests:1, invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+var LINK_P = {requests:1, invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+var LINK_R = {invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+var RECENT_MS = 36*3600*1000;      // سجلات آخر ٣٦ ساعة عند التحديث تبقى قابلة للمزامنة (رقم حتمي)
+var OLD_MS    = 10*60*1000;        // سجل منشؤه قبل التحديث بأكثر من ١٠ دقائق = أرشيف
+var BULK      = 400;               // ظهور مفاجئ لأكثر من هذا العدد بلا رقم = استيراد/استعادة ⇒ أرشيف
+SX.COLS = COLS; SX.LINK_P = LINK_P; SX.LINK_R = LINK_R;
+
+var S = { ready:false, pfx:'', T0:0, legacy:{}, sidById:{}, idx:{}, ver:{}, legacyDirty:{}, pend:{}, pendT:null, starting:false };
+SX._S = S;
+
+/* ── أدوات ── */
+function h53(str, seed){
+  var h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
+  for(var i=0, ch; i<str.length; i++){ ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+  h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1>>>0)).toString(36);
+}
+function code4(s){ return ('0000'+h53(String(s), 3)).slice(-5); }
+function pfx(){ try{ return DB._pfx(); }catch(e){ return 'mlab2_'; } }
+function hasUser(){ try{ return !!DB._user; }catch(e){ return false; } }
+function devId(){ try{ return localStorage.getItem('lis_lan_devid') || ''; }catch(e){ return ''; } }
+function devNo(){ try{ var n = parseInt(localStorage.getItem('lis_device_no')||'0',10); return (n>=1 && n<=99) ? n : 0; }catch(e){ return 0; } }
+var _seq = 0;
+function newSid(){
+  _seq = (_seq+1) % 1296;
+  return 'S' + devNo().toString(36) + '.' + Date.now().toString(36) + ('0'+_seq.toString(36)).slice(-2) + '.' +
+         h53(devId()||'x', 1).slice(0,4) + Math.random().toString(36).slice(2,6);
+}
+function orgOf(o){
+  var t = o && (o._org || o.regTime || o.createdAt);
+  if(!t) return 0;
+  var n = (typeof t === 'number') ? t : Date.parse(t);
+  return isNaN(n) ? 0 : n;
+}
+/* رقم حتمي: نفس الملف ⇒ نفس الرقم على كل الحاسبات (يحوي رقم الملف + لحظة المنشأ + الجهاز المنشئ) */
+function detSid(o){
+  var org = o._org || o.regTime || o.createdAt || '';
+  var base = String(o.id) + '|' + org + '|' + (o._dev||'');
+  if(!org) base += '|' + String(o.name || o.patientName || '') + '|' + String(o.registered || o.date || '');
+  return 'L' + h53(base, 0) + h53(base, 7);
+}
+function sidFor(o){ return (orgOf(o) || o._dev) ? detSid(o) : newSid(); }
+SX.newSid = newSid; SX.detSid = detSid;
+SX.isSid = function(x){ return typeof x === 'string' && /^[SL][0-9a-z]/.test(x) && x.length >= 10; };
+
+/* المصفوفة الحيّة لكل مجموعة (المتغيّرات العامة للبرنامج) */
+function getArr(col){
+  var v;
+  try{
+    switch(col){
+      case 'patients': v = patients; break;
+      case 'requests': v = requests; break;
+      case 'invoices': v = invoices; break;
+      case 'billing':  v = billingRecords; break;
+      case 'cultureRecords':   v = (typeof cultureRecords!=='undefined') ? cultureRecords : null; break;
+      case 'uaRecords':        v = (typeof uaRecords!=='undefined') ? uaRecords : null; break;
+      case 'stoolExamRecords': v = (typeof stoolExamRecords!=='undefined') ? stoolExamRecords : null; break;
+      case 'semenRecords':     v = (typeof semenRecords!=='undefined') ? semenRecords : null; break;
+    }
+  }catch(e){ v = null; }
+  if(Array.isArray(v)) return v;
+  try{ var w = load(col, []); return Array.isArray(w) ? w : []; }catch(e){ return []; }
+}
+SX.arr = getArr;
+
+/* ── فهرس (sid ⇒ سجل) و (id ⇒ سجل) — يُبنى عند الطلب ويُبطَل عند كل حفظ ── */
+function index(col){
+  var a = getArr(col), c = S.idx[col];
+  if(c && c.arr === a && c.len === a.length && c.ver === (S.ver[col]||0)) return c;
+  var bySid = {}, byId = {};
+  for(var i=0;i<a.length;i++){
+    var o = a[i]; if(!o || typeof o !== 'object') continue;
+    if(o._sid) bySid[o._sid] = o;
+    if(o.id != null && o.id !== '') byId[String(o.id)] = o;
+  }
+  c = S.idx[col] = {arr:a, len:a.length, ver:(S.ver[col]||0), bySid:bySid, byId:byId};
+  return c;
+}
+SX.index = index;
+SX.touch = function(col){ S.ver[col] = (S.ver[col]||0) + 1; };
+
+/* ── الأرشيف (لقطة المعرّفات القديمة بلحظة التحديث) ── */
+function legKey(col){ return pfx() + 'msid_legacy_' + col; }
+function flagKey(){ return pfx() + 'msid_v1'; }
+function saveLegacy(col){
+  try{ IDB.set(legKey(col), Array.from(S.legacy[col] || [])); }catch(e){}
+}
+var _legT = null;
+function scheduleLegacySave(){
+  if(_legT) return;
+  _legT = setTimeout(function(){ _legT = null; Object.keys(S.legacyDirty).forEach(function(c){ saveLegacy(c); }); S.legacyDirty = {}; }, 3000);
+}
+function isLegacy(col, rec){
+  var L = S.legacy[col];
+  if(L && rec.id != null && L.has(String(rec.id))) return true;
+  var org = orgOf(rec);
+  return !!(org && org < S.T0 - OLD_MS);
+}
+
+/* يضمن رقماً لسجل (يُستخدم للترقية: مريض قديم لطلب جديد) — يُرجع true إن أُعطي رقم جديد */
+function ensureSid(col, rec){
+  if(!rec || typeof rec !== 'object' || rec._sid) return false;
+  if(rec.id == null || rec.id === '') return false;
+  var prev = S.sidById[col] && S.sidById[col][String(rec.id)];
+  rec._sid = prev || (isLegacy(col, rec) ? detSid(rec) : sidFor(rec));
+  (S.sidById[col] || (S.sidById[col] = {}))[String(rec.id)] = rec._sid;
+  SX.touch(col);
+  return true;
+}
+/* يُجدول حفظ سجلات رُقّيت من مجموعة أخرى */
+function queueSave(col, rec){
+  (S.pend[col] || (S.pend[col] = [])).push(rec);
+  if(S.pendT) return;
+  S.pendT = setTimeout(function(){
+    S.pendT = null;
+    var p = S.pend; S.pend = {};
+    Object.keys(p).forEach(function(c){
+      try{ var a = getArr(c); saveOne.apply(null, [c, a].concat(p[c])); }catch(e){ try{ save(c, getArr(c)); }catch(e2){} }
+    });
+  }, 0);
+}
+/* روابط المريض/الطلب بالرقم المخفي — يُرجع true إن تغيّر السجل */
+function linkFix(col, rec){
+  var ch = false;
+  if(LINK_P[col] && rec.patientId != null && rec.patientId !== '' && rec._pidAt !== rec.patientId){
+    var p = index('patients').byId[String(rec.patientId)];
+    if(p){
+      if(!p._sid && ensureSid('patients', p)) queueSave('patients', p);
+      if(p._sid){ if(rec._psid !== p._sid) rec._psid = p._sid; rec._pidAt = rec.patientId; ch = true; }
+    }
+  }
+  if(LINK_R[col] && rec.reqId != null && rec.reqId !== '' && rec._ridAt !== rec.reqId){
+    var r = index('requests').byId[String(rec.reqId)];
+    if(r){
+      if(!r._sid && ensureSid('requests', r)){ linkFix('requests', r); queueSave('requests', r); }
+      if(r._sid){ if(rec._rsid !== r._sid) rec._rsid = r._sid; rec._ridAt = rec.reqId; ch = true; }
+    }
+  }
+  return ch;
+}
+
+/* ═════ الخطّاف: يُستدعى من save() قبل الكتابة — يُرجع السجلات التي خُتمت ═════ */
+window._sidOnSave = function(k, arr){
+  if(!COLS[k] || !Array.isArray(arr)) return null;
+  SX.touch(k);
+  if(!S.ready || S.pfx !== pfx()) return null;
+  var L = S.legacy[k] || (S.legacy[k] = new Set());
+  var map = S.sidById[k] || (S.sidById[k] = {});
+  var stamped = [], fresh = [], seen = {}, i, o, id;
+  for(i=0;i<arr.length;i++){
+    o = arr[i];
+    if(!o || typeof o !== 'object') continue;
+    if(o._sid){
+      if(o.id != null){ seen[String(o.id)] = 1; if(map[String(o.id)] !== o._sid) map[String(o.id)] = o._sid; }
+      if((LINK_P[k] && o._pidAt !== o.patientId && o.patientId != null) || (LINK_R[k] && o._ridAt !== o.reqId && o.reqId != null)){
+        if(linkFix(k, o)) stamped.push(o);
+      }
+      continue;
+    }
+    if(o.id == null || o.id === '') continue;
+    id = String(o.id);
+    if(map[id]){ o._sid = map[id]; seen[id] = 1; linkFix(k, o); stamped.push(o); continue; }   // رقم سقط أثناء تعديل ⇒ يُستعاد
+    if(L.has(id)) continue;
+    var org = orgOf(o);
+    if(org && org < S.T0 - OLD_MS){ L.add(id); S.legacyDirty[k] = 1; continue; }  // سجل قديم ⇒ أرشيف
+    fresh.push(o);
+  }
+  if(fresh.length > BULK){
+    /* 🛡️ ظهور مفاجئ لعدد كبير بلا رقم (استيراد/استعادة نسخة) ⇒ أرشيف محلي لا يُرسل */
+    for(i=0;i<fresh.length;i++) L.add(String(fresh[i].id));
+    S.legacyDirty[k] = 1;
+    try{ console.warn('[SID] bulk '+k+' x'+fresh.length+' ⇒ archived locally (not synced)'); }catch(e){}
+    fresh = [];
+  }
+  for(i=0;i<fresh.length;i++){
+    o = fresh[i];
+    o._sid = sidFor(o);
+    map[String(o.id)] = o._sid; seen[String(o.id)] = 1;
+    linkFix(k, o);
+    stamped.push(o);
+  }
+  /* سجلات حُذفت ⇒ لا يُعاد رقمها لسجل آخر يحمل الرقم الظاهر نفسه مستقبلاً */
+  for(id in map){ if(!seen[id]) delete map[id]; }
+  if(Object.keys(S.legacyDirty).length) scheduleLegacySave();
+  return stamped;
+};
+
+/* ═════ الاستلام: تحويل سجل وارد إلى تمثيله المحلي ═════ */
+var _fixQ = {}, _fixT = null;
+function fixLinksLater(col, sid, nid){
+  _fixQ[col+'|'+sid] = {col:col, sid:sid, nid:nid};
+  if(_fixT) return;
+  _fixT = setTimeout(function(){
+    _fixT = null;
+    var jobs = _fixQ; _fixQ = {};
+    var byCol = {};
+    Object.keys(jobs).forEach(function(k){
+      var j = jobs[k];
+      var targets = (j.col === 'patients') ? LINK_P : (j.col === 'requests' ? LINK_R : null);
+      if(!targets) return;
+      Object.keys(targets).forEach(function(tc){
+        var a = getArr(tc);
+        for(var i=0;i<a.length;i++){
+          var r = a[i]; if(!r || typeof r !== 'object') continue;
+          if(j.col === 'patients' && r._psid === j.sid && r.patientId !== j.nid){ r.patientId = j.nid; r._pidAt = j.nid; (byCol[tc]||(byCol[tc]=[])).push(r); }
+          if(j.col === 'requests' && r._rsid === j.sid && r.reqId !== j.nid){ r.reqId = j.nid; r._ridAt = j.nid; (byCol[tc]||(byCol[tc]=[])).push(r); }
+        }
+      });
+    });
+    Object.keys(byCol).forEach(function(tc){ try{ saveOne.apply(null, [tc, getArr(tc)].concat(byCol[tc])); }catch(e){} });
+  }, 900);
+}
+/* ctx اختياري: {bySid, byId} يُحدَّث أثناء دفعة واحدة */
+SX.adopt = function(col, rec, ctx){
+  if(!rec || typeof rec !== 'object' || !rec._sid) return null;
+  ctx = ctx || index(col);
+  var out = Object.assign({}, rec);
+  var local = ctx.bySid[rec._sid];
+  if(local){
+    if(local.id != null) out.id = local.id;
+    if(col === 'patients' && local.barcode != null) out.barcode = local.barcode;
+  } else if(out.id != null && out.id !== ''){
+    var clash = ctx.byId[String(out.id)];
+    /* نفس الكيان لكنه لم يأخذ رقمه هنا بعد (رقم حتمي متطابق) ⇒ هو نفسه، لا إعادة ترقيم */
+    if(clash && !clash._sid && detSid(clash) === rec._sid){
+      clash._sid = rec._sid; ctx.bySid[rec._sid] = clash;
+      if(col === 'patients' && clash.barcode != null) out.barcode = clash.barcode;
+    }
+    else if(clash && clash._sid !== rec._sid){
+      /* رقم الملف مستخدم محلياً لكيان آخر ⇒ إعادة ترقيم الوارد (حتمية) بلا طمس */
+      var nid = String(out.id) + '~' + code4(rec._sid);
+      out.id = nid;
+      if(col === 'patients' && out.barcode != null) out.barcode = nid;
+      if(col === 'patients' || col === 'requests') fixLinksLater(col, rec._sid, nid);
+    }
+  }
+  if(LINK_P[col] && out._psid){
+    var p = index('patients').bySid[out._psid];
+    if(p && p.id != null){ out.patientId = p.id; out._pidAt = p.id; }
+    else if(out.patientId != null){ out._pidAt = out.patientId; }
+  }
+  if(LINK_R[col] && out._rsid){
+    var r = index('requests').bySid[out._rsid];
+    if(r && r.id != null){ out.reqId = r.id; out._ridAt = r.id; }
+    else if(out.reqId != null){ out._ridAt = out.reqId; }
+  }
+  /* سجّل في الفهرس المؤقت حتى لا يتكرر داخل الدفعة نفسها */
+  ctx.bySid[out._sid] = out;
+  if(out.id != null) ctx.byId[String(out.id)] = out;
+  if(out.id != null) (S.sidById[col] || (S.sidById[col] = {}))[String(out.id)] = out._sid;
+  return out;
+};
+/* دفعة كاملة (مسار الواي فاي): يُسقط ما لا يحمل رقماً، ويوحّد المكرر داخل الدفعة */
+SX.adoptMany = function(col, list){
+  if(!Array.isArray(list)) return [];
+  var base = index(col), ctx = {bySid:Object.assign({}, base.bySid), byId:Object.assign({}, base.byId)};
+  var out = [], seen = {};
+  for(var i=0;i<list.length;i++){
+    var r = list[i];
+    if(!r || typeof r !== 'object' || !r._sid) continue;
+    var a = SX.adopt(col, r, ctx);
+    if(!a) continue;
+    if(seen[a._sid] !== undefined){ out[seen[a._sid]] = a; continue; }
+    seen[a._sid] = out.length; out.push(a);
+  }
+  return out;
+};
+
+/* ═════ التهيئة: لقطة الأرشيف مرة واحدة لكل حساب ═════ */
+function boot(){
+  if(S.starting) return;
+  if(!hasUser() || !window._msDataReady){ setTimeout(boot, 1500); return; }
+  S.starting = true;
+  var p = pfx();
+  var flag = 0; try{ flag = parseInt(localStorage.getItem(flagKey())||'0',10)||0; }catch(e){}
+  var cols = Object.keys(COLS);
+  if(flag){
+    S.T0 = flag;
+    Promise.all(cols.map(function(c){
+      return Promise.resolve(IDB.get(legKey(c))).catch(function(){ return null; }).then(function(v){ S.legacy[c] = new Set(Array.isArray(v) ? v.map(String) : []); });
+    })).then(function(){ finishBoot(p, false); }).catch(function(){ finishBoot(p, false); });
+    return;
+  }
+  /* أول تشغيل بعد التحديث: كل ما هو موجود الآن = أرشيف، عدا سجلات آخر ٣٦ ساعة (رقم حتمي) */
+  S.T0 = Date.now();
+  var stamped = {};
+  cols.forEach(function(c){
+    var set = new Set(), seenIds = {};
+    var lists = [getArr(c)];
+    try{ var st = load(c, []); if(Array.isArray(st) && st !== lists[0]) lists.push(st); }catch(e){}
+    lists.forEach(function(a, li){
+      for(var i=0;i<a.length;i++){
+        var o = a[i]; if(!o || typeof o !== 'object' || o.id == null || o.id === '') continue;
+        var id = String(o.id); if(seenIds[id]) continue; seenIds[id] = 1;
+        if(o._sid) continue;
+        var org = orgOf(o);
+        if(li === 0 && org && org >= S.T0 - RECENT_MS){ o._sid = detSid(o); (stamped[c] || (stamped[c] = [])).push(o); }
+        else set.add(id);
+      }
+    });
+    S.legacy[c] = set;
+    saveLegacy(c);
+  });
+  try{ localStorage.setItem(flagKey(), String(S.T0)); }catch(e){}
+  finishBoot(p, stamped);
+}
+function finishBoot(p, stamped){
+  S.pfx = p;
+  /* خريطة id ⇒ sid لاستعادة الرقم إن سقط أثناء تعديل يعيد بناء السجل */
+  Object.keys(COLS).forEach(function(c){
+    var a = getArr(c), m = S.sidById[c] = {};
+    for(var i=0;i<a.length;i++){ var o = a[i]; if(o && o._sid && o.id != null) m[String(o.id)] = o._sid; }
+  });
+  S.ready = true;
+  SX.ready = true;
+  if(stamped){
+    /* الحفظ يمرّ بالخطّاف فتُضاف الروابط (_psid/_rsid) ثم يلتقطها محرّك المزامنة */
+    ['patients','requests','invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords'].forEach(function(c){
+      if(stamped[c] && stamped[c].length){ try{ saveOne.apply(null, [c, getArr(c)].concat(stamped[c])); }catch(e){ try{ save(c, getArr(c)); }catch(e2){} } }
+    });
+    try{ console.log('[SID] first run — archive snapshot taken; recent records stamped:', JSON.stringify(Object.keys(stamped).reduce(function(o,c){ o[c]=stamped[c].length; return o; },{}))); }catch(e){}
+  }
+}
+SX.isReady = function(){ return S.ready && S.pfx === pfx(); };
+SX.stats = function(){
+  var o = {};
+  Object.keys(COLS).forEach(function(c){ var a = getArr(c), n = 0; for(var i=0;i<a.length;i++) if(a[i] && a[i]._sid) n++; o[c] = {all:a.length, synced:n, archive:(S.legacy[c]?S.legacy[c].size:0)}; });
+  return o;
+};
+setTimeout(boot, 800);
+})();
+</script>
+
 <script id="msync-module">
 /* ══════════════════════════════════════════════════════════════════════════
  * ☁️ MedLab Cloud Sync (MSync v1) — مزامنة سحابية عبر Firebase كناقل لحظي فقط
@@ -70865,6 +71375,9 @@ var BIG_KEYS = ['headerImg','footerImg','hdrTplLogo','wmImg','hdrImgH','ftrImgH'
 var ATT_REC = ['att_employees','att_logs','att_leaves'];
 var ATT_LOCAL = {cameraId:1, camMode:1};
 var DELTA = {patients:1,requests:1,invoices:1,billing:1,cultureRecords:1,uaRecords:1,stoolExamRecords:1,semenRecords:1};
+/* 🆔 مجموعات «رقم المزامنة المخفي»: لا يُزامَن منها إلا ما يحمل _sid (الجديد فقط) — المفتاح هو _sid لا رقم الملف */
+var SIDC = {patients:1,requests:1,invoices:1,billing:1,cultureRecords:1,uaRecords:1,stoolExamRecords:1,semenRecords:1};
+function sidOn(){ return !!(window.SIDX && SIDX.adopt); }
 
 /* ═══ 🔬 قاعدة التحاليل — اتجاه واحد عبر Firebase ═══
    • الحاسبة رقم 1 تُصدّر القاعدة ولا تستلمها أبداً.
@@ -70961,6 +71474,7 @@ async function unpack(p){
 /* ═════════════════════ المجموعات ═════════════════════ */
 function idOf(col, o, i){
   if(!o || typeof o!=='object') return null;
+  if(SIDC[col]) return o._sid ? String(o._sid) : null;      // 🆔 الأرشيف بلا رقم مزامنة ⇒ لا يُرسل أبداً
   if(col==='phoneBook') return o.phone ? String(o.phone) : null;
   if(col==='customAbxEntries') return o.code ? String(o.code) : null;
   if(o.id!=null && o.id!=='') return String(o.id);
@@ -71083,7 +71597,7 @@ function listOf(col){
    meta[col][id] = [hash, version(توقيت الخادم), r(لحظة التغيّر المحلي بساعة الحاسبة)]
    hash = 0 ⇒ علامة حذف */
 var _metaSaveT={};
-function metaKey(col){ return pfxKey('msync_meta_'+col); }
+function metaKey(col){ return pfxKey((SIDC[col]?'msync_metaS_':'msync_meta_')+col); }
 function metaSave(col){
   clearTimeout(_metaSaveT[col]);
   _metaSaveT[col]=setTimeout(function(){ try{ IDB.set(metaKey(col), S.meta[col]||{}); }catch(e){} }, 1500);
@@ -71113,7 +71627,8 @@ function quickDiff(col, ids){
   var meta=S.meta[col]||(S.meta[col]={}), arr=c.arr(), want={}, out=[];
   ids.forEach(function(x){ want[String(x)]=1; });
   for(var i=0;i<arr.length;i++){
-    var o=arr[i], id=idOf(col,o,i); if(!id || !want[id]) continue;
+    var o=arr[i], id=idOf(col,o,i); if(!id) continue;
+    if(!want[id] && !(SIDC[col] && o.id!=null && want[String(o.id)])) continue;   // المعرّفات المُعدّلة تصل بأرقام الملفات
     var h=fnv(JSON.stringify(o)), m=meta[id];
     if(!m || m[0]!==h){ meta[id]=[h, noteChange(col,id,o,m), R()]; out.push(id); }
   }
@@ -71295,7 +71810,9 @@ function mergeReq(win, lose){
     if(!L || typeof L!=='object' || Array.isArray(L)) return;
     if(W!=null && (typeof W!=='object' || Array.isArray(W))) return;
     var add=null;
-    for(var k in L){ if(L[k]!==undefined && L[k]!=='' && L[k]!==null && (!W || W[k]===undefined)){ (add||(add={}))[k]=L[k]; } }
+    /* 🧹 نتيجة/ملاحظة مسحها المستخدم عمداً (شاهد مسح) لا تُستعاد من النسخة الأقدم */
+    var tomb = (f==='results') ? win._resCleared : (f==='resultNotesPer' ? win._noteCleared : null);
+    for(var k in L){ if(L[k]!==undefined && L[k]!=='' && L[k]!==null && (!W || W[k]===undefined) && !(tomb && tomb[k])){ (add||(add={}))[k]=L[k]; } }
     if(!add) return;
     if(!out) out=Object.assign({}, win);
     out[f]=Object.assign({}, W||{}, add);
@@ -71347,6 +71864,7 @@ function applyRows(col, rows, peer){
     metaSave(col);
     return sets.length+dels.length;
   }
+  if(SIDC[col]) return applySidRows(col, rows, meta);
   var c=COL(col); if(!c) return 0;
   var arr=c.arr(), idx={}, i;
   for(i=0;i<arr.length;i++){ var iid=idOf(col,arr[i],i); if(iid) idx[iid]=i; }
@@ -71410,7 +71928,79 @@ function applyRows(col, rows, peer){
   return changed.length+removed;
 }
 
+/* 🆔 تطبيق وارد مجموعات رقم المزامنة: المطابقة بـ _sid (موجود ⇒ تحديث، غير موجود ⇒ إضافة)
+   ورقم الملف/روابط المريض تُحوَّل إلى ما يقابلها محلياً — لا تكرار ولا طمس */
+function applySidRows(col, rows, meta){
+  var c=COL(col); if(!c || !sidOn()) return 0;
+  var arr=c.arr(), pos={}, ctx={bySid:{}, byId:{}}, j, o;
+  for(j=0;j<arr.length;j++){
+    o=arr[j]; if(!o || typeof o!=='object') continue;
+    if(o._sid){ pos[o._sid]=j; ctx.bySid[o._sid]=o; }
+    if(o.id!=null && o.id!=='') ctx.byId[String(o.id)]=o;
+  }
+  var changed=[], removed=0;
+  rows.forEach(function(r){
+    var sid=r[0], v=r[1], rec=r[2], m=meta[sid], p=pos[sid];
+    if(rec==null){
+      if(!m && !SIDX.isSid(sid)) return;                      // شاهد حذف بمعرّف قديم (حاسبة بإصدار سابق) ⇒ يُتجاهل
+      if(m && v<=m[1]) return;
+      if(p!==undefined && arr[p]){ arr[p]=null; removed++; delete pos[sid]; delete ctx.bySid[sid]; }
+      meta[sid]=[0,v,R()];
+      return;
+    }
+    if(typeof rec!=='object' || !rec._sid) return;           // سجل بلا رقم مزامنة ⇒ لا يُقبل
+    if(rec._sid!==sid) rec=Object.assign({}, rec, {_sid:sid});
+    if(m && m[0]===0 && v<=m[1]) return;                      // حُذف هنا بعد هذا الإصدار
+    if(p===undefined && rec.id!=null){
+      /* نفس الكيان موجود هنا ولم يأخذ رقمه بعد (رقم حتمي متطابق) ⇒ تحديث لا إضافة */
+      var cl=ctx.byId[String(rec.id)];
+      if(cl && !cl._sid && SIDX.detSid(cl)===sid){ var ci=arr.indexOf(cl); if(ci>-1){ cl._sid=sid; ctx.bySid[sid]=cl; pos[sid]=ci; p=ci; } }
+    }
+    var local=(p!==undefined)?arr[p]:null;
+    var nrec=SIDX.adopt(col, rec, ctx);
+    if(!nrec) return;
+    if(!local){
+      arr.push(nrec); pos[sid]=arr.length-1;
+      meta[sid]=[fnv(JSON.stringify(nrec)),v,R()]; changed.push(nrec); return;
+    }
+    var h=fnv(JSON.stringify(nrec));
+    if(m && h===m[0]){ if(v>m[1]) m[1]=v; return; }          // المحتوى نفسه ⇒ لا شيء
+    var win = m ? (v>m[1] || (v===m[1] && JSON.stringify(nrec)>JSON.stringify(local))) : (v>=vOf(local));
+    if(!win) return;
+    var fin=(col==='requests') ? mergeReq(nrec, local) : nrec;
+    arr[p]=fin;
+    var nh=fnv(JSON.stringify(fin));
+    meta[sid]=[nh, v, R()];
+    changed.push(fin);
+    if(nh!==h){ meta[sid]=[nh, Math.max(srv(), v+1), R()]; queueLive(col,[sid],true); }
+  });
+  if(removed){ arr=arr.filter(function(x){ return x!==null; }); }
+  if(changed.length || removed){
+    S.applying=true; window._msApplying=true;
+    try{ c.write(arr, changed, removed); }catch(e){ console.warn('[MSync] write', col, e); }
+    finally{ S.applying=false; window._msApplying=false; }
+    try{ SIDX.touch(col); }catch(e){}
+    render(col);
+  }
+  metaSave(col);
+  return changed.length+removed;
+}
+
 /* ═════════════════════ البصمة والمؤشّرات ═════════════════════ */
+/* 🔁 منع إعادة الإرسال بعد عودة الإنترنت: ما وصل لنا (أو أنشأناه) منذ آخر لقاء سحابي مع حاسبة
+   يُرسل لها كبصمة صغيرة (رقم + بصمة محتوى) فلا تعيد لنا ما استلمناه عبر الواي فاي أثناء الانقطاع */
+function lastOkKey(){ return 'msync_lastok_'+S.acct; }
+function recentDigest(peer){
+  var since=(S.lastOk && S.lastOk[peer]) ? S.lastOk[peer]-SKEW : 0;
+  if(!since) return null;
+  var out={}, n=0;
+  for(var col in SIDC){
+    var meta=S.meta[col]||{}, a=[];
+    for(var id in meta){ var m=meta[id]; if(m[0]!==0 && m[2]>since){ a.push(id, m[0]); if(++n>20000) return null; } }
+    if(a.length) out[col]=a;
+  }
+  return n ? out : null;
+}
 function digest(){
   var d={};
   allCols().forEach(function(col){
@@ -71455,6 +72045,7 @@ function pullFrom(peer, force){
   var cur=S.cursors[peer]||0;
   var payload={cur:cur, no:S.no};
   if(!cur) payload.dg=digest();
+  else { try{ var rd=recentDigest(peer); if(rd) payload.rd=rd; }catch(e){} }
   sendTo(peer, 'hi', payload, 0);
 }
 
@@ -71476,6 +72067,17 @@ function handle(k, m){
     } else if(m.y==='hi'){
       var upto=R();                                     // كل ما تغيّر قبل هذه اللحظة يُرسل الآن
       var ch=changesFor(d.cur||0, d.dg||null);
+      if(d.rd && typeof d.rd==='object'){
+        /* ما يملكه الطرف الآخر بالمحتوى نفسه (وصله عبر الواي فاي) ⇒ لا يُعاد إرساله */
+        Object.keys(ch.cols).forEach(function(col){
+          var a=d.rd[col]; if(!Array.isArray(a) || !SIDC[col]) return;
+          var have={}; for(var i=0;i<a.length;i+=2) have[a[i]]=a[i+1];
+          var meta=S.meta[col]||{}, before=ch.cols[col].length;
+          ch.cols[col]=ch.cols[col].filter(function(id){ return !(have[id] && meta[id] && meta[id][0]===have[id]); });
+          ch.n-=before-ch.cols[col].length;
+          if(!ch.cols[col].length) delete ch.cols[col];
+        });
+      }
       Object.keys(ch.cols).forEach(function(col){ sendRows(peer, col, rowsFor(col, ch.cols[col])); });
       sendTo(peer, 'ok', {upto:upto, n:ch.n}, 0);
       if(!S.hello[peer]) pullFrom(peer);                 // اتجاهان دائماً
@@ -71485,6 +72087,7 @@ function handle(k, m){
     } else if(m.y==='ok'){
       if(d.upto > (S.cursors[peer]||0)){ S.cursors[peer]=d.upto; saveCursors(); }
       S.pulled[peer]=Date.now();
+      try{ (S.lastOk||(S.lastOk={}))[peer]=Date.now(); lsSet(lastOkKey(), S.lastOk); }catch(e){}
       var st=S.stats; if(st){ st.peers[peer]=Date.now(); }
       S.lastSync=Date.now();
     }
@@ -71606,7 +72209,10 @@ MS.start = function(){
   MS.stop(true);
   S.acct=acct; S.root='msync/'+acct; S.me=devId();
   S.cursors=lsGet(curKey(), {})||{};
+  S.lastOk=lsGet('msync_lastok_'+acct, {})||{};
   S.lastR=parseInt(localStorage.getItem('msync_lastr_'+acct)||'0',10)||0;
+  /* 🆔 سجلات الإصدارات القديمة (مفهرسة بأرقام الملفات للأرشيف كاملاً) لم تعد مستخدمة ⇒ تُحذف مرة واحدة */
+  try{ if(!localStorage.getItem('msync_sidmeta_'+acct)){ Object.keys(SIDC).forEach(function(c){ try{ Promise.resolve(IDB.del(pfxKey('msync_meta_'+c))).catch(function(){}); }catch(e){} }); localStorage.setItem('msync_sidmeta_'+acct,'1'); } }catch(e){}
   S.no=parseInt(localStorage.getItem('lis_device_no')||'0',10)||0;
   loadStats();
   S.status='prep'; ui();
@@ -71681,6 +72287,8 @@ function renderCard(){
   h+='</div>';
   h+='<div class="ms-stats"><div><b>'+(st.sR||0)+'</b><span>سجل مُرسَل اليوم</span></div><div><b>'+(st.rR||0)+'</b><span>سجل مُستلَم اليوم</span></div>'
     +'<div><b>'+fmtB((st.mSB||0)+(st.mRB||0))+'</b><span>استهلاك هذا الشهر</span></div><div><b>'+(S.lastSync?ago(S.lastSync+(S.offset||0)):'—')+'</b><span>آخر نشاط</span></div></div>';
+  try{ if(window.SIDX && SIDX.isReady && SIDX.isReady()){ var _ss=SIDX.stats(); h+='<div class="ms-hint" style="margin-top:6px">🆔 تُزامَن الطلبات الجديدة فقط (برقم مزامنة مخفي): مرضى <b>'+_ss.patients.synced+'</b> · طلبات <b>'+_ss.requests.synced+'</b> — الأرشيف القديم يبقى محلياً في كل حاسبة ولا يُرسل.</div>'; } }catch(e){}
+  try{ if(window.AFO && AFO.cardHtml) h+=AFO.cardHtml(); }catch(e){}
   if(S.err) h+='<div class="ms-err">⚠️ '+esc(S.err)+'</div>';
   if(MS.lastWarn) h+='<div class="ms-warn">🛡️ '+esc(MS.lastWarn)+'</div>';
   if(S.status==='denied') h+='<div class="ms-err" style="direction:ltr;text-align:left;font-family:monospace;white-space:pre;font-size:10.5px">"msync": {\n  "$acct": { ".read": "auth != null", ".write": "auth != null" }\n}</div>';
@@ -71707,6 +72315,8 @@ MS._online = function(){ return (S.on && S.regDone) ? onlinePeers() : []; };
 MS._srv = srv;
 MS._send = function(peer, y, payload){ if(!S.on || !S.regDone) return Promise.resolve(false); return sendTo(peer, y, payload, 0).then(function(){ return true; }); };
 MS._name = myName;
+MS._devUpdate = function(o){ try{ if(S.on && S.db && S.regDone && S.me) return ref(S.root+'/dev/'+S.me).update(o).catch(function(){}); }catch(e){} return Promise.resolve(); };
+MS._connected = function(){ return !!(S.on && S.connected && S.regDone && S.status==='ok'); };
 MS.status = function(){ return {status:S.status, no:S.no, peers:S.peers, cursors:S.cursors, err:S.err}; };
 
 /* ربط زر «حفظ رقم الحاسبة» القديم بالسحابة حتى لا يتكرر الرقم */
@@ -72072,5 +72682,469 @@ document.addEventListener('click', function(e){
   try{ var t=e.target && e.target.closest && e.target.closest('[onclick*="pr-net"]'); if(t) setTimeout(RP.renderUI, 30); }catch(_){}
 }, true);
 setTimeout(function(){ try{ RP.renderUI(); }catch(e){} }, 1500);
+})();
+</script>
+
+<!-- ══════════ Sync-ID LAN guard + WiFi failover + ESR audio route + layout — لا تحذف ══════════ -->
+<style id="ml-oct-fixes">
+/* ① إدخال النتائج: التحاليل أكبر بدرجة وتتناسب مع عرض الشاشة */
+@media (min-width:769px){
+  #sec-results .res-tbl th{font-size:clamp(12.5px,0.42vw + 7px,14.5px) !important;padding:11px 14px !important;}
+  #sec-results .res-tbl td{padding:9px 14px !important;}
+  #res-entry-tbody td:first-child{font-size:clamp(14px,0.55vw + 7px,17px) !important;}
+  #res-entry-tbody td:first-child > span{font-size:clamp(10.5px,0.3vw + 6.5px,12px) !important;}
+  #res-entry-tbody td:first-child div[style*="font-size:13px"]{font-size:clamp(14px,0.55vw + 7px,17px) !important;}
+  #res-entry-tbody td:first-child div[style*="font-size:10px"]{font-size:clamp(11px,0.3vw + 7px,12.5px) !important;}
+  #res-entry-tbody .res-input{font-size:clamp(14px,0.5vw + 7px,16.5px) !important;min-height:36px;}
+  #res-entry-tbody input.res-input[type="text"]{width:clamp(110px,7.5vw,150px) !important;}
+  #res-entry-tbody select.res-input{width:clamp(145px,9vw,175px) !important;}
+  #res-entry-tbody td:nth-child(3){font-size:clamp(12.5px,0.4vw + 7px,14.5px) !important;}
+  #res-entry-tbody td:nth-child(4) span{font-size:clamp(12px,0.4vw + 6.5px,14px) !important;}
+  #res-entry-tbody td[id^="interp-"]{font-size:clamp(13px,0.45vw + 7px,15.5px) !important;}
+  #res-entry-tbody input[id^="rnote-"]{font-size:clamp(12px,0.4vw + 6.5px,14px) !important;width:clamp(110px,8vw,150px) !important;padding:6px 10px !important;}
+  #res-entry-tbody .cmp-sign-btn{font-size:15px;min-width:28px;min-height:30px;}
+}
+/* ③ بيانات المريض: نافذة بحجم شاشة اختيار التحاليل نفسها (لا على كامل الشاشة)
+      وكل الحقول في مكانها بلا تمرير — الخطوط والمسافات تتكيّف مع ارتفاع الشاشة */
+@media (min-width:769px){
+  #m-wizard.wiz-s1-ov{padding:16px !important;align-items:center !important;justify-content:center !important;}
+  #m-wizard.wiz-s1-ov > #m-wizard-inner.wiz-s1-mode{width:100% !important;max-width:1640px !important;height:92vh !important;max-height:92vh !important;
+    margin:auto !important;border-radius:18px !important;border-width:1px !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body{padding:clamp(6px,1.2vh,14px) clamp(10px,1.2vw,18px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body > div{padding:clamp(8px,1.6vh,20px) clamp(12px,1.6vw,26px) !important;gap:clamp(6px,1.4vh,18px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body label.fl{font-size:clamp(12.5px,1.95vh,17px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body input.fc,
+  #m-wizard-inner.wiz-s1-mode #wiz-body select#wp-phone-cc{font-size:clamp(13px,2.05vh,18px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body input.fc{padding-top:clamp(4px,0.95vh,11px) !important;padding-bottom:clamp(4px,0.95vh,11px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body [id^="title-btn-"],
+  #m-wizard-inner.wiz-s1-mode #wiz-body #wp-sidelab-btn{font-size:clamp(11.5px,1.8vh,15.5px) !important;padding:clamp(4px,0.8vh,9px) clamp(8px,0.85vw,15px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body #age-display{font-size:clamp(12.5px,1.95vh,17px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body .fg span{font-size:clamp(12px,1.85vh,16px);}
+  #m-wizard-inner.wiz-s1-mode #wiz-body #wp-age-y,
+  #m-wizard-inner.wiz-s1-mode #wiz-body #wp-age-m,
+  #m-wizard-inner.wiz-s1-mode #wiz-body #wp-age-d{width:clamp(64px,5.5vw,92px) !important;}
+  #m-wizard-inner.wiz-s1-mode #wiz-body #wp-birthyear{width:clamp(100px,8vw,140px) !important;}
+}
+/* 🛜 شارة الربط الاحتياطي */
+#afo-chip{position:fixed;left:14px;bottom:14px;z-index:99990;max-width:min(460px,calc(100vw - 28px));display:none;align-items:center;gap:8px;
+  padding:8px 14px;border-radius:12px;font-family:'Cairo',sans-serif;font-size:12.5px;font-weight:800;direction:rtl;
+  background:rgba(6,14,30,0.95);border:1.5px solid rgba(0,212,255,0.55);color:#e8f6ff;box-shadow:0 8px 28px rgba(0,0,0,0.45);}
+#afo-chip.on{display:flex;}
+#afo-chip b{color:#00e58f;font-family:monospace;font-size:14px;direction:ltr;unicode-bidi:embed;}
+#afo-chip .afo-x{cursor:pointer;opacity:.6;margin-right:4px;font-size:14px;}
+body.light-mode #afo-chip{background:#ffffff;color:#0b1b33;}
+.afo-box{margin-top:10px;padding:10px 12px;border-radius:10px;border:1px dashed rgba(0,212,255,0.45);background:rgba(0,212,255,0.05);font-size:11.5px;line-height:1.9;}
+.afo-box b.ip{font-family:monospace;font-size:13px;color:#00c46a;direction:ltr;unicode-bidi:embed;}
+</style>
+<div id="afo-chip"><span id="afo-chip-txt"></span><span class="afo-x" title="إخفاء" onclick="this.parentNode.classList.remove('on');window.__afoChipHidden=Date.now();">✕</span></div>
+<script id="ml-oct-fixes-js">
+/* ══════════════════════════════════════════════════════════════════════════
+ * ① حارس رقم المزامنة على مسار الواي فاي (LAN)
+ *    • الإرسال: لا يخرج من المرضى/الطلبات/الفحوصات الخاصة إلا ما يحمل _sid (الجديد فقط).
+ *    • الاستلام: يُسقط ما لا يحمل رقماً (حاسبة بإصدار قديم)، ويُطابق الوارد بالرقم المخفي
+ *      فيتحوّل إلى رقم الملف المحلي نفسه ⇒ الدمج يحدّث السجل ولا يكرره أبداً.
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(typeof window._lanSendRaw !== 'function' || typeof window._lanHandleMessage !== 'function') return;
+  function cols(){ return (window.SIDX && SIDX.COLS) || {}; }
+  var prevSend = window._lanSendRaw;
+  window._lanSendRaw = function(obj){
+    try{
+      if(obj && (obj.type === 'sync2' || obj.type === 'sync') && cols()[obj.key] && Array.isArray(obj.data)){
+        var d = obj.data.filter(function(r){ return r && typeof r === 'object' && r._sid; });
+        if(!d.length) return;                                     // أرشيف فقط ⇒ لا شيء يُرسل
+        if(d.length !== obj.data.length) obj = Object.assign({}, obj, {data:d});
+      }
+    }catch(e){}
+    return prevSend.call(this, obj);
+  };
+  var prevHandle = window._lanHandleMessage;
+  var RX_TYPE = /"type"\s*:\s*"([^"]{1,40})"/, RX_KEY = /"key"\s*:\s*"([^"]{1,40})"/;
+  window._lanHandleMessage = function(raw){
+    try{
+      if(typeof raw === 'string' && raw.length > 20){
+        var head = raw.length > 240 ? raw.substring(0, 240) : raw;
+        var mt = RX_TYPE.exec(head), type = mt ? mt[1] : '';
+        if(type === 'sync2' || type === 'sync'){
+          var mk = RX_KEY.exec(head), key = mk ? mk[1] : '';
+          if(cols()[key]){
+            var msg = JSON.parse(raw);
+            if(!(msg.from && typeof _lanDeviceId !== 'undefined' && msg.from === _lanDeviceId) && Array.isArray(msg.data)){
+              if(!(window.SIDX && SIDX.adoptMany)) return;            // لا يُقبل قبل جاهزية نظام الأرقام
+              var d = SIDX.adoptMany(key, msg.data);
+              if(!d.length) return;
+              msg.data = d;
+              raw = JSON.stringify(msg);
+            }
+          }
+        }
+      }
+    }catch(e){ try{ console.warn('[SID-LAN]', e); }catch(_){} }
+    return prevHandle.call(this, raw);
+  };
+  /* بعد أي تطبيق وارد عبر الواي فاي ⇒ أبطل فهرس الأرقام */
+  if(typeof window._lanApplyKey === 'function'){
+    var prevApply = window._lanApplyKey;
+    window._lanApplyKey = function(key){ var r = prevApply.apply(this, arguments); try{ if(window.SIDX && SIDX.touch) SIDX.touch(key); }catch(e){} return r; };
+  }
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * ② الربط الاحتياطي التلقائي عبر الواي فاي عند انقطاع الإنترنت
+ *    • الحاسبة رقم ١: يشتغل السيرفير تلقائياً ويظهر IP الواي فاي بلا قفل.
+ *    • الحاسبات فوق ١: تجد سيرفير الحاسبة ١ تلقائياً (IP محفوظ من السحابة ثم بحث في
+ *      الشبكة) وتتصل كعميل — لا إدخال يدوي.
+ *    • ما يُنشأ أثناء الانقطاع يُخزَّن ويُزامَن عبر الواي فاي (الجديد فقط وبلا تكرار).
+ *    • عند عودة الإنترنت: تعود المزامنة لـ Firebase، ويُفصل الربط الاحتياطي، ولا يُعاد
+ *      إرسال ما وصل عبر الواي فاي (بصمة المحتوى في المصافحة السحابية).
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var A = window.AFO = window.AFO || {};
+  A.cardHtml = function(){ return ''; };
+  if(!(window.electronAPI && window.electronAPI.lanStartServer)) return;   // الهاتف/المتصفح: لا ربط احتياطي
+  var PORT = (typeof _LAN_PORT !== 'undefined') ? _LAN_PORT : 8797;
+  var OFF_MS = 20000, ON_MS = 15000, TICK_MS = 4000;
+  var st = { mode:'idle', offSince:0, onSince:0, startedSrv:false, startedCli:false, srvIp:'', cliIp:'', searching:false,
+             lastSearch:0, infoFor:'', lastPub:0, msg:'', clients:0 };
+  A._st = st;
+
+  function h32(s){ var h=0x811c9dc5; s=String(s); for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h.toString(36); }
+  function acct(){ try{ return (window.MSync && MSync._acct) ? MSync._acct() : ''; }catch(e){ return ''; } }
+  function tag(){ var a = acct(); return a ? ('a' + h32('medlab|' + a)) : ''; }
+  function myNo(){ try{ var n = parseInt(localStorage.getItem('lis_device_no')||'0',10); return (n>=1 && n<=99) ? n : 0; }catch(e){ return 0; } }
+  function loggedIn(){ try{ var s = (typeof getSession === 'function') ? getSession() : null; return !!(s && s.username); }catch(e){ return false; } }
+  function cloudOk(){ try{ return navigator.onLine !== false && !!(window.MSync && MSync._connected && MSync._connected()); }catch(e){ return false; } }
+  function lanMode(){ try{ return (typeof _lanMode !== 'undefined') ? _lanMode : null; }catch(e){ return null; } }
+  function notif(t, m, ty){ try{ showNotif(t, m, ty || 'info'); }catch(e){} }
+  function lsG(k){ try{ return JSON.parse(localStorage.getItem(k) || 'null'); }catch(e){ return null; } }
+  function lsS(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function fetchJ(url, ms){
+    var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+    var to = setTimeout(function(){ try{ ctl && ctl.abort(); }catch(e){} }, ms || 1500);
+    return fetch(url, {cache:'no-store', signal: ctl ? ctl.signal : undefined})
+      .then(function(r){ clearTimeout(to); if(!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .catch(function(e){ clearTimeout(to); throw e; });
+  }
+  function cacheKey(){ return 'afo_srv_' + acct(); }
+
+  /* ── السيرفير (حاسبة ١): تعريف نفسه للمكتشِفين + IP الواي فاي ── */
+  function serverInfo(){
+    var t = tag(); if(!t) return Promise.resolve(null);
+    var base = 'http://127.0.0.1:' + PORT;
+    var setP = (st.infoFor === t + '|' + myNo()) ? Promise.resolve() :
+      fetchJ(base + '/__medlab-set?acct=' + encodeURIComponent(t) + '&no=' + myNo(), 1500).then(function(){ st.infoFor = t + '|' + myNo(); }).catch(function(){});
+    return setP.then(function(){ return fetchJ(base + '/__medlab-info', 1500); }).then(function(j){
+      var ip = (j && (j.ip || (j.lan && j.lan[0]))) || '';
+      if(ip) st.srvIp = ip;
+      return j;
+    }).catch(function(){
+      return (window.electronAPI.getLocalIP ? window.electronAPI.getLocalIP() : Promise.resolve('')).then(function(ip){ if(ip && ip !== '127.0.0.1') st.srvIp = ip; return null; }).catch(function(){ return null; });
+    });
+  }
+  A._onServerUp = function(){ setTimeout(function(){ serverInfo().then(function(){ ui(); }); }, 300); };
+
+  /* ── نشر عنوان حاسبة ١ في السحابة (وهي متصلة) ليُحفظ عند البقية للاتصال الفوري لاحقاً ── */
+  function publish(){
+    if(myNo() !== 1 || !cloudOk()) return;
+    if(Date.now() - st.lastPub < 120000) return;
+    st.lastPub = Date.now();
+    var ips = [];
+    var p1 = window.electronAPI.getLocalIP ? window.electronAPI.getLocalIP().then(function(ip){ if(ip && ip !== '127.0.0.1') ips.push(ip); }).catch(function(){}) : Promise.resolve();
+    var p2 = (lanMode() === 'server') ? serverInfo().then(function(j){ if(j){ if(j.ip) ips.unshift(j.ip); (j.lan||[]).forEach(function(x){ ips.push(x); }); } }) : Promise.resolve();
+    Promise.all([p1, p2]).then(function(){
+      var u = []; ips.forEach(function(x){ if(x && u.indexOf(x) < 0) u.push(x); });
+      if(u.length && window.MSync && MSync._devUpdate) MSync._devUpdate({ips:u.slice(0,5), port:PORT});
+    });
+  }
+  function cachePeers(){
+    try{
+      if(!cloudOk() || !window.MSync || !MSync._peers) return;
+      var p = MSync._peers() || {}, me = MSync._me ? MSync._me() : '';
+      Object.keys(p).forEach(function(id){
+        var x = p[id]; if(!x || id === me) return;
+        if(parseInt(x.no,10) === 1 && Array.isArray(x.ips) && x.ips.length) lsS(cacheKey(), {ips:x.ips, port:x.port||PORT, dev:id, ts:Date.now()});
+      });
+    }catch(e){}
+  }
+
+  /* ── العميل: البحث عن سيرفير الحاسبة ١ ── */
+  function probe(ip, ms){
+    var t = tag();
+    return fetchJ('http://' + ip + ':' + PORT + '/__medlab-info', ms || 1200).then(function(j){
+      if(j && j.app === 'medlab' && parseInt(j.no,10) === 1 && (!t || j.acct === t)) return ip;
+      throw new Error('no');
+    });
+  }
+  function wsProbe(ip, ms){
+    return new Promise(function(res, rej){
+      var done = false, ws;
+      var to = setTimeout(function(){ if(done) return; done = true; try{ ws && ws.close(); }catch(e){} rej(new Error('to')); }, ms || 1800);
+      try{
+        ws = new WebSocket('ws://' + ip + ':' + PORT);
+        ws.onopen = function(){ if(done) return; done = true; clearTimeout(to); try{ ws.close(); }catch(e){} res(ip); };
+        ws.onerror = function(){ if(done) return; done = true; clearTimeout(to); rej(new Error('err')); };
+      }catch(e){ clearTimeout(to); rej(e); }
+    });
+  }
+  function firstOf(list, fn){
+    var i = 0;
+    return new Promise(function(res){
+      (function next(){ if(i >= list.length) return res(''); var ip = list[i++]; fn(ip).then(res, next); })();
+    });
+  }
+  function scanSubnet(base){
+    return new Promise(function(res){
+      var ips = []; for(var n=1;n<=254;n++) ips.push(base + n);
+      var found = '', active = 0, idx = 0, LIM = 24;
+      (function pump(){
+        if(found) return;
+        if(idx >= ips.length && active === 0) return res('');
+        while(active < LIM && idx < ips.length){
+          var ip = ips[idx++]; active++;
+          probe(ip, 900).then(function(x){ if(!found){ found = x; res(x); } }, function(){}).then(function(){ active--; pump(); });
+        }
+      })();
+    });
+  }
+  function search(){
+    if(st.searching) return Promise.resolve('');
+    st.searching = true; st.lastSearch = Date.now(); st.msg = '🔎 جارِ البحث عن الحاسبة رقم ١ على الواي فاي…'; ui();
+    var c = lsG(cacheKey()) || {}, cand = [];
+    var last = lsG('afo_last_' + acct()); if(last && last.ip) cand.push(last.ip);
+    (c.ips || []).forEach(function(x){ if(cand.indexOf(x) < 0) cand.push(x); });
+    try{ if(typeof _lanLoadSaved === 'function'){ _lanLoadSaved(); (_lanSaved||[]).forEach(function(x){ if(x && x.role === 'client' && x.ip && cand.indexOf(x.ip) < 0) cand.push(x.ip); }); } }catch(e){}
+    return firstOf(cand, function(ip){ return probe(ip, 1500); }).then(function(ip){
+      if(ip) return ip;
+      /* سيرفير بإصدار main.js قديم لا يعرّف نفسه ⇒ نقبل عنوانه المحفوظ من السحابة لنفس الحساب فقط */
+      return firstOf((c.ips || []).slice(0, 3), function(x){ return wsProbe(x, 1800); });
+    }).then(function(ip){
+      if(ip) return ip;
+      var getIp = window.electronAPI.getLocalIP ? window.electronAPI.getLocalIP().catch(function(){ return ''; }) : Promise.resolve('');
+      return getIp.then(function(my){
+        var bases = [];
+        [my].concat(c.ips || []).forEach(function(x){ var m = /^(\d+\.\d+\.\d+\.)\d+$/.exec(String(x||'')); if(m && bases.indexOf(m[1]) < 0 && m[1] !== '127.0.0.') bases.push(m[1]); });
+        return firstOf(bases.slice(0, 2), function(b){ return scanSubnet(b).then(function(x){ if(x) return x; throw new Error('no'); }); });
+      });
+    }).then(function(ip){ st.searching = false; return ip; }, function(){ st.searching = false; return ''; });
+  }
+  function connect(ip){
+    try{
+      var inp = document.getElementById('lan-server-ip'); if(inp) inp.value = ip;
+      st.startedCli = true; st.cliIp = ip; st.mode = 'client'; st.msg = '';
+      lsS('afo_last_' + acct(), {ip:ip, ts:Date.now()});
+      lisLanConnectClient();
+      notif('🛜 انقطع الإنترنت', 'المزامنة الآن عبر الواي فاي مع الحاسبة رقم ١ (' + ip + ')', 'warning');
+    }catch(e){ st.startedCli = false; }
+    ui();
+  }
+
+  function engage(){
+    var mode = lanMode(), no = myNo();
+    if(no === 1){
+      if(mode === 'server'){ if(st.mode !== 'server'){ st.mode = 'server'; serverInfo().then(ui); } return; }
+      if(mode === 'client') return;                              // ربط يدوي قائم — لا نغيّره
+      st.startedSrv = true; st.mode = 'server';
+      try{ lisLanStartServer(); }catch(e){}
+      notif('🛜 انقطع الإنترنت', 'شُغّل السيرفير الاحتياطي على هذه الحاسبة (رقم ١) — بقية الحاسبات تتصل تلقائياً', 'warning');
+      ui();
+      return;
+    }
+    if(mode === 'client' || mode === 'server'){ if(st.startedCli) st.mode = 'client'; return; }
+    try{ if(typeof _lanWS !== 'undefined' && _lanWS && _lanWS.readyState <= 1) return; }catch(e){}
+    try{ if(!st.startedCli && typeof _lanClientIP !== 'undefined' && _lanClientIP && !_lanManualDisc) return; }catch(e){}
+    if(st.searching || Date.now() - st.lastSearch < 15000) return;
+    search().then(function(ip){
+      if(!ip){ st.msg = '⚠️ لم تُعثر على الحاسبة رقم ١ على الواي فاي — إعادة المحاولة تلقائياً'; ui(); return; }
+      if(cloudOk()) return;                                       // عاد الإنترنت أثناء البحث
+      if(lanMode()) return;
+      connect(ip);
+    });
+  }
+  function restore(){
+    var changed = false;
+    if(st.startedCli){
+      try{
+        _lanManualDisc = true;
+        if(_lanReconnectT){ clearTimeout(_lanReconnectT); _lanReconnectT = null; }
+        if(_lanWS){ try{ _lanWS.close(); }catch(e){} _lanWS = null; }
+        _lanMode = null; _lanClientIP = null;
+        try{ _lanOpenGate(); }catch(e){}
+        try{ _lanUpdateStatus(); }catch(e){}
+      }catch(e){}
+      st.startedCli = false; st.cliIp = ''; changed = true;
+    }
+    if(st.startedSrv){
+      var keep = false;
+      try{ keep = !!(window._tvCastActive || (settings && settings.scanApp && settings.scanApp.enabled === true)); }catch(e){}
+      if(keep){ st.startedSrv = false; changed = true; }
+      else {
+        var fin = function(n){
+          if(n > 0) return;                                        // حاسبة لا تزال بلا إنترنت تعتمد عليه ⇒ يبقى
+          try{ window.electronAPI.lanStopServer().catch(function(){}); }catch(e){}
+          try{ _lanMode = null; _lanClients.clear(); _lanOpenGate(); _lanUpdateStatus(); }catch(e){}
+          st.startedSrv = false; st.srvIp = ''; st.mode = 'idle'; ui();
+        };
+        if(window.electronAPI.lanClientCount) window.electronAPI.lanClientCount().then(fin).catch(function(){ fin(0); }); else fin(0);
+      }
+    }
+    if(changed){
+      if(!st.startedSrv && !st.startedCli) st.mode = 'idle';
+      st.msg = '';
+      notif('☁️ عاد الإنترنت', 'رجعت المزامنة إلى السحابة — ما وصل عبر الواي فاي لا يُعاد إرساله', 'success');
+      ui();
+    }
+  }
+
+  function tick(){
+    if(!loggedIn()) return;
+    var ok = cloudOk(), now = Date.now();
+    if(ok){ st.offSince = 0; if(!st.onSince) st.onSince = now; }
+    else  { st.onSince = 0;  if(!st.offSince) st.offSince = now; }
+    if(ok){ cachePeers(); publish(); }
+    /* سيرفير يعمل (يدوياً أو تلقائياً) على حاسبة ١ ⇒ يعرّف نفسه للمكتشِفين */
+    if(lanMode() === 'server' && myNo() === 1 && st.infoFor !== tag() + '|' + myNo()) serverInfo().then(ui);
+    /* الحاسبة ١ تبدأ أولاً، والبقية تنتظر قليلاً ليكون سيرفيرها جاهزاً قبل البحث */
+    if(!ok && now - st.offSince >= (myNo() === 1 ? OFF_MS : OFF_MS + 6000)) engage();
+    else if(ok && st.onSince && now - st.onSince >= ON_MS && (st.startedCli || st.startedSrv)) restore();
+    if(st.mode === 'server' && window.electronAPI.lanClientCount){
+      window.electronAPI.lanClientCount().then(function(n){ if(n !== st.clients){ st.clients = n; ui(); } }).catch(function(){});
+    }
+    if(st.mode === 'client' && lanMode() !== 'client' && !st.startedCli) st.mode = 'idle';
+    ui();
+  }
+  setInterval(tick, TICK_MS);
+  setTimeout(tick, 6000);
+
+  /* ── الواجهة: شارة ظاهرة (IP بلا قفل) + قسم في بطاقة المزامنة ── */
+  function chipText(){
+    if(st.mode === 'server' && (st.startedSrv || !cloudOk()))
+      return '🛜 السيرفير الاحتياطي يعمل (الحاسبة ١) — IP الواي فاي: <b>' + esc(st.srvIp || '…') + '</b>' + (st.clients ? ' · متصل: ' + st.clients : '');
+    if(st.mode === 'client' && st.startedCli)
+      return (lanMode() === 'client' ? '🔵 مزامنة عبر الواي فاي — السيرفير: ' : '🟡 إعادة الاتصال بالسيرفير: ') + '<b>' + esc(st.cliIp) + '</b>';
+    if(st.msg && !cloudOk() && st.offSince && Date.now() - st.offSince >= OFF_MS) return esc(st.msg);
+    return '';
+  }
+  var _lastChip = '';
+  function ui(){
+    var t = chipText(), el = document.getElementById('afo-chip'), tx = document.getElementById('afo-chip-txt');
+    if(el && tx){
+      if(t !== _lastChip){ tx.innerHTML = t; _lastChip = t; if(t) window.__afoChipHidden = 0; }
+      el.classList.toggle('on', !!t && !window.__afoChipHidden);
+    }
+  }
+  A.ui = ui;
+  A.cardHtml = function(){
+    var no = myNo(), line;
+    if(st.mode === 'server' && st.srvIp) line = '🟢 السيرفير الاحتياطي يعمل الآن — IP الواي فاي: <b class="ip">' + esc(st.srvIp) + '</b>' + (st.clients ? ' · حاسبات متصلة: ' + st.clients : '');
+    else if(st.mode === 'client' && st.cliIp) line = '🔵 متصلة عبر الواي فاي بالحاسبة ١: <b class="ip">' + esc(st.cliIp) + '</b>';
+    else if(st.msg && !cloudOk()) line = esc(st.msg);
+    else line = (no === 1) ? 'هذه الحاسبة رقم ١ ⇒ عند انقطاع الإنترنت يشتغل عليها السيرفير الاحتياطي تلقائياً ويظهر IP الواي فاي هنا.'
+                           : 'عند انقطاع الإنترنت تتصل هذه الحاسبة تلقائياً بسيرفير الحاسبة رقم ١ عبر الواي فاي.';
+    return '<div class="afo-box">🛜 <b>الربط الاحتياطي (واي فاي)</b><br>' + line + '</div>';
+  };
+})();
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * ③ صوت إنذار ESR دائماً من سماعات الحاسبة (لا من الشاشة/التلفاز HDMI)
+ *    • اختيار تلقائي لمخرج الصوت: يُستبعد HDMI/DisplayPort/الشاشات ويُفضَّل سماعات الحاسبة.
+ *    • يمكن تثبيت مخرج محدد من قسم ESR (يُحفظ لكل حاسبة).
+ *    • صوت واحد يُعاد تشغيله (بدل إنشاء محرك صوت جديد كل ٣ ثوانٍ).
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var KEY = 'esr_audio_sink';
+  var BAD = /hdmi|displayport|display audio|digital display|nvidia high definition|amd high definition|intel\(r\) display|\btv\b|television|monitor|شاشة|تلفاز|تلفزيون/i;
+  var GOOD = /speaker|realtek|headphone|headset|سماع|مكبر|conexant|\bidt\b|sound blaster|line out|analog|high definition audio device/i;
+  var _url = null, _labelsTried = false;
+  function wavUrl(){
+    if(_url) return _url;
+    var rate = 22050, dur = 1.2, n = Math.floor(rate*dur), data = new Int16Array(n);
+    function beep(f, s, d){
+      var a = Math.floor(s*rate), b = Math.min(n, Math.floor((s+d)*rate));
+      for(var i=a;i<b;i++){
+        var t = (i-a)/rate, env = Math.min(1, t/0.01) * Math.exp(-6.9*t/d);
+        data[i] = Math.max(-32767, Math.min(32767, data[i] + Math.sin(2*Math.PI*f*t) * env * 0.6 * 32767));
+      }
+    }
+    beep(880, 0, 0.25); beep(880, 0.35, 0.25); beep(1100, 0.70, 0.40);
+    var buf = new ArrayBuffer(44 + n*2), v = new DataView(buf);
+    function ws(o, s){ for(var i=0;i<s.length;i++) v.setUint8(o+i, s.charCodeAt(i)); }
+    ws(0,'RIFF'); v.setUint32(4, 36+n*2, true); ws(8,'WAVE'); ws(12,'fmt '); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+    v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); ws(36,'data'); v.setUint32(40,n*2,true);
+    for(var i=0;i<n;i++) v.setInt16(44+i*2, data[i], true);
+    _url = URL.createObjectURL(new Blob([buf], {type:'audio/wav'}));
+    return _url;
+  }
+  function outs(){
+    if(!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)) return Promise.resolve([]);
+    return navigator.mediaDevices.enumerateDevices().then(function(l){ return l.filter(function(d){ return d.kind === 'audiooutput'; }); }).catch(function(){ return []; });
+  }
+  /* أسماء المخارج تظهر بعد إذن الصوت — يُطلب مرة واحدة بلطف عند الحاجة فقط */
+  function ensureLabels(){
+    return outs().then(function(l){
+      if(_labelsTried || !l.length || l.some(function(d){ return d.label; })) return l;
+      _labelsTried = true;
+      if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return l;
+      return navigator.mediaDevices.getUserMedia({audio:true}).then(function(s){ try{ s.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} return outs(); }).catch(function(){ return l; });
+    });
+  }
+  function autoPick(l){
+    var real = l.filter(function(d){ return d.deviceId !== 'default' && d.deviceId !== 'communications'; });
+    var ok = real.filter(function(d){ return d.label && !BAD.test(d.label); });
+    var pick = ok.filter(function(d){ return GOOD.test(d.label); })[0] || ok[0];
+    return pick || null;
+  }
+  function resolveSink(){
+    var manual = ''; try{ manual = localStorage.getItem(KEY) || ''; }catch(e){}
+    return outs().then(function(l){
+      if(manual && manual !== 'auto' && l.some(function(d){ return d.deviceId === manual; })) return manual;
+      var p = autoPick(l); return p ? p.deviceId : '';
+    });
+  }
+  function playOnce(sink){
+    var a = new Audio(wavUrl()); a.volume = 1.0;
+    var p = (sink && typeof a.setSinkId === 'function') ? a.setSinkId(sink).catch(function(){}) : Promise.resolve();
+    return p.then(function(){ return a.play(); });
+  }
+  var origBeep = window.esrBeep;
+  window.esrBeep = function(){
+    try{ if(_esrAlertAudio){ clearInterval(_esrAlertAudio); _esrAlertAudio = null; } }catch(e){}
+    var sink = '';
+    resolveSink().then(function(s){ sink = s; return playOnce(sink); }).catch(function(){
+      try{ if(typeof origBeep === 'function'){ origBeep(); return; } }catch(e){}
+    });
+    try{
+      _esrAlertAudio = setInterval(function(){
+        if(!_esrAlertActive){ clearInterval(_esrAlertAudio); _esrAlertAudio = null; return; }
+        playOnce(sink).catch(function(){});
+      }, 3000);
+    }catch(e){}
+  };
+  if(typeof window.esrAddTimer === 'function'){
+    var prevAdd = window.esrAddTimer;
+    window.esrAddTimer = function(){ try{ ensureLabels(); }catch(e){} return prevAdd.apply(this, arguments); };
+  }
+  window.esrSinkFill = function(){
+    var sel = document.getElementById('esr-sink-sel'), hint = document.getElementById('esr-sink-hint'); if(!sel) return;
+    ensureLabels().then(function(l){
+      var cur = ''; try{ cur = localStorage.getItem(KEY) || 'auto'; }catch(e){ cur = 'auto'; }
+      var real = l.filter(function(d){ return d.deviceId !== 'default' && d.deviceId !== 'communications'; });
+      var auto = autoPick(l);
+      var h = '<option value="auto">تلقائي — سماعات الحاسبة' + (auto && auto.label ? ' (' + auto.label.replace(/</g,'&lt;') + ')' : '') + '</option>';
+      real.forEach(function(d, i){ h += '<option value="' + d.deviceId.replace(/"/g,'&quot;') + '">' + (d.label ? d.label.replace(/</g,'&lt;') : ('مخرج صوت ' + (i+1))) + (BAD.test(d.label||'') ? ' — شاشة' : '') + '</option>'; });
+      sel.innerHTML = h;
+      sel.value = (cur !== 'auto' && real.some(function(d){ return d.deviceId === cur; })) ? cur : 'auto';
+      if(hint) hint.textContent = real.length ? 'الإنذار يُسمع دائماً من سماعات الحاسبة لا من الشاشة/التلفاز.' : 'لا تتوفر قائمة المخارج الآن — سيُستخدم مخرج الحاسبة الافتراضي.';
+    });
+  };
+  window.esrSinkChange = function(v){ try{ localStorage.setItem(KEY, v || 'auto'); }catch(e){} try{ showNotif('🔊 ESR', 'تم حفظ مخرج صوت الإنذار لهذه الحاسبة', 'success'); }catch(e){} };
+  window.esrSinkTest = function(){ resolveSink().then(function(s){ return playOnce(s); }).catch(function(){ try{ showNotif('🔊 ESR','تعذّر تشغيل الصوت','error'); }catch(e){} }); };
+  setTimeout(function(){ try{ window.esrSinkFill(); }catch(e){} }, 4000);
+  document.addEventListener('click', function(e){
+    try{ var t = e.target && e.target.closest && e.target.closest('[onclick*="\'esr\'"]'); if(t) setTimeout(window.esrSinkFill, 200); }catch(_){}
+  }, true);
 })();
 </script>
