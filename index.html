@@ -1578,9 +1578,10 @@ body.light-mode .lang-toggle-btn.lang-en{background:rgba(85,0,187,0.1);border-co
 .high{color:var(--danger)!important;font-weight:700!important;}
 .low{color:var(--warning)!important;font-weight:700!important;}
 .normal{color:var(--success)!important;}
-.notif-wrap{position:fixed;bottom:18px;left:18px;z-index:2147483000;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;}
+/* 🔔 الإشعارات أعلى اليمين (كانت أسفل اليسار وتغطي الأزرار) — الأحدث في الأعلى */
+.notif-wrap{position:fixed;top:14px;right:18px;left:auto;bottom:auto;z-index:2147483000;display:flex;flex-direction:column-reverse;align-items:flex-end;gap:8px;pointer-events:none;max-width:min(420px,calc(100vw - 36px));}
 .notif{background:#080f20;border:1px solid var(--border);border-radius:11px;padding:12px 16px;display:flex;align-items:center;gap:10px;min-width:260px;box-shadow:0 4px 16px rgba(0,0,0,0.4);animation:nsl 0.15s ease;pointer-events:all;}
-@keyframes nsl{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:none}}
+@keyframes nsl{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 .notif h4{font-size:11px;font-weight:700;}
 .notif p{font-size:11px;color:var(--text2);margin-top:1px;}
 .pt-bar{background:linear-gradient(135deg,rgba(0,212,255,0.07),rgba(123,47,255,0.05));border:1px solid var(--border);border-radius:11px;padding:12px 16px;display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;}
@@ -2433,6 +2434,12 @@ select.fc:focus{outline:none;}
   transform:scale(1.2) rotate(90deg) !important;
 }
 
+/* 💰 حقل السعر في قائمة التحاليل المختارة */
+.wiz-price-in{width:68px;flex-shrink:0;margin-left:4px;padding:2px 5px;font-size:10.5px;font-weight:700;direction:ltr;text-align:right;color:var(--text2);background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;outline:none;font-family:inherit;-moz-appearance:textfield;}
+.wiz-price-in::-webkit-outer-spin-button,.wiz-price-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.wiz-price-in:focus{border-color:var(--primary);color:var(--text);background:rgba(0,212,255,0.08);}
+.wiz-price-in.ov{color:var(--success);border-color:rgba(0,230,118,0.45);}
+body.light-mode .wiz-price-in{background:#fff;color:#33475b;}
 /* أزرار الأكثر طلباً */
 #mrt-buttons-area .btn{
   transition:all 0.14s cubic-bezier(0.34,1.56,0.64,1) !important;
@@ -5556,18 +5563,30 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                         </div>
                         <div class="tog" id="tog-cbc-prev" onclick="this.classList.toggle('on');_saveCBCShowPrev(this.classList.contains('on'))"><div class="tog-t"></div></div>
                       </div>
+
                     </div>
 
                     <!-- ═══ اختيار نموذج تقرير النتائج العامة ═══ -->
                     <div style="background:rgba(0,140,255,0.05);border:1px solid rgba(0,140,255,0.35);border-radius:10px;padding:14px">
                       <div style="font-size:12px;font-weight:800;color:#2b9bff;margin-bottom:10px">📄 نموذج تقرير النتائج العامة</div>
-                      <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). ثلاثة تصاميم حديثة ومرتبة.</div>
+                      <div style="font-size:10px;color:var(--text2);margin-bottom:8px">اختر شكل صفحة التقرير التي تُطبع لنتائج التحاليل العامة (لا يشمل CBC). يتغيّر جزء النتائج فقط — الترويسة وبيانات المريض كما هي.</div>
                       <select id="st-report-template" class="fc" style="width:100%;font-size:12px;font-weight:700" onchange="_saveReportTemplate(this.value)">
                         <option value="1">📄 النموذج 1 — كلاسيكي (التصميم الحالي)</option>
                         <option value="3">✨ النموذج 3 — أنيق مينيمال بأحرف متباعدة وخطوط رفيعة</option>
                         <option value="4">↕️ النموذج 4 — أقسام بأسهم اتجاه (عالي/منخفض)</option>
+                        <option value="cbc">🩸 النموذج 5 — جدول مثل نموذج CBC رقم 1 (بلا ترقيم + آخر نتيجة)</option>
                       </select>
                       <button class="btn btn-s" style="width:100%;margin-top:8px;font-size:11px;background:rgba(0,140,255,0.15);border-color:rgba(0,140,255,0.5);color:#2b9bff" onclick="_previewReportTemplate()">👁️ معاينة النموذج المختار</button>
+                      <!-- 🩸 جدول نموذج CBC رقم 1 للفحوصات الخاصة -->
+                      <div style="margin-top:12px;padding-top:11px;border-top:1px solid rgba(0,140,255,0.3)">
+                        <div style="font-size:12px;font-weight:700">🩸 نتائج الإدرار والخروج والسائل المنوي بجدول نموذج CBC رقم 1</div>
+                        <div style="font-size:10px;color:var(--text2);margin:2px 0 8px;line-height:1.6">يتغيّر جدول النتائج فقط (بلا ترقيم + آخر نتيجة) — الترويسة وبيانات المريض والعنوان كما هي. المطفأ يُطبع بتصميمه الحالي.</div>
+                        <div style="display:flex;flex-direction:column;gap:7px">
+                          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:700">💧 الإدرار (GUE)</span><div class="tog" id="tog-spcbc1-ua" onclick="_spCbc1Toggle('ua',this)"><div class="tog-t"></div></div></div>
+                          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:700">🧫 الخروج (GSE)</span><div class="tog" id="tog-spcbc1-stool" onclick="_spCbc1Toggle('stool',this)"><div class="tog-t"></div></div></div>
+                          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11.5px;font-weight:700">🔬 السائل المنوي (SFA)</span><div class="tog" id="tog-spcbc1-semen" onclick="_spCbc1Toggle('semen',this)"><div class="tog-t"></div></div></div>
+                        </div>
+                      </div>
                     </div>
 
                   </div>
@@ -8108,6 +8127,11 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
           <div class="fg"><label class="fl">اسم المجموعة</label><input class="fc" id="grp-name" placeholder="مثال: فحص السكر الشامل..."></div>
           <input type="hidden" id="grp-edit-id">
           <div class="fg">
+            <label class="fl">💰 سعر المجموعة الخاص <span style="font-weight:400;color:var(--text2)">(اختياري — اتركه فارغاً لاستخدام أسعار التحاليل)</span></label>
+            <input class="fc" id="grp-price" type="number" min="0" step="any" inputmode="decimal" placeholder="مثال: 25000" oninput="renderGrpPricePreview()" style="direction:ltr;text-align:right">
+            <div id="grp-price-preview" style="margin-top:6px"></div>
+          </div>
+          <div class="fg">
             <label class="fl">ابحث وأضف تحاليل</label>
             <div style="position:relative;margin-bottom:8px">
               <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:14px">🔍</span>
@@ -8423,7 +8447,7 @@ Menopause — 25–135 IU/L" style="font-size:12px;resize:vertical;line-height:1
           <input class="fc" id="et-calc-formula" placeholder="e.g. homa_ir" style="direction:ltr;font-family:monospace" oninput="onCalcFormulaInput()">
         </div>
         <div style="font-size:10px;color:var(--text2);margin-bottom:10px;line-height:1.7">
-          الأكواد: <span style="color:#a78bfa;font-family:monospace;font-size:9px">homa_ir | homa_b | egfr_ckd | egfr_mdrd | ldl_friedewald | non_hdl | chol_ratio | trig_hdl | bmi | ag_ratio | tbil_ratio | quicki | map | sodium_corr | anion_gap | uacr | ft3_ft4 | meld | fib4 | mchr</span>
+          الأكواد: <span style="color:#a78bfa;font-family:monospace;font-size:9px">homa_ir | homa_b | egfr_ckd | egfr_mdrd | ldl_friedewald | non_hdl | chol_ratio | trig_hdl | bmi | ag_ratio | tbil_ratio | quicki | map | sodium_corr | anion_gap | uacr | ft3_ft4 | meld | fib4 | mchr | bun_urea | bun_cr</span>
         </div>
         <!-- إعدادات المدخلات — تظهر تلقائياً بعد اختيار المعادلة -->
         <div id="et-calc-inputs-list" style="display:none">
@@ -10906,6 +10930,8 @@ const ALL_TESTS=[
 {id:'calc016',code:'ANION-GAP',nameEn:'Anion Gap',nameShort:'Anion Gap',cat:'Calculated',subCat:'Miscellaneous',unit:'mEq/L',minVal:8,maxVal:12,minF:8,maxF:12,ref:'8 - 12',time:'calculated',price:0,notes:'Formula: Na - (Cl + HCO3)',isCalc:true,calcFormula:'anion_gap'},
 {id:'calc019',code:'MELD',nameEn:'MELD Score',nameShort:'MELD',cat:'Calculated',subCat:'Miscellaneous',unit:'score',minVal:null,maxVal:null,minF:null,maxF:null,ref:'< 10 Low | 10-19 Medium | >20 High',time:'calculated',price:0,notes:'Formula: 3.78×ln(Bili) + 11.2×ln(INR) + 9.57×ln(Creat) + 6.43',isCalc:true,calcFormula:'meld'},
 {id:'calc020',code:'FIB4',nameEn:'FIB-4 Index',nameShort:'FIB-4',cat:'Calculated',subCat:'Miscellaneous',unit:'index',minVal:null,maxVal:null,minF:null,maxF:null,ref:'< 1.30 Low | 1.30-2.67 Indeterminate | >2.67 High',time:'calculated',price:0,notes:'Formula: (Age × AST) / (Platelets × √ALT)',isCalc:true,calcFormula:'fib4'},
+{id:'calc021',code:'BUN-CALC',nameEn:'BUN (Calculated)',nameShort:'BUN',cat:'Calculated',subCat:'Miscellaneous',unit:'mg/dL',minVal:7,maxVal:20,minF:7,maxF:20,ref:'7 - 20',time:'calculated',price:0,notes:'Formula: BUN = Urea ÷ 2.14',isCalc:true,calcFormula:'bun_urea'},
+{id:'calc022',code:'BUN-CR',nameEn:'BUN/Creatinine Ratio',nameShort:'BUN/Creat',cat:'Calculated',subCat:'Miscellaneous',unit:'ratio',minVal:10,maxVal:20,minF:10,maxF:20,ref:'10 - 20 | > 20 Prerenal | < 10 Renal / Liver',time:'calculated',price:0,notes:'Formula: BUN (mg/dL) ÷ Creatinine (mg/dL) · BUN = Urea ÷ 2.14',isCalc:true,calcFormula:'bun_cr'},
 // ══════════════════════════════════════════════════════════════
 // LAB TO LAB — تحاليل مُضافة من قائمة Lab to Lab (بدون تكرار مع الموجود)
 // ══════════════════════════════════════════════════════════════
@@ -14055,12 +14081,12 @@ function toggleWizTest(tid){
   if(!t){
     // تحليل محذوف من القائمة لكنه موجود في طلب قيد التعديل — يُزال فقط
     const _mi=wizSelectedTests.findIndex(x=>String(x.id)===String(tid));
-    if(_mi>-1){ wizSelectedTests.splice(_mi,1); renderWizRightPanel(); }
+    if(_mi>-1){ wizSelectedTests.splice(_mi,1); _wizTPDrop(tid); renderWizRightPanel(); }
     return;
   }
   const idx=wizSelectedTests.findIndex(x=>x.id===tid);
   const nowSelected=idx===-1;
-  if(idx>-1){ wizSelectedTests.splice(idx,1); try{ delete _wizDefRes[tid]; }catch(e){} }
+  if(idx>-1){ wizSelectedTests.splice(idx,1); try{ delete _wizDefRes[tid]; }catch(e){} _wizTPDrop(tid); }
   else wizSelectedTests.push(t);
 
   // 1) تحديث test-item في القائمة اليسرى (checkbox + class)
@@ -14117,7 +14143,7 @@ function _wizRightPanelUpdateOne(t, tid, nowSelected){
     div.className='wiz-sel-item';
     div.dataset.selId=tid;
     if(typeof _defResOf==='function' && _defResOf(t)) div.style.flexWrap='wrap';
-    div.innerHTML=`<div style="flex:1;min-width:0"><div class="wiz-sel-item-code">${t.code}</div><div class="wiz-sel-item-name">${tDisplayName(t)}</div>${(typeof _wizDefResHTML==='function')?_wizDefResHTML(t):''}</div><span style="font-size:10px;color:var(--text2);flex-shrink:0;margin-left:4px">${t.price||0}</span><button class="wiz-sel-rm" onclick="toggleWizTest('${tid}')" title="حذف">×</button>`;
+    div.innerHTML=`<div style="flex:1;min-width:0"><div class="wiz-sel-item-code">${t.code}</div><div class="wiz-sel-item-name">${tDisplayName(t)}</div>${(typeof _wizDefResHTML==='function')?_wizDefResHTML(t):''}</div>${_wizPriceTag(t)}<button class="wiz-sel-rm" onclick="toggleWizTest('${tid}')" title="حذف">×</button>`;
     list.appendChild(div);
   } else {
     // حذف العنصر من القائمة اليمنى
@@ -14289,7 +14315,7 @@ function renderWizRightPanel(){
         <div class="wiz-sel-item-name">${tDisplayName(t)}</div>
         ${_wizDefResHTML(t)}
       </div>
-      <span style="font-size:10px;color:var(--text2);flex-shrink:0;margin-left:4px">${t.price||0}</span>
+      ${_wizPriceTag(t)}
       <button class="wiz-sel-rm" onclick="toggleWizTest('${t.id}')" title="حذف">×</button>
     </div>`).join('');
   updateWizTotal();
@@ -14527,6 +14553,7 @@ function _wizEditLoadReq(req){
     list.push(t || {id:tid, code:'', nameEn:String(tid), nameShort:'', price:0, _missing:true});
   });
   wizSelectedTests=list;
+  if(req.tp && typeof req.tp==='object'){ list._tp={}; Object.keys(req.tp).forEach(function(k){ const v=parseFloat(req.tp[k]); if(isFinite(v)) list._tp[k]=v; }); }
   // ② النتائج الحالية تظهر في خانة «💡 النتيجة» بدل النتيجة الافتراضية
   _wizDefRes={}; _wizEditOrigDefRes={};
   const res=req.results||{};
@@ -14651,6 +14678,7 @@ function _wizFinishEditReq(){
   const added=newIds.filter(id=>oldIds.indexOf(id)<0);
   req.tests=newIds;
   req.testNames=newIds.map(function(id){ const t=wizSelectedTests.find(x=>x.id===id); return t?(t.nameEn||String(id)):String(id); });
+  { const _tp=_wizTPMap(); if(_tp) req.tp=_tp; else delete req.tp; }   // 💰 حصص أسعار المجموعات
   if(!req.results) req.results={};
   removed.forEach(function(tid){ delete req.results[tid]; });
   // النتائج المقترحة: للتحاليل المضافة حديثاً، أو لما عدّله المستخدم في خانة «💡 النتيجة»
@@ -14675,7 +14703,7 @@ function _wizFinishEditReq(){
 
   // ③ تحديث فاتورة نفس الطلب (لا فاتورة جديدة) — أو إنشاؤها إن لم تكن موجودة
   const today=new Date().toISOString().split('T')[0];
-  const rawTotal=wizSelectedTests.reduce((s,t)=>s+(parseFloat(t.price)||0),0);
+  const rawTotal=Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
   const _discIn=parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
   const discAmt=Math.min(Math.max(0,_discIn), rawTotal);
   const disc=rawTotal?Math.round(discAmt/rawTotal*1000)/10:0;
@@ -14796,6 +14824,7 @@ function wizFinish(){
     status:'pending', results:{}, tech:'', resultDate:'', resultNotes:'',
     sideLab: !!pt.sideLab
   };
+  { const _tp=_wizTPMap(); if(_tp) req.tp=_tp; }   // 💰 حصص أسعار المجموعات
   // 💡 النتائج المقترحة (كما ظهرت/عُدّلت في واجهة الاختيار)
   try{ if(typeof _applyDefResults==='function') _applyDefResults(req, req.tests, true); }catch(e){}
   _wizDefRes = {};
@@ -14803,7 +14832,7 @@ function wizFinish(){
   requests.push(req); saveOne('requests',requests,req);
 
   // الفاتورة مع الخصم وحالة الدفع
-  const rawTotal = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
+  const rawTotal = Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
   // 💵 الخصم مبلغ بالعملة (وليس نسبة): 15000 − 5000 = 10000
   const _discIn  = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
   const discAmt  = Math.min(Math.max(0,_discIn), rawTotal);
@@ -14865,7 +14894,7 @@ function wizFinish(){
 
 // ── حساب مجموع التحاليل في المعالج ──────────────────────────
 function updateWizTotal(){
-  const total = wizSelectedTests.reduce((s,t)=>s+(t.price||0),0);
+  const total = Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
   const disc  = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
   const final = total - Math.min(Math.max(0,disc), total);   // 💵 خصم بالمبلغ
   const cur   = settings.currency||'';
@@ -19034,6 +19063,9 @@ function getCalcFormulaInputs(formula){
     meld:[_mkCalcInput('TBIL','Total Bilirubin','mg/dL'),_mkCalcInput('INR','INR',''),_mkCalcInput('CREAT','Creatinine','mg/dL')],
     fib4:[{code:'AGE_INPUT',name:'العمر',unit:'سنة',label:'العمر (سنة)'},_mkCalcInput('AST','AST','U/L'),_mkCalcInput('PLT','Platelets','×10³/μL'),_mkCalcInput('ALT','ALT','U/L')],
     mchr:[_mkCalcInput('MCH','MCH','pg'),_mkCalcInput('MCHC','MCHC','g/dL')],
+    /* 🫘 BUN من اليوريا (mg/dL): Urea ÷ 2.14 (60 ÷ 28) · ونسبة BUN/Creatinine */
+    bun_urea:[_mkCalcInput('UREA','Urea','mg/dL')],
+    bun_cr:[_mkCalcInput('UREA','Urea','mg/dL'),_mkCalcInput('CREAT','Creatinine','mg/dL')],
     /* 📈 منحنى تحمّل الجلوكوز (OGTT) — مدخلات يدوية بلا ربط بتحاليل أخرى */
     gtt:[
       {code:'GTT_LOAD',name:'Glucose load',unit:'g',label:'كمية الجلوكوز المعطاة (غم) — 75 / 100 / 50'},
@@ -19116,6 +19148,8 @@ function calcFormula(formula, vals){
     }
     case 'fib4':{const plt=v('PLT'),alt=v('ALT');return(plt&&alt)?((v('AGE_INPUT')*v('AST'))/(plt*Math.sqrt(alt))).toFixed(2):'0';}
     case 'mchr': return v('MCHC')?(v('MCH')/v('MCHC')).toFixed(3):'0';
+    case 'bun_urea': return (v('UREA')/2.14).toFixed(1);
+    case 'bun_cr': return v('CREAT')?((v('UREA')/2.14)/v('CREAT')).toFixed(1):'0';
     default: return '0';
   }
 }
@@ -20101,7 +20135,7 @@ function buildPrintHTML(req, opts){
   //  تستقبل النتائج الجاهزة فقط وتغلّفها بتصميم مختلف.
   // ═══════════════════════════════════════════════════════════════════════
   var RTPL = String(settings.reportTemplate||'1');
-  if(RTPL === '2') RTPL = '1';   /* النموذج ٢ (الدوائر) أُلغي — يُعرض بالكلاسيكي */
+  if(RTPL === '2' || RTPL === '5' || RTPL === '6' || RTPL === '7') RTPL = '1';   /* النموذج ٢ (الدوائر) أُلغي — يُعرض بالكلاسيكي */
   // ألوان مساعدة مشتقة من الإعدادات (كل النماذج تخضع لإعدادات الألوان وأحجام الخط)
   const _tplAccent = sectionColor;         // لون القسم/العناوين (من الإعدادات)
   const _tplStrip  = stripColor;           // لون الشريط (من الإعدادات)
@@ -20126,6 +20160,8 @@ function buildPrintHTML(req, opts){
         <div style="flex:3;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:left;letter-spacing:1.6px;text-transform:uppercase;padding-left:6px">Reference</div>
         <div style="flex:2;font-size:${colHdrFs-1}px;font-weight:800;color:${_tplStrip};text-align:center;letter-spacing:1.6px;text-transform:uppercase">Previous</div>
       </div>`;
+    } else if(RTPL==='cbc'){
+      colHdr=_cbcTplTable(true);
     } else if(RTPL==='4'){
       // نموذج 4 «أقسام بأسهم» — رأس أعمدة بلون الشريط من الإعدادات
       colHdr=`
@@ -20138,6 +20174,47 @@ function buildPrintHTML(req, opts){
       </div>`;
     }
   })();
+
+  /* ═══ 🩸 النموذج «cbc» — جدول نتائج بشكل نموذج CBC رقم 1 (بلا ترقيم + آخر نتيجة) ═══
+     كل قسم جدول بالأعمدة نفسها (عرض ثابت) فتتطابق الأعمدة في الورقة كلها،
+     ورأس الأعمدة جدول مستقل بلون الجدول — الترويسة وبيانات المريض كما هي. */
+  var _cbcZ=0;
+  function _cbcTCf(){ return (settings && settings.tableColor) || '#003366'; }
+  function _cbcTplTable(withHead){
+    const cg='<colgroup><col style="width:29%"><col style="width:15%"><col style="width:7%"><col style="width:13%"><col style="width:21%"><col style="width:15%"></colgroup>';
+    if(!withHead) return '<table style="width:calc(100% - 12px);margin:0 6px;border-collapse:collapse;table-layout:fixed;direction:ltr">'+cg;
+    const TH='background:'+_cbcTCf()+';color:#fff;padding:5px 6px;font-size:'+colHdrFs+'px;border:1px solid #002244;text-align:center;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact';
+    return '<table style="width:calc(100% - 12px);margin:0 6px 2px;border-collapse:collapse;table-layout:fixed;direction:ltr">'+cg
+      +'<tr><th style="'+TH+'">Parameter</th><th style="'+TH+'">Result</th><th style="'+TH+'">Flag</th><th style="'+TH+'">Unit</th><th style="'+TH+'">Ref. Ranges</th><th style="'+TH+'">Last Result</th></tr></table>';
+  }
+  function _cbcTplRow(p){
+    const C='padding:3px 6px;border:1px solid #ddd;overflow-wrap:anywhere;';
+    const on = p.abnColor && String(p.abnColor).toLowerCase()!=='#000000';
+    const isH = on && (p.isNumericHigh || (p.isHigh && !p.isQualAbnormal));
+    const isL = on && !isH && (p.isNumericLow || (p.isLow && !p.isQualAbnormal));
+    const isA = on && !isH && !isL;
+    const vc = isH ? _tplHighColor : isL ? _tplLowColor : isA ? _tplHighColor : '#000';
+    const val = (p.value===undefined||p.value===null||p.value==='') ? '—' : p.value;
+    const numeric = isFinite(parseFloat(String(val).replace(/^[<>]\s*/,'')));
+    const flag = isH ? 'H' : isL ? 'L' : (!isA && numeric && p.refTxt && p.refTxt!=='—') ? 'N' : '';
+    let ref='—';
+    if(p.refTxt && p.refTxt!=='—'){
+      let parts=[]; if(p.refTxt.indexOf('\n')>-1) parts=p.refTxt.split('\n'); else if(p.refTxt.indexOf('|')>-1) parts=p.refTxt.split('|');
+      parts=parts.map(function(x){return x.trim();}).filter(Boolean);
+      ref = parts.length>=2 ? parts.join('<br>') : p.refTxt;
+    }
+    const prev = (showPrev && p.prevVal) ? ('<b style="color:#1a4fa0">'+p.prevVal+'</b>'+(p.prevDate?'<div style="font-size:'+Math.max(_fsPrevN-3,6)+'px;color:#6b7785;font-weight:600">'+p.prevDate+'</div>':'')) : '<span style="color:#9aa6b2">—</span>';
+    _cbcZ++;
+    const bg = _cbcZ%2===0 ? '#f5f5f5' : '#fff';
+    return '<tr style="background:'+bg+';page-break-inside:avoid;break-inside:avoid">'
+      +'<td style="'+C+'font-size:'+_fsName+';font-weight:600;color:#000">'+p.name+'</td>'
+      +'<td style="'+C+'font-size:'+_fsRes+';font-weight:800;text-align:center;color:'+vc+'">'+val+'</td>'
+      +'<td style="'+C+'font-size:'+Math.max(_fsRefN-1,7)+'px;font-weight:700;text-align:center;color:'+vc+'">'+flag+'</td>'
+      +'<td style="'+C+'font-size:'+_fsRef+';font-weight:600;text-align:center;color:#000">'+(p.unit||'')+'</td>'
+      +'<td style="'+C+'font-size:'+_fsRef+';font-weight:600;text-align:center;color:#000;line-height:1.45">'+ref+'</td>'
+      +'<td style="'+C+'font-size:'+_fsPrev+';font-weight:600;text-align:center;background:#f4f8ff;-webkit-print-color-adjust:exact;print-color-adjust:exact">'+prev+'</td>'
+      +'</tr>';
+  }
 
   // ── باني عنوان القسم حسب النموذج ──
   function _tplSectionHeader(cat, catTests){
@@ -20158,6 +20235,10 @@ function buildPrintHTML(req, opts){
         <div style="font-size:${subcatFs};font-weight:900;color:${_tplAccent};text-transform:uppercase;letter-spacing:1.4px;white-space:nowrap">${title}</div>
         ${devHtml}
       </div>`;
+    } else if(RTPL==='cbc'){
+      _cbcZ=0;
+      const _dv=_devName?'<span style="float:right;font-size:'+_devFs+'px;color:'+_devColor+';font-weight:700;letter-spacing:0.3px">⚙ '+_devName+'</span>':'';
+      return _cbcTplTable(false)+'<tr style="background:#fff"><td colspan="6" style="padding:3px 8px;border:1px solid #ddd;border-top:2px solid '+_cbcTCf()+';font-size:'+subcatFs+';font-weight:900;color:'+_tplAccent+';text-transform:capitalize;letter-spacing:0.3px">'+title+_dv+'</td></tr>';
     } else if(RTPL==='4'){
       // نموذج 4 — عنوان القسم في شريط رمادي فاتح، النص بلون القسم من الإعدادات (كما في الصورة)
       return `<div style="margin:10px 6px 0;direction:ltr;padding:6px 12px;background:#eef1f4;border:1px solid #dde3ea;border-bottom:none;border-radius:7px 7px 0 0;display:flex;align-items:center;justify-content:space-between;gap:8px">
@@ -20188,6 +20269,7 @@ function buildPrintHTML(req, opts){
   }
   function _tplSectionClose(){
     if(RTPL==='2'||RTPL==='4'){ return `</div>`; }
+    if(RTPL==='cbc'){ return '</table>'; }
     return '';
   }
 
@@ -20209,6 +20291,7 @@ function buildPrintHTML(req, opts){
   // ── باني صف/بطاقة تحليل حسب النموذج ──
   // p = { name, resultBox, flag, refHtml, prevHtml, bullet, isAbn, value, isHigh, isLow, refTxt, unit, prevVal, prevDate }
   function _tplRow(p){
+    if(RTPL==='cbc') return _cbcTplRow(p);
     const bullet = p.bullet!==undefined ? p.bullet : '●';
     if(RTPL==='2'){
       // نموذج 2 «بطاقة بدائرة» — كما في الصورة الأولى تماماً:
@@ -20331,6 +20414,7 @@ function buildPrintHTML(req, opts){
     if(RTPL==='3'){ return `<div style="margin:0 6px;border-top:1px solid #eef1f5"></div>`; }
     if(RTPL==='4'){ return `<div style="margin:0 8px;border-top:1px solid #f0f2f5"></div>`; }
     if(RTPL==='2'){ return ''; } // البطاقات لا تحتاج فواصل
+    if(RTPL==='cbc'){ return ''; } // حدود الجدول تفصل الصفوف
     return null; // النموذج 1 — اترك المنطق الأصلي
   }
 
@@ -24778,7 +24862,7 @@ var DocVisits = (function(){
         if(inv && inv.reqId===r.id && isFinite(parseFloat(inv.total))) return parseFloat(inv.total);
       }
     }catch(e){}
-    return (r.tests||[]).reduce(function(s,tid){ var t=tests.find(function(x){return x.id===tid;}); return s+((t&&parseFloat(t.price))||0); },0);
+    return (r.tests||[]).reduce(function(s,tid){ var t=tests.find(function(x){return x.id===tid;}); return s+_reqTP(r,tid,t||null); },0);
   }
   function testNamesOf(r){
     if(Array.isArray(r.testNames) && r.testNames.length) return r.testNames.join('، ');
@@ -25380,14 +25464,14 @@ var RpData=(function(){
   /* عدّاد التحاليل (طلبات + سجلات مستقلة) */
   function testCounts(D){
     var cnt=new Map();
-    function add(id,code,name,cat,price){
-      var c=cnt.get(id); if(!c){ c={id:id,code:code,name:name,cat:cat,price:price,n:0}; cnt.set(id,c); }
-      c.n++;
+    function add(id,code,name,cat,price,val){
+      var c=cnt.get(id); if(!c){ c={id:id,code:code,name:name,cat:cat,price:price,n:0,v:0}; cnt.set(id,c); }
+      c.n++; c.v+=_rpNum(val===undefined?price:val);
     }
     D.reqs.forEach(function(r){
       (r.tests||[]).forEach(function(tid){
         var t=D.TM.get(tid);
-        add(tid, t?(t.code||''):String(tid), testName(t,tid), t?(t.cat||'-'):'-', t?_rpNum(t.price):0);
+        add(tid, t?(t.code||''):String(tid), testName(t,tid), t?(t.cat||'-'):'-', t?_rpNum(t.price):0, _reqTP(r,tid,t||null));
       });
     });
     D.stand.forEach(function(s){ s.tests.forEach(function(t){ add(t.id,t.code,t.name,t.cat,t.price); }); });
@@ -25575,11 +25659,11 @@ function _rpBuildDef(type){
     var TC=RpData.testCounts(D), total=TC.reduce(function(s,c){ return s+c.n; },0), val=0;
     def.testIds=TC.map(function(c){ return c.id; });   /* للضغط على السطر → تفاصيل التحليل */
     def.title='🧪 تقرير التحاليل — '+S.label;
-    def.columns=[{h:'#',type:'num'},{h:'الكود',type:'center'},{h:'اسم التحليل',type:'bold'},{h:'القسم',type:'center'},{h:'العدد',type:'num'},{h:'النسبة',type:'pct'},{h:'سعر القائمة',type:'money'},{h:'القيمة بسعر القائمة',type:'money'}];
-    def.rows=TC.map(function(c,i){ var v=_rpR2(c.n*c.price); val+=v; return [i+1, c.code||'-', c.name, c.cat||'-', c.n, total?Math.round(c.n/total*1000)/10:0, c.price, v]; });
+    def.columns=[{h:'#',type:'num'},{h:'الكود',type:'center'},{h:'اسم التحليل',type:'bold'},{h:'القسم',type:'center'},{h:'العدد',type:'num'},{h:'النسبة',type:'pct'},{h:'سعر القائمة',type:'money'},{h:'القيمة (مع أسعار المجموعات)',type:'money'}];
+    def.rows=TC.map(function(c,i){ var v=_rpR2(c.v!==undefined?c.v:c.n*c.price); val+=v; return [i+1, c.code||'-', c.name, c.cat||'-', c.n, total?Math.round(c.n/total*1000)/10:0, c.price, v]; });
     def.totals=['المجموع','','','',total,total?100:0,'',_rpR2(val)];
     def.summary=[['إجمالي التحاليل المُجراة',total,'num','var(--primary)'],['عدد الطلبات',D.reqs.length,'num','var(--secondary)'],
-      ['سجلات مستقلة (زرع/إدرار/خروج/منوي)',D.stand.length,'num','#a78bfa'],['أنواع التحاليل المستخدمة',TC.length,'num','var(--success)'],['القيمة بسعر القائمة',_rpR2(val),'money','var(--warning)']];
+      ['سجلات مستقلة (زرع/إدرار/خروج/منوي)',D.stand.length,'num','#a78bfa'],['أنواع التحاليل المستخدمة',TC.length,'num','var(--success)'],['القيمة (مع أسعار المجموعات)',_rpR2(val),'money','var(--warning)']];
   } else if(type==='critical'){
     var CR=RpData.criticals(D);
     def.title='⚠️ تقرير النتائج الحرجة — '+S.label;
@@ -25720,7 +25804,7 @@ function _rpBuildTestDetail(def, D){
       var resTxt=(res===null||res===undefined||typeof res==='object')?(res&&typeof res==='object'?'✓':''):String(res);
       var st=ST[r.status]||r.status||'-'; if(r.status==='done') done++;
       pts.add(r.patientId!=null&&r.patientId!==''?'id:'+r.patientId:'nm:'+(r.patientName||''));
-      rows.push([0, r.orderNo||r.id||'-', r.patientName||'-', r.patientId!=null?String(r.patientId):'-', _rpD(r.date)||'-', r.doctorName||'-', 'طلب', st, resTxt, price]);
+      rows.push([0, r.orderNo||r.id||'-', r.patientName||'-', r.patientId!=null?String(r.patientId):'-', _rpD(r.date)||'-', r.doctorName||'-', 'طلب', st, resTxt, _reqTP(r,x,t||null)]);
     });
   });
   D.stand.forEach(function(s){
@@ -25735,7 +25819,7 @@ function _rpBuildTestDetail(def, D){
   var val=_rpR2(rows.reduce(function(s,r){ return s+(_rpNum(r[9])||0); },0));
   def.title='🧪 تقرير التحاليل — '+name+(code&&code!==name?' ('+code+')':'')+' — '+def.S.label;
   def.columns=[{h:'#',type:'num'},{h:'رقم الطلب',type:'center'},{h:'المريض',type:'bold'},{h:'رقم الملف',type:'center'},{h:'التاريخ',type:'date'},
-    {h:'الطبيب',type:'center'},{h:'المصدر',type:'center'},{h:'الحالة',type:'center'},{h:'النتيجة',type:'center'},{h:'سعر القائمة',type:'money'}];
+    {h:'الطبيب',type:'center'},{h:'المصدر',type:'center'},{h:'الحالة',type:'center'},{h:'النتيجة',type:'center'},{h:'السعر',type:'money'}];
   def.rows=rows;
   def.totals=['المجموع','','','','','','','','',val];
   def.summary=[['عدد مرات الإجراء',rows.length,'num','var(--primary)'],['عدد المرضى',pts.size,'num','var(--secondary)'],
@@ -26610,7 +26694,10 @@ function _invAdjustForTest(req, tid, sign){
   try{
     if(!req||!tid) return;
     const inv=_billInvOf(req.id); if(!inv) return;
-    const t=tests.find(x=>x.id===tid); const price=t?(parseFloat(t.price)||0):0;
+    const t=tests.find(x=>x.id===tid);
+    // حذف: يُخصم ما دُفع فعلاً عن هذا التحليل (حصة المجموعة إن وُجدت) · إضافة: سعر القائمة
+    const price=(sign<0)?_reqTP(req,tid,t||null):(t?(parseFloat(t.price)||0):0);
+    if(req.tp && Object.prototype.hasOwnProperty.call(req.tp,tid)){ delete req.tp[tid]; if(!Object.keys(req.tp).length) delete req.tp; }
     if(!price) return;
     const raw0=parseFloat(inv.rawTotal);
     const raw=(isFinite(raw0)&&raw0>0?raw0:(parseFloat(inv.total)||0)+_invDiscAmt(inv));
@@ -26637,7 +26724,7 @@ function _billSub(r){
   const inv=r?_billInvOf(r.id):null;
   if(inv && parseFloat(inv.rawTotal)>0) return parseFloat(inv.rawTotal);
   const reqTests=r?(r.tests||[]).map(tid=>tests.find(t=>t.id===tid)).filter(Boolean):[];
-  return reqTests.reduce((s,t)=>s+(parseFloat(t.price)||0),0);
+  return reqTests.reduce((s,t)=>s+_reqTP(r,t.id,t),0);
 }
 // مبلغ الخصم الحالي في الفاتورة (السجلات القديمة بالنسبة تُحوَّل لمبلغ)
 function _invDiscAmt(inv){
@@ -26656,7 +26743,8 @@ function calcBillTotal(){
   const reqTests=r.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean);
   let html='<div style="margin-bottom:8px">';
   let sub=0;
-  reqTests.forEach(t=>{sub+=t.price;html+=`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span>${tDisplayName(t)}</span><span style="color:var(--primary);font-weight:700">${t.price} ${settings.currency}</span></div>`;});
+  reqTests.forEach(t=>{const _p=_reqTP(r,t.id,t);sub+=_p;html+=`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)"><span>${tDisplayName(t)}</span><span style="color:var(--primary);font-weight:700">${_p} ${settings.currency}</span></div>`;});
+  sub=Math.round(sub*100)/100;
   html+=`<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;padding-top:6px;color:var(--text)"><span>مجموع أسعار التحاليل:</span><span style="color:var(--primary)">${sub} ${settings.currency}</span></div></div>`;
   box.innerHTML=html;
   // 💵 عبّئ الخصم الحالي للفاتورة (مبلغ) حتى لا يُحتسب الخصم مرتين
@@ -27904,9 +27992,10 @@ function loadSettings(){
   // نموذج CBC
   const cbcTplSel=document.getElementById('st-cbc-template');
   if(cbcTplSel) cbcTplSel.value=settings.cbcTemplate||'1';
+  try{ if(typeof _spCbc1LoadUI==='function') _spCbc1LoadUI(); }catch(e){}
   const repTplSel=document.getElementById('st-report-template');
   if(repTplSel){
-    if(String(settings.reportTemplate)==='2'){ settings.reportTemplate='1'; try{ save('settings',settings); }catch(e){} }
+    if(['2','5','6','7'].indexOf(String(settings.reportTemplate))>-1){ settings.reportTemplate='1'; try{ save('settings',settings); }catch(e){} }
     repTplSel.value=settings.reportTemplate||'1';
   }
   // 🖨️ وضع الطباعة عبر الشبكة (طباعة في الحاسبتين / الأخرى فقط / حاسبتي فقط)
@@ -29728,6 +29817,102 @@ let grpSelectedTests = []; // temp array while editing in settings
 
 function saveGroupsData(){ save('testGroups', testGroups); }
 
+/* ═══════════ 💰 سعر المجموعة الخاص ═══════════
+   • g.price (اختياري) = سعر المجموعة كاملة. فارغ ⇒ تُستخدم أسعار التحاليل كما هي.
+   • يتوزّع على تحاليل المجموعة بنسبة سعر كل تحليل (بالترتيب)، والفرق الناتج عن التقريب
+     يُضاف لآخر تحليل ⇒ مجموع الحصص = سعر المجموعة بالضبط دائماً.
+   • تُحفظ الحصص داخل الطلب في req.tp = {tid: سعر} ⇒ الفاتورة والوصل والتقارير تقرأ منها،
+     ولا تتأثر الطلبات القديمة بتغيير أسعار التحاليل أو المجموعة لاحقاً. */
+function _grpHasPrice(g){ return !!g && g.price!==null && g.price!==undefined && g.price!=='' && isFinite(parseFloat(g.price)) && parseFloat(g.price)>=0; }
+function _grpListSum(ids){ return (ids||[]).reduce(function(s,tid){ const t=tests.find(x=>x.id===tid); return s+(t?(parseFloat(t.price)||0):0); },0); }
+function _grpShares(ids, price){
+  const list=(ids||[]).filter(function(tid,i,a){ return a.indexOf(tid)===i && tests.find(x=>x.id===tid); });
+  const out={}; if(!list.length) return out;
+  const P=Math.max(0, parseFloat(price)||0);
+  const intMode=Math.round(P)===P && list.every(function(tid){ const t=tests.find(x=>x.id===tid); const v=parseFloat(t&&t.price)||0; return Math.round(v)===v; });
+  const r=function(v){ return intMode?Math.round(v):Math.round(v*100)/100; };
+  const sum=_grpListSum(list);
+  let used=0;
+  list.forEach(function(tid,i){
+    if(i===list.length-1){ out[tid]=r(P-used); return; }
+    const t=tests.find(x=>x.id===tid), lp=parseFloat(t&&t.price)||0;
+    const v=sum>0 ? r(P*lp/sum) : r(P/list.length);
+    out[tid]=Math.min(v, r(P-used)); used=r(used+out[tid]);
+  });
+  return out;
+}
+/* سعر تحليل داخل طلب محفوظ: حصة المجموعة إن وُجدت، وإلا سعر القائمة */
+function _reqTP(req, tid, t){
+  if(req && req.tp && Object.prototype.hasOwnProperty.call(req.tp, tid)){ const v=parseFloat(req.tp[tid]); if(isFinite(v)) return v; }
+  if(t===undefined) t=(typeof tests!=='undefined'&&tests)?tests.find(function(x){ return x&&x.id===tid; }):null;
+  return (t && parseFloat(t.price)) || 0;
+}
+/* سعر تحليل داخل واجهة اختيار التحاليل (قبل الحفظ) */
+function _wizTP(t){
+  const m=(typeof wizSelectedTests!=='undefined'&&wizSelectedTests)?wizSelectedTests._tp:null;
+  if(t && m && Object.prototype.hasOwnProperty.call(m, t.id)){ const v=parseFloat(m[t.id]); if(isFinite(v)) return v; }
+  return (t && parseFloat(t.price)) || 0;
+}
+function _wizTPMap(){
+  const m=(typeof wizSelectedTests!=='undefined'&&wizSelectedTests)?wizSelectedTests._tp:null; if(!m) return null;
+  const o={}; let n=0;
+  wizSelectedTests.forEach(function(t){ if(t && Object.prototype.hasOwnProperty.call(m,t.id) && isFinite(parseFloat(m[t.id]))){ o[t.id]=parseFloat(m[t.id]); n++; } });
+  return n?o:null;
+}
+/* 💰 سعر التحليل في واجهة الاختيار — قابل للكتابة يدوياً.
+   • السعر المعدَّل (يدوياً أو بسعر مجموعة) يُحفظ داخل الطلب (req.tp) فتعتمده الفاتورة والوصل والتقارير.
+   • تفريغ الحقل أو كتابة سعر القائمة نفسه ⇒ يعود لسعر القائمة. */
+function _wizPriceTag(t){
+  const m=(typeof wizSelectedTests!=='undefined'&&wizSelectedTests)?wizSelectedTests._tp:null;
+  const ov=!!(t && m && Object.prototype.hasOwnProperty.call(m,t.id));
+  const v=_wizTP(t);
+  if(!t || t._missing) return '<span style="font-size:10px;color:var(--text2);flex-shrink:0;margin-left:4px">'+v+'</span>';
+  return '<input class="wiz-price-in'+(ov?' ov':'')+'" type="number" min="0" step="any" inputmode="decimal" value="'+v+'" data-tid="'+t.id+'"'
+    +' title="السعر — اكتب سعراً آخر لهذا الطلب (سعر القائمة: '+(parseFloat(t.price)||0)+')"'
+    +' onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onfocus="this.select()"'
+    +' oninput="_wizSetPrice(\''+t.id+'\',this.value,true)" onchange="_wizSetPrice(\''+t.id+'\',this.value)"'
+    +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}">';
+}
+function _wizSetPrice(tid, raw, live){
+  const t=(wizSelectedTests||[]).find(x=>x && String(x.id)===String(tid)); if(!t) return;
+  if(!wizSelectedTests._tp) wizSelectedTests._tp={};
+  const s=String(raw==null?'':raw).trim(), list=parseFloat(t.price)||0;
+  if(s===''){ if(live) return; delete wizSelectedTests._tp[tid]; }
+  else{
+    const v=parseFloat(s);
+    if(!isFinite(v) || v<0){ if(live) return; delete wizSelectedTests._tp[tid]; }
+    else if(Math.round(v*100)/100===list && !live) delete wizSelectedTests._tp[tid];
+    else wizSelectedTests._tp[tid]=Math.round(v*100)/100;
+  }
+  updateWizTotal();
+  if(!live){
+    // حدّث الحقل نفسه (اللون + القيمة المنسّقة) دون إعادة رسم القائمة
+    document.querySelectorAll('.wiz-price-in[data-tid="'+tid+'"]').forEach(function(el){
+      const ov=Object.prototype.hasOwnProperty.call(wizSelectedTests._tp,tid);
+      el.classList.toggle('ov',ov); if(document.activeElement!==el) el.value=_wizTP(t);
+    });
+  }
+}
+window._wizSetPrice=_wizSetPrice;
+function _wizTPDrop(tid){ try{ if(wizSelectedTests && wizSelectedTests._tp) delete wizSelectedTests._tp[tid]; }catch(e){} }
+function _grpMoney(v){ const n=Math.round((parseFloat(v)||0)*100)/100; try{ return n.toLocaleString('en-US'); }catch(e){ return String(n); } }
+function renderGrpPricePreview(){
+  const box=document.getElementById('grp-price-preview'); if(!box) return;
+  const el=document.getElementById('grp-price'), raw=el?String(el.value).trim():'';
+  const cur=settings.currency||'';
+  const sum=_grpListSum(grpSelectedTests);
+  if(!grpSelectedTests.length){ box.innerHTML=''; return; }
+  if(raw===''){ box.innerHTML='<div style="font-size:11px;color:var(--text2)">مجموع أسعار التحاليل: <b style="color:var(--primary)"><bdi>'+_grpMoney(sum)+' '+cur+'</bdi></b></div>'; return; }
+  const P=parseFloat(raw);
+  if(!isFinite(P)||P<0){ box.innerHTML='<div style="font-size:11px;color:var(--danger)">أدخل سعراً صحيحاً (0 أو أكثر)</div>'; return; }
+  const sh=_grpShares(grpSelectedTests, P), diff=Math.round((P-sum)*100)/100;
+  box.innerHTML='<div style="font-size:11px;color:var(--text2);margin-bottom:5px">مجموع الأسعار الأصلية: <b>'+_grpMoney(sum)+'</b> ← سعر المجموعة: <b style="color:var(--success)"><bdi>'+_grpMoney(P)+' '+cur+'</bdi></b>'
+    +(diff<0?' <span style="color:var(--warning)">(توفير '+_grpMoney(-diff)+')</span>':diff>0?' <span style="color:var(--warning)">(+'+_grpMoney(diff)+')</span>':'')+'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr auto auto;gap:2px 10px;font-size:11px;background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:8px;padding:6px 9px;max-height:140px;overflow:auto">'
+    +grpSelectedTests.map(function(tid){ const t=tests.find(x=>x.id===tid); if(!t) return ''; return '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+tDisplayName(t)+'</span><span style="color:var(--text2);text-decoration:line-through;direction:ltr">'+_grpMoney(t.price)+'</span><b style="color:var(--primary);direction:ltr">'+_grpMoney(sh[tid])+'</b>'; }).join('')
+    +'</div>';
+}
+
 function renderGrpTestSearch(v){
   const box = document.getElementById('grp-test-results');
   if(!v||v.length<1){ box.style.display='none'; return; }
@@ -29757,6 +29942,7 @@ function removeGrpTest(tid){
 function renderGrpSelectedTags(){
   const wrap = document.getElementById('grp-selected-tests');
   if(!wrap) return;
+  try{ renderGrpPricePreview(); }catch(e){}
   if(!grpSelectedTests.length){ wrap.innerHTML='<span style="color:var(--text2);font-size:11px">لم يتم اختيار تحاليل بعد...</span>'; return; }
   wrap.innerHTML = grpSelectedTests.map(tid=>{
     const t = tests.find(x=>x.id===tid);
@@ -29772,11 +29958,20 @@ function saveTestGroup(){
   const editId = document.getElementById('grp-edit-id').value;
   if(!name){ showNotif('خطأ','يرجى إدخال اسم المجموعة','error'); return; }
   if(!grpSelectedTests.length){ showNotif('خطأ','يرجى إضافة تحليل واحد على الأقل','error'); return; }
+  const _pEl=document.getElementById('grp-price'), _pRaw=_pEl?String(_pEl.value).trim():'';
+  let price=null;
+  if(_pRaw!==''){
+    price=parseFloat(_pRaw);
+    if(!isFinite(price)||price<0){ showNotif('خطأ','سعر المجموعة غير صحيح','error'); return; }
+    price=Math.round(price*100)/100;
+  }
   if(editId){
     const g = testGroups.find(x=>x.id===editId);
-    if(g){ g.name=name; g.tests=[...grpSelectedTests]; }
+    if(g){ g.name=name; g.tests=[...grpSelectedTests]; if(price===null) delete g.price; else g.price=price; g._updatedAt=Date.now(); }
   } else {
-    testGroups.push({ id:_uid('grp_'), name, tests:[...grpSelectedTests] });
+    const ng={ id:_uid('grp_'), name, tests:[...grpSelectedTests] };
+    if(price!==null) ng.price=price;
+    testGroups.push(ng);
   }
   saveGroupsData();
   clearGrpForm();
@@ -29787,6 +29982,7 @@ function saveTestGroup(){
 function clearGrpForm(){
   document.getElementById('grp-name').value='';
   document.getElementById('grp-edit-id').value='';
+  { const _gp=document.getElementById('grp-price'); if(_gp) _gp.value=''; }
   grpSelectedTests=[];
   renderGrpSelectedTags();
   document.getElementById('grp-test-srch').value='';
@@ -29800,6 +29996,7 @@ function editTestGroup(gid){
   if(!g) return;
   document.getElementById('grp-name').value = g.name;
   document.getElementById('grp-edit-id').value = g.id;
+  { const _gp=document.getElementById('grp-price'); if(_gp) _gp.value=_grpHasPrice(g)?String(g.price):''; }
   grpSelectedTests = [...g.tests];
   renderGrpSelectedTags();
   const titleEl = document.getElementById('grp-form-title');
@@ -29841,7 +30038,7 @@ function renderSettingsGroups(){
       <div style="display:flex;flex-wrap:wrap;gap:4px">
         ${g.tests.map(tid=>{const t=tests.find(x=>x.id===tid);return t?`<span style="font-size:10px;background:rgba(0,212,255,0.08);border:1px solid rgba(0,212,255,0.2);padding:2px 7px;border-radius:10px;color:var(--text2)">${t.nameEn}</span>`:''}).join('')}
       </div>
-      <div style="font-size:10px;color:var(--text2);margin-top:5px">${g.tests.length} تحليل</div>
+      <div style="font-size:10px;color:var(--text2);margin-top:5px">${g.tests.length} تحليل${_grpHasPrice(g)?` · <span style="color:var(--success);font-weight:700">💰 سعر خاص ${_grpMoney(g.price)} ${settings.currency||''}</span> <span style="text-decoration:line-through">${_grpMoney(_grpListSum(g.tests))}</span>`:` · ${_grpMoney(_grpListSum(g.tests))} ${settings.currency||''}`}</div>
     </div>`).join('');
 }
 
@@ -29878,7 +30075,7 @@ function renderGrpDropdown(){
       onmouseover="this.style.background='rgba(0,212,255,0.08)'" onmouseout="this.style.background=''">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
         <span style="font-size:13px;font-weight:700;color:var(--primary)">📋 ${g.name}</span>
-        <span class="bdg bdg-p" style="font-size:10px">${g.tests.length} تحليل</span>
+        <span style="display:flex;gap:5px;align-items:center">${_grpHasPrice(g)?`<span class="bdg bdg-s" style="font-size:10px">💰 ${_grpMoney(g.price)} ${settings.currency||''}</span>`:''}<span class="bdg bdg-p" style="font-size:10px">${g.tests.length} تحليل</span></span>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:4px">
         ${testNames.slice(0,6).map(n=>`<span style="font-size:10px;background:rgba(255,255,255,0.05);border-radius:8px;padding:1px 7px;color:var(--text2)">${n}</span>`).join('')}
@@ -29902,6 +30099,12 @@ function applyGrpDropdown(gid){
       added++;
     }
   });
+  // 💰 سعر المجموعة الخاص ⇒ حصص التحاليل داخل هذا الطلب
+  if(_grpHasPrice(g)){
+    if(!wizSelectedTests._tp) wizSelectedTests._tp={};
+    const sh=_grpShares(g.tests, g.price);
+    Object.keys(sh).forEach(function(tid){ wizSelectedTests._tp[tid]=sh[tid]; });
+  }
   renderWizTestList();
   renderWizRightPanel();
   updateWizTotal();
@@ -31771,7 +31974,7 @@ function showNotif(title,msg,type='info'){
   const el=document.createElement('div');el.className='notif';
   el.innerHTML='<span style="font-size:18px">'+( icons[type]||'ℹ️')+'</span><div><h4>'+title+'</h4><p>'+msg+'</p></div>';
   w.appendChild(el);
-  setTimeout(function(){el.style.cssText='opacity:0;transform:translateX(-100%);transition:0.35s';setTimeout(function(){if(el.parentNode)el.remove();},360);},3200);
+  setTimeout(function(){el.style.cssText='opacity:0;transform:translateX(110%);transition:0.35s';setTimeout(function(){if(el.parentNode)el.remove();},360);},3200);
 }
 
 // ============================================================
@@ -36347,6 +36550,148 @@ function _spTitleStamp(rec, kind){
 }
 window._spTitleSet=_spTitleSet; window._spTitleReset=_spTitleReset;
 
+/* ══════════════════════════════════════════════════════════════════
+   📄 جدول النتائج بشكل نموذج CBC رقم 1 — للإدرار والخروج والسائل المنوي
+   ──────────────────────────────────────────────────────────────────
+   • يتغيّر جزء النتائج فقط: الترويسة + صندوق بيانات المريض + العنوان +
+     التذييل + العلامة المائية تبقى كما هي في كل تقرير.
+   • جدول واحد: رأس بلون الجدول، صفوف متناوبة بحدود رمادية، عنوان كل
+     قسم كسطر فاصل — بلا ترقيم، ومع عمود «آخر نتيجة» (حسب إعداد السابقة).
+   • يُفعَّل لكل فحص على حدة: settings.spCbc1 = {ua, stool, semen}
+   ══════════════════════════════════════════════════════════════════ */
+function _spCbc1On(kind){ try{ return !!(settings && settings.spCbc1 && settings.spCbc1[kind]); }catch(e){ return false; } }
+function _spCbc1Esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+/* sections = [{label, rows:[{name, val(html), abn, ref, unit, prev(html|null), wide}]}] · prev = سجل الفحص السابق أو null */
+function _cbc1TableHTML(sections, prev){
+  const tc=(settings&&settings.tableColor)||'#003366';
+  const hasPrev=!!prev;
+  const hasUnit=sections.some(s=>s.rows.some(x=>x.unit));
+  const nCols=3+(hasUnit?1:0)+(hasPrev?1:0);
+  const C='padding:3px 8px;border:1px solid #ddd;';
+  let body='', n=1;
+  sections.forEach(function(sec){
+    if(!sec.rows.length) return;
+    body+='<tbody style="page-break-inside:avoid;break-inside:avoid"><tr style="background:#fff"><td colspan="'+nCols+'" style="'+C+'border-top:2px solid '+tc+';font-size:13px;font-weight:900;color:'+tc+';letter-spacing:0.3px">'+_spCbc1Esc(sec.label)+'</td></tr>';
+    sec.rows.forEach(function(x){
+      const bg=n%2===0?'#f5f5f5':'#fff';
+      if(x.wide){
+        body+='<tr style="background:'+bg+'"><td style="'+C+'font-size:13px;font-weight:600">'+_spCbc1Esc(x.name)+'</td><td colspan="'+(nCols-1)+'" style="'+C+'font-size:13px;font-weight:700;text-align:left;white-space:pre-wrap;word-break:break-word">'+x.val+'</td></tr>';
+      } else {
+        body+='<tr style="background:'+bg+'"><td style="'+C+'font-size:13px;font-weight:600">'+_spCbc1Esc(x.name)+'</td>'
+          +'<td style="'+C+'font-size:14px;font-weight:800;text-align:center;color:'+(x.abn?'#cc0000':'#000')+'">'+(x.val===''?'&nbsp;':x.val)+'</td>'
+          +(hasUnit?'<td style="'+C+'font-size:12px;font-weight:600;text-align:center">'+_spCbc1Esc(x.unit||'')+'</td>':'')
+          +'<td style="'+C+'font-size:12px;font-weight:600;text-align:center">'+_spCbc1Esc(x.ref||'—')+'</td>'
+          +(hasPrev?'<td style="'+C+'font-size:12px;font-weight:700;text-align:center;color:#1a4fa0;background:#f4f8ff;-webkit-print-color-adjust:exact;print-color-adjust:exact">'+(x.prev==null||x.prev===''?'—':x.prev)+'</td>':'')
+          +'</tr>';
+      }
+      n++;
+    });
+    body+='</tbody>';
+  });
+  if(!body) return '';
+  const TH='background:'+tc+';color:#fff;padding:5px 8px;font-size:12px;border:1px solid #002244;text-align:center;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact';
+  return '<table style="width:100%;border-collapse:collapse;margin-top:3px;direction:ltr"><thead><tr>'
+    +'<th style="'+TH+'">Parameter</th><th style="'+TH+'">Result</th>'+(hasUnit?'<th style="'+TH+'">Unit</th>':'')+'<th style="'+TH+'">Ref. Ranges</th>'
+    +(hasPrev?'<th style="'+TH+';white-space:nowrap">Last Result'+(prev.date?'<div style="font-size:8px;font-weight:600;opacity:.85">'+_spCbc1Esc(prev.date)+'</div>':'')+'</th>':'')
+    +'</tr></thead>'+body+'</table>';
+}
+function _spCbc1Val(f, raw){
+  if(raw===undefined || raw===null) return '';
+  if(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL) return '';
+  if(f && f.type==='multiselect'){
+    const a=String(raw).split('||').map(s=>s.trim()).filter(Boolean);
+    return a.length ? a.map(_spCbc1Esc).join('<br>') : 'Absent';
+  }
+  return _spCbc1Esc(String(raw).trim());
+}
+/* 💧 الإدرار / 🧫 الخروج — من تعريف الحقول نفسه (يشمل الحقول المخصّصة) وبنفس قواعد العرض */
+function _spCbc1Fields(r, FIELDS, prev, skipTextarea){
+  return Object.values(FIELDS).map(function(sec){
+    const out=[];
+    sec.fields.forEach(function(f){
+      const raw=r[f.id];
+      const pv=prev ? (_spCbc1Val(f, prev[f.id])||'—') : null;
+      if(f.type==='multiselect'){
+        const a=String(raw||'').split('||').filter(p=>p.trim());
+        out.push({name:f.label, val:_spCbc1Val(f, raw||''), abn:a.length>0, ref:f.normal||'—', prev:pv});
+        return;
+      }
+      if(raw===undefined || raw===null || raw==='') return;
+      if(f.hideIfNormal && raw===f.normal) return;
+      if(f.type==='textarea'){ if(!skipTextarea) out.push({name:f.label, val:_spCbc1Esc(raw), wide:true}); return; }
+      const isEmpty=(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL);
+      out.push({name:f.label, val:_spCbc1Val(f, raw), abn:!isEmpty && !!f.normal && raw!==f.normal, ref:f.normal||'—', unit:f.unit||'', prev:pv});
+    });
+    return {label:sec.label, rows:out};
+  });
+}
+/* 🔬 السائل المنوي — بنفس تسميات وقيم وقواعد «غير طبيعي» للنموذج المختار للسائل المنوي */
+function _spCbc1SemenBody(r, keys, D){
+  const prev=D.prev||null;
+  const multi={s_normal_shapes:1, s_abnormal_forms:1};
+  const valOf=function(fid, rec){
+    const raw=rec?rec[fid]:undefined;
+    if(raw===undefined||raw===null||raw==='') return '';
+    if(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL) return '';
+    if(multi[fid]) return String(raw).split('||').filter(Boolean).map(_spCbc1Esc).join(', ');
+    return _spCbc1Esc(raw);
+  };
+  const sections=[];
+  keys.forEach(function(k){
+    if(D.tpl4){
+      const sec=(typeof SEMEN_FIELDS_4!=='undefined')?SEMEN_FIELDS_4[k]:null; if(!sec || !Array.isArray(sec.fields)) return;
+      const out=[];
+      sec.fields.forEach(function(f){
+        const raw=r[f.id]; if(raw===undefined||raw===null||raw==='' || f.type==='textarea') return;
+        const v=(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL)?'':String(raw);
+        let abn=false; try{ abn=!!_semenT4Abn(f, v); }catch(e){}
+        out.push({name:f.label, val:_spCbc1Esc(v), abn:abn, ref:f.ref||'', unit:f.unit||'', prev:prev?(valOf(f.id,prev)||'—'):null});
+      });
+      sections.push({label:sec.label, rows:out});
+      return;
+    }
+    const secDef=D.EN[k];
+    const fids = D.order ? D.order(k) : (secDef ? Object.keys(secDef.fields) : []);
+    if(!fids.length) return;
+    const out=[];
+    fids.forEach(function(fid){
+      const raw=r[fid]; if(raw===undefined||raw===null||raw==='') return;
+      const isEmpty=(typeof EMPTY_VAL!=='undefined' && raw===EMPTY_VAL);
+      const val=isEmpty?'':raw, ref=(D.ref ? D.ref(k,fid) : D.REFS[fid])||'', numVal=_semenNumVal(val);
+      let abn=false;
+      const lowRef=function(){ const rn=parseFloat(String(ref).replace(/[^0-9.]/g,'')); return (!isNaN(numVal)&&!isNaN(rn)) ? numVal<rn : false; };
+      if(isEmpty) abn=false;
+      else if(D.tpl2 && ['s_volume','s_conc','s_total_count','s_grade_a','s_pr','s_total_motile','s_vitality'].includes(fid)) abn=lowRef();
+      else if(D.tpl2 && fid==='s_normal_forms'){ if(!isNaN(numVal)) abn=numVal<14; }
+      else if(!D.tpl2 && ['s_volume','s_conc','s_total_count','s_pr','s_total_motile','s_vitality','s_normal_forms'].includes(fid)) abn=lowRef();
+      else if(fid==='s_dna_frag'){ if(!isNaN(numVal)) abn=numVal>15; }
+      else if(fid==='s_azoospermia'){ abn=val==='Yes'; }
+      else if(fid==='s_wbc'){ abn=val!=='< 1 M/mL'; }
+      else if(['s_rbc','s_bacteria','s_antisperm_ab'].includes(fid)){ abn=val!=='Absent'&&val!=='Negative'; }
+      else if(['s_agglutination','s_viscosity'].includes(fid)){ abn=val!=='Nil'; }
+      else if(fid==='s_oxidative'){ abn=val!=='Normal'; }
+      out.push({name:(D.label ? D.label(k,fid) : (secDef && secDef.fields[fid]) || fid), val:valOf(fid, r), abn:abn, ref:ref, prev:prev?(valOf(fid,prev)||'—'):null});
+    });
+    sections.push({label:(D.secLabel ? D.secLabel(k) : (secDef && secDef.label) || k), rows:out});
+  });
+  return _cbc1TableHTML(sections, prev);
+}
+/* ⚙️ الإعدادات: تفعيل الشكل لكل فحص */
+function _spCbc1Toggle(kind, el){
+  if(typeof settings!=='object') return;
+  const on=el ? el.classList.toggle('on') : !(settings.spCbc1&&settings.spCbc1[kind]);
+  settings.spCbc1=Object.assign({}, (settings.spCbc1&&typeof settings.spCbc1==='object')?settings.spCbc1:{}, {[kind]:!!on});
+  try{ save('settings', settings); }catch(e){}
+  try{ showNotif('✅ تم الحفظ', ({ua:'الإدرار',stool:'الخروج',semen:'السائل المنوي'}[kind]||kind)+(on?' — نتائجه بجدول نموذج CBC رقم 1':' — بتصميمه الأصلي'),'success'); }catch(e){}
+}
+function _spCbc1LoadUI(){
+  ['ua','stool','semen'].forEach(function(k){
+    const el=document.getElementById('tog-spcbc1-'+k);
+    if(el) el.classList.toggle('on', _spCbc1On(k));
+  });
+}
+window._spCbc1Toggle=_spCbc1Toggle; window._spCbc1LoadUI=_spCbc1LoadUI;
+
 function _buildUAPrintHTML(r){
   if(typeof r === 'string'){ loadUARecords(); r=uaRecords.find(x=>x.id===r); }
   if(!r) return '';
@@ -36528,7 +36873,7 @@ function _buildUAPrintHTML(r){
       </div>
       <div style="margin:0 0 2px;height:2px;background:${color}"></div>
       <div class="ua-sec">
-        ${Object.values(UA_FIELDS).map(renderSec).join('')}
+        ${_spCbc1On('ua') ? _cbc1TableHTML(_spCbc1Fields(r, UA_FIELDS, _uaPrevRec, false), _uaPrevRec) : Object.values(UA_FIELDS).map(renderSec).join('')}
       </div>
     </div>
     <div class="ua-footer">${ftrHTML}</div>
@@ -37137,7 +37482,7 @@ function _buildStoolPrintHTML(r){
         &#x1F9EB; General Stool Examination
       </div>
       <div style="margin:0 0 3px;height:2px;background:${color}"></div>
-      <div>${Object.values(STOOL_FIELDS).map(renderSec).join('')}</div>
+      <div>${_spCbc1On('stool') ? _cbc1TableHTML(_spCbc1Fields(r, STOOL_FIELDS, _stPrevRec, true), _stPrevRec) : Object.values(STOOL_FIELDS).map(renderSec).join('')}</div>
       ${r.s_note?`<div style="border:1.5px solid #b8b8b8;padding:5px 12px;margin-top:3px"><span style="font-size:13px;font-weight:800;color:#444">Notes: </span><span style="font-size:13px;color:#333">${r.s_note}</span></div>`:''}
     </div>
     <div class="se-footer">${ftrHTML}</div>
@@ -39872,9 +40217,33 @@ function _getMRTCodes(){
 // الحفظ: IDB (يدخل ضمن النسخة الاحتياطية) + نسخة احتياطية في localStorage للتوافق
 function _saveMRTCodes(codes){
   _mrtCodes=codes;
-  try{ setBig(MRT_BIG_KEY, JSON.stringify(codes)); }catch(e){}
+  const ts=Date.now();
+  try{ localStorage.setItem('mrt_ts', String(ts)); }catch(e){}
+  try{ setBig(MRT_BIG_KEY, JSON.stringify(codes)); }catch(e){}   // ☁️ يُزامَن عبر السحابة (مخزن big)
   try{ localStorage.setItem(MRT_LEGACY_KEY, JSON.stringify(codes)); }catch(e){}
+  // 🛜 وعبر الواي فاي للحاسبات المتصلة
+  try{ if(typeof _lanSendRaw==='function' && typeof _lanMode!=='undefined' && _lanMode) _lanSendRaw({ type:'mrt:set', from:(typeof _lanDeviceId!=='undefined'?_lanDeviceId:''), codes:codes, ts:ts }); }catch(e){}
 }
+/* 🔄 قائمة «الأكثر طلباً» وصلت من حاسبة أخرى ⇒ تُعرض فوراً (الواجهة كانت تبقى على النسخة القديمة حتى إعادة التشغيل) */
+function _mrtReload(){
+  _mrtCodes=null;
+  try{ renderMRTButtons(); }catch(e){}
+  try{ if(_mrtEditMode){ _mrtCodes=[..._getMRTCodes()]; _renderMRTSortable(); } }catch(e){}
+}
+window._mrtReload=_mrtReload;
+function _mrtApplyRemote(codes, ts){
+  if(!Array.isArray(codes) || !codes.length || codes.length>300) return false;
+  codes=codes.filter(function(c){ return typeof c==='string' && c.length<=40; });
+  if(!codes.length) return false;
+  let mine=0; try{ mine=parseInt(localStorage.getItem('mrt_ts')||'0',10)||0; }catch(e){}
+  if(+ts && +ts<=mine) return false;            // لدينا أحدث
+  try{ localStorage.setItem('mrt_ts', String(+ts||Date.now())); }catch(e){}
+  try{ localStorage.setItem(MRT_LEGACY_KEY, JSON.stringify(codes)); }catch(e){}
+  try{ setBig(MRT_BIG_KEY, JSON.stringify(codes)); }catch(e){}
+  _mrtReload();
+  return true;
+}
+window._mrtApplyRemote=_mrtApplyRemote;
 
 // ترحيل لمرة واحدة بعد تحميل كاش IDB — يحافظ على ترتيب المستخدمين القدماء
 async function _mrtMigrateToIDB(){
@@ -41584,6 +41953,12 @@ function _buildSemenPrintHTML(r, mode){
   // بناء جسم التقرير لمجموعة أقسام معيّنة (يحترم النموذج المختار)
   const _smBuildBody=(keys)=>{
     if(!keys || !keys.length) return '';
+    /* 📄 جدول نموذج CBC رقم 1 (من الإعدادات) — الترويسة وبيانات المريض والعنوان والتوزيع على ورقتين كما هي */
+    if(_spCbc1On('semen')){
+      const _smPrev=(typeof _spFindPrev==='function')?_spFindPrev(semenRecords||[], r):null;
+      return _spCbc1SemenBody(r, keys, {EN:SEMEN_EN, REFS:SEMEN_REFS, tpl2:_SMTPL2, tpl4:_SMTPL4, prev:_smPrev,
+        order:_SMTPL2?_smLiveFieldOrder:null, label:_SMTPL2?_smLiveLabel:null, ref:_SMTPL2?_smLiveRef:null, secLabel:_SMTPL2?_smLiveSecLabel:null});
+    }
     if(_SMTPL4) return _semenT4BodyHTML(r, keys);   // 🔬 نموذج ٤
     if(_SMTPL2){
       const rowsHTML=keys.map(renderSec2).join('');
@@ -57190,6 +57565,10 @@ function _lanHandleMessage(raw){
       if(msg.to === _lanDeviceId && typeof _lisPushFinish==='function')
         _lisPushFinish(msg.pushId, msg.msg||(msg.ok?'✅ تم الإرسال':'❌ فشل الإرسال'));
     }
+    else if(msg.type==='mrt:set' && msg.from !== _lanDeviceId){
+      // ⚡ قائمة «الأكثر طلباً» (السيرفير يرحّلها تلقائياً لبقية الحاسبات)
+      if(typeof _mrtApplyRemote==='function') _mrtApplyRemote(msg.codes, msg.ts);
+    }
     else if(msg.type==='cbc' && msg.reqId){
       // نتيجة CBC وصلت من جهاز على حاسبة أخرى
       if(typeof lisCbcFromLAN==='function') lisCbcFromLAN(msg);
@@ -57282,6 +57661,54 @@ function lisLanDeleteSaved(id){
   showNotif('LAN','تم حذف الرابط ✓','info');
 }
 
+// ═══════════════════════════════════════════════════════════
+// 🔐 مصادقة الواي فاي: مفتاح مشتق من حساب المختبر (لا يُرسل أبداً) + تحدٍّ HMAC لكل اتصال
+//    SHA-256 بلغة JS خالصة — يعمل أيضاً على الهاتف المفتوح عبر http (بلا crypto.subtle)
+// ═══════════════════════════════════════════════════════════
+var _LanSha = (function(){
+  var K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  function utf8(str){ var out=[], i, c; str=String(str); for(i=0;i<str.length;i++){ c=str.charCodeAt(i);
+    if(c<0x80) out.push(c); else if(c<0x800) out.push(0xc0|(c>>6),0x80|(c&63));
+    else if(c>=0xd800&&c<0xdc00&&i+1<str.length){ var d=str.charCodeAt(++i); c=0x10000+((c&0x3ff)<<10)+(d&0x3ff); out.push(0xf0|(c>>18),0x80|((c>>12)&63),0x80|((c>>6)&63),0x80|(c&63)); }
+    else out.push(0xe0|(c>>12),0x80|((c>>6)&63),0x80|(c&63)); } return out; }
+  function hash(bytes){
+    var H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+    var m=bytes.slice(), l=m.length*8, W=new Array(64), i, j, a,b,c,d,e,f,g,h,t1,t2;
+    m.push(0x80); while(m.length%64!==56) m.push(0);
+    for(i=7;i>=0;i--) m.push(i>3?0:(l>>>(i*8))&255);
+    for(j=0;j<m.length;j+=64){
+      for(i=0;i<16;i++) W[i]=(m[j+i*4]<<24)|(m[j+i*4+1]<<16)|(m[j+i*4+2]<<8)|m[j+i*4+3];
+      for(i=16;i<64;i++){ var x=W[i-15], y=W[i-2];
+        var s0=((x>>>7)|(x<<25))^((x>>>18)|(x<<14))^(x>>>3), s1=((y>>>17)|(y<<15))^((y>>>19)|(y<<13))^(y>>>10);
+        W[i]=(W[i-16]+s0+W[i-7]+s1)|0; }
+      a=H[0];b=H[1];c=H[2];d=H[3];e=H[4];f=H[5];g=H[6];h=H[7];
+      for(i=0;i<64;i++){
+        t1=(h+(((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7)))+((e&f)^(~e&g))+K[i]+W[i])|0;
+        t2=((((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10)))+((a&b)^(a&c)^(b&c)))|0;
+        h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0; }
+      H[0]=(H[0]+a)|0;H[1]=(H[1]+b)|0;H[2]=(H[2]+c)|0;H[3]=(H[3]+d)|0;H[4]=(H[4]+e)|0;H[5]=(H[5]+f)|0;H[6]=(H[6]+g)|0;H[7]=(H[7]+h)|0;
+    }
+    var out=[]; for(i=0;i<8;i++) out.push((H[i]>>>24)&255,(H[i]>>>16)&255,(H[i]>>>8)&255,H[i]&255); return out;
+  }
+  function hex(b){ var s=''; for(var i=0;i<b.length;i++) s+=(b[i]<16?'0':'')+b[i].toString(16); return s; }
+  function unhex(h){ var o=[]; for(var i=0;i<h.length;i+=2) o.push(parseInt(h.substr(i,2),16)); return o; }
+  function hmac(keyBytes, msgBytes){
+    if(keyBytes.length>64) keyBytes=hash(keyBytes);
+    var ip=[], op=[]; for(var i=0;i<64;i++){ var k=keyBytes[i]||0; ip.push(k^0x36); op.push(k^0x5c); }
+    return hash(op.concat(hash(ip.concat(msgBytes))));
+  }
+  return { sha256hex:function(s){ return hex(hash(utf8(s))); }, hmacHex:function(keyHex, msg){ return hex(hmac(unhex(keyHex), utf8(msg))); } };
+})();
+window._LanSha = _LanSha;
+function _lanAcct(){ try{ return (window.MSync && MSync._acct) ? (MSync._acct()||'') : ''; }catch(e){ return ''; } }
+function _lanKeyHex(){ var a=_lanAcct(); return a ? _LanSha.sha256hex('medlab-lan-v1|'+a) : ''; }
+/* السيرفير: يسلّم المفتاح لعملية Electron (من 127.0.0.1 فقط) — بعدها لا يُقبل إلا من يعرف الحساب */
+function _lanPushKey(tries){
+  var k=_lanKeyHex();
+  if(!k){ if((tries||0)<20) setTimeout(function(){ _lanPushKey((tries||0)+1); }, 3000); return; }
+  try{ fetch('http://127.0.0.1:'+_LAN_PORT+'/__medlab-lankey?k='+k, {cache:'no-store'}).catch(function(){}); }catch(e){}
+}
+
 // تشغيل LAN كسيرفير
 function lisLanStartServer(){
   _ensureLanSaveHook();
@@ -57291,6 +57718,7 @@ function lisLanStartServer(){
     window.electronAPI.lanStartServer(_LAN_PORT).then(function(r){
       if(r && r.ok){
         _lanMode = 'server';
+        _lanPushKey(0);   // 🔐 فعّل المصادقة فوراً
         _lanResetGate(); // ⭐ ابدأ مغلقاً حتى تكتمل المصالحة مع أول جهاز
         /* ⭐ مستمع واحد فقط مهما أُعيد تشغيل السيرفير (الربط الاحتياطي يشغّله ويوقفه تلقائياً)
            — كان كل تشغيل يضيف مستمعاً جديداً فتُعالَج كل رسالة أكثر من مرة */
@@ -57365,9 +57793,30 @@ function lisLanConnectClient(){
       _lanUpdateStatus();
       showNotif('🌐 LAN','✅ متصل بالسيرفير','success');
       // ⭐ أعلن جردة بياناتنا → الأغنى بالبيانات يفوز ويدفع نسخته للجميع
-      setTimeout(function(){ _lanAnnounce(); }, 400);
+      //    🔐 سيرفير بمصادقة يرسل تحدّياً أولاً ⇒ نُعلن بعد قبولنا · سيرفير قديم بلا تحدٍّ ⇒ كما كان
+      var _wsMe = _lanWS;
+      _wsMe._annT = setTimeout(function(){ if(_lanWS===_wsMe) _lanAnnounce(); }, 900);
     };
-    _lanWS.onmessage = function(e){ _lanHandleMessage(e.data); };
+    _lanWS.onmessage = function(e){
+      var d = e.data;
+      if(typeof d==='string' && d.length<400 && d.indexOf('"lan_')!==-1){
+        var _m=null; try{ _m=JSON.parse(d); }catch(_){}
+        if(_m && _m.type==='lan_challenge'){
+          var _ws=this; clearTimeout(_ws._annT);
+          var _k=_lanKeyHex();
+          try{ _ws.send(JSON.stringify({ type:'lan_auth', h:_k?_LanSha.hmacHex(_k, String(_m.n||'')):'' })); }catch(_){}
+          _ws._annT = setTimeout(function(){ if(_lanWS===_ws) _lanAnnounce(); }, 4000);   // احتياط
+          return;
+        }
+        if(_m && _m.type==='lan_auth_ok'){ clearTimeout(this._annT); if(_lanWS===this) setTimeout(function(){ _lanAnnounce(); }, 150); return; }
+        if(_m && _m.type==='lan_auth_fail'){
+          clearTimeout(this._annT);
+          showNotif('🔐 LAN','رفض السيرفير الاتصال: هذه الحاسبة ليست على حساب المختبر نفسه (سجّل الدخول بنفس الحساب)','error');
+          return;
+        }
+      }
+      _lanHandleMessage(d);
+    };
     _lanWS.onclose = function(){
       _lanMode=null; _lanWS=null; _lanOpenGate(); _lanUpdateStatus();
       // ⭐ قطع يدوي؟ لا تعِد الاتصال. غير ذلك: جدوِل إعادة محاولة مع backoff
@@ -66717,7 +67166,10 @@ else setTimeout(boot,300);
 #mls-root .mls-switch .tr::after{content:"";position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:right .2s}
 #mls-root .mls-switch.on .tr{background:var(--success)}
 #mls-root .mls-switch.on .tr::after{right:21px}
-#mls-root .mls-tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:14px;overflow-x:auto}
+/* 🖥️ ملاءمة كل الشاشات: المحتوى لا يتمدد خلف حافة الشاشة (عنصر flex يحتاج min-width:0 حتى ينكمش) */
+.layout>.main,.main>.page{min-width:0}
+#mls-root{min-width:0;max-width:100%}
+#mls-root .mls-tabs{display:flex;flex-wrap:wrap;gap:2px 6px;border-bottom:1px solid var(--border);margin-bottom:14px}
 #mls-root .mls-tab{padding:9px 16px;border:0;background:none;color:var(--text2);font-weight:700;font-size:12.5px;cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap;font-family:inherit}
 #mls-root .mls-tab.on{color:var(--primary);border-bottom-color:var(--primary)}
 #mls-root .mls-tab b{background:var(--danger);color:#fff;border-radius:99px;padding:0 6px;font-size:10.5px;margin-right:5px}
@@ -66727,6 +67179,20 @@ else setTimeout(boot,300);
 #mls-root .mls-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center}
 #mls-root .mls-chip{padding:5px 12px;border-radius:99px;border:1px solid var(--border);background:var(--bg-glass);color:var(--text2);font-weight:700;font-size:11.5px;cursor:pointer;font-family:inherit}
 #mls-root .mls-chip.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+#mls-root .mls-acc{display:flex;flex-direction:column;gap:8px}
+#mls-root .mls-acc-it{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--mls-r);overflow:hidden;transition:border-color .15s,box-shadow .15s}
+#mls-root .mls-acc-it.on{border-color:var(--primary);box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 35%,transparent)}
+#mls-root .mls-acc-hd{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;border:0;background:none;color:inherit;font-family:inherit;font-size:12.5px;cursor:pointer;text-align:right;min-width:0}
+#mls-root .mls-acc-hd:hover{background:var(--bg-glass)}
+#mls-root .mls-acc-hd .no{font-weight:800;direction:ltr;flex:none}
+#mls-root .mls-acc-hd .nm{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mls-root .mls-acc-hd .dt{color:var(--text2);font-size:11px;flex:none}
+#mls-root .mls-acc-hd .am{font-weight:800;flex:none;min-width:84px;text-align:left}
+#mls-root .mls-acc-hd .cv{flex:none;color:var(--text2);transition:transform .2s}
+#mls-root .mls-acc-it.on .cv{transform:rotate(180deg);color:var(--primary)}
+#mls-root .mls-acc-bd{padding:0 10px 10px}
+#mls-root .mls-acc-bd .mls-ord{border:0;padding:6px 4px 2px;background:none}
+@media (max-width:700px){#mls-root .mls-acc-hd .dt{display:none}}
 #mls-root .mls-orders{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px}
 #mls-root .mls-ord{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--mls-r);padding:13px 14px;display:flex;flex-direction:column;gap:8px;position:relative}
 #mls-root .mls-ord.new{border-color:var(--warning);box-shadow:0 0 0 1px color-mix(in srgb,var(--warning) 40%,transparent)}
@@ -67025,7 +67491,7 @@ function putLog(oid,o){ try{ var L=getLog(); L[oid]=o; var ks=Object.keys(L); if
 function defStore(){
   var s=S()||{};
   return { sid:'', secret:'', code:'', url:DEFAULT_URL, on:true, createdAt:Date.now(), dev1:!!(window._tdbIsMaster && window._tdbIsMaster()),
-    info:{ nm:s.labName||'', ph:s.phone||'', wa:s.phone||'', ad:'', hr:'', msg:'', open:true, fm:'free', fv:0, fa:0, mn:0, ars:[], ret:3, lg:'' },
+    info:{ nm:s.labName||'', ph:s.phone||'', wa:s.phone||'', ad:'', hr:'', msg:'', open:true, fm:'fixed', fv:CAP_MIN_FEE, fa:0, mn:0, ars:[], ret:3, lg:'' },
     sec:{}, tst:{}, dg:0, cps:[], bns:[], pks:[], sound:true, dirty:true, pubAt:0 };
 }
 
@@ -67049,11 +67515,15 @@ async function ledHeal(){
   // تصحيح ذاتي: أي سجل بقي «جديد» بينما الطلب تجاوز مرحلة القبول (انقطاع شبكة مثلاً)
   if(!M.conn) return;
   try{
-    var snap=await M.db.ref('led/'+M.sid).orderByChild('st').equalTo('new').once('value'), v=snap.val()||{};
-    for(var oid in v){ var o=M.orders[oid]; if(!o) continue;
-      if(['accepted','onway','collected','inlab','ready','done'].indexOf(o.st)>=0) await ledMark(oid,'acc');
+    var snap=await M.db.ref('led/'+M.sid).orderByChild('st').equalTo('new').once('value'), v=snap.val()||{}, L=getLog(), n=0;
+    for(var oid in v){
+      // الطلب على الخادم، أو (إن حُذف بعد اكتماله) آخر حالة له في سجل هذه الحاسبة
+      var o=M.orders[oid] || L[oid]; if(!o || o.dl) continue;
+      var accd=['accepted','onway','collected','inlab','ready','done'].indexOf(o.st)>=0;                      // الملغى لا يُحتسب
+      if(accd){ await ledMark(oid,'acc'); n++; }
       else if(o.st==='rejected') await ledMark(oid,'rej'); }
-  }catch(e){}
+    return n;
+  }catch(e){ return 0; }
 }
 
 /* ───────── الاتصال بمشروع المتجر ───────── */
@@ -67156,6 +67626,10 @@ function onOrder(oid,o,added){
   M.orders[oid]=o;
   putLog(oid, Object.assign({}, getLog()[oid]||{}, o));
   try{ capWatch(oid, o, was); }catch(e){ console.warn('[mlstore] capWatch',e); }
+  if(was && o.st==='cancelled' && was.st!=='cancelled'){
+    if(M.dsp[oid] && M.dsp[oid].state==='run'){ clearTimeout(M.dsp[oid].timer); M.dsp[oid].state='stop'; pushApi('cancel',{oid:oid}).then(function(r){ if(!r||!r.ok) M.db.ref('jobs/'+oid).remove().catch(function(){}); }); }
+    if(was.st!=='new'){ chime(); notif('✖️ ألغى المراجع الطلب', (o.nm||'')+' — #'+shortNo(oid)+(o.cr?' — السبب: '+o.cr:'')+(was.cap?' (أُبلغ موظف السحب '+(was.cn||'')+')':''),'warning'); dlogEv(oid,{e:'pcancel'}); }
+  }
   if(o.st==='new' && (!was || was.st!=='new') && !M.seen[oid]){
     M.seen[oid]=1;
     if(!added || (Date.now()-(o.ts||0))<6*3600e3) alertNew(o);
@@ -67258,7 +67732,7 @@ function buildInfo(v){
   var c=cfg(), I=c.info||{};
   return { nm:String(I.nm||(S().labName)||'المختبر').slice(0,80), ph:String(I.ph||'').slice(0,20), wa:String(I.wa||'').slice(0,20),
     ad:String(I.ad||'').slice(0,200), hr:String(I.hr||'').slice(0,120), msg:String(I.msg||'').slice(0,200), open:I.open!==false,
-    fm:['free','fixed','area'].indexOf(I.fm)>=0?I.fm:'free', fv:+I.fv||0, fa:+I.fa||0, mn:+I.mn||0,
+    fm:['free','fixed','area'].indexOf(I.fm)>=0?I.fm:'fixed', fv:I.fm==='fixed'||!I.fm?Math.max(CAP_MIN_FEE,+I.fv||0):+I.fv||0, fa:+I.fa||0, mn:+I.mn||0,
     ars:(I.ars||[]).filter(function(a){return a&&a.n;}).map(function(a){return {n:String(a.n).slice(0,60), f:+a.f||0};}),
     cur:cur().slice(0,8), lg:I.lg||'', v:v, bv:+c.bv||0,
     la:typeof I.la==='number'?I.la:null, lo:typeof I.lo==='number'?I.lo:null };
@@ -67330,6 +67804,7 @@ function rmExtra(oid){ var u={}; u['vc/'+oid]=null; u['ps/'+oid]=null; return u;
 async function setSt(oid, st, extra){
   if(!M.conn) return notif('غير متصل','لا يوجد اتصال بخادم المتجر','error');
   var u=Object.assign({st:st, upd:TS()}, extra||{});
+  if(st==='accepted' && M.orders[oid] && M.orders[oid].st==='new') u.aat=TS();   // ⏱ منه تُحسب مهلة الساعة لإلغاء المراجع
   try{ await oref(oid).update(u); }catch(e){ notif('خطأ','تعذّر تحديث الطلب','error'); return; }
   if(st==='accepted') ledMark(oid,'acc'); else if(st==='rejected') ledMark(oid,'rej');
   if(M.orders[oid]) M.orders[oid]=Object.assign({}, M.orders[oid], {st:st});
@@ -67593,6 +68068,7 @@ function chatSend(oid, text){
   c.ms.push({id:id, f:'l', t:text, ts:sNow(), st:'sending'}); c.lt=Date.now(); putChats(C); chatPaint(oid,true);
   ref.set({f:'l', t:text, ts:TS()}).then(function(){
     var C2=getChats(), x=C2[oid] && C2[oid].ms.find(function(y){return y.id===id;}); if(x && x.st==='sending'){ x.st='sent'; putChats(C2); chatPaint(oid,false); }
+    pushApi('msg',{c:'cx', sid:M.sid, oid:oid, mid:id});   // 🔔 تصل للمراجع كإشعار يحمل الرسالة (تُحذف من الخادم فور استلامها)
   }).catch(function(e){
     var C2=getChats(), x=C2[oid] && C2[oid].ms.find(function(y){return y.id===id;}); if(x){ x.st='fail'; putChats(C2); chatPaint(oid,false); }
     notif('تعذّر الإرسال', (e&&e.code==='PERMISSION_DENIED')?'تحقّق من تحديث قواعد Firebase للمتجر':'تحقّق من الاتصال', 'error');
@@ -67817,11 +68293,24 @@ function ordersHtml(){
   list.sort(function(a,b){ return M.filter==='new'?(a.ts||0)-(b.ts||0):(b.upd||b.ts||0)-(a.upd||a.ts||0); });
   return '<div class="mls-chips">'+FILTERS.map(function(x){return '<button class="mls-chip '+(M.filter===x[0]?'on':'')+'" data-x="filter" data-v="'+x[0]+'">'+x[1]+' ('+cnt[x[0]]+')</button>';}).join('')+
     '<input class="fc" style="max-width:240px;margin-right:auto" placeholder="🔍 اسم، هاتف، أو رقم الطلب" data-x="q" value="'+esc(M.q)+'"></div>'+
-    (list.length?'<div class="mls-orders">'+list.slice(0,120).map(orderCard).join('')+'</div>':
+    (list.length?(M.filter==='closed'?accListHtml(list):'<div class="mls-orders">'+list.slice(0,120).map(orderCard).join('')+'</div>'):
      '<div class="mls-empty"><b>'+(M.filter==='new'?'لا توجد طلبات جديدة':'لا توجد طلبات هنا')+'</b>'+(M.filter==='new'?'تصل الطلبات الجديدة هنا فوراً مع تنبيه صوتي.':'')+'</div>');
 }
+/* 📂 الطلبات المنتهية: قائمة منسدلة — ضغطة تفتح التفاصيل، والضغط خارجها يغلقها */
+function accListHtml(list){
+  if(M.accOpen && !list.some(function(o){ return o.oid===M.accOpen; })) M.accOpen=null;
+  return '<div class="mls-acc">'+list.slice(0,200).map(function(o){
+    var on=M.accOpen===o.oid, s=o.dl?['حذفه المختبر','bad']:(ST[o.st]||[o.st,'']);
+    return '<div class="mls-acc-it'+(on?' on':'')+'">'+
+      '<button class="mls-acc-hd" data-x="acc" data-o="'+o.oid+'" aria-expanded="'+on+'">'+
+        '<span class="no">#'+shortNo(o.oid)+'</span><span class="nm">'+esc(o.nm||'—')+'</span>'+
+        '<span class="mls-st '+s[1]+'">'+s[0]+'</span>'+(o._arch?'<span class="mls-muted" style="font-size:10.5px">من السجل</span>':'')+
+        '<span class="dt">'+(o.ts?new Date(o.ts).toLocaleDateString('ar-IQ'):'')+'</span><span class="am">'+money(o.tot)+'</span><span class="cv">▾</span></button>'+
+      (on?'<div class="mls-acc-bd">'+orderCard(o)+'</div>':'')+'</div>';
+  }).join('')+'</div>';
+}
 function orderCard(o){
-  var oid=o.oid, s=ST[o.st]||[o.st,''], req=linkedReq(oid), arch=!!o._arch, busy=!!M.busy[oid];
+  var oid=o.oid, s=o.dl?['حذفه المختبر','bad']:(ST[o.st]||[o.st,'']), req=linkedReq(oid), arch=!!o._arch, busy=!!M.busy[oid];
   var exp=expectedTotals(o), warn='';
   if(!arch && o.st==='new'){ if(exp.missing.length) warn+='<div class="mls-warn">⚠️ تحاليل لم تعد في متجرك: '+esc(exp.missing.join('، '))+'</div>';
     else if(Math.abs(exp.sub-(+o.sub||0))>1) warn+='<div class="mls-warn">⚠️ أسعار الطلب ('+fmt(o.sub)+') تختلف عن أسعارك الحالية ('+fmt(exp.sub)+')</div>'; }
@@ -67843,9 +68332,9 @@ function orderCard(o){
     var _un=((getChats()[oid]||{}).un)||0;
     acts.push('<button class="btn btn-s btn-sm" data-x="copen"'+D+'>💬 مراسلة'+(_un?' <b class="mls-cbadge">'+_un+'</b>':'')+'</button>');
     acts.push('<button class="btn btn-s btn-sm" data-x="wa"'+D+'>واتساب</button>');
-    if(['done','rejected','cancelled'].indexOf(o.st)>=0) acts.push('<button class="btn btn-s btn-sm" data-x="del"'+D+'>🗑️ حذف من الخادم</button>');
+    acts.push('<button class="btn '+(['done','rejected','cancelled'].indexOf(o.st)>=0?'btn-s':'btn-d')+' btn-sm" data-x="del"'+D+'>🗑️ حذف الطلب</button>');
     if(o.st==='new') acts.push('<button class="btn btn-s btn-sm" data-x="block"'+D+' title="منع هذا الرقم من الطلب">🚫 حظر</button>');
-  }
+  } else acts.push('<button class="btn btn-s btn-sm" data-x="adel" data-o="'+oid+'">🗑️ حذف من السجل</button>');
   return '<div class="mls-ord '+(o.st==='new'?'new':'')+'">'+
     '<div class="hd"><span class="no">#'+shortNo(oid)+'</span><span class="mls-st '+s[1]+'">'+s[0]+'</span><span class="tm">'+ago(o.ts)+(req?' · <b style="color:var(--success)">'+esc(req.id)+'</b>':'')+'</span></div>'+
     '<div class="mls-kv"><span>المراجع</span><b>'+esc(o.nm)+' <span class="mls-muted">('+(o.g==='female'?'أنثى':'ذكر')+'، '+esc(o.ag)+' سنة)</span></b>'+
@@ -67856,14 +68345,38 @@ function orderCard(o){
       '<span>الموعد</span><span>'+esc(o.wh)+'</span>'+
       (o.nt?'<span>ملاحظة</span><span>'+esc(o.nt)+'</span>':'')+
       (o.by&&!o.cn?'<span>الساحب</span><span>'+esc(o.by)+'</span>':'')+
-      (o.msg?'<span>رسالتك</span><span>'+esc(o.msg)+'</span>':'')+'</div>'+
+      (o.msg?'<span>رسالتك</span><span>'+esc(o.msg)+'</span>':'')+
+      (o.st==='cancelled' && o.cr?'<span>سبب الإلغاء</span><b style="color:var(--danger)">'+esc(o.cr)+'</b>':'')+'</div>'+
     '<div class="mls-items">'+(o.it||[]).map(function(i){return '<div><span>'+(i.k==='p'?'📦 ':'')+esc(i.n)+'</span><span>'+fmt(i.p)+'</span></div>';}).join('')+'</div>'+
-    '<div class="mls-kv"><span>المجموع</span><span>'+fmt(o.sub)+'</span>'+(o.dsc?'<span>الخصم'+(o.cp?' ('+esc(o.cp)+')':'')+'</span><span>− '+fmt(o.dsc)+'</span>':'')+'<span>أجور السحب</span><span>'+(o.fee?fmt(o.fee):'مجاناً')+'</span></div>'+
+    '<div class="mls-kv"><span>المجموع</span><span>'+fmt(o.sub)+'</span>'+(o.dsc?'<span>الخصم'+(o.cp?' ('+esc(o.cp)+')':'')+'</span><span>− '+fmt(o.dsc)+'</span>':'')+'<span>أجور السحب</span><span>'+(o.fee?fmt(o.fee):'مجاناً')+'</span>'+(o.cap?'<span>أجرة موظف السحب</span><span>'+fmt(capFee(o))+'</span><span>التسوية مع الساحب</span><span>'+esc(settleTxt(o))+'</span>':'')+'</div>'+
     '<div class="mls-tot"><span>يُستلم نقداً</span><span>'+money(o.tot)+'</span></div>'+
     warn+flow+capOrderHtml(o)+(acts.length?'<div class="mls-acts">'+acts.join('')+'</div>':'')+
   '</div>';
 }
 
+/* 🗑️ حذف طلب بأي حالة — مع تنبيه واضح إن لم يكتمل (يُلغى عند المراجع وموظف السحب) */
+async function delOrder(oid){
+  var o=M.orders[oid]; if(!o) return;
+  var fin=['done','rejected','cancelled'].indexOf(o.st)>=0;
+  var msg=fin?'حذف الطلب #'+shortNo(oid)+' من الخادم؟\nيبقى محفوظاً في سجل هذه الحاسبة.'
+    :'⚠️ تنبيه: هذا الطلب غير مكتمل (الحالة: '+((ST[o.st]||[o.st])[0])+').\n\nحذفه يُلغي الطلب عند المراجع '+(o.nm||'')+(o.cap?' وعند موظف السحب '+(o.cn||'')+' فوراً':'')+'، ولا يمكن التراجع.\n\nهل أنت متأكد من حذف الطلب #'+shortNo(oid)+'؟';
+  if(!confirm(msg)) return;
+  if(!M.conn) return notif('غير متصل','لا يوجد اتصال بخادم المتجر','error');
+  var cap=o.cap||null;
+  if(!fin){
+    if(M.dsp[oid]){ clearTimeout(M.dsp[oid].timer); M.dsp[oid].state='stop'; }
+    if(o.st==='accepted' && !cap){ var rc=await pushApi('cancel',{oid:oid}); if(!rc || !rc.ok) await M.db.ref('jobs/'+oid).remove().catch(function(){}); }
+    if(o.st==='new') ledMark(oid,'rej');
+    dlogEv(oid,{e:'deleted'});                      // (قبل كتابة السجل — dlog يدمج حالة الطلب الحية)
+    var L1=getLog(); putLog(oid, Object.assign({}, L1[oid]||{}, o, {st:'cancelled', dl:1, upd:Date.now(), dp:(L1[oid]||{}).dp}));
+  }
+  if(o.rs) M.db.ref('stores/'+M.sid+'/res/'+o.rs).remove().catch(function(){});
+  M.db.ref('stores/'+M.sid).update(rmExtra(oid)).catch(function(){});
+  try{ await oref(oid).remove(); }catch(e){ return notif('خطأ','تعذّر حذف الطلب','error'); }
+  if(!fin && cap) pushApi('unassigned',{sid:M.sid, oid:oid, cap:cap, why:'deleted'});   // يتوقف موظف السحب فوراً
+  if(M.accOpen===oid) M.accOpen=null;
+  notif('تم الحذف','الطلب #'+shortNo(oid)+(fin?'':' — أُلغي عند المراجع'+(cap?' وموظف السحب':'')),'success');
+}
 /* ── شريط الأقسام الأفقي: سحب بالماوس + عجلة + أسهم + إبقاء القسم المحدد ظاهراً ── */
 function bindSecBar(r, savedLeft){
   var bar=r.querySelector('#mls-secbar'); if(!bar) return;
@@ -68062,6 +68575,7 @@ function offersHtml(){
 async function loadDues(force){
   if(!M.conn) return;
   if(!force && M.dues && Date.now()-M.dues.at<60000) return;
+  if(force || !M.dues) await ledHeal();
   try{
     var a=await Promise.all([M.db.ref('led/'+M.sid).once('value'), M.db.ref('pay/'+M.sid).once('value')]);
     M.dues={at:Date.now(), led:a[0].val()||{}, pay:a[1].val()||{}};
@@ -68188,9 +68702,10 @@ function settingsHtml(){
         '<input type="file" accept="image/*" data-x="logo" class="fc" style="max-width:260px">'+(I.lg?'<button class="btn btn-s btn-sm" data-x="logodel">إزالة</button>':'')+'</div></div></div></div>'+
     '<div class="mls-card"><h4>🛵 أجور السحب المنزلي</h4>'+
       '<div class="mls-chips">'+[['free','مجاني'],['fixed','مبلغ ثابت'],['area','حسب المنطقة']].map(function(x){return '<button class="mls-chip '+(I.fm===x[0]?'on':'')+'" data-x="fm" data-v="'+x[0]+'">'+x[1]+'</button>';}).join('')+'</div>'+
-      '<div class="mls-row">'+(I.fm==='fixed'?inp('fv','أجور السحب','5000','number','min="0"'):'')+(I.fm!=='free'?inp('fa','مجاني إذا تجاوز الطلب (0 = لا)','100000','number','min="0"'):'')+inp('mn','الحد الأدنى للطلب (0 = لا)','0','number','min="0"')+'</div>'+
+      '<div class="mls-row">'+(I.fm==='fixed'?inp('fv','أجور السحب (أقل شيء '+fmt(CAP_MIN_FEE)+')',String(CAP_MIN_FEE),'number','min="'+CAP_MIN_FEE+'" step="250"'):'')+(I.fm!=='free'?inp('fa','مجاني إذا تجاوز الطلب (0 = لا)','100000','number','min="0"'):'')+inp('mn','الحد الأدنى للطلب (0 = لا)','0','number','min="0"')+'</div>'+
+      feeNoteHtml(I)+
       (I.fm==='area'?'<div class="mls-list">'+(areas||'<div class="mls-muted">أضف المناطق التي تغطيها مع أجر كل منطقة.</div>')+'</div>'+
-        '<div class="mls-row" style="margin-top:8px"><div class="fg"><label class="fl">المنطقة</label><input class="fc" id="ar-n" maxlength="60" placeholder="الكرادة"></div><div class="fg" style="max-width:150px"><label class="fl">الأجر (0 = مجاني)</label><input class="fc" id="ar-f" type="number" min="0"></div><div class="fg" style="max-width:100px"><button class="btn btn-p btn-sm" data-x="aradd">➕ إضافة</button></div></div>':'')+
+        '<div class="mls-row" style="margin-top:8px"><div class="fg"><label class="fl">المنطقة</label><input class="fc" id="ar-n" maxlength="60" placeholder="الكرادة"></div><div class="fg" style="max-width:150px"><label class="fl">الأجر (0 = مجاني، أو '+fmt(CAP_MIN_FEE)+' فأكثر)</label><input class="fc" id="ar-f" type="number" min="0"></div><div class="fg" style="max-width:100px"><button class="btn btn-p btn-sm" data-x="aradd">➕ إضافة</button></div></div>':'')+
     '</div>'+
     capSettingsHtml()+
     '<div class="mls-card"><h4>⚙️ خيارات</h4><div class="mls-row">'+
@@ -68301,7 +68816,7 @@ async function dirSyncNow(){
     if(old && (!d || d.k!==old || off)){ await M.db.ref('dir/'+old+'/'+c.sid).remove(); c.dirK=''; saveCfg(); }
     if(!d || off) return;
     var I=c.info||{}, e={ nm:String(I.nm||(S().labName)||'المختبر').slice(0,80), la:+labLoc().la, lo:+labLoc().lo,
-      ad:String(I.ad||'').slice(0,120), open:I.open!==false, fm:['free','fixed','area'].indexOf(I.fm)>=0?I.fm:'free', fv:Math.max(0,+I.fv||0), cur:cur().slice(0,8), t:TS() };
+      ad:String(I.ad||'').slice(0,120), open:I.open!==false, fm:['free','fixed','area'].indexOf(I.fm)>=0?I.fm:'fixed', fv:I.fm==='fixed'||!I.fm?Math.max(CAP_MIN_FEE,+I.fv||0):Math.max(0,+I.fv||0), cur:cur().slice(0,8), t:TS() };
     if(typeof I.lg==='string' && I.lg.indexOf('data:image/')===0 && I.lg.length<=24000) e.lg=I.lg;
     await M.db.ref('dir/'+d.k+'/'+c.sid).set(e);
     if(c.dirK!==d.k){ c.dirK=d.k; saveCfg(); if(isShown()) render(); }
@@ -68315,6 +68830,10 @@ async function dirSyncNow(){
    • كل شيء يُسجَّل محلياً في سجل الطلبات (يدخل في النسخة الاحتياطية) ⇒ تقرير «موظفو السحب». */
 var PUSH_URL='https://medlab-push.saifshaker819.workers.dev';     // ← رابط مُرسِل الإشعارات بعد نشره (نفسه في تطبيق خليك تسحب)
 var CAP_ROUNDS=5, CAP_ROUND_MS=20000, CAP_COLLECT_MS=3600e3;
+/* 💵 أقل أجرة لموظف السحب: 5,000 — إذا كانت أجور المراجع أقل (أو مجانية) يدفع المختبر الفرق للساحب */
+var CAP_MIN_FEE=5000;
+function settleTxt(o){ var d=Math.round((+o.tot||0)-capFee(o)); return d>=0?'استلم منه '+fmt(d)+' '+cur():'ادفع له '+fmt(-d)+' '+cur()+' — فرق أجرة السحب'; }
+function capFee(o){ return Math.max(CAP_MIN_FEE, Math.round(+(o&&o.fee)||0)); }
 var CS_TXT={1:'في الطريق إلى المختبر',2:'في الطريق إلى المراجع',3:'عند المراجع'};
 function cpt(){ var c=cfg(); if(!c) return null; c.cpt=c.cpt||{on:true, rad:10}; return c.cpt; }
 function labLoc(){ var c=cfg(), I=c&&c.info; return (I && typeof I.la==='number' && typeof I.lo==='number')?{la:I.la, lo:I.lo}:null; }
@@ -68343,7 +68862,7 @@ async function startDispatch(oid, manual){
   if(M.dsp[oid] && M.dsp[oid].state==='run') return;
   var wa=phoneIntl(c.info.wa||c.info.ph||''), job={
     sid:M.sid, ln:String(c.info.nm||S().labName||'المختبر').slice(0,80), la:+loc.la, lo:+loc.lo,
-    fee:+o.fee||0, n:Math.max(1,Math.min(500,(o.it||[]).length||1)), rad:Math.max(1,Math.min(50,+k.rad||10)), ts:TS()
+    fee:capFee(o), tot:Math.max(0,Math.round(+o.tot||0)), n:Math.max(1,Math.min(500,(o.it||[]).length||1)), rad:Math.max(1,Math.min(50,+k.rad||10)), ts:TS()
   };
   if(/^[0-9]{7,15}$/.test(wa)) job.wa='+'+wa;
   if(typeof o.lat==='number' && typeof o.lng==='number'){ job.dla=Math.round(o.lat*1000)/1000; job.dlo=Math.round(o.lng*1000)/1000; }  // تقريب ≈100م قبل القبول
@@ -68390,13 +68909,13 @@ function capWatch(oid, o, was){
   if(was && was.st!==o.st){ var L=getLog()[oid]||{}, tm=Object.assign({}, L.tm||{}); tm[o.st]=t; putLog(oid, Object.assign({}, L, o, {tm:tm})); }
   if(o.cap && (!was || !was.cap)){
     var D=M.dsp[oid]; if(D){ clearTimeout(D.timer); D.state='acc'; }
-    dlog(oid,{res:'acc', acc:+o.ct||t, cap:o.cap, cn:o.cn||'', cph:o.cph||'', fee:+o.fee||0}); dlogEv(oid,{e:'acc', cn:o.cn||''});
+    dlog(oid,{res:'acc', acc:+o.ct||t, cap:o.cap, cn:o.cn||'', cph:o.cph||'', fee:capFee(o)}); dlogEv(oid,{e:'acc', cn:o.cn||''});
     if(was){ chime(); notif('🛵 قبل موظف السحب الطلب', (o.cn||'موظف السحب')+' — '+(o.cph||'')+' — #'+shortNo(oid),'success'); }
   }
   if(was && was.cap && !o.cap) dlogEv(oid,{e:'unassign'});
   if(was && o.cap && was.st!==o.st){
     if(o.st==='collected'){ dlog(oid,{col:t}); notif('💉 تم السحب', (o.cn||'موظف السحب')+' سحب عينة '+(o.nm||'')+' — في الطريق للمختبر','success'); }
-    if(o.st==='inlab'){ dlog(oid,{inl:t}); chime(); notif('🔬 وصلت العينة', (o.cn||'موظف السحب')+' سلّم العينة — #'+shortNo(oid)+' (استلم منه '+fmt((+o.tot||0)-(+o.fee||0))+' '+cur()+')','success'); }
+    if(o.st==='inlab'){ dlog(oid,{inl:t}); chime(); notif('🔬 وصلت العينة', (o.cn||'موظف السحب')+' سلّم العينة — #'+shortNo(oid)+' ('+settleTxt(o)+')','success'); }
   }
   if(was && o.cap && o.cs===3 && was.cs!==3) notif('📍 وصل موظف السحب', (o.cn||'')+' عند '+(o.nm||'المراجع'),'info');
 }
@@ -68414,8 +68933,9 @@ async function capTimeouts(){
   }
 }
 async function unassign(oid, auto){
-  var o=M.orders[oid]; if(!o) return;
+  var o=M.orders[oid]; if(!o) return; var prevCap=o.cap;
   await oref(oid).update({cap:null, cn:null, cph:null, ct:null, cs:null, vk:null, va:null, st:'accepted', upd:TS()});
+  if(prevCap) pushApi('unassigned',{sid:M.sid, oid:oid, cap:prevCap});   // يُبلَّغ الساحب فوراً ليتوقف ويتحرر لطلبات أخرى
   dlog(oid,{res:auto?'timeout':'unassign', end:Date.now()}); dlogEv(oid,{e:auto?'timeout':'unassign', cn:o.cn||''});
   notifyPatient(oid);
 }
@@ -68470,13 +68990,21 @@ function pickOnMap(start){
   document.getElementById('mls-dlg').addEventListener('click', function(e){ var b=e.target.closest('[data-pz]'); if(b){ e.preventDefault(); e.stopPropagation(); z=Math.max(4,Math.min(19,z+(+b.getAttribute('data-pz')))); draw(); } }, true);
   setTimeout(draw, 80);
 }
+/* تنبيه: من يدفع أجرة موظف السحب عندما تكون أجور المراجع أقل من الحد الأدنى */
+function feeNoteHtml(I){
+  var low=I.fm==='free' || (+I.fa>0) || (I.fm==='area' && (I.ars||[]).some(function(a){ return (+a.f||0)<CAP_MIN_FEE; }));
+  if(!low) return '<div class="mls-info" style="margin-top:8px;font-size:12px">💵 موظف السحب يأخذ أجور السحب كاملة (أقل شيء '+fmt(CAP_MIN_FEE)+' '+cur()+').</div>';
+  return '<div class="mls-warn" style="margin-top:8px;font-size:12.5px">⚠️ <b>حضرتك من يدفع أجور السحب لموظف السحب.</b> '+
+    (I.fm==='free'?'السحب مجاني للمراجع، لكن':'في الطلبات التي تكون أجورها '+(+I.fa>0?'مجانية (فوق '+fmt(I.fa)+') ':'')+'أقل من '+fmt(CAP_MIN_FEE)+'،')+
+    ' موظف السحب يستلم '+fmt(CAP_MIN_FEE)+' '+cur()+' على الأقل عن كل طلب — تُخصم من مبلغ التحاليل الذي يسلّمه لك.</div>';
+}
 /* ── بطاقة الإعدادات ── */
 function capSettingsHtml(){
   var c=cfg(), k=cpt(), loc=labLoc();
   return '<div class="mls-card"><h4>🛵 موظفو السحب — ساحبون مستقلون قريبون منك</h4>'+
     '<div class="mls-info" style="margin-bottom:10px">عند ضغط «قبول» يُرسل الطلب تلقائياً لموظفي السحب في «خليك تسحب» القريبين من مختبرك. أول موظف سحب يقبل يتوجّه للمختبر، ثم للمراجع، ويسلّمك العينة. أجرة السحب كاملة لموظف السحب. لا يرى موظف السحب هاتف المراجع أو عنوانه إلا بعد قبوله الطلب.</div>'+
     (!pushReady()?'<div class="mls-warn" style="margin-bottom:10px">⚠️ مُرسِل الإشعارات غير مضبوط بعد (PUSH_URL) — لن تصل الطلبات لموظفي السحب.</div>':'')+
-    ((c.info.fm||'free')==='free'?'<div class="mls-warn" style="margin-bottom:10px">⚠️ أجور السحب «مجانية» حالياً — موظف السحب لن يحصل على أجر وقد لا يقبل الطلبات. حدّد أجراً من بطاقة «أجور السحب المنزلي».</div>':'')+
+    ((c.info.fm||'fixed')==='free'?'<div class="mls-warn" style="margin-bottom:10px">⚠️ أجور السحب «مجانية» للمراجع — <b>حضرتك من يدفع أجرة موظف السحب</b> ('+fmt(CAP_MIN_FEE)+' '+cur()+' عن كل طلب، تُخصم من مبلغ التحاليل الذي يسلّمه لك).</div>':'')+
     '<label style="display:flex;gap:6px;align-items:center;font-weight:700;margin-bottom:10px"><input type="checkbox" data-x="cpton"'+(k.on!==false?' checked':'')+'> إرسال الطلب لموظفي السحب تلقائياً بعد القبول</label>'+
     '<div class="mls-row"><div class="fg" style="max-width:220px"><label class="fl">نطاق البحث عن موظف سحب</label><select class="fc" data-x="cptrad">'+[3,5,10,15,20,30].map(function(v){ return '<option value="'+v+'"'+((+k.rad||10)===v?' selected':'')+'>'+v+' كم</option>'; }).join('')+'</select></div></div>'+
     '<div class="fg"><label class="fl">📍 موقع المختبر (نقطة انطلاق موظف السحب)</label>'+
@@ -68521,7 +69049,7 @@ function capsHtml(){
   function avg(a){ if(!a.length) return '—'; return Math.round(a.reduce(function(s,x){return s+x;},0)/a.length/60000)+' د'; }
   var caps=Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){ return b.done-a.done; });
   var tot=caps.reduce(function(s,g){ return s+g.done; },0), fees=caps.reduce(function(s,g){ return s+g.fee; },0);
-  var evName={start:'بدء الإرسال', round:'جولة', acc:'قبول', none:'لم يقبل أحد', timeout:'سحب لتأخر ساعة', unassign:'سحب يدوي', err:'خطأ إرسال'};
+  var evName={start:'بدء الإرسال', round:'جولة', acc:'قبول', none:'لم يقبل أحد', timeout:'سحب لتأخر ساعة', unassign:'سحب يدوي', err:'خطأ إرسال', pcancel:'ألغاه المراجع', deleted:'حذفه المختبر'};
   return '<div class="mls-chips">'+[['day','اليوم'],['week','7 أيام'],['month','هذا الشهر'],['all','الكل']].map(function(x){ return '<button class="mls-chip '+(pre===x[0]?'on':'')+'" data-x="cpr" data-v="'+x[0]+'">'+x[1]+'</button>'; }).join('')+'</div>'+
     '<div class="mls-card"><h4>📊 الملخص</h4><div class="mls-kv"><span>طلبات أُرسلت لموظفي السحب</span><b>'+rows.length+'</b><span>سحبات مكتملة (سُلّمت للمختبر)</span><b>'+tot+'</b><span>مجموع أجور موظفي السحب</span><b>'+money(fees)+'</b><span>لم يقبلها أحد</span><b>'+none+'</b><span>سُحبت لتأخر أكثر من ساعة</span><b>'+tmo+'</b></div></div>'+
     '<div class="mls-card"><h4>🛵 حسب موظف السحب</h4>'+(caps.length?'<div class="mls-scroll"><table class="mls-t"><thead><tr><th>موظف السحب</th><th>الهاتف</th><th>قبِل</th><th>أكمل</th><th>الأجور</th><th>سرعة القبول</th><th>حتى السحب</th><th>حتى التسليم</th></tr></thead><tbody>'+
@@ -68554,7 +69082,7 @@ function onClick(e){
     case 'duesre': M.dues=null; loadDues(true); render(); break;
     case 'dpre': M.dr={pre:el.getAttribute('data-v')}; render(); break;
     case 'dprint': printDues(); break;
-    case 'filter': M.filter=el.getAttribute('data-v'); render(); break;
+    case 'filter': M.filter=el.getAttribute('data-v'); M.accOpen=null; render(); break;
     case 'open': setOpen(!(c.info.open!==false)); break;
     case 'publish': publish(false); break;
     case 'accept': convert(oid); break;
@@ -68569,7 +69097,9 @@ function onClick(e){
     case 'msg': askText('رسالة للمراجع','تظهر في صفحة طلبه داخل التطبيق',(M.orders[oid]||{}).msg||'').then(function(m){ if(m!==null && M.conn) oref(oid).update({msg:m.slice(0,300), upd:TS()}).catch(function(){notif('خطأ','تعذّر الإرسال','error');}); }); break;
     case 'wa': { var o=M.orders[oid]; if(o) openExt('https://wa.me/'+phoneIntl(o.ph)+'?text='+encodeURIComponent('مرحباً '+(o.nm||'')+'، بخصوص طلبك رقم '+shortNo(oid)+' من '+(c.info.nm||''))); break; }
     case 'map': openExt('https://www.google.com/maps?q='+(+el.getAttribute('data-lat'))+','+(+el.getAttribute('data-lng'))); break;
-    case 'del': if(confirm('حذف الطلب من الخادم؟ يبقى محفوظاً في سجل هذه الحاسبة.')){ var od=M.orders[oid]; if(od&&od.rs) M.db.ref('stores/'+M.sid+'/res/'+od.rs).remove().catch(function(){}); M.db.ref('stores/'+M.sid).update(rmExtra(oid)).catch(function(){}); oref(oid).remove().catch(function(){}); } break;
+    case 'del': delOrder(oid); break;
+    case 'adel': if(confirm('حذف هذا الطلب من سجل هذه الحاسبة نهائياً؟')){ var L0=getLog(); delete L0[oid]; try{ localStorage.setItem(logKey(),JSON.stringify(L0)); }catch(e){} if(M.accOpen===oid) M.accOpen=null; render(); } break;
+    case 'acc': M.accOpen=(M.accOpen===oid?null:oid); render(); break;
     case 'block': { var ob=M.orders[oid]; if(!ob || !confirm('حظر الرقم '+ob.ph+' من إرسال طلبات جديدة، ورفض هذا الطلب؟')) break;
       var key='p'+String(ob.ph).replace('+','');
       Promise.all([M.db.ref('stores/'+M.sid+'/blk/'+key).set(true), M.db.ref('stores/'+M.sid+'/blk/'+ob.uid).set(true)]).then(function(){
@@ -68595,8 +69125,13 @@ function onClick(e){
       if(!pn || !(pp>0) || M.pkSel.length<2) return notif('تنبيه','اكتب اسم الباقة وسعرها واختر تحليلين على الأقل','warning');
       c.pks=(c.pks||[]).concat([{i:'pk'+rand(8), n:pn, p:pp, d:(document.getElementById('pk-d').value||'').trim(), ts:M.pkSel.slice(), on:true}]); M.pkSel=[]; markDirty(); render(); break; }
     case 'pkdel': c.pks.splice(i,1); markDirty(); render(); break;
-    case 'fm': c.info.fm=el.getAttribute('data-v'); markDirty(); render(); break;
-    case 'aradd': { var an=(document.getElementById('ar-n').value||'').trim(); if(!an) return; c.info.ars=(c.info.ars||[]).concat([{n:an, f:+document.getElementById('ar-f').value||0}]); markDirty(); render(); break; }
+    case 'fm': { var fmv=el.getAttribute('data-v');
+      if(fmv==='free' && c.info.fm!=='free' && !confirm('تنبيه: عند جعل السحب مجانياً للمراجع، حضرتك من يدفع أجور السحب لموظف السحب.\n\nيستلم موظف السحب '+fmt(CAP_MIN_FEE)+' '+cur()+' عن كل طلب، تُخصم من مبلغ التحاليل الذي يسلّمه لك.\n\nهل تريد المتابعة؟')) return;
+      c.info.fm=fmv; if(fmv==='fixed' && (+c.info.fv||0)<CAP_MIN_FEE) c.info.fv=CAP_MIN_FEE; markDirty(); render(); break; }
+    case 'aradd': { var an=(document.getElementById('ar-n').value||'').trim(); if(!an) return; var af=Math.max(0,+document.getElementById('ar-f').value||0);
+      if(af>0 && af<CAP_MIN_FEE){ notif('أقل أجرة سحب','أجر المنطقة '+fmt(CAP_MIN_FEE)+' '+cur()+' على الأقل (أو 0 = مجاني ويدفع المختبر الأجرة)','warning'); return; }
+      if(af===0 && !confirm('هذه المنطقة مجانية للمراجع — حضرتك من يدفع أجور السحب لموظف السحب ('+fmt(CAP_MIN_FEE)+' '+cur()+'). متابعة؟')) return;
+      c.info.ars=(c.info.ars||[]).concat([{n:an, f:af}]); markDirty(); render(); break; }
     case 'ardel': c.info.ars.splice(i,1); markDirty(); render(); break;
     case 'logodel': c.info.lg=''; markDirty(); render(); break;
     case 'copy': (navigator.clipboard?navigator.clipboard.writeText(storeLink()):Promise.reject()).then(function(){ notif('تم النسخ',storeLink(),'success'); },function(){ notif('الرابط',storeLink(),'info'); }); break;
@@ -68643,7 +69178,11 @@ function onInput(e){
     case 'cpton': cpt().on=!!val; saveCfg(); return;
     case 'cptrad': cpt().rad=Math.max(1,Math.min(50,+val||10)); saveCfg(); return;
     case 'url': c.url=String(val).trim().slice(0,200); saveCfg(); if(e.type==='change') render(); return;
-    case 'inf': { var k=el.getAttribute('data-k'); if(['fv','fa','mn','ret'].indexOf(k)>=0) c.info[k]=Math.max(0,+val||0); else c.info[k]=String(val).slice(0,200); break; }
+    case 'inf': { var k=el.getAttribute('data-k'); if(['fv','fa','mn','ret'].indexOf(k)>=0) c.info[k]=Math.max(0,+val||0); else c.info[k]=String(val).slice(0,200);
+      if(k==='fv' && e.type==='change' && c.info.fv<CAP_MIN_FEE){ c.info.fv=CAP_MIN_FEE; el.value=CAP_MIN_FEE; notif('أقل أجرة سحب',fmt(CAP_MIN_FEE)+' '+cur()+' — حتى يقبل موظفو السحب الطلبات','warning'); }
+      if(k==='fa' && e.type==='change' && c.info.fa>0 && !c._faOk){ c._faOk=1; alert('تنبيه: الطلبات التي يتجاوز مبلغها '+fmt(c.info.fa)+' تصبح مجانية للمراجع — وفيها حضرتك من يدفع أجور السحب لموظف السحب ('+fmt(CAP_MIN_FEE)+' '+cur()+').'); }
+      if(e.type==='change' && (k==='fv'||k==='fa')) render();
+      break; }
     case 'dfrom': case 'dto': { if(e.type!=='change' || !val) return; var rg0=M.dr&&M.dr.pre!=='custom'?presetRange(M.dr.pre):null;
       M.dr=M.dr||{}; if(rg0){ M.dr.from=ymdL(rg0[0]); M.dr.to=ymdL(rg0[1]-864e5); } M.dr.pre='custom'; M.dr[x==='dfrom'?'from':'to']=val; render(); return; }
     case 'bimgadd': { if(e.type!=='change'||!el.files||!el.files[0]) return; if(!M.conn) return notif('غير متصل','','error');
@@ -68667,6 +69206,11 @@ function tick(){
 function init(){
   var r=root(); if(!r || r._mls) return; r._mls=1;
   r.addEventListener('click', onClick);
+  document.addEventListener('click', function(e){
+    if(!M.accOpen) return;
+    var t=e.target; if(t && t.closest && (t.closest('.mls-acc-it.on') || t.closest('[data-x="acc"]'))) return;
+    M.accOpen=null; if(isShown()) render();
+  });
   r.addEventListener('input', onInput);
   r.addEventListener('change', onInput);
   r.addEventListener('keydown', function(e){ if(e.target && e.target.id==='mls-cin' && e.key==='Enter' && !e.shiftKey && !e.isComposing){ e.preventDefault(); chatSendUI(); } });
@@ -68677,7 +69221,7 @@ function init(){
   setInterval(function(){ capTimeouts().catch(function(){}); }, 60000);
   setInterval(function(){ if(isShown() && M.tab==='orders' && !document.activeElement.closest('#mls-root')) render(); }, 60000);  // تحديث «قبل X دقيقة»
 }
-window.MLStore = { onShow:function(){ render(); }, publish:function(){ return publish(false); }, _m:M };
+window.MLStore = { onShow:function(){ M.accOpen=null; render(); }, publish:function(){ return publish(false); }, _m:M };
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
 </script>
@@ -68960,7 +69504,7 @@ function _testsOf(req){
       name:  (t && (t.nameEn || t.nameShort || t.code)) || (req.testNames && req.testNames[i]) || tid,
       code:  (t && t.code) || '',
       cat:   (t && t.cat) || '',
-      price: (t && parseFloat(t.price)) || 0
+      price: (typeof _reqTP==='function') ? _reqTP(req, tid, t) : ((t && parseFloat(t.price)) || 0)
     };
   });
 }
@@ -69570,7 +70114,7 @@ setTimeout(_hookWiz, 5000);
   html body #wiz-ftr:not(.wiz-ftr-s2) > .btn{flex:1 1 0;justify-content:center;min-height:44px;}
 
   /* ── 🧾 الإشعارات المنبثقة أصغر وأنظف ── */
-  html body #notif-wrap{left:8px !important;right:8px !important;max-width:none !important;}
+  html body #notif-wrap{left:8px !important;right:8px !important;top:8px !important;bottom:auto !important;max-width:none !important;align-items:stretch !important;}
   html body #notif-wrap .notif{max-width:none !important;width:auto !important;padding:10px 12px !important;font-size:12px !important;}
 
   /* ── 💬 زر المحادثة الجانبي أصغر حتى لا يغطي المحتوى ── */
@@ -72255,7 +72799,7 @@ var RENDER = {
   esrTimers:function(){ try{ esrRenderList(); }catch(e){} },
   customAbxEntries:function(){},
   settings:function(){ try{ applyFontCustom(); }catch(e){} try{ if(window._mlsOnSettings) window._mlsOnSettings(); }catch(e){} try{ var s=document.getElementById('sec-settings'); if(s && s.classList.contains('active')) loadSettings(); }catch(e){} },
-  big:function(){ try{ applyCustomExamFields(); }catch(e){} try{ applyFontCustom(); }catch(e){} },
+  big:function(){ try{ applyCustomExamFields(); }catch(e){} try{ applyFontCustom(); }catch(e){} try{ if(window._mrtReload) window._mrtReload(); }catch(e){} },
   docs:function(){ try{ loadCustomSubCats(); buildTestCatTabs(); }catch(e){} },
   att:function(){ try{ if(window.ATT && ATT.renderAll) ATT.renderAll(); }catch(e){} }
 };
@@ -72360,6 +72904,8 @@ function scheduleDiff(col, ids){
   _diffT[col]=setTimeout(function(){ fullDiff(col); }, isFields(col)?250:600);
 }
 function noteChange(col, id, rec, m){
+  // 🔬 تعديل محلي لقاعدة التحاليل على غير رقم 1: لا يرفع الإصدار ⇒ نسخة رقم 1 تبقى المرجع وتُستعاد عند المقارنة
+  if(m && !isTdbMaster() && (TESTDB_RECS[col] || (col==='docs' && TESTDB_DOCS[id]))) return m[1]||1;
   // سجل يظهر لأول مرة ⇒ إصداره ختمه الأصلي (لا «الآن») حتى لا تطغى نسخة قديمة على أحدث منها
   if(m && m[0]===0) return Math.max(srv(), m[1]+1);
   if(!m) return isFields(col) ? ((col==='settings' && id==='store') ? srv() : 1) : vOf(rec);
@@ -72566,7 +73112,33 @@ function mergeReq(win, lose){
   });
   return out || win;
 }
+/* 🛡️ الوارد يُقبل فقط بالشكل الصحيح وللحقول المسموح مزامنتها (لا يكتب أي مفتاح آخر في التخزين) */
+function fieldAllowed(col, id){
+  if(!id || id.length>80 || /^__|^(constructor|prototype)$/.test(id)) return false;
+  if(col==='settings') return !LOCAL_SETTINGS[id] && !BIG_IN_SETTINGS[id];
+  if(col==='big') return BIG_KEYS.indexOf(id)>-1;
+  if(col==='docs') return DOC_KEYS.indexOf(id)>-1 || /^cultAbxProfile_[A-Za-z0-9_\-]{1,60}$/.test(id);
+  if(col==='att_settings') return !ATT_LOCAL[id];
+  return false;
+}
+function cleanRows(col, rows){
+  if(!Array.isArray(rows) || allCols().indexOf(col)<0) return [];
+  var out=[];
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(!Array.isArray(r) || r.length<2) continue;
+    if(typeof r[0]!=='string' && typeof r[0]!=='number') continue;
+    var v=+r[1]; if(!isFinite(v) || v<0) continue;
+    if(r[2]!=null && typeof r[2]!=='object') continue;
+    if(isFields(col) && !fieldAllowed(col, String(r[0]))) continue;
+    out.push(r[1]===v ? r : [r[0], v, r[2]]);
+  }
+  return out;
+}
+/* 🔬 الحاسبة غير رقم 1 تأخذ نسخة رقم 1 من قاعدة التحاليل دائماً (هو المرجع) — حتى لو عُدّلت محلياً بعده */
+function tdbForce(col, id, peer){ return !isTdbMaster() && !(peer && tdbPeerNotMaster(peer)) && (TESTDB_RECS[col] || (col==='docs' && TESTDB_DOCS[id])); }
 function applyRows(col, rows, peer){
+  rows = cleanRows(col, rows);
   if(!rows || !rows.length) return 0;
   /* 🔬 قاعدة التحاليل: رقم 1 لا يستلمها؛ وغيره يستلمها من رقم 1 فقط */
   if(TESTDB_RECS[col] || col==='docs'){
@@ -72591,8 +73163,11 @@ function applyRows(col, rows, peer){
         if(_dec==='keep'){ meta[id]=['~'+v, v, R()]; setTimeout(function(){ scheduleDiff('settings'); }, 250); return; }
         if(_dec==='take'){ meta[id]=[fnv(JSON.stringify(rec.x)), v, R()]; sets.push({id:id, x:rec.x}); return; }
       }
-      if(m && v<=m[1]) return;
+      var _f = tdbForce(col, id, peer);
+      if(m && v<=m[1] && !_f) return;
+      if(_f && m) v=Math.max(v, m[1]);
       if(rec==null){ if(m && m[0]!==0){ dels.push(id); } meta[id]=[0,v,R()]; return; }
+      if(typeof rec!=='object' || !('x' in rec)) return;
       var val=rec.x;
       if(col==='docs' && UNION_DOCS[id]){
         var cur=null; try{ cur=load(id,null); }catch(e){}
@@ -72616,15 +73191,17 @@ function applyRows(col, rows, peer){
   var arr=c.arr(), idx={}, i;
   for(i=0;i<arr.length;i++){ var iid=idOf(col,arr[i],i); if(iid) idx[iid]=i; }
   var changed=[], removed=0, collide=[];
+  var _tf = tdbForce(col, '', peer);
   rows.forEach(function(r){
-    var id=r[0], v=r[1], rec=r[2], m=meta[id], pos=idx[id];
+    var id=String(r[0]), v=r[1], rec=r[2], m=meta[id], pos=idx[id];
+    if(_tf && m) v=Math.max(v, m[1]);
     if(rec==null){
-      if(m && v<=m[1]) return;
+      if(m && v<=m[1] && !_tf) return;
       if(pos!==undefined){ arr[pos]=null; removed++; delete idx[id]; }
       meta[id]=[0,v,R()];
       return;
     }
-    if(m && m[0]===0 && v<=m[1]) return;                 // حُذف هنا بعد هذا الإصدار
+    if(m && m[0]===0 && v<=m[1] && !_tf) return;         // حُذف هنا بعد هذا الإصدار
     if(pos===undefined){
       arr.push(rec); idx[id]=arr.length-1; meta[id]=[fnv(JSON.stringify(rec)),v,R()]; changed.push(rec); return;
     }
@@ -72632,7 +73209,7 @@ function applyRows(col, rows, peer){
     if(!sameEntity(col, local, rec)){ collide.push(rec); return; }
     var h=fnv(JSON.stringify(rec));
     if(m && h===m[0]){ if(v>m[1]) m[1]=v; return; }      // المحتوى نفسه
-    var win = !m || v>m[1] || (v===m[1] && JSON.stringify(rec)>JSON.stringify(local));
+    var win = _tf || !m || v>m[1] || (v===m[1] && JSON.stringify(rec)>JSON.stringify(local));
     if(!win) return;
     var nrec = (col==='requests') ? mergeReq(rec, local) : rec;
     arr[pos]=nrec;
@@ -75464,7 +76041,7 @@ function ansTestOne(t, S){
   var h='<div class="mla-q">🧪 '+esc(t.nameEn||t.code)+' <span dir="ltr" style="color:var(--mla-sub)">('+esc(t.code||'')+')</span> — '+esc(S.label)+'</div>'
     +'<div class="mla-big"><b>'+num(R.length)+'</b><span>مرة</span></div>'
     +'<div class="mla-grid">'+st(num(done),'✅ منجزة','mla-up')+st(num(R.length-done),'⏳ معلّقة',R.length-done?'mla-wr':'')+st(num(ab),'🔴 خارج المدى',ab?'mla-dn':'')
-    +(permAny('billing','reports')?st(fmt(t.price),'🏷️ السعر')+st(fmt(R.length*(+t.price||0)),'💰 القيمة'):'')+'</div>';
+    +(permAny('billing','reports')?st(fmt(t.price),'🏷️ السعر')+st(fmt(R.reduce(function(a,r){ return a+((typeof _reqTP==='function')?_reqTP(r,t.id,t):(+t.price||0)); },0)),'💰 القيمة'):'')+'</div>';
   if(R.length) h+='<div class="mla-list">'+R.slice().reverse().slice(0,12).map(function(r){ var v=r.results&&r.results[t.id]; return '<div class="mla-li ck" onclick="MLAsk.go(\''+(r.status==='done'?'openViewResultsModal':'goToResult')+'\',\''+jsq(r.id)+'\')"><span class="s" dir="ltr">'+esc(dk(r.date))+'</span><span class="n">'+esc(r.patientName||'-')+'</span><span class="v">'+esc(v!=null&&v!==''?v:'—')+'</span></div>'; }).join('')+'</div>';
   var sx=scopeText(S);
   return h+acts([runBtn('📅 هذا الشهر','كم '+(t.code||t.nameEn)+' هذا الشهر'),runBtn('🏆 أكثر التحاليل','اكثر التحاليل '+sx),runBtn('🏷️ سعره','سعر '+(t.code||t.nameEn))]);
@@ -76018,7 +76595,7 @@ var PayEdit=(function(){
   }
   function reqTotal(r){
     var tm={}; (tests||[]).forEach(function(t){ if(t) tm[t.id]=t; });
-    return r2((r.tests||[]).reduce(function(s,id){ return s+(tm[id]?(parseFloat(tm[id].price)||0):0); },0));
+    return r2((r.tests||[]).reduce(function(s,id){ return s+(tm[id]?_reqTP(r,id,tm[id]):_reqTP(r,id,null)); },0));
   }
   function kindOf(i){ try{ return _invKind(i); }catch(e){ return 'unpaid'; } }
   function stFromKind(k){ return k==='paid'?'مدفوعة':(k==='partial'?'جزئية':'معلقة'); }
