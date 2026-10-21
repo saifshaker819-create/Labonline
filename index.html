@@ -5014,7 +5014,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                         <button class="btn btn-s btn-sm" onclick="lisLanFullResync()" title="يُستخدم مرة واحدة فقط عند الشك بفقدان بيانات قديمة">♻️ إعادة مزامنة كاملة</button>
                         <button class="btn btn-s btn-sm" onclick="lisScanIdConflicts()" title="يكشف المرضى الذين اختلطت ملفاتهم بسبب تكرار الأرقام">🩺 فحص تضارب الأرقام</button>
                       </div>
-                      <div class="lset-hint" style="margin-top:8px">⛔ مزامنة LAN لا تشمل: <b>الفواتير</b> · <b>الحسابات</b> · <b>دفتر الهواتف</b> — أما ☁️ المزامنة السحابية فتشمل كل البرنامج.</div>
+                      <div class="lset-hint" style="margin-top:8px">✅ مزامنة LAN تشمل <b>الفواتير</b> و<b>قسم الحسابات</b> (الحسابات · المصروفات · الفئات · الحذف) بين كل الحاسبات بغض النظر عن رقم الحاسبة — ⛔ ولا تشمل <b>دفتر الهواتف</b> فقط. ☁️ المزامنة السحابية تشمل كل البرنامج.</div>
                     </div>
                   </details>
 
@@ -10102,6 +10102,8 @@ function save(k,v){
   try{ if(typeof AuditLog!=='undefined' && AuditLog) AuditLog.onSave(k, v, _touchedBad[k]?null:(_touched[k]?Array.from(_touched[k]):null)); }catch(e){}
   /* ☁️ المزامنة السحابية — تلتقط المعرّفات المعدّلة قبل أن يستهلكها DB.set */
   try{ if(typeof window._msOnSave==='function') window._msOnSave(k, v, _touchedBad[k]?null:(_touched[k]?Array.from(_touched[k]):null)); }catch(e){}
+  /* 🧾 قسم الحسابات: التقط السجلات المحذوفة (شواهد حذف) لتُزامَن مع بقية الحاسبات */
+  try{ if(typeof window._accTrack==='function') window._accTrack(k,v); }catch(e){}
   DB.set(k,v);
   // ⭐ نقطة بثّ مركزية: الاستدعاءات داخل هذا الـ script block ترتبط
   //    بتعريف save المحلي ولا تمرّ عبر window.save إطلاقاً، لذلك يجب
@@ -13677,28 +13679,7 @@ function renderWizStep(){
               <button onclick="_toggleMRTEdit()" id="mrt-edit-btn" style="font-size:9px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:rgba(255,255,255,0.05);color:var(--text2);cursor:pointer;font-family:'Cairo',sans-serif">✏️ تعديل</button>
             </div>
             <div id="mrt-buttons-area" style="display:flex;flex-wrap:wrap;gap:6px;max-height:150px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--primary) transparent"></div>
-            <div id="mrt-edit-area" style="display:none;margin-top:6px;background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:8px;position:relative;z-index:99999">
-              <div style="display:flex;gap:8px;align-items:flex-start">
-                <!-- يسار: منطقة البحث والإضافة -->
-                <div style="width:175px;flex-shrink:0;display:flex;flex-direction:column;align-items:stretch">
-                  <!-- نتائج البحث تظهر فوق مربع البحث -->
-                  <div id="mrt-suggest-box" style="display:none;background:var(--bg-modal);border:1px solid var(--border);border-radius:7px;max-height:220px;overflow-y:auto;margin-bottom:4px;z-index:99999;box-shadow:0 -4px 18px var(--shadow-color)"></div>
-                  <div style="display:flex;gap:4px;align-items:center">
-                    <input id="mrt-add-inp" placeholder="ابحث عن تحليل..." style="flex:1;min-width:0;background:rgba(255,255,255,0.06);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text);font-size:11px;font-family:'Cairo',sans-serif;outline:none" oninput="_mrtSearchSuggest(this.value)">
-                    <button onclick="_mrtAddFromInput()" style="padding:4px 8px;border-radius:6px;border:1px solid var(--primary);background:rgba(0,212,255,0.12);color:var(--primary);font-size:11px;cursor:pointer;font-family:'Cairo',sans-serif;font-weight:700">+</button>
-                  </div>
-                </div>
-                <!-- يمين: منطقة الترتيب والأزرار -->
-                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:5px">
-                  <div style="font-size:10px;color:var(--text2);font-weight:700">اسحب لإعادة الترتيب · اضغط ✕ للحذف</div>
-                  <div id="mrt-sortable" style="display:flex;flex-wrap:wrap;gap:4px;min-height:28px;padding:4px;border:1px dashed rgba(0,212,255,0.3);border-radius:6px"></div>
-                  <div style="display:flex;gap:5px;margin-top:2px">
-                    <button onclick="_mrtSave()" style="flex:1;padding:5px;border-radius:6px;border:none;background:linear-gradient(135deg,var(--primary),var(--primary-dark));color:#000;font-size:11px;font-weight:800;cursor:pointer;font-family:'Cairo',sans-serif">&#128190; حفظ</button>
-                    <button onclick="_toggleMRTEdit()" style="flex:1;padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg-glass);color:var(--text2);font-size:11px;cursor:pointer;font-family:'Cairo',sans-serif">إلغاء</button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <!-- ✏️ تعديل الأكثر طلباً: يُفتح الآن كشاشة مستقلة (#mrt-ov) تُنشأ من JS فوق شاشة اختيار التحاليل -->
           </div>
           <!-- الأقسام مخفية من الواجهة -->
           <div id="wiz-cats" style="display:none">${catBtns}</div>
@@ -40300,23 +40281,147 @@ window._mrtFitRows=_mrtFitRows;
   });
 })();
 
+/* ══ ✏️ شاشة تعديل «الأكثر طلباً» — نافذة مستقلة فوق شاشة اختيار التحاليل ══
+   • تُضاف إلى <body> (لا تتأثر بتخطيط شاشة الاختيار ولا تُقصّ بها)
+   • رأس + بحث ثابتان، قائمة الأزرار قابلة للتمرير، وأزرار الحفظ/الإلغاء ثابتة أسفل الشاشة دائماً
+   • تتكيّف مع أي حجم شاشة (حاسوب / لوحي / هاتف) وتدعم الوضعين الداكن والفاتح */
+function _mrtEsc(x){ return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function _mrtEnsureOverlay(){
+  let ov=document.getElementById('mrt-ov'); if(ov) return ov;
+  if(!document.getElementById('mrt-ov-css')){
+    const st=document.createElement('style'); st.id='mrt-ov-css';
+    st.textContent=
+      '#mrt-ov{position:fixed;top:0;left:0;right:0;bottom:0;height:100%;z-index:10000020;display:none;align-items:center;justify-content:center;'
+      +'background:rgba(0,0,0,.72);box-sizing:border-box;overscroll-behavior:contain;'
+      +'padding:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left));}'
+      +'@supports (height:100dvh){#mrt-ov{height:100dvh;}}'
+      +'#mrt-ov.open{display:flex;}'
+      +'#mrt-ov .mrt-card{background:var(--bg-modal,#070d1c);border:1px solid var(--border,rgba(255,255,255,.15));border-radius:14px;width:min(780px,100%);max-height:100%;'
+      +'display:flex;flex-direction:column;min-height:0;box-shadow:0 12px 48px rgba(0,0,0,.65);font-family:\'Cairo\',sans-serif;color:var(--text,#e8f0ff);}'
+      +'#mrt-ov .mrt-hd{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--border,rgba(255,255,255,.15));flex-shrink:0;}'
+      +'#mrt-ov .mrt-hd b{font-size:14px;font-weight:900;flex:1;min-width:0;}'
+      +'#mrt-ov .mrt-cnt{background:var(--primary,#00d4ff);color:#000;border-radius:20px;padding:1px 10px;font-size:11px;font-weight:900;}'
+      +'#mrt-ov .mrt-x{width:34px;height:34px;border-radius:9px;border:1px solid var(--border,rgba(255,255,255,.15));background:rgba(255,255,255,.05);color:var(--text,#e8f0ff);font-size:16px;cursor:pointer;line-height:1;}'
+      +'#mrt-ov .mrt-sr{padding:10px 14px 6px;flex-shrink:0;position:relative;}'
+      +'#mrt-ov .mrt-sr-row{display:flex;gap:6px;align-items:center;}'
+      +'#mrt-ov #mrt-add-inp{flex:1;min-width:0;background:rgba(255,255,255,.06);border:1px solid var(--border,rgba(255,255,255,.15));border-radius:8px;padding:9px 11px;color:var(--text,#e8f0ff);font-size:14px;font-family:\'Cairo\',sans-serif;outline:none;}'
+      +'#mrt-ov #mrt-add-inp:focus{border-color:var(--primary,#00d4ff);}'
+      +'#mrt-ov .mrt-add{padding:9px 16px;border-radius:8px;border:1px solid var(--primary,#00d4ff);background:rgba(0,212,255,.14);color:var(--primary,#00d4ff);font-size:15px;font-weight:900;cursor:pointer;font-family:\'Cairo\',sans-serif;}'
+      +'#mrt-ov #mrt-suggest-box{display:none;position:absolute;top:calc(100% - 4px);left:14px;right:14px;z-index:5;max-height:min(260px,38vh);overflow-y:auto;'
+      +'background:var(--bg-modal,#070d1c);border:1px solid var(--primary,#00d4ff);border-radius:9px;box-shadow:0 10px 30px rgba(0,0,0,.6);}'
+      +'#mrt-ov .mrt-hint{padding:2px 14px 8px;font-size:11px;color:var(--text2,#9fb0cc);font-weight:700;flex-shrink:0;}'
+      +'#mrt-ov .mrt-body{flex:1 1 auto;min-height:90px;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 14px 10px;}'
+      +'#mrt-ov #mrt-sortable{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;padding:8px;border:1px dashed rgba(0,212,255,.35);border-radius:9px;}'
+      +'#mrt-ov .mrt-chip{display:flex;align-items:center;gap:5px;padding:5px 8px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,.15));background:rgba(0,212,255,.08);'
+      +'font-size:12px;font-weight:800;cursor:grab;user-select:none;-webkit-user-select:none;color:var(--primary,#00d4ff);}'
+      +'#mrt-ov .mrt-chip.over{border-color:var(--primary,#00d4ff);background:rgba(0,212,255,.22);}'
+      +'#mrt-ov .mrt-grip{opacity:.7;touch-action:none;padding:2px 3px;cursor:grab;}'
+      +'#mrt-ov .mrt-del{width:22px;height:22px;border-radius:50%;border:none;background:rgba(255,40,60,.22);color:var(--danger,#ff4d6d);cursor:pointer;font-size:13px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:900;padding:0;}'
+      +'#mrt-ov .mrt-ft{display:flex;gap:8px;padding:10px 14px;border-top:1px solid var(--border,rgba(255,255,255,.15));flex-shrink:0;background:var(--bg-modal,#070d1c);border-radius:0 0 14px 14px;}'
+      +'#mrt-ov .mrt-ft button{flex:1;padding:11px;border-radius:9px;font-size:14px;font-weight:900;cursor:pointer;font-family:\'Cairo\',sans-serif;}'
+      +'#mrt-ov .mrt-save{border:none;background:linear-gradient(135deg,var(--primary,#00d4ff),var(--primary-dark,#0090b3));color:#000;}'
+      +'#mrt-ov .mrt-cancel{border:1px solid var(--border,rgba(255,255,255,.15));background:var(--bg-glass,rgba(255,255,255,.05));color:var(--text2,#9fb0cc);}'
+      +'@media (max-width:520px){#mrt-ov{padding:0;}#mrt-ov .mrt-card{width:100%;height:100%;max-height:100%;border-radius:0;border:none;}#mrt-ov .mrt-ft{border-radius:0;}}';
+    document.head.appendChild(st);
+  }
+  ov=document.createElement('div'); ov.id='mrt-ov'; ov.setAttribute('dir','rtl'); ov.setAttribute('role','dialog'); ov.setAttribute('aria-modal','true');
+  ov.innerHTML=
+    '<div class="mrt-card">'
+      +'<div class="mrt-hd"><b>⚡ تعديل التحاليل الأكثر طلباً</b><span class="mrt-cnt" id="mrt-cnt">0</span>'
+        +'<button type="button" class="mrt-x" onclick="_toggleMRTEdit()" title="إغلاق" aria-label="إغلاق">✕</button></div>'
+      +'<div class="mrt-sr"><div class="mrt-sr-row">'
+        +'<input id="mrt-add-inp" placeholder="ابحث عن تحليل لإضافته (كود أو اسم)..." autocomplete="off" oninput="_mrtSearchSuggest(this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_mrtAddFromInput();}">'
+        +'<button type="button" class="mrt-add" onclick="_mrtAddFromInput()" title="إضافة">+</button></div>'
+        +'<div id="mrt-suggest-box"></div></div>'
+      +'<div class="mrt-hint">اسحب لإعادة الترتيب · اضغط ✕ للحذف · التغييرات تُحفظ تلقائياً</div>'
+      +'<div class="mrt-body" id="mrt-body"><div id="mrt-sortable"></div></div>'
+      +'<div class="mrt-ft"><button type="button" class="mrt-save" onclick="_mrtSave()">&#128190; حفظ</button>'
+        +'<button type="button" class="mrt-cancel" onclick="_toggleMRTEdit()">إلغاء</button></div>'
+    +'</div>';
+  // النقر على الخلفية يغلق الشاشة (التعديلات تُحفظ تلقائياً عند كل تغيير)
+  ov.addEventListener('mousedown',function(e){ if(e.target===ov) _toggleMRTEdit(); });
+  // حذف شريحة بالنقر على ✕ (تفويض أحداث)
+  ov.addEventListener('click',function(e){
+    const d=e.target.closest&&e.target.closest('.mrt-del'); if(!d) return;
+    const chip=d.closest('.mrt-chip'); if(chip) _mrtRemove(chip.dataset.code);
+  });
+  document.body.appendChild(ov);
+  if(!window._mrtEscBound){
+    window._mrtEscBound=true;
+    document.addEventListener('keydown',function(e){
+      if(e.key!=='Escape'||!_mrtEditMode) return;
+      const sb=document.getElementById('mrt-suggest-box');
+      if(sb && sb.style.display==='block'){ sb.style.display='none'; return; }
+      e.stopPropagation(); _toggleMRTEdit();
+    },true);
+  }
+  return ov;
+}
+
 function _toggleMRTEdit(){
   _mrtEditMode=!_mrtEditMode;
-  document.getElementById('mrt-edit-area').style.display=_mrtEditMode?'block':'none';
-  document.getElementById('mrt-edit-btn').textContent=_mrtEditMode?'❌ إغلاق':'✏️ تعديل';
-  if(_mrtEditMode) _renderMRTSortable();
+  const ov=_mrtEnsureOverlay();
+  if(_mrtEditMode){
+    _mrtCodes=[..._getMRTCodes()];
+    ov.classList.add('open');
+    _renderMRTSortable();
+  } else {
+    ov.classList.remove('open');
+    const sb=document.getElementById('mrt-suggest-box'); if(sb) sb.style.display='none';
+    const inp=document.getElementById('mrt-add-inp'); if(inp) inp.value='';
+    try{ renderMRTButtons(); }catch(e){}     // أظهر آخر ترتيب/حذف/إضافة في الأزرار السريعة
+  }
+  const b=document.getElementById('mrt-edit-btn'); if(b) b.textContent='✏️ تعديل';
 }
 
 function _renderMRTSortable(){
   const container=document.getElementById('mrt-sortable'); if(!container) return;
   const codes=_getMRTCodes();
+  const cnt=document.getElementById('mrt-cnt'); if(cnt) cnt.textContent=codes.length;
   container.innerHTML=codes.map((code,i)=>`
-    <div draggable="true" data-code="${code}" data-idx="${i}"
-      ondragstart="_mrtDragStart(event)" ondragover="_mrtDragOver(event)" ondrop="_mrtDrop(event)" ondragend="_mrtDragEnd(event)"
-      style="display:flex;align-items:center;gap:3px;padding:3px 7px;border-radius:5px;border:1px solid var(--border);background:rgba(0,212,255,0.08);font-size:10px;font-weight:700;cursor:grab;user-select:none;color:var(--primary)">
-      <span>⠿</span><span>${code}</span>
-      <button onclick="_mrtRemove('${code}')" style="margin-right:2px;width:14px;height:14px;border-radius:50%;border:none;background:rgba(255,40,60,0.2);color:var(--danger);cursor:pointer;font-size:10px;line-height:1;display:flex;align-items:center;justify-content:center;font-weight:900">×</button>
+    <div class="mrt-chip" draggable="true" data-code="${_mrtEsc(code)}" data-idx="${i}"
+      ondragstart="_mrtDragStart(event)" ondragover="_mrtDragOver(event)" ondrop="_mrtDrop(event)" ondragend="_mrtDragEnd(event)">
+      <span class="mrt-grip" ontouchstart="_mrtTouchStart(event)" ontouchmove="_mrtTouchMove(event)" ontouchend="_mrtTouchEnd(event)" ontouchcancel="_mrtTouchEnd(event)">⠿</span><span>${_mrtEsc(code)}</span>
+      <button type="button" class="mrt-del" title="حذف">×</button>
     </div>`).join('');
+}
+
+/* ترتيب بالسحب على شاشات اللمس (HTML5 drag لا يعمل على الهاتف) */
+let _mrtTouchChip=null;
+function _mrtTouchStart(e){
+  const chip=e.currentTarget.closest('.mrt-chip'); if(!chip) return;
+  _mrtTouchChip=chip; chip.style.opacity='0.45';
+}
+function _mrtTouchMove(e){
+  if(!_mrtTouchChip) return;
+  e.preventDefault();
+  const t=e.touches&&e.touches[0]; if(!t) return;
+  document.querySelectorAll('#mrt-sortable .mrt-chip.over').forEach(el=>el.classList.remove('over'));
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  const tgt=el&&el.closest?el.closest('#mrt-sortable .mrt-chip'):null;
+  if(tgt&&tgt!==_mrtTouchChip) tgt.classList.add('over');
+  // تمرير تلقائي قرب حافتَي القائمة
+  const body=document.getElementById('mrt-body');
+  if(body){ const r=body.getBoundingClientRect(); if(t.clientY<r.top+36) body.scrollTop-=12; else if(t.clientY>r.bottom-36) body.scrollTop+=12; }
+}
+function _mrtTouchEnd(e){
+  const src=_mrtTouchChip; _mrtTouchChip=null;
+  if(!src) return;
+  src.style.opacity='';
+  const over=document.querySelector('#mrt-sortable .mrt-chip.over');
+  document.querySelectorAll('#mrt-sortable .mrt-chip.over').forEach(el=>el.classList.remove('over'));
+  if(over&&over!==src) _mrtMove(src.dataset.code,over.dataset.code);
+}
+function _mrtMove(srcCode,tgtCode){
+  const codes=[..._getMRTCodes()];
+  const srcIdx=codes.indexOf(srcCode), tgtIdx=codes.indexOf(tgtCode);
+  if(srcIdx>-1&&tgtIdx>-1&&srcIdx!==tgtIdx){
+    codes.splice(srcIdx,1);
+    codes.splice(tgtIdx,0,srcCode);
+    _mrtCodes=codes;
+    _saveMRTCodes([..._mrtCodes]); // حفظ تلقائي عند كل تغيير في الترتيب
+  }
+  _renderMRTSortable();
 }
 
 function _mrtDragStart(e){
@@ -40328,28 +40433,17 @@ function _mrtDragStart(e){
 function _mrtDragOver(e){
   e.preventDefault(); e.dataTransfer.dropEffect='move';
   const target=e.currentTarget;
-  if(target!==_mrtDragSrc) target.style.borderColor='var(--primary)';
+  if(target!==_mrtDragSrc) target.classList.add('over');
 }
 function _mrtDrop(e){
   e.preventDefault();
   const target=e.currentTarget;
   if(!_mrtDragSrc||target===_mrtDragSrc) return;
-  const codes=_getMRTCodes();
-  const srcCode=_mrtDragSrc.dataset.code;
-  const tgtCode=target.dataset.code;
-  const srcIdx=codes.indexOf(srcCode);
-  const tgtIdx=codes.indexOf(tgtCode);
-  if(srcIdx>-1&&tgtIdx>-1){
-    codes.splice(srcIdx,1);
-    codes.splice(tgtIdx,0,srcCode);
-    _mrtCodes=[...codes];
-    _saveMRTCodes([..._mrtCodes]); // حفظ تلقائي عند كل تغيير في الترتيب
-  }
-  _renderMRTSortable();
+  _mrtMove(_mrtDragSrc.dataset.code,target.dataset.code);
 }
 function _mrtDragEnd(e){
   if(_mrtDragSrc){ _mrtDragSrc.style.opacity=''; _mrtDragSrc=null; }
-  document.querySelectorAll('#mrt-sortable [draggable]').forEach(el=>el.style.borderColor='');
+  document.querySelectorAll('#mrt-sortable .mrt-chip').forEach(el=>el.classList.remove('over'));
 }
 
 function _mrtRemove(code){
@@ -40375,9 +40469,17 @@ function _mrtSearchSuggest(q){
 }
 function _mrtAddFromInput(){
   const inp=document.getElementById('mrt-add-inp'); if(!inp) return;
-  _mrtAddCode(inp.value.trim().toUpperCase());
+  const raw=inp.value.trim(); if(!raw) return;
+  const up=raw.toUpperCase();
+  let code=up;
+  if(!tests.find(x=>String(x.code).toUpperCase()===up)){          // لا يوجد كود مطابق ⇒ أول اقتراح بحث
+    const qL=raw.toLowerCase();
+    const f=tests.find(t=>(t.code+t.nameEn+' '+(t.nameAr||'')).toLowerCase().includes(qL));
+    if(f) code=f.code;
+  }
+  _mrtAddCode(code);
   inp.value='';
-  document.getElementById('mrt-suggest-box').style.display='none';
+  const sb=document.getElementById('mrt-suggest-box'); if(sb) sb.style.display='none';
 }
 function _mrtAddCode(code){
   if(!code) return;
@@ -40389,8 +40491,9 @@ function _mrtAddCode(code){
   _mrtCodes=[...codes];
   _saveMRTCodes([..._mrtCodes]); // حفظ تلقائي عند الإضافة
   _renderMRTSortable();
-  const inp=document.getElementById('mrt-add-inp'); if(inp) inp.value='';
-  document.getElementById('mrt-suggest-box').style.display='none';
+  const inp=document.getElementById('mrt-add-inp'); if(inp){ inp.value=''; try{ inp.focus(); }catch(e){} }
+  const sb=document.getElementById('mrt-suggest-box'); if(sb) sb.style.display='none';
+  const bd=document.getElementById('mrt-body'); if(bd) bd.scrollTop=bd.scrollHeight;   // أظهر العنصر المضاف
 }
 function _mrtSave(){
   _saveMRTCodes([..._mrtCodes]);
@@ -56202,13 +56305,16 @@ var _lanMode      = null;   // 'server' | 'client' | null
 var _lanHttpServer= null;
 var _LAN_PORT     = 8797;
 // ⭐ مزامنة شاملة — كل أقسام البرنامج (وليس 4 مفاتيح فقط)
-// ⛔ أُخرِجت من المزامنة بطلب المستخدم (كانت تسبّب تجمّد البرنامج):
-//    invoices (الفواتير) · billing (الحسابات) · phoneBook (دفتر الهواتف)
-//    هذه الأقسام تبقى محلية في كل حاسبة ولا تُبثّ ولا تُستقبل إطلاقاً.
-var _LAN_SYNC_EXCLUDED = ['invoices','billing','phoneBook'];
+// ⛔ يبقى خارج المزامنة: phoneBook (دفتر الهواتف) فقط.
+// ✅ قسم الحسابات يُزامَن بالكامل بين كل الحاسبات (بغض النظر عن رقم الحاسبة):
+//    invoices (الفواتير/الإيرادات) · billing (سجل الحسابات) · expenses (المصروفات)
+//    + فئات المصروفات (expenseCats/expenseCatsHidden) وعمليات الحذف عبر «ACC Sync v1» أسفل الملف.
+//    المزامنة تفاضلية بدفعات صغيرة فلا تُجمّد البرنامج كما كان يحدث سابقاً.
+var _LAN_SYNC_EXCLUDED = ['phoneBook'];
 var _LAN_SYNC_KEYS= ['patients','requests','doctors','testGroups',
                      'packages','inventory','qc','cultureRecords',
-                     'uaRecords','stoolExamRecords','semenRecords'];
+                     'uaRecords','stoolExamRecords','semenRecords',
+                     'invoices','billing','expenses'];
 
 /* ═══ 🔬 قاعدة التحاليل — اتجاه واحد عبر LAN (واي فاي / كابل) ═══
    • الحاسبة رقم 1 (lis_device_no = 1) هي المصدر: تُصدّر القاعدة ولا تستلمها أبداً.
@@ -56262,13 +56368,14 @@ var _LAN_RENDER = {
                      renderRequestsFiltered(_rf,(_rs&&_rs.value)||'');
                      updateBadges();updateDashboard();loadResultsDropdown();loadPrintDropdown();
                    }catch(e){} },
-  invoices:        function(){ try{renderInvoices();}catch(e){} },
+  invoices:        function(){ try{renderInvoices();}catch(e){} try{ if(window._accRefreshUI) window._accRefreshUI('invoices'); }catch(e){} },
   doctors:         function(){ try{renderDoctors();}catch(e){} },
   testGroups:      function(){ try{renderTestsDB();}catch(e){} },
   packages:        function(){ try{renderPackages();}catch(e){} },
   inventory:       function(){ try{renderInventory();}catch(e){} },
   qc:              function(){ try{renderQC();}catch(e){} },
-  billing:         function(){ if(window._syncLightRender)window._syncLightRender('billing'); },
+  billing:         function(){ try{ if(window._accRefreshUI) window._accRefreshUI('billing'); }catch(e){} },
+  expenses:        function(){ try{ if(window._accRefreshUI) window._accRefreshUI('expenses'); }catch(e){} },
   cultureRecords:  function(){ if(window._syncLightRender)window._syncLightRender('cultureRecords'); },
   uaRecords:       function(){ if(window._syncLightRender)window._syncLightRender('uaRecords'); },
   stoolExamRecords:function(){ if(window._syncLightRender)window._syncLightRender('stoolExamRecords'); },
@@ -59913,6 +60020,290 @@ setInterval(function(){
     _hello();
   }catch(e){}
 }, TOPUP_MS);
+
+})();
+</script>
+
+
+<!-- ══════════ ACC Sync v1 — مزامنة قسم الحسابات بين كل الحاسبات — لا تحذف ══════════ -->
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   MedLab Pro — ACC Sync v1  (مزامنة قسم الحسابات بين الحاسبات)
+   ──────────────────────────────────────────────────────────────────────
+   • الفواتير + سجل الحسابات + المصروفات صارت ضمن _LAN_SYNC_KEYS فتمرّ على
+     نفس المزامنة التفاضلية (دفعات ٢٠٠ سجل + مؤشّرات) — بلا تجميد.
+   • لا علاقة لها برقم الحاسبة: كل الحاسبات تُرسل وتستلم بالتساوي
+     (قاعدة التحاليل وحدها تبقى من رقم 1).
+   • الحذف: الدمج يُبقي كل السجلات (لا يفقد شيئاً) فكان المحذوف يعود من
+     الحاسبة الأخرى. الحل: «شواهد حذف» (id → وقت الحذف) تُلتقط مركزياً
+     من save() وتُبثّ للجميع، ويُرفض أي سجل أقدم من شاهد حذفه.
+   • فئات المصروفات (المحفوظة/المخفية) تُبثّ برسالة صغيرة (الأحدث يفوز).
+   • عند أول لقاء مع حاسبة تعمل بهذا الإصدار تُدفع السجلات الموجودة مرة
+     واحدة (لأن المؤشّرات القديمة لا تعرف هذه الأقسام).
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+if(typeof _LAN_SYNC_KEYS === 'undefined' || typeof _lanSendRaw !== 'function') return;
+
+var ACC       = ['invoices','billing','expenses'];
+var TOMB_KEY  = 'lis_acc_tombs';
+var BF_KEY    = 'lis_acc_bf';          // الحاسبات التي دُفعت لها السجلات القديمة
+var CATS_TS   = 'lis_acc_cats_ts';
+var TOMB_TTL  = 120*24*3600*1000;      // شاهد الحذف يُحتفظ به ١٢٠ يوماً
+var CHUNK = 200, GAP_MS = 25;
+
+function _on(){ return (typeof _lanMode !== 'undefined') && !!_lanMode; }
+function _idOf(o){
+  if(!o || typeof o !== 'object') return null;
+  var id = o.id || o.reqId || o.patientId || o.invoiceId || o._id || null;
+  return id == null ? null : String(id);
+}
+function _tsOf(o){
+  if(!o || typeof o !== 'object') return 0;
+  var t = o._updatedAt || o.updatedAt || o.lastModified || o.ts || o.modifiedAt || 0;
+  var n = (typeof t === 'number') ? t : Date.parse(t);
+  return isNaN(n) ? 0 : n;
+}
+function _arr(k){ try{ var v = _lanGetLocal(k); return Array.isArray(v) ? v : []; }catch(e){ return []; } }
+function _idsOf(arr){
+  var m = {}, i, id;
+  for(i=0;i<arr.length;i++){ id = _idOf(arr[i]); if(id) m[id] = 1; }
+  return m;
+}
+function _applying(){ return (typeof _lanApplying !== 'undefined') && !!_lanApplying; }
+
+/* ── شواهد الحذف (دائمة) ───────────────────────────────────────── */
+var tombs = {};
+try{ tombs = JSON.parse(localStorage.getItem(TOMB_KEY) || '{}') || {}; }catch(e){ tombs = {}; }
+function _saveTombs(){ try{ localStorage.setItem(TOMB_KEY, JSON.stringify(tombs)); }catch(e){} }
+function _pruneTombs(){
+  var cut = Date.now() - TOMB_TTL, k, id, ch = false;
+  for(k in tombs){ for(id in tombs[k]){ if(!(tombs[k][id] > cut)){ delete tombs[k][id]; ch = true; } } }
+  if(ch) _saveTombs();
+}
+_pruneTombs();
+function _hasTombs(k){ var t = tombs[k]; if(!t) return false; for(var x in t) return true; return false; }
+
+/* ── لقطة المعرّفات الحالية لكل مفتاح (للكشف عن المحذوف عند الحفظ) ── */
+var snap = {};
+(function(){
+  var tries = 0;
+  var iv = setInterval(function(){
+    var done = true; tries++;
+    ACC.forEach(function(k){
+      if(snap[k]) return;
+      var a = _arr(k);
+      if(a.length || tries > 20) snap[k] = _idsOf(a); else done = false;
+    });
+    if(done) clearInterval(iv);
+  }, 1500);
+})();
+
+var _tbT = null;
+function _scheduleTombs(){
+  if(_tbT) return;
+  _tbT = setTimeout(function(){ _tbT = null; _sendTombs(); }, 400);
+}
+function _sendTombs(){
+  if(!_on()) return;
+  _pruneTombs();
+  try{ _lanSendRaw({ type:'acc:tombs', from:_lanDeviceId, tombs:tombs, sent:Date.now(), ts:Date.now() }); }catch(e){}
+}
+
+var _ctT = null;
+function _scheduleCats(){
+  if(_ctT) return;
+  _ctT = setTimeout(function(){ _ctT = null; _sendCats(); }, 400);
+}
+function _sendCats(){
+  if(!_on()) return;
+  var ts = 0; try{ ts = parseInt(localStorage.getItem(CATS_TS) || '0', 10) || 0; }catch(e){}
+  if(!ts) return;
+  var sv = [], hd = [];
+  try{ sv = load('expenseCats', []) || []; }catch(e){}
+  try{ hd = load('expenseCatsHidden', []) || []; }catch(e){}
+  try{ _lanSendRaw({ type:'acc:cats', from:_lanDeviceId, saved:sv, hidden:hd, cts:ts, sent:Date.now(), ts:Date.now() }); }catch(e){}
+}
+
+/* ── الخطّاف المركزي: يُستدعى من save() قبل كل كتابة ───────────────── */
+window._accTrack = function(k, v){
+  try{
+    if(k === 'expenseCats' || k === 'expenseCatsHidden'){
+      if(_applying()) return;
+      try{ localStorage.setItem(CATS_TS, String(Date.now())); }catch(e){}
+      _scheduleCats();
+      return;
+    }
+    if(ACC.indexOf(k) === -1 || !Array.isArray(v)) return;
+    var cur = _idsOf(v), prev = snap[k], id;
+    if(prev && !_applying()){
+      var removed = [], total = 0;
+      for(id in prev){ total++; if(!(id in cur)) removed.push(id); }
+      /* مسح جماعي (استيراد/استعادة نسخة/تصفير) ليس «حذف سجل» — لا يُنشر كحذف */
+      var bulk = removed.length > 50 && removed.length > total*0.3;
+      if(removed.length && !bulk){
+        var now = Date.now(); tombs[k] = tombs[k] || {};
+        for(var i=0;i<removed.length;i++) tombs[k][removed[i]] = now;
+        _saveTombs(); _scheduleTombs();
+      }
+    }
+    /* سجل أُعيد إنشاؤه/عُدّل بعد حذفه ⇒ ألغِ شاهد الحذف الأقدم منه */
+    if(_hasTombs(k) && !_applying()){
+      var tk = tombs[k], ch = false, j, rid;
+      for(j=0;j<v.length;j++){
+        rid = _idOf(v[j]);
+        if(rid && tk[rid] && _tsOf(v[j]) > tk[rid]){ delete tk[rid]; ch = true; }
+      }
+      if(ch) _saveTombs();
+    }
+    snap[k] = cur;
+  }catch(e){}
+};
+
+/* ── تصفية الوارد: لا يُقبل سجل أقدم من شاهد حذفه ─────────────────── */
+function _filter(key, arr){
+  if(!Array.isArray(arr) || !_hasTombs(key)) return arr;
+  var tk = tombs[key], out = [], i, o, id, t;
+  for(i=0;i<arr.length;i++){
+    o = arr[i]; id = _idOf(o); t = id ? tk[id] : 0;
+    if(t && _tsOf(o) <= t) continue;
+    out.push(o);
+  }
+  return out.length === arr.length ? arr : out;
+}
+if(typeof _lanApplyKey === 'function'){
+  var _prevApply = window._lanApplyKey || _lanApplyKey;
+  window._lanApplyKey = function(key, data){
+    if(ACC.indexOf(key) !== -1) data = _filter(key, data);
+    return _prevApply.call(this, key, data);
+  };
+}
+
+/* ── تطبيق شواهد حذف واردة ────────────────────────────────────────── */
+function _applyTombs(inc, off){
+  if(!inc || typeof inc !== 'object') return;
+  var jobs = [];
+  ACC.forEach(function(k){
+    var src = inc[k]; if(!src || typeof src !== 'object') return;
+    tombs[k] = tombs[k] || {};
+    var id, t;
+    for(id in src){
+      t = +src[id]; if(!t) continue;
+      if(off && Math.abs(off) > 3000) t -= off;
+      if(!(tombs[k][id] >= t)) tombs[k][id] = t;
+    }
+    var arr = _arr(k), out = _filter(k, arr);
+    if(out !== arr) jobs.push([k, out]);
+  });
+  _saveTombs();
+  jobs.forEach(function(j){ try{ window._lanApplyKey(j[0], j[1]); }catch(e){ console.warn('[ACC] tomb apply', e); } });
+}
+
+/* ── فئات المصروفات الواردة ───────────────────────────────────────── */
+function _applyCats(msg, off){
+  var cts = +msg.cts || 0; if(!cts) return;
+  if(off && Math.abs(off) > 3000) cts -= off;
+  var mine = 0; try{ mine = parseInt(localStorage.getItem(CATS_TS) || '0', 10) || 0; }catch(e){}
+  if(cts <= mine) return;                                   // لدينا أحدث
+  if(!Array.isArray(msg.saved) || !Array.isArray(msg.hidden)) return;
+  _lanApplying = true;
+  try{
+    save('expenseCats', msg.saved.filter(function(c){ return typeof c === 'string' && c.length <= 80; }).slice(0, 500));
+    save('expenseCatsHidden', msg.hidden.filter(function(c){ return typeof c === 'string' && c.length <= 80; }).slice(0, 500));
+  }catch(e){}
+  finally{ _lanApplying = false; }
+  try{ localStorage.setItem(CATS_TS, String(cts)); }catch(e){}
+  _refreshUI('expenses');
+}
+
+/* ── دفع السجلات الموجودة مرة واحدة لكل حاسبة جديدة ─────────────── */
+var bf = {};
+try{ bf = JSON.parse(localStorage.getItem(BF_KEY) || '{}') || {}; }catch(e){ bf = {}; }
+function _pushBackfill(){
+  var parts = [];
+  ACC.forEach(function(k){
+    var a = _arr(k); if(!a.length) return;
+    var n = Math.ceil(a.length / CHUNK), p;
+    for(p=0;p<n;p++) parts.push({ type:'sync2', key:k, part:p, parts:n,
+                                  data:a.slice(p*CHUNK, (p+1)*CHUNK), from:_lanDeviceId, ts:0 });
+  });
+  var i = 0;
+  (function step(){
+    if(i >= parts.length || !_on()) return;
+    var o = parts[i++]; o.ts = Date.now();
+    try{ _lanSendRaw(o); }catch(e){}
+    setTimeout(step, GAP_MS);
+  })();
+}
+var greeted = {};
+function _peerSeen(peer){
+  if(!peer) return;
+  if(!greeted[peer]){                         // ردّ مرة واحدة في هذه الجلسة
+    greeted[peer] = 1;
+    setTimeout(function(){ _sendTombs(); _sendCats(); }, 300);
+  }
+  if(!bf[peer]){
+    bf[peer] = 1;
+    try{ localStorage.setItem(BF_KEY, JSON.stringify(bf)); }catch(e){}
+    setTimeout(_pushBackfill, 1200);
+  }
+}
+
+/* ── تحديث الواجهة (مؤجَّل ومُجمَّع — لا يُرهق عند وصول دفعات) ──── */
+var _uiT = null, _uiKeys = {};
+function _refreshUI(key){
+  _uiKeys[key] = 1;
+  if(_uiT) return;
+  _uiT = setTimeout(function(){
+    var ks = _uiKeys; _uiKeys = {}; _uiT = null;
+    try{
+      var sec = document.getElementById('sec-billing');
+      var active = !!(sec && sec.classList.contains('active'));
+      if(ks.invoices){ try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(e){} }
+      if(active){
+        if(ks.billing){ try{ if(typeof renderBillingHistory === 'function') renderBillingHistory(); }catch(e){} }
+        try{ if(window.Accounts) Accounts.render(); }catch(e){}
+      }
+    }catch(e){}
+  }, 500);
+}
+window._accRefreshUI = _refreshUI;
+
+/* ── الرسائل الواردة (acc:*) ─────────────────────────────────────── */
+function _onMsg(msg){
+  if(!msg || !msg.from || msg.from === _lanDeviceId) return;
+  if(typeof _lanMode !== 'undefined' && _lanMode === 'server' && !msg._relayed){
+    msg._relayed = 1; try{ _lanSendRaw(msg); }catch(e){}
+  }
+  var off = msg.sent ? (msg.sent - Date.now()) : 0;
+  if(Math.abs(off) <= 3000) off = 0;
+  if(msg.type === 'acc:tombs'){ _applyTombs(msg.tombs, off); _peerSeen(msg.from); }
+  else if(msg.type === 'acc:cats'){ _applyCats(msg, off); _peerSeen(msg.from); }
+}
+if(typeof _lanHandleMessage === 'function'){
+  var _prevHandle = window._lanHandleMessage || _lanHandleMessage;
+  window._lanHandleMessage = function(raw){
+    try{
+      if(typeof raw === 'string' && raw.length < 5000000){
+        var head = raw.length > 80 ? raw.substring(0, 80) : raw;
+        if(head.indexOf('"type":"acc:') !== -1){ _onMsg(JSON.parse(raw)); return; }
+      }
+    }catch(e){ return; }
+    return _prevHandle.apply(this, arguments);
+  };
+}
+
+/* ── عند كل اتصال + مصافحة دورية خفيفة ──────────────────────────── */
+if(typeof _lanAnnounce === 'function'){
+  var _prevAnnounce = window._lanAnnounce || _lanAnnounce;
+  window._lanAnnounce = function(){
+    greeted = {};
+    var r; try{ r = _prevAnnounce.apply(this, arguments); }catch(e){}
+    setTimeout(function(){ _sendTombs(); _sendCats(); }, 3500);
+    return r;
+  };
+}
+setInterval(function(){ try{ if(_on()){ _sendTombs(); _sendCats(); } }catch(e){} }, 300000);
 
 })();
 </script>
