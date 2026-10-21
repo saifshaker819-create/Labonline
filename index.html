@@ -60259,6 +60259,7 @@ function _refreshUI(key){
     try{
       var sec = document.getElementById('sec-billing');
       var active = !!(sec && sec.classList.contains('active'));
+      if(ks.expenses){ try{ if(window.Exp) Exp.reset(); }catch(e){} }   /* ذاكرة المصروفات المؤقتة قد تكون قديمة بعد وارد LAN */
       if(ks.invoices){ try{ if(typeof updateDashboard === 'function') updateDashboard(); }catch(e){} }
       if(active){
         if(ks.billing){ try{ if(typeof renderBillingHistory === 'function') renderBillingHistory(); }catch(e){} }
@@ -77242,7 +77243,7 @@ var Exp=(function(){
   return {all:all,reset:reset,cats:cats,usage:usage,addCat:addCat,hideCat:hideCat,notes:notes,inScope:inScope,sum:sum,add:add,upd:upd,del:del};
 })();
 window.Exp=Exp;
-try{ window._smSetters=window._smSetters||{}; window._smSetters['expenses']=function(v){ Exp.reset(); try{ if(window.Accounts) Accounts.render(); }catch(e){} }; }catch(e){}
+try{ window._smSetters=window._smSetters||{}; window._smSetters['expenses']=function(v){ Exp.reset(); /* ⚠️ الرسم بعد اكتمال save() — كان يُرسم قبلها فيُخزَّن في ذاكرة Exp النسخة القديمة (المصروفات الواردة لا تظهر وقد تُمحى عند أول إضافة) */ setTimeout(function(){ try{ Exp.reset(); if(window.Accounts) Accounts.render(); }catch(e){} },0); }; }catch(e){}
 
 /* فترات سريعة */
 function mkS(mode,from,to,label){
