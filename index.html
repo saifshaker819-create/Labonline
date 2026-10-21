@@ -51758,7 +51758,11 @@ async function fsaRestoreFromFile(){
       try{
         const f = e.target.files && e.target.files[0];
         if(!f) return;
+        showNotif('جارٍ قراءة الملف','⏳ الملف كبير ('+Math.round(f.size/1048576)+' MB) — انتظر حتى تظهر المعاينة ولا تغلق الصفحة','info');
+        await new Promise(r=>setTimeout(r,80));
         const text = await f.text();
+        showNotif('جارٍ التحليل','⏳ تم تحميل الملف — يتم تحليل البيانات...','info');
+        await new Promise(r=>setTimeout(r,80));
         _fsaProcessRestore(text);
       }catch(err){
         showNotif('خطأ','فشل قراءة الملف: '+err.message,'error');
@@ -51888,7 +51892,11 @@ function _showRestorePreview(parsed){
       <div style="color:var(--danger);font-weight:700;margin-top:8px">⚠️ سيتم استبدال جميع البيانات الحالية بالبيانات المستردة!</div>
     `;
     const previewBox = document.getElementById('db-import-preview');
-    if(previewBox) previewBox.style.display='block';
+    if(previewBox){
+      previewBox.style.display='block';
+      try{ previewBox.scrollIntoView({behavior:'smooth',block:'center'}); }catch(_){}
+      showNotif('جاهز للاسترداد','✅ تمت قراءة الملف — اضغط زر التأكيد في المعاينة لإتمام الاسترداد','success');
+    }
 }
 
 // ── تأكيد الاسترداد الفعلي ─────────────────────────────────
