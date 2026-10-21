@@ -13073,6 +13073,7 @@ function openPatientQuickPanel(pid){
 
 function deleteReqFromPanel(reqId, pid){
   if(!confirm('حذف هذا الطلب؟\nسيُحذف معه: فاتورته وسجلات الحسابات ونتائج الزرع/الإدرار/الخروج/المنوي المرتبطة به — ويختفي من كل التقارير.'))return;
+  try{ if(window._accMarkDel) _accMarkDel('requests', requests.filter(r=>r.id===reqId)); }catch(e){}
   requests=requests.filter(r=>r.id!==reqId);
   save('requests',requests);
   try{ _cascadeDeleteReqs([reqId]); }catch(e){ console.warn('[cascade]',e); }
@@ -15090,6 +15091,7 @@ function searchPatients(v){
   },80);
 }
 function deletePatient(id){if(confirm('هل أنت متأكد من حذف هذا المريض؟')){
+  try{ if(window._accMarkDel) _accMarkDel('patients', patients.filter(p=>p.id===id)); }catch(e){}
   patients=patients.filter(p=>p.id!==id);save('patients',patients);
   // ⭐ بدل renderAll() (١١ جدول) — ارسم فقط ما يتأثر بحذف المريض
   const _activeTab=document.querySelector('#sec-patients .tabs .tab.active');
@@ -16532,6 +16534,7 @@ function searchReq(v){
   renderRequestsFiltered(filter,v);
 }
 function deleteReq(id){if(confirm('حذف هذا الطلب؟\nسيُحذف معه: فاتورته وسجلات الحسابات ونتائج الزرع/الإدرار/الخروج/المنوي المرتبطة به — ويختفي من كل التقارير.')){
+  try{ if(window._accMarkDel) _accMarkDel('requests', requests.filter(r=>r.id===id)); }catch(e){}
   requests=requests.filter(r=>r.id!==id);save('requests',requests);
   try{ _cascadeDeleteReqs([id]); }catch(e){ console.warn('[cascade]',e); }
   // ⭐ إصلاح: احترم الفلتر النشط بدل عرض كل الطلبات (كان renderRequests() يمرّر 'all')
@@ -25536,10 +25539,10 @@ function _cascadeDeleteReqs(reqIds, opts){
     }
   }catch(e){ console.warn('[cascade] billing',e); }
   try{
-    if(typeof uaRecords!=='undefined'){ var a=uaRecords.length; uaRecords=uaRecords.filter(function(x){ return !hit(x); }); if(a!==uaRecords.length){ res.sp+=a-uaRecords.length; save('uaRecords',uaRecords); } }
-    if(typeof stoolExamRecords!=='undefined'){ var s=stoolExamRecords.length; stoolExamRecords=stoolExamRecords.filter(function(x){ return !hit(x); }); if(s!==stoolExamRecords.length){ res.sp+=s-stoolExamRecords.length; save('stoolExamRecords',stoolExamRecords); } }
-    if(typeof semenRecords!=='undefined'){ var m=semenRecords.length; semenRecords=semenRecords.filter(function(x){ return !hit(x); }); if(m!==semenRecords.length){ res.sp+=m-semenRecords.length; save('semenRecords',semenRecords); } }
-    if(typeof cultureRecords!=='undefined'){ var c=cultureRecords.length; cultureRecords=cultureRecords.filter(function(x){ return !hit(x); }); if(c!==cultureRecords.length){ res.sp+=c-cultureRecords.length; save('cultureRecords',cultureRecords); } }
+    if(typeof uaRecords!=='undefined'){ var a=uaRecords.length; try{ if(window._accMarkDel) _accMarkDel('uaRecords', uaRecords.filter(hit)); }catch(e){} uaRecords=uaRecords.filter(function(x){ return !hit(x); }); if(a!==uaRecords.length){ res.sp+=a-uaRecords.length; save('uaRecords',uaRecords); } }
+    if(typeof stoolExamRecords!=='undefined'){ var s=stoolExamRecords.length; try{ if(window._accMarkDel) _accMarkDel('stoolExamRecords', stoolExamRecords.filter(hit)); }catch(e){} stoolExamRecords=stoolExamRecords.filter(function(x){ return !hit(x); }); if(s!==stoolExamRecords.length){ res.sp+=s-stoolExamRecords.length; save('stoolExamRecords',stoolExamRecords); } }
+    if(typeof semenRecords!=='undefined'){ var m=semenRecords.length; try{ if(window._accMarkDel) _accMarkDel('semenRecords', semenRecords.filter(hit)); }catch(e){} semenRecords=semenRecords.filter(function(x){ return !hit(x); }); if(m!==semenRecords.length){ res.sp+=m-semenRecords.length; save('semenRecords',semenRecords); } }
+    if(typeof cultureRecords!=='undefined'){ var c=cultureRecords.length; try{ if(window._accMarkDel) _accMarkDel('cultureRecords', cultureRecords.filter(hit)); }catch(e){} cultureRecords=cultureRecords.filter(function(x){ return !hit(x); }); if(c!==cultureRecords.length){ res.sp+=c-cultureRecords.length; save('cultureRecords',cultureRecords); } }
   }catch(e){ console.warn('[cascade] special',e); }
   try{ if(typeof renderInvoices==='function' && document.getElementById('sec-invoices') && document.getElementById('sec-invoices').classList.contains('active')) renderInvoices(); }catch(e){}
   try{ if(typeof renderReports==='function' && document.getElementById('sec-reports') && document.getElementById('sec-reports').classList.contains('active')) renderReports(); }catch(e){}
@@ -26883,6 +26886,7 @@ function deletePatientPermanently(pid){
   if(!confirm(`⚠️ هل أنت متأكد من حذف المريض "${p.name}" نهائياً؟\nسيتم حذف ${ptReqs} طلب مرتبط به أيضاً.`))return;
   if(!confirm(`تأكيد نهائي: حذف "${p.name}" وجميع بياناته من النظام؟`))return;
   const _delReqIds=requests.filter(r=>r.patientId===pid).map(r=>r.id);
+  try{ if(window._accMarkDel){ _accMarkDel('patients', patients.filter(x=>x.id===pid)); _accMarkDel('requests', requests.filter(r=>r.patientId===pid)); } }catch(e){}
   patients=patients.filter(x=>x.id!==pid);
   requests=requests.filter(r=>r.patientId!==pid);
   invoices=invoices.filter(i=>i.patientId!==pid);
@@ -60046,6 +60050,11 @@ setInterval(function(){
 if(typeof _LAN_SYNC_KEYS === 'undefined' || typeof _lanSendRaw !== 'function') return;
 
 var ACC       = ['invoices','billing','expenses'];
+/* 🗑️ حذف مريض/طلب: يُبثّ شاهد حذف أيضاً (كان الدمج يُرجع المحذوف من الحاسبة الأخرى).
+   مجموعات «رقم المزامنة» (SIDX) تُعرَّف بـ _sid لا برقم الملف — رقم الملف قد يختلف بين الحاسبات،
+   والسجل بلا _sid (أرشيف قديم) لا يُزامَن أصلاً فلا يُنشر له شاهد حذف (حتى لا يُحذف ملف مريض آخر بالخطأ). */
+var SIDK      = {patients:1, requests:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+var TKEYS     = ACC.concat(['patients','requests','cultureRecords','uaRecords','stoolExamRecords','semenRecords']);
 var TOMB_KEY  = 'lis_acc_tombs';
 var BF_KEY    = 'lis_acc_bf';          // الحاسبات التي دُفعت لها السجلات القديمة
 var CATS_TS   = 'lis_acc_cats_ts';
@@ -60063,6 +60072,11 @@ function _tsOf(o){
   var t = o._updatedAt || o.updatedAt || o.lastModified || o.ts || o.modifiedAt || 0;
   var n = (typeof t === 'number') ? t : Date.parse(t);
   return isNaN(n) ? 0 : n;
+}
+function _tid(k, o){
+  if(!o || typeof o !== 'object') return null;
+  if(SIDK[k]) return o._sid ? String(o._sid) : null;
+  return _idOf(o);
 }
 function _arr(k){ try{ var v = _lanGetLocal(k); return Array.isArray(v) ? v : []; }catch(e){ return []; } }
 function _idsOf(arr){
@@ -60160,12 +60174,28 @@ window._accTrack = function(k, v){
   }catch(e){}
 };
 
+/* ── تسجيل حذف سجل/سجلات صراحةً (من دوال حذف المريض/الطلب) ──────────── */
+window._accMarkDel = function(k, recs){
+  try{
+    if(TKEYS.indexOf(k) === -1 || !recs) return;
+    if(!Array.isArray(recs)) recs = [recs];
+    var now = Date.now(), n = 0, i, id;
+    tombs[k] = tombs[k] || {};
+    for(i=0;i<recs.length;i++){
+      id = _tid(k, recs[i]);
+      if(id){ tombs[k][id] = now; n++; }
+    }
+    if(n){ _saveTombs(); _scheduleTombs(); }
+  }catch(e){}
+};
+
 /* ── تصفية الوارد: لا يُقبل سجل أقدم من شاهد حذفه ─────────────────── */
 function _filter(key, arr){
   if(!Array.isArray(arr) || !_hasTombs(key)) return arr;
   var tk = tombs[key], out = [], i, o, id, t;
   for(i=0;i<arr.length;i++){
-    o = arr[i]; id = _idOf(o); t = id ? tk[id] : 0;
+    o = arr[i]; id = _tid(key, o); t = id ? tk[id] : 0;
+    if(!t && id && SIDK[key] && window.SIDX && SIDX.resolve){ try{ var _rid = SIDX.resolve(key, id); if(_rid && _rid !== id) t = tk[_rid]; }catch(e){} }
     if(t && _tsOf(o) <= t) continue;
     out.push(o);
   }
@@ -60174,7 +60204,7 @@ function _filter(key, arr){
 if(typeof _lanApplyKey === 'function'){
   var _prevApply = window._lanApplyKey || _lanApplyKey;
   window._lanApplyKey = function(key, data){
-    if(ACC.indexOf(key) !== -1) data = _filter(key, data);
+    if(TKEYS.indexOf(key) !== -1) data = _filter(key, data);
     return _prevApply.call(this, key, data);
   };
 }
@@ -60183,7 +60213,7 @@ if(typeof _lanApplyKey === 'function'){
 function _applyTombs(inc, off){
   if(!inc || typeof inc !== 'object') return;
   var jobs = [];
-  ACC.forEach(function(k){
+  TKEYS.forEach(function(k){
     var src = inc[k]; if(!src || typeof src !== 'object') return;
     tombs[k] = tombs[k] || {};
     var id, t;
@@ -73040,9 +73070,9 @@ var HB_MS = 4*60000;               // نبضة «أنا موجود»
 var REPULL_MS = 30*60000;          // سحب احتياطي دوري من كل حاسبة مفتوحة
 
 /* ── المجموعات المُزامَنة ── */
-var REC_KEYS = ['patients','requests','invoices','billing','doctors','testGroups','packages','inventory','qc',
+var REC_KEYS = ['patients','requests','invoices','billing','expenses','doctors','testGroups','packages','inventory','qc',
                 'cultureRecords','uaRecords','stoolExamRecords','semenRecords','phoneBook','tests','customAbxEntries','esrTimers'];
-var DOC_KEYS = ['customSubCats','deletedTestIds'];          // مستند كامل (+ cultAbxProfile_*)
+var DOC_KEYS = ['customSubCats','deletedTestIds','expenseCats','expenseCatsHidden'];          // مستند كامل (+ cultAbxProfile_*)
 var UNION_DOCS = {deletedTestIds:1};                         // دمج اتحاد
 /* إعدادات خاصة بكل حاسبة — لا تُزامَن */
 var LOCAL_SETTINGS = {printerMain:1,printerBarcode:1,printerWorksheet:1,printerReceipt:1,printScope:1,labelW:1,labelH:1,
@@ -73192,7 +73222,7 @@ var RENDER = {
   customAbxEntries:function(){},
   settings:function(){ try{ applyFontCustom(); }catch(e){} try{ if(window._mlsOnSettings) window._mlsOnSettings(); }catch(e){} try{ var s=document.getElementById('sec-settings'); if(s && s.classList.contains('active')) loadSettings(); }catch(e){} },
   big:function(){ try{ applyCustomExamFields(); }catch(e){} try{ applyFontCustom(); }catch(e){} try{ if(window._mrtReload) window._mrtReload(); }catch(e){} },
-  docs:function(){ try{ loadCustomSubCats(); buildTestCatTabs(); }catch(e){} },
+  docs:function(){ try{ loadCustomSubCats(); buildTestCatTabs(); }catch(e){} try{ if(window._accRefreshUI) window._accRefreshUI('expenses'); }catch(e){} },
   att:function(){ try{ if(window.ATT && ATT.renderAll) ATT.renderAll(); }catch(e){} }
 };
 var _rT={};
@@ -73661,7 +73691,7 @@ function applySidRows(col, rows, meta){
     if(rec==null){
       if(!m && !SIDX.isSid(sid)) return;                      // شاهد حذف بمعرّف قديم (حاسبة بإصدار سابق) ⇒ يُتجاهل
       if(m && v<=m[1]) return;
-      if(p!==undefined && arr[p]){ arr[p]=null; removed++; delete pos[sid]; delete ctx.bySid[sid]; }
+      if(p!==undefined && arr[p]){ try{ if(window._accMarkDel) window._accMarkDel(col, arr[p]); }catch(e){} arr[p]=null; removed++; delete pos[sid]; delete ctx.bySid[sid]; }
       meta[sid]=[0,v,R()];
       return;
     }
