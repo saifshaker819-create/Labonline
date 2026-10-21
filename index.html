@@ -11357,6 +11357,7 @@ let _wizEditOrigReqId=null;
    مع تحاليل الطلب نفسه، و«حفظ» يحدّث نفس الطلب وفاتورته بدل إنشاء طلب جديد. */
 let _wizEditTestsLoaded=false;   // حُمِّلت تحاليل الطلب الأصلي إلى المعالج
 let _wizElec=false, _wizElecAuto=false;   // 💳 دفع إلكتروني لهذا الطلب فقط (الافتراضي نقدي — يُصفَّر مع كل طلب جديد)
+let _wizManual=null;             // ✍️ المبلغ الكلي اليدوي (null = تلقائي من الأسعار − الخصم)
 let _wizEditDraft=null;          // قيم الخطوة ٢ (العينة/الأولوية/الملاحظة/الخصم/الدفع)
 let _wizEditOrigDefRes={};       // النتائج الحالية للتحاليل ذات «النتيجة المقترحة»
 let currentReqId=null;
@@ -13382,7 +13383,7 @@ function markWpNameEnManual(){
 // WIZARD - NEW PATIENT WITH AUTOCOMPLETE
 // ============================================================
 function startNewPatient(){wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;_wizEditResetState();renderWizStep();openModal('m-wizard');}
-function _wizEditResetState(){ _wizElec=false; _wizElecAuto=false; _wizEditTestsLoaded=false; _wizEditDraft=null; _wizEditOrigDefRes={}; }
+function _wizEditResetState(){ _wizManual=null; _wizElec=false; _wizElecAuto=false; _wizEditTestsLoaded=false; _wizEditDraft=null; _wizEditOrigDefRes={}; }
 
 function renderWizStep(){
   const body=document.getElementById('wiz-body');
@@ -13785,13 +13786,15 @@ function renderWizStep(){
       <div id="wiz-pay-bar">
         <div class="wpb-grp wpb-total" title="المبلغ الكلي المطلوب من المريض (بعد الخصم إن وُجد)">
           <span class="wpb-lbl">💰 الكلي:</span>
-          <span id="wiz-bar-final" dir="ltr">0</span>
+          <input class="fc wpb-in" id="wiz-bar-final" type="number" min="0" step="any" lang="en" dir="ltr" placeholder="0" oninput="_wizManualInput(this)" onblur="updateWizTotal()" title="المبلغ الكلي — يمكنك كتابته يدوياً (يُحسب الخصم تلقائياً). امسح الحقل أو اضغط ↺ للرجوع للحساب التلقائي" style="width:100px;font-size:15px;font-weight:900;color:var(--success,#00e676)">
+          <span class="wpb-cur">${settings.currency||''}</span>
+          <button type="button" id="wiz-manual-reset" class="wpb-in" onclick="_wizManualReset()" title="إلغاء المبلغ اليدوي والرجوع للحساب التلقائي" style="display:none;cursor:pointer;padding:2px 8px">↺</button>
           <span id="wiz-bar-raw" dir="ltr" style="display:none"></span>
         </div>
         <span class="wpb-sep"></span>
         <div class="wpb-grp">
           <span class="wpb-lbl">🏷️ الخصم</span>
-          <input class="fc wpb-in" id="wiz-discount" type="number" min="0" step="any" lang="en" dir="ltr" placeholder="0" oninput="updateWizTotal()" title="مبلغ الخصم بالـ${settings.currency||''}" style="width:84px">
+          <input class="fc wpb-in" id="wiz-discount" type="number" min="0" step="any" lang="en" dir="ltr" placeholder="0" oninput="_wizManual=null;updateWizTotal()" title="مبلغ الخصم بالـ${settings.currency||''}" style="width:84px">
           <span class="wpb-cur">${settings.currency||''}</span>
         </div>
         <span class="wpb-sep"></span>
@@ -14600,6 +14603,7 @@ function _wizEditLoadReq(req){
     sample:req.sample||'', priority:req.priority||'Routine', note:req.note||'',
     discount:disc>0?disc:'', payStatus:_wizPayOptOf(inv), paidAmt:paid>0?paid:''
   };
+  _wizManual=(inv && inv.manualTotal && isFinite(parseFloat(inv.total)))?parseFloat(inv.total):null;
   _wizEditTestsLoaded=true;
 }
 function _wizEditCaptureDraft(){
@@ -14725,11 +14729,8 @@ function _wizFinishEditReq(){
 
   // ③ تحديث فاتورة نفس الطلب (لا فاتورة جديدة) — أو إنشاؤها إن لم تكن موجودة
   const today=new Date().toISOString().split('T')[0];
-  const rawTotal=Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
-  const _discIn=parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
-  const discAmt=Math.min(Math.max(0,_discIn), rawTotal);
+  const _A=_wizAmounts(), rawTotal=_A.rawTotal, discAmt=_A.discAmt, total=_A.total, _manual=_A.manual;
   const disc=rawTotal?Math.round(discAmt/rawTotal*1000)/10:0;
-  const total=rawTotal-discAmt;
   let payStatus=(document.getElementById('wiz-pay-status')||{}).value||'معلقة';
   let paidAmt=0;
   if(payStatus==='مدفوعة') paidAmt=total;
@@ -14763,12 +14764,12 @@ function _wizFinishEditReq(){
       }
     }
     inv.patientId=pt.id; inv.patientName=pt.name;
-    inv.rawTotal=rawTotal; inv.discount=disc; inv.discountAmt=discAmt; inv.total=total;
+    inv.rawTotal=rawTotal; inv.discount=disc; inv.discountAmt=discAmt; inv.total=total; inv.manualTotal=_manual;
     inv.status=payStatus; inv.paidAmt=paidAmt; inv._updatedAt=Date.now();
   } else {
     inv={
       id:_wizNewInvId(), patientId:pt.id, patientName:pt.name, reqId:req.id,
-      rawTotal, discount:disc, discountAmt:discAmt, total,
+      rawTotal, discount:disc, discountAmt:discAmt, total, manualTotal:_manual,
       insType:pt.insurance||'', insAmt:0, status:payStatus, date:req.date||today,
       paidAmt, payments: paidAmt>0?[{amt:paidAmt, date:today, ts:Date.now(), by:_payUser, note:'تعديل الطلب', method:(_wizElec?'electronic':'cash')}]:[]
     };
@@ -14854,12 +14855,8 @@ function wizFinish(){
   requests.push(req); saveOne('requests',requests,req);
 
   // الفاتورة مع الخصم وحالة الدفع
-  const rawTotal = Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
-  // 💵 الخصم مبلغ بالعملة (وليس نسبة): 15000 − 5000 = 10000
-  const _discIn  = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
-  const discAmt  = Math.min(Math.max(0,_discIn), rawTotal);
+  const _A=_wizAmounts(), rawTotal=_A.rawTotal, discAmt=_A.discAmt, total=_A.total, _manual=_A.manual;
   const disc     = rawTotal ? Math.round(discAmt/rawTotal*1000)/10 : 0;   // النسبة المكافئة (توافق مع السجلات القديمة)
-  const total    = rawTotal - discAmt;
   let payStatus= (document.getElementById('wiz-pay-status')||{}).value||'معلقة';
   // 💳 المبلغ المدفوع عند التسجيل: مدفوع ⇒ كامل الصافي · مطلوب ⇒ المُدخَل · غير مدفوع ⇒ صفر
   let paidAmt=0;
@@ -14890,7 +14887,7 @@ function wizFinish(){
   invoices.push({
     id:_genUniqueInvId(),
     patientId:pt.id, patientName:pt.name, reqId:rqid,
-    rawTotal, discount:disc, discountAmt:discAmt, total,
+    rawTotal, discount:disc, discountAmt:discAmt, total, manualTotal:_manual,
     insType:pt.insurance||'', insAmt:0,
     status:payStatus, date:today,
     paidAmt, payments: paidAmt>0?[{amt:paidAmt, date:today, ts:Date.now(), by:_payUser, note:'عند التسجيل', method:(_wizElec?'electronic':'cash')}]:[]
@@ -14899,7 +14896,7 @@ function wizFinish(){
 
   closeModal('m-wizard');
   showNotif('تم الإنشاء',`${rqid} — ${pt.name} | ${total} ${settings.currency||''} — ${payStatus==='جزئية'?('مطلوب: دفع '+paidAmt+' والمتبقي '+(Math.round((total-paidAmt)*100)/100)):payStatus}${(_wizElec&&paidAmt>0)?' — 💳 دفع إلكتروني':''} ✅`,'success');
-  _wizElec=false; _wizElecAuto=false;
+  _wizElec=false; _wizElecAuto=false; _wizManual=null;
   currentReqId=rqid;
   window._goToResultCalled=true;
   // ⚡ الانتقال فوراً لواجهة النتائج، وتأجيل الرسوم الثقيلة (لوحة التحكم/الشارات)
@@ -14915,18 +14912,39 @@ function wizFinish(){
 }
 
 // ── حساب مجموع التحاليل في المعالج ──────────────────────────
-function updateWizTotal(){
-  const total = Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
-  const disc  = parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
-  const final = total - Math.min(Math.max(0,disc), total);   // 💵 خصم بالمبلغ
+/* ✍️ حساب المبالغ الموحّد (الواجهة + الحفظ + التعديل): المبلغ اليدوي إن وُجد يتقدّم على (الأسعار − الخصم) */
+function _wizAmounts(){
+  let rawTotal=Math.round(wizSelectedTests.reduce((s,t)=>s+_wizTP(t),0)*100)/100;
+  const discIn=parseFloat((document.getElementById('wiz-discount')||{}).value)||0;
+  let discAmt=Math.min(Math.max(0,discIn), rawTotal), total, manual=false;
+  if(_wizManual!=null && isFinite(_wizManual)){
+    manual=true; total=Math.round(Math.max(0,_wizManual)*100)/100;
+    if(total>rawTotal){ rawTotal=total; discAmt=0; }          // أعلى من الأسعار ⇒ يصير هو الإجمالي بلا خصم
+    else discAmt=Math.round((rawTotal-total)*100)/100;       // أقل ⇒ الفرق خصم
+  } else total=Math.round((rawTotal-discAmt)*100)/100;
+  return {rawTotal, discAmt, total, manual};
+}
+function _wizManualInput(el){
+  const v=String(el.value).trim();
+  _wizManual=(v==='')?null:Math.max(0,parseFloat(v)||0);
+  updateWizTotal(true);
+}
+function _wizManualReset(){ _wizManual=null; updateWizTotal(); }
+window._wizManualReset=_wizManualReset; window._wizManualInput=_wizManualInput;
+function updateWizTotal(keepBar){
+  const A=_wizAmounts(), total=A.rawTotal, final=A.total;
   const cur   = settings.currency||'';
   const tl=document.getElementById('wiz-total-lbl');
   const fl=document.getElementById('wiz-final-lbl');
   if(tl) tl.textContent=total+' '+cur;
   if(fl) fl.textContent=final+' '+cur;
-  /* 💰 المبلغ الكلي داخل صندوق الدفع — يظهر دائماً (مع خصم أو بدونه) */
+  /* 💰 المبلغ الكلي داخل صندوق الدفع — قابل للتعديل اليدوي */
   const bf=document.getElementById('wiz-bar-final');
-  if(bf) bf.textContent=final+' '+cur;
+  if(bf && !(keepBar===true && document.activeElement===bf)) bf.value=final;
+  const rb=document.getElementById('wiz-manual-reset'); if(rb) rb.style.display=A.manual?'':'none';
+  if(bf) bf.style.borderColor=A.manual?'var(--warning,#ffb020)':'';
+  /* الخصم المشتق من المبلغ اليدوي يظهر في حقل الخصم */
+  if(A.manual){ const de=document.getElementById('wiz-discount'); if(de && document.activeElement!==de) de.value=A.discAmt>0?A.discAmt:''; }
   const br=document.getElementById('wiz-bar-raw');
   if(br){ if(final<total){ br.style.display=''; br.textContent=total+' '+cur; } else br.style.display='none'; }
   /* 💳 «مطلوب»: المتبقي بعد الدفعة الأولى */
@@ -26837,6 +26855,7 @@ function saveBillFinal(){
     invoices.push(inv); invCreated=true;
   }
   inv.rawTotal=sub; inv.discountAmt=discAmt; inv.discount=discPct; inv.total=afterDisc;
+  if(invPrev && afterDisc!==parseFloat(invPrev.total)) inv.manualTotal=false;   // عُدّل من واجهة الحساب ⇒ لم يعد يدوياً
   inv._updatedAt=Date.now();
   save('invoices',invoices);
 
