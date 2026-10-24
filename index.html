@@ -11241,24 +11241,25 @@ const SUB_CATS = {
   'Biochemistry': [
     'Liver Functions','Kidney Functions','Diabetes Profile','Lipid Profile',
     'Cardiac Profile','Electrolytes','Pancreatic Profile','Protein Electrophoresis',
-    'Therapeutic Drugs','Body Fluids','Miscellaneous','Other Biochemistry'
+    'Specific Proteins','Inflammatory Markers','Therapeutic Drugs','Drugs Of Abuse',
+    'Heavy Metals','Body Fluids','Miscellaneous','Other Biochemistry'
   ],
   'Hormones': [
     'Thyroid Hormones','Parathyroid Hormones','Fertility Hormones',
-    'Suprarenal Hormones','Pituitary Hormones','Other Hormones'
+    'Suprarenal Hormones','Pituitary Hormones','Pregnancy Tests','Other Hormones'
   ],
   'Immunology': [
-    'Autoimmunity','Serology','Allergy','Widal Test','Brucella Test','Other Immunology'
+    'Autoimmunity','Serology','Immunoglobulins & Complement','Allergy','Other Immunology'
   ],
   'Vitamins & Minerals': [
-    'Vitamins','Other Vitamins & Minerals'
+    'Vitamins','Trace Elements','Other Vitamins & Minerals'
   ],
   'Tumor Markers': [
     'Tumor Markers','Other Tumor Markers'
   ],
   'Infections': [
-    'Virology','Bacteria','TORCH Screen','Parasitic Tests',
-    'Pregnancy Tests','Drugs Of Abuse','Miscellaneous','Other Infections'
+    'Virology','Bacteria','TORCH Screen','Parasitic Tests','Fungal Tests',
+    'Widal Test','Brucella Test','Other Infections'
   ],
   'Urinalysis':  ['Routine Urine','Urine Chemistry','Other Urinalysis'],
   'Microbiology':['Microbiology','Molecular Biology','Other Microbiology'],
@@ -11267,6 +11268,85 @@ const SUB_CATS = {
   'Special':     ['Miscellaneous','Histopathology & Cytology','Other Special'],
   'Calculated':  ['Miscellaneous','Other Calculated']
 };
+/* ══════════════════════════════════════════════════════════════════
+   🗂️ تدقيق المجموعات الرئيسية والفرعية للتحاليل (v1)
+   ──────────────────────────────────────────────────────────────────
+   كل تحليل في مجموعته الفرعية والرئيسية الصحيحة، وكل مجموعة فرعية تتبع
+   مجموعة رئيسية واحدة فقط (لا تتكرر في التقرير ولا في المتجر).
+   • TEST_GROUP_FIX  : تصحيح بالمعرّف [الرئيسية، الفرعية، الرئيسية القديمة، الفرعية القديمة]
+                       لا يُطبَّق إلا إذا كان التحليل ما زال على تصنيفه القديم الافتراضي
+                       (أي تصنيف غيّره المستخدم بيده يبقى كما هو).
+   • TEST_GROUP_PAIR : توحيد أي تحليل (افتراضي أو مستورد) حسب «الرئيسية|الفرعية».
+   يُنفَّذ مرة واحدة لكل حساب، وعلى القاعدة الافتراضية ALL_TESTS دائماً.
+   ══════════════════════════════════════════════════════════════════ */
+const TEST_GROUP_FIX = {"h042":["Hematology", "Tests For Blood Diseases", "Hematology", null],"h044":["Hematology", "Tests For Blood Diseases", "Hematology", null],"h034":["Hematology", "Tests For Blood Diseases", "Hematology", "Haematology"],"h036":["Hematology", "Tests For Blood Diseases", "Hematology", "Haematology"],"h028":["Hematology", "Tests For Blood Diseases", "Hematology", "Iron Tests"],"c050":["Hematology", "Tests For Blood Diseases", "Biochemistry", "Protein Electrophoresis"],"h043":["Infections", "Parasitic Tests", "Hematology", null],"h045":["Vitamins & Minerals", "Vitamins", "Hematology", null],"h046":["Hematology", "Coagulation Profile", "Hematology", null],"h047":["Hematology", "Coagulation Profile", "Hematology", null],"h048":["Hematology", "Coagulation Profile", "Hematology", null],"h049":["Hematology", "Coagulation Profile", "Hematology", null],"h050":["Hematology", "Coagulation Profile", "Hematology", null],"h051":["Hematology", "Coagulation Profile", "Hematology", null],"h054":["Hematology", "Coagulation Profile", "Hematology", null],"h052":["Microbiology", "Molecular Biology", "Hematology", null],"h053":["Microbiology", "Molecular Biology", "Hematology", null],"c051":["Hematology", "Iron Tests", "Biochemistry", "Protein Electrophoresis"],"c052":["Hematology", "Iron Tests", "Biochemistry", "Protein Electrophoresis"],"l2l047":["Biochemistry", "Body Fluids", "Hematology", "Other Hematology"],"c032":["Biochemistry", "Inflammatory Markers", "Biochemistry", "Cardiac Profile"],"c043":["Biochemistry", "Inflammatory Markers", "Biochemistry", "Cardiac Profile"],"new002":["Biochemistry", "Inflammatory Markers", "Biochemistry", "Cardiac Profile"],"gls156":["Biochemistry", "Inflammatory Markers", "Immunology", "Other Immunology"],"gls159":["Biochemistry", "Inflammatory Markers", "Immunology", "Other Immunology"],"imx010":["Biochemistry", "Miscellaneous", "Biochemistry", "Cardiac Profile"],"c041":["Biochemistry", "Miscellaneous", "Biochemistry", "Kidney Functions"],"bc072":["Biochemistry", "Miscellaneous", "Biochemistry", "Kidney Functions"],"hr009":["Biochemistry", "Diabetes Profile", "Hormones", "Diabetes Profile"],"hr024":["Biochemistry", "Diabetes Profile", "Hormones", "Diabetes Profile"],"hr043":["Biochemistry", "Diabetes Profile", "Hormones", "Diabetes Profile"],"c053":["Biochemistry", "Electrolytes", "Biochemistry", "Kidney Functions"],"c054":["Urinalysis", "Urine Chemistry", "Biochemistry", "Kidney Functions"],"gls001":["Biochemistry", "Kidney Functions", "Blood Gases", "Creatinine Clearance"],"gls067":["Biochemistry", "Kidney Functions", "Blood Gases", "Creatinine Clearance"],"c049":["Biochemistry", "Specific Proteins", "Biochemistry", "Protein Electrophoresis"],"l2l035":["Biochemistry", "Specific Proteins", "Biochemistry", "Protein Electrophoresis"],"bc020":["Biochemistry", "Heavy Metals", "Biochemistry", "Therapeutic Drugs"],"sp010":["Biochemistry", "Heavy Metals", "Biochemistry", "Therapeutic Drugs"],"sp009":["Biochemistry", "Heavy Metals", "Special", "Miscellaneous"],"gls006":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls007":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls008":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls009":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls010":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls011":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls012":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls013":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls014":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls015":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls016":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls017":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"gls018":["Biochemistry", "Drugs Of Abuse", "Infections", "Drugs Of Abuse"],"sp001":["Biochemistry", "Cardiac Profile", "Special", "Miscellaneous"],"hr044":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"hr032":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"hx014":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"hx013":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"hr030":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"sp005":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"sp006":["Hormones", "Other Hormones", "Hormones", "Pituitary Hormones"],"sp003":["Hormones", "Suprarenal Hormones", "Special", "Miscellaneous"],"sp004":["Hormones", "Suprarenal Hormones", "Special", "Miscellaneous"],"sp007":["Hormones", "Pregnancy Tests", "Special", "Pregnancy Tests"],"sp007b":["Hormones", "Pregnancy Tests", "Special", "Pregnancy Tests"],"sp007c":["Hormones", "Pregnancy Tests", "Special", "Pregnancy Tests"],"im005":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"im006":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"im007":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"im008":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"im009":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"im010":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"gls152":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"gls153":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"gls154":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"gls155":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"gls193":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"gls195":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"l2l033":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"l2l034":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"imx007":["Immunology", "Immunoglobulins & Complement", "Immunology", "Serology"],"im011":["Immunology", "Serology", "Immunology", "Autoimmunity"],"imx008":["Immunology", "Other Immunology", "Immunology", "Serology"],"inf006":["Infections", "Bacteria", "Infections", "Serology"],"add001":["Infections", "Bacteria", "Infections", "Serology"],"add002":["Infections", "Bacteria", "Infections", "Serology"],"inf034":["Infections", "Bacteria", "Infections", "Serology"],"gls200":["Infections", "Bacteria", "Immunology", "Serology"],"im012":["Infections", "Widal Test", "Immunology", "Widal Test"],"im012b":["Infections", "Widal Test", "Immunology", "Widal Test"],"l2l081":["Infections", "Widal Test", "Immunology", "Widal Test"],"inf052":["Infections", "Fungal Tests", "Infections", "Microbiology"],"inf053":["Infections", "Fungal Tests", "Infections", "Microbiology"],"inf054":["Infections", "Fungal Tests", "Infections", "Microbiology"],"new007":["Infections", "Fungal Tests", "Microbiology", "Molecular Biology"],"pcr009":["Microbiology", "Molecular Biology", "Microbiology", "Serology"],"pcr007":["Microbiology", "Molecular Biology", "Microbiology", "Virology"],"add022":["Microbiology", "Molecular Biology", "Infections", "Virology"],"vr005":["Microbiology", "Molecular Biology", "Infections", "Virology"],"vr006":["Microbiology", "Molecular Biology", "Infections", "Virology"],"vr023":["Microbiology", "Molecular Biology", "Infections", "Virology"],"vr024":["Microbiology", "Molecular Biology", "Infections", "Virology"],"vr030":["Microbiology", "Molecular Biology", "Infections", "Virology"],"inf046":["Microbiology", "Molecular Biology", "Infections", "Parasitic Tests"],"inf051":["Microbiology", "Molecular Biology", "Infections", "Bacteria"],"u008":["Microbiology", "Microbiology", "Urinalysis", "Miscellaneous"],"gue001":["Urinalysis", "Routine Urine", "Urinalysis", "Miscellaneous"],"u001":["Urinalysis", "Routine Urine", "Urinalysis", "Miscellaneous"],"u002":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"u003":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"u004":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"u005":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"u006":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"u007":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"ur008":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"ur009":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"ur010":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"ur011":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"bc025":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"bc026":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l001":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l002":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l003":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l004":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l005":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l006":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l007":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l008":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l009":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l010":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l011":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"l2l012":["Urinalysis", "Urine Chemistry", "Urinalysis", "Miscellaneous"],"gse001":["Stool", "Routine Stool", "Stool", "Miscellaneous"],"s001":["Stool", "Routine Stool", "Stool", "Miscellaneous"],"s002":["Stool", "Routine Stool", "Stool", "Miscellaneous"],"s003":["Stool", "Routine Stool", "Stool", "Miscellaneous"],"l2l093":["Stool", "Routine Stool", "Stool", "Miscellaneous"],"l2l094":["Stool", "Routine Stool", "Stool", "Miscellaneous"],"l2l092":["Stool", "Stool Chemistry", "Stool", "Miscellaneous"],"semen001":["Semen", "Semen Analysis", "Semen", "Miscellaneous"],"l2l090":["Semen", "Semen Analysis", "Semen", "Miscellaneous"],"l2l091":["Semen", "Semen Analysis", "Semen", "Miscellaneous"],"v010":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"v011":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"v012":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"vm026":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"vm028":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"vm029":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"vm030":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"],"l2l048":["Vitamins & Minerals", "Trace Elements", "Vitamins & Minerals", "Vitamins"]};
+const TEST_GROUP_PAIR = {
+  'hematology|':['Hematology','Haematology'],
+  'hematology|hematology':['Hematology','Haematology'],
+  'blood gases|creatinine clearance':['Biochemistry','Kidney Functions'],
+  'hormones|diabetes profile':['Biochemistry','Diabetes Profile'],
+  'infections|drugs of abuse':['Biochemistry','Drugs Of Abuse'],
+  'infections|pregnancy tests':['Hormones','Pregnancy Tests'],
+  'special|pregnancy tests':['Hormones','Pregnancy Tests'],
+  'infections|serology':['Infections','Bacteria'],
+  'infections|miscellaneous':['Infections','Other Infections'],
+  'immunology|widal test':['Infections','Widal Test'],
+  'immunology|brucella test':['Infections','Brucella Test'],
+  'immunology|weil felix test':['Infections','Bacteria'],
+  'microbiology|serology':['Microbiology','Molecular Biology'],
+  'microbiology|virology':['Microbiology','Molecular Biology'],
+  'urinalysis|miscellaneous':['Urinalysis','Urine Chemistry'],
+  'stool|miscellaneous':['Stool','Routine Stool'],
+  'semen|miscellaneous':['Semen','Semen Analysis'],
+  'special|miscellaneous':['Special','Other Special'],
+  'biochemistry|sarcoidosis':['Biochemistry','Miscellaneous'],
+  'biochemistry|myopathy':['Biochemistry','Miscellaneous'],
+  'biochemistry|osteoporosis':['Biochemistry','Miscellaneous'],
+  'biochemistry|hypertension':['Biochemistry','Miscellaneous'],
+  'biochemistry|obesity':['Biochemistry','Miscellaneous'],
+  'biochemistry|test for shock investigation':['Biochemistry','Miscellaneous'],
+  'biochemistry|liver pathology scoring':['Biochemistry','Liver Functions'],
+  'hormones|diabetes insipidus':['Hormones','Pituitary Hormones']
+};
+const TEST_GROUP_FLAG = 'medlab_test_groups_fix_v1';
+function _fixTestGroups(arr, force){
+  let ch=false;
+  try{
+    if(!Array.isArray(arr)) return false;
+    arr.forEach(function(t){
+      if(!t || typeof t!=='object') return;
+      const f=TEST_GROUP_FIX[t.id];
+      if(f){
+        const curSub=(t.subCat===undefined||t.subCat===null||t.subCat==='')?null:t.subCat;
+        if(force || (t.cat===f[2] && curSub===f[3])){
+          if(t.cat!==f[0] || t.subCat!==f[1]){ t.cat=f[0]; t.subCat=f[1]; ch=true; }
+        }
+      }
+      if(t.isCalc) return;
+      const k=String(t.cat||'').trim().toLowerCase()+'|'+String(t.subCat||'').trim().toLowerCase();
+      const pr=TEST_GROUP_PAIR[k];
+      if(pr && (t.cat!==pr[0] || t.subCat!==pr[1])){ t.cat=pr[0]; t.subCat=pr[1]; ch=true; }
+    });
+  }catch(e){ console.warn('[test groups fix]',e); }
+  return ch;
+}
+try{ _fixTestGroups(ALL_TESTS, true); }catch(e){}
+/* يُستدعى بعد تحميل تحاليل الحساب — مرة واحدة لكل حساب */
+function _applyTestGroupsMigration(){
+  try{
+    if(!Array.isArray(tests)||!tests.length) return;
+    const key=(DB._pfx?DB._pfx():'')+TEST_GROUP_FLAG;
+    if(localStorage.getItem(key)==='1') return;
+    const dirty=_fixTestGroups(tests, false);
+    if(dirty){
+      try{ save('tests',tests); }catch(e){}
+      try{ IDB.set(DB._pfx()+'tests',tests).catch(function(){}); }catch(e){}
+      try{ if(typeof buildTestCatTabs==='function') buildTestCatTabs(); }catch(e){}
+      try{ if(typeof renderTestsDB==='function') renderTestsDB(); }catch(e){}
+    }
+    localStorage.setItem(key,'1');
+  }catch(e){ console.warn('[test groups migration]',e); }
+}
 // المجاميع الفرعية المخصصة (يضيفها المستخدم) — تُحفظ في localStorage وتدوم بعد الريفريش
 let customSubCats = {};
 function loadCustomSubCats(){
@@ -11997,6 +12077,7 @@ async function _mergeIDBInBackground(){
     // ⭐ بعد اكتمال تحميل التحاليل من IDB — طبّق ترحيل اسم FBG إجبارياً
     try{ _applyFbgNamingMigration(true); }catch(e){}
     try{ _applyCulturePriceMigration(); }catch(e){}
+    try{ _applyTestGroupsMigration(); }catch(e){}
     // 🩸 تحليل CBC لا يُحذف — أعِده إن كان محذوفاً سابقاً
     try{ if(typeof _cbcEnsureTest==='function') _cbcEnsureTest(); }catch(e){}
     if(changed){
@@ -28917,19 +28998,20 @@ const TEST_SUBCATS=[
   // Biochemistry
   'Liver Functions','Kidney Functions','Diabetes Profile','Lipid Profile',
   'Cardiac Profile','Electrolytes','Pancreatic Profile','Protein Electrophoresis',
-  'Therapeutic Drugs','Body Fluids','Other Biochemistry',
+  'Specific Proteins','Inflammatory Markers','Therapeutic Drugs','Drugs Of Abuse',
+  'Heavy Metals','Body Fluids','Other Biochemistry',
   // Hormones
   'Thyroid Hormones','Parathyroid Hormones','Fertility Hormones',
-  'Suprarenal Hormones','Pituitary Hormones','Other Hormones',
+  'Suprarenal Hormones','Pituitary Hormones','Pregnancy Tests','Other Hormones',
   // Immunology
-  'Autoimmunity','Serology','Allergy','Widal Test','Brucella Test','Other Immunology',
+  'Autoimmunity','Serology','Immunoglobulins & Complement','Allergy','Other Immunology',
   // Vitamins & Minerals
-  'Vitamins','Other Vitamins & Minerals',
+  'Vitamins','Trace Elements','Other Vitamins & Minerals',
   // Tumor Markers
   'Tumor Markers','Other Tumor Markers',
   // Infections
-  'Virology','Bacteria','TORCH Screen','Parasitic Tests',
-  'Pregnancy Tests','Drugs Of Abuse','Other Infections',
+  'Virology','Bacteria','TORCH Screen','Parasitic Tests','Fungal Tests',
+  'Widal Test','Brucella Test','Other Infections',
   // Urinalysis
   'Routine Urine','Urine Chemistry','Other Urinalysis',
   // Microbiology
@@ -29039,15 +29121,16 @@ function loadSettings(){
       }
     });
   }
-  if(settings.primaryColor)document.getElementById('st-primary-color').value=settings.primaryColor;
-  if(settings.colorName)document.getElementById('st-color-name').value=settings.colorName;
-  if(settings.colorDoctor){var cdEl=document.getElementById('st-color-doctor');if(cdEl)cdEl.value=settings.colorDoctor;}
-  if(settings.colorResults)document.getElementById('st-color-results').value=settings.colorResults;
-  if(settings.colorHeader)document.getElementById('st-color-header').value=settings.colorHeader;
-  if(settings.sidebarColor)document.getElementById('st-sidebar-color').value=settings.sidebarColor;
-  if(settings.colorSection){var csEl=document.getElementById('st-color-section');if(csEl)csEl.value=settings.colorSection;}
-  if(settings.colorDevice){var cdvEl=document.getElementById('st-color-device');if(cdvEl)cdvEl.value=settings.colorDevice;}
-  if(settings.colorStripText){var cstEl=document.getElementById('st-color-strip-text');if(cstEl)cstEl.value=settings.colorStripText;}
+  /* 🎨 عبر _setColorInput كي لا يُكتب فوق لون يختاره المستخدم الآن */
+  _setColorInput('st-primary-color', settings.primaryColor);
+  _setColorInput('st-color-name', settings.colorName);
+  _setColorInput('st-color-doctor', settings.colorDoctor);
+  _setColorInput('st-color-results', settings.colorResults);
+  _setColorInput('st-color-header', settings.colorHeader);
+  _setColorInput('st-sidebar-color', settings.sidebarColor);
+  _setColorInput('st-color-section', settings.colorSection);
+  _setColorInput('st-color-device', settings.colorDevice);
+  _setColorInput('st-color-strip-text', settings.colorStripText);
   if(settings.deviceFontSize){var dfsRng=document.getElementById('st-device-font-size-range');if(dfsRng){dfsRng.value=parseInt(settings.deviceFontSize);var dfsLbl=document.getElementById('lbl-device-font-size');if(dfsLbl)dfsLbl.textContent=parseInt(settings.deviceFontSize);}}
   if(settings.subcatFontSize){var scfRng=document.getElementById('st-subcat-font-size-range');if(scfRng){scfRng.value=parseInt(settings.subcatFontSize);var scfLbl=document.getElementById('lbl-subcat-font-size');if(scfLbl)scfLbl.textContent=parseInt(settings.subcatFontSize);}}
   if(settings.printFontSize){var pfRng=document.getElementById('st-print-font-size-range');if(pfRng){pfRng.value=parseInt(settings.printFontSize);var pfLbl=document.getElementById('lbl-print-font-size');if(pfLbl)pfLbl.textContent=parseInt(settings.printFontSize);}}
@@ -30688,8 +30771,52 @@ function applyFontCustom(){
 function _domVal(id){ var e=document.getElementById(id); return e?e.value:''; }
 function _setColorInput(id, val){
   var e=document.getElementById(id);
-  if(e && val) e.value=val;
+  if(!e || !val) return;
+  /* 🎨 لا نكتب فوق لون يختاره المستخدم الآن (منتقي الألوان مفتوح) — وإلا عاد اللون الأصلي */
+  if(_colorInputBusy(e)) return;
+  e.value=val;
 }
+/* هل هذا الحقل قيد الاختيار الآن؟ (مركّز عليه أو تغيّر خلال آخر ثانيتين) */
+function _colorInputBusy(e){
+  try{
+    if(!e) return false;
+    if(e._clrEditTs && (Date.now()-e._clrEditTs)<2000) return true;
+    return document.activeElement===e;
+  }catch(x){ return false; }
+}
+/* 🎨 حفظ اللون لحظة اختياره (حدث input) لا عند إغلاق المنتقي فقط (حدث change).
+   سابقاً: يُحفظ اللون فقط بعد النقر خارج المنتقي، وأي إعادة رسم للإعدادات أثناء ذلك
+   (مزامنة/حفظ) تُرجع الحقل للون القديم المخزّن. الآن: الإعداد يُحدَّث فوراً
+   فتبقى كل إعادة رسم على اللون الجديد، والحفظ في التخزين يتم بعد توقف قصير. */
+(function(){
+  var _tm={};
+  function _keyOf(el){
+    try{
+      var oc=el.getAttribute('onchange')||'';
+      var m=oc.match(/_saveColor\(\s*'([^']+)'/);
+      return m?m[1]:null;
+    }catch(e){ return null; }
+  }
+  document.addEventListener('input', function(ev){
+    var el=ev.target;
+    if(!el || el.tagName!=='INPUT' || el.type!=='color') return;
+    var key=_keyOf(el); if(!key) return;
+    el._clrEditTs=Date.now();
+    var val=el.value;
+    try{ settings[key]=val; if(key==='colorStripText') settings.colorStripTextSet=true; }catch(e){}
+    clearTimeout(_tm[key]);
+    _tm[key]=setTimeout(function(){
+      try{ _saveColor(key, el.value); }catch(e){}
+    }, 150);
+  }, true);
+  document.addEventListener('change', function(ev){
+    var el=ev.target;
+    if(!el || el.tagName!=='INPUT' || el.type!=='color') return;
+    var key=_keyOf(el); if(!key) return;
+    clearTimeout(_tm[key]);
+    el._clrEditTs=0;
+  }, true);
+})();
 function _syncSlider(rangeId, hiddenId, lblId, pxVal){
   var num=parseInt(pxVal)||0; if(!num) return;
   var r=document.getElementById(rangeId);
@@ -35194,7 +35321,7 @@ function _cultTypeForTest(t){
   }catch(e){ return ''; }
 }
 /* سجل الزرع الخاص بتحليل معيّن داخل طلب */
-function _cultRecFor(reqId, testId){
+function _cultRecForRaw(reqId, testId){
   var list=((typeof cultureRecords!=='undefined'?cultureRecords:[])||[]).filter(function(x){ return x && x.reqId && x.reqId===reqId; });
   if(!list.length) return null;
   var r=list.find(function(x){ return testId && x.reqTestId===testId; }); if(r) return r;
@@ -35202,12 +35329,106 @@ function _cultRecFor(reqId, testId){
   r=list.find(function(x){ return !x.reqTestId && ct && x.cultureType===ct; }); if(r) return r;
   return list.find(function(x){ return !x.reqTestId; }) || null;
 }
+function _cultRecFor(reqId, testId){
+  var r=_cultRecForRaw(reqId, testId);
+  if(r) return r;
+  /* 🔗 نتيجة زرع أُدخلت من «قسم نتائج الزرع» مباشرةً (بلا ربط بالطلب) ⇒ نتبنّاها هنا */
+  try{ r=_cultAdoptForReq(reqId, testId); }catch(e){ r=null; }
+  return r||null;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   🔗 الترابط بين «قسم نتائج الزرع» و«واجهة إدخال النتائج»
+   ──────────────────────────────────────────────────────────────────
+   زرع يُدخل من قسم الزرع لمريض لديه طلب يحوي تحليل زرع ⇒ يُربط تلقائياً بذلك
+   الطلب وبتحليل الزرع المناسب فيه (reqId + reqTestId)، فيظهر «✅ تم إدخال
+   النتائج» في واجهة إدخال النتائج ويُطبع/يُرسل مع الطلب، وتتحدّث حالة الطلب.
+   والعكس قائم أصلاً: ما يُدخل من واجهة النتائج يظهر في قسم الزرع.
+   قواعد الاختيار:
+   • نفس المريض (رقم الملف، وإلا الاسم مطابقاً).
+   • الطلب يحوي تحليل زرع لم يُربط به سجل آخر بعد.
+   • الأفضلية: تطابق نوع الزرع ← الطلب الأقرب تاريخاً (حتى 30 يوماً قبل
+     تاريخ الزرع و 3 أيام بعده).
+   ══════════════════════════════════════════════════════════════════ */
+function _cultNormName(n){ return String(n||'').replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/\s+/g,' ').trim().toLowerCase(); }
+function _cultDayNum(d){ var t=Date.parse(String(d||'').slice(0,10)+'T00:00:00'); return isNaN(t)?null:Math.round(t/864e5); }
+function _cultIsCultTest(id){
+  try{ var t=(tests||[]).find(function(x){ return x && x.id===id; }); return !!(t && t.isSpecialExam==='culture'); }catch(e){ return false; }
+}
+function _cultSamePatient(rec, req){
+  if(!rec || !req) return false;
+  if(rec.patientId && req.patientId && String(rec.patientId)===String(req.patientId)) return true;
+  var a=_cultNormName(rec.patientName), b=_cultNormName(req.patientName);
+  return !!(a && b && a===b);
+}
+/* هل تحليل الزرع هذا في الطلب مربوط بسجل آخر غير rec؟ */
+function _cultSlotTaken(reqId, testId, exceptId){
+  var list=((typeof cultureRecords!=='undefined'?cultureRecords:[])||[]);
+  return list.some(function(x){ return x && x.id!==exceptId && x.reqId===reqId && (x.reqTestId===testId || !x.reqTestId); });
+}
+/* أفضل (طلب، تحليل زرع) لسجل زرع غير مربوط */
+function _cultBestSlot(rec){
+  if(!rec || typeof requests==='undefined' || !Array.isArray(requests)) return null;
+  var rd=_cultDayNum(rec.date)||Math.round(Date.now()/864e5);
+  var best=null;
+  requests.forEach(function(rq){
+    if(!rq || !Array.isArray(rq.tests) || !_cultSamePatient(rec, rq)) return;
+    var qd=_cultDayNum(rq.date); if(qd===null) qd=rd;
+    var diff=rd-qd;                      // موجب = الطلب قبل تاريخ الزرع
+    if(diff>30 || diff<-3) return;
+    rq.tests.forEach(function(tid){
+      if(!_cultIsCultTest(tid)) return;
+      if(_cultSlotTaken(rq.id, tid, rec.id)) return;
+      var typeOk = rec.cultureType && _cultTypeForTest(tid)===rec.cultureType;
+      var score=(typeOk?1000:0) - Math.abs(diff)*10 + (rq.status!=='done'?1:0);
+      if(!best || score>best.score) best={req:rq, testId:tid, score:score, typeOk:typeOk};
+    });
+  });
+  return best;
+}
+/* يربط السجل بالطلب المناسب (إن وُجد) — يُعيد true إن رُبط */
+function _cultAutoLink(rec){
+  try{
+    if(!rec || rec.reqId) return false;
+    var b=_cultBestSlot(rec);
+    if(!b) return false;
+    rec.reqId=b.req.id; rec.reqTestId=b.testId;
+    return true;
+  }catch(e){ console.warn('[culture auto-link]', e); return false; }
+}
+/* واجهة النتائج تبحث عن زرع لتحليل في طلب ولم تجده ⇒ تتبنّى سجلاً غير مربوط لنفس المريض */
+var _cultAdoptSaveT=null;
+function _cultAdoptForReq(reqId, testId){
+  var list=((typeof cultureRecords!=='undefined'?cultureRecords:[])||[]);
+  var rq=(requests||[]).find(function(r){ return r && r.id===reqId; });
+  if(!rq || !testId) return null;
+  var cands=list.filter(function(x){ return x && !x.reqId && _cultSamePatient(x, rq); });
+  if(!cands.length) return null;
+  var hit=null;
+  /* السجل يُتبنّى فقط إن كان هذا الطلب/التحليل هو أفضل خيار له — لا نسرقه من طلب أنسب */
+  cands.sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); }).some(function(x){
+    var bs=_cultBestSlot(x);
+    if(bs && bs.req.id===reqId && bs.testId===testId){ hit=x; return true; }
+    return false;
+  });
+  if(!hit) return null;
+  hit.reqId=reqId; hit.reqTestId=testId;
+  try{ if(typeof _stamp==='function') _stamp(hit); }catch(e){}
+  hit._updatedAt=Date.now();
+  try{ if(String(hit.organism||'').trim() && typeof _spFinalizeReqStatus==='function'){ _spFinalizeReqStatus(rq, hit.date); saveOne('requests',requests,rq); } }catch(e){}
+  clearTimeout(_cultAdoptSaveT);
+  _cultAdoptSaveT=setTimeout(function(){ try{ saveCultureRecords(); }catch(e){} }, 50);
+  return hit;
+}
+window._cultAutoLink=_cultAutoLink;
 /* صفحات تقارير الزرع المرتبطة بالطلب — بترتيب التحاليل في الطلب */
 function _cultPagesForReq(req){
   var out=[];
   try{
     if(!req||!req.id) return out;
     try{ loadCultureRecords(); }catch(e){}
+    // 🔗 تبنّي نتائج زرع أُدخلت من قسم الزرع ولم تُربط بعد
+    try{ (req.tests||[]).forEach(function(tid){ if(_cultIsCultTest(tid)) _cultRecFor(req.id, tid); }); }catch(e){}
     var list=(cultureRecords||[]).filter(function(x){ return x && x.reqId===req.id && String(x.organism||'').trim(); });
     if(!list.length) return out;
     var order=(req.tests||[]);
@@ -35614,7 +35835,8 @@ function _buildCultureModalBody(c){
       <!-- بحث في المضادات الموجودة -->
       <div style="position:relative;margin-bottom:10px">
         <span style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:13px;color:var(--primary);pointer-events:none">🔍</span>
-        <input class="fc" id="cult-abx-inline-search" placeholder="ابحث عن مضاد موجود لتغيير حالته..." oninput="filterInlineAbx(this.value)" style="padding-right:34px;font-size:12px" autocomplete="off">
+        <input class="fc" id="cult-abx-inline-search" lang="en" dir="ltr" inputmode="text" data-ltb="cult-abx-inline-search-ltb" placeholder="ابحث عن مضاد موجود لتغيير حالته..." onfocus="_abxLangSync(this)" oninput="filterInlineAbx(this.value)" style="padding-right:34px;padding-left:42px;font-size:12px" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        <button type="button" class="lang-toggle-btn lang-en" id="cult-abx-inline-search-ltb" onclick="toggleInputLang('cult-abx-inline-search','cult-abx-inline-search-ltb')" title="تبديل لغة الإدخال" style="left:6px;right:auto;">EN</button>
       </div>
       <!-- رأس الجدول -->
       <div style="display:grid;grid-template-columns:1fr auto auto auto auto;gap:4px;margin-bottom:6px;padding:0 4px">
@@ -35805,6 +36027,20 @@ function cultUpdateAgeDisplay(){
   if(disp) disp.textContent=val?'→ '+val+' '+unit:'';
 }
 
+/* 🔤 حقول بحث المضادات: لغة الكتابة تتبع زر EN/ع بجانب الحقل (الافتراضي إنجليزي).
+   عند كل فتح للنافذة يُعاد بناء الحقل بزر EN ⇒ نزامن التحويل مع حالة الزر الظاهرة
+   (وإلا بقي آخر اختيار قديم محفوظاً فيكتب عربياً والزر يقول EN). */
+function _abxLangSync(el){
+  try{
+    if(!el || !el.id) return;
+    var btn=document.getElementById(el.id+'-ltb'); if(!btn) return;
+    var lang=btn.classList.contains('lang-en')?'en':'ar';
+    if(!window._charConvOverrides) window._charConvOverrides={};
+    window._charConvOverrides[el.id]=lang;
+    el.setAttribute('lang',lang); el.setAttribute('dir',lang==='en'?'ltr':'rtl');
+  }catch(e){}
+}
+window._abxLangSync=_abxLangSync;
 // بحث في المضادات الموجودة — يخفي غير المطابق ويُبقي المطابق بنفس شكله وموقعه
 function filterInlineAbx(q){
   const rows=document.getElementById('cult-abx-rows'); if(!rows) return;
@@ -36059,10 +36295,12 @@ function openAddAbxModal(){
       <!-- حقل البحث المحسّن -->
       <div style="position:relative;margin-bottom:14px">
         <span style="position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:14px;color:var(--primary)">🔍</span>
-        <input class="fc" id="add-abx-search" placeholder="ابحث بالكود أو الاسم... مثال: VAN أو Vancomycin"
+        <input class="fc" id="add-abx-search" lang="en" dir="ltr" inputmode="text" data-ltb="add-abx-search-ltb" placeholder="ابحث بالكود أو الاسم... مثال: VAN أو Vancomycin"
+          onfocus="_abxLangSync(this)"
           oninput="filterAddAbx(this.value)"
-          style="padding-right:36px;font-size:13px"
-          autocomplete="off">
+          style="padding-right:36px;padding-left:42px;font-size:13px"
+          autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+        <button type="button" class="lang-toggle-btn lang-en" id="add-abx-search-ltb" onclick="toggleInputLang('add-abx-search','add-abx-search-ltb')" title="تبديل لغة الإدخال" style="left:6px;right:auto;">EN</button>
       </div>
       <!-- نتائج البحث السريعة -->
       <div id="add-abx-quick" style="display:none;margin-bottom:12px;background:rgba(0,212,255,0.05);border:1px solid var(--border);border-radius:10px;padding:10px;max-height:160px;overflow-y:auto">
@@ -36322,6 +36560,9 @@ async function saveCultureEntry(opts){
     // تحقق أنه لم يُضف مسبقاً (حماية من الضغط المزدوج)
     if(!cultureRecords.find(c=>c.id===rec.id)) cultureRecords.push(rec);
   }
+  // 🔗 أُدخل من قسم الزرع مباشرةً ⇒ اربطه تلقائياً بطلب المريض الذي يحوي تحليل الزرع
+  let _cAuto=false;
+  try{ if(!rec.reqId && _cultAutoLink(rec)) _cAuto=true; }catch(e){}
   await saveCultureRecords();   // ⭐ انتظر اكتمال الكتابة قبل إعادة القراءة
   // 🔗 مرتبط بطلب ⇒ حدّث حالة الطلب (مثل السائل المنوي) وارجع لواجهة نتائج نفس المريض
   const _cBackReq = rec.reqId || null;
@@ -36336,7 +36577,8 @@ async function saveCultureEntry(opts){
   closeModal('m-culture');
   renderCultureList();
   if(_cWasInline && _cBackReq){ try{ _spReturnToResultEntry(_cBackReq); }catch(e){} window._specialExamInlineMode=false; }
-  showNotif('تم الحفظ','تم حفظ نتيجة الزرع ✅','success');
+  showNotif('تم الحفظ', _cAuto ? ('تم حفظ نتيجة الزرع ✅ وربطها بطلب المريض '+((function(){ try{ var _q=(requests||[]).find(function(r){return r.id===rec.reqId;}); return _q&&typeof _reqNoText==='function'?_reqNoText(_q):''; }catch(e){ return ''; } })())) : 'تم حفظ نتيجة الزرع ✅','success');
+  try{ if(rec.reqId){ var _rs=document.getElementById('res-req-sel'); if(_rs && _rs.value===rec.reqId && typeof loadResultEntry==='function') loadResultEntry(); } }catch(e){}
   if(opts.print){ setTimeout(function(){ try{ printCultureReport(rec.id); }catch(e){} }, 200); }
 }
 
@@ -43596,6 +43838,7 @@ function toggleInputLang(inputId, btnId){
     'et-name-en','et-code','et-unit','et-ref','et-notes',
     'ua-new-label','ua-new-opts','stool-new-label','stool-new-opts',
     'semen-new-label','semen-new-opts','custom-abx-code','custom-abx-name',
+    'cult-abx-inline-search','add-abx-search',
     'ftr-txt-phone','billing-test-srch'
   ];
 
@@ -67429,24 +67672,24 @@ var GLT = (function(){
     'tumor markers':['Tumor Markers','Tumor Markers'],'drugs of abuse':['Infections','Drugs Of Abuse'],
     'therapeutic drugs':['Biochemistry','Therapeutic Drugs'],'coagulation profile':['Hematology','Coagulation Profile'],
     'torch screen':['Infections','TORCH Screen'],'serology':['Immunology','Serology'],'virology':['Infections','Virology'],
-    'molecular biology':['Microbiology','Molecular Biology'],'pregnancy tests':['Infections','Pregnancy Tests'],
+    'molecular biology':['Microbiology','Molecular Biology'],'pregnancy tests':['Hormones','Pregnancy Tests'],
     'erythrocyte sedimentation rate':['Hematology','Erythrocyte Sedimentation Rate'],
     'fertility hormones':['Hormones','Fertility Hormones'],'suprarenal hormones':['Hormones','Suprarenal Hormones'],
     'vitamins':['Vitamins & Minerals','Vitamins'],'thyroid hormones':['Hormones','Thyroid Hormones'],
     'parathyroid hormones':['Hormones','Parathyroid Hormones'],'flow cytometry':['Hematology','Flow Cytometry'],
     'bacteria':['Infections','Bacteria'],'pancereatic profile':['Biochemistry','Pancreatic Profile'],
     'pancreatic profile':['Biochemistry','Pancreatic Profile'],'seminal fluid':['Semen','Semen Analysis'],
-    'iron tests':['Hematology','Iron Tests'],'widal test':['Immunology','Widal Test'],'brucella test':['Immunology','Brucella Test'],
+    'iron tests':['Hematology','Iron Tests'],'widal test':['Infections','Widal Test'],'brucella test':['Infections','Brucella Test'],
     'pitutary hormones':['Hormones','Pituitary Hormones'],'pituitary hormones':['Hormones','Pituitary Hormones'],
     'blood gases':['Blood Gases','Blood Gases'],'hb electrophoreses':['Hematology','Hb Electrophoreses'],
-    'creatinine clearance':['Blood Gases','Creatinine Clearance'],'protein electrophoresis':['Biochemistry','Protein Electrophoresis'],
-    'weil felix test':['Immunology','Weil Felix Test'],'prothrombin test':['Hematology','Coagulation Profile'],
+    'creatinine clearance':['Biochemistry','Kidney Functions'],'protein electrophoresis':['Biochemistry','Protein Electrophoresis'],
+    'weil felix test':['Infections','Bacteria'],'prothrombin test':['Hematology','Coagulation Profile'],
     'parasitic tests':['Infections','Parasitic Tests'],'blood group':['Hematology','Blood Group'],
     'blood picture':['Hematology','Blood Picture'],'tests for blood diseases':['Hematology','Tests For Blood Diseases'],
-    'sarcoidosis':['Biochemistry','Sarcoidosis'],'myopathy':['Biochemistry','Myopathy'],'osteoporosis':['Biochemistry','Osteoporosis'],
-    'hypertension':['Biochemistry','Hypertension'],'diabetes insipidus':['Hormones','Diabetes Insipidus'],
-    'obesity':['Biochemistry','Obesity'],'test for shock investigation':['Biochemistry','Test For Shock Investigation'],
-    'liver pathology scoring':['Biochemistry','Liver Pathology Scoring'],'autoimmunity':['Immunology','Autoimmunity']};
+    'sarcoidosis':['Biochemistry','Miscellaneous'],'myopathy':['Biochemistry','Miscellaneous'],'osteoporosis':['Biochemistry','Miscellaneous'],
+    'hypertension':['Biochemistry','Miscellaneous'],'diabetes insipidus':['Hormones','Pituitary Hormones'],
+    'obesity':['Biochemistry','Miscellaneous'],'test for shock investigation':['Biochemistry','Miscellaneous'],
+    'liver pathology scoring':['Biochemistry','Liver Functions'],'autoimmunity':['Immunology','Autoimmunity']};
   var MAINMAP = {BIOCHEMISTRY:'Biochemistry',HAEMATOLOGY:'Hematology',HEMATOLOGY:'Hematology',HORMONES:'Hormones',
     IMMUNOLOGY:'Immunology',MICROBIOLOGY:'Microbiology'};
 
@@ -68966,7 +69209,58 @@ async function askText(title,label,def){
 function phoneIntl(p){ var d=String(p||'').replace(/[^0-9]/g,''); if(d.indexOf('00')===0) d=d.slice(2); if(d.indexOf('0')===0) d='964'+d.slice(1); return d; }
 function phoneLocal(p){ var d=String(p||'').replace(/[^0-9]/g,''); if(d.indexOf('00964')===0) d=d.slice(5); if(d.indexOf('964')===0) d='0'+d.slice(3); return d; }
 function secKey(name){ var h=5381, s=String(name); for(var i=0;i<s.length;i++) h=((h<<5)+h+s.charCodeAt(i))>>>0; return 's'+h.toString(36); }
-function autoSec(name){ for(var i=0;i<AR_SEC.length;i++){ if(AR_SEC[i][0].test(name)) return {n:AR_SEC[i][1], ic:AR_SEC[i][2]}; } return {n:'', ic:'flask'}; }
+/* 🗂️ اسم عربي مميّز لكل مجموعة فرعية — كي لا تظهر مجموعتان مختلفتان بنفس الاسم في التطبيق */
+var AR_EXACT = {
+  'haematology':['أمراض الدم','drop'],'hematology':['أمراض الدم','drop'],'blood picture':['صورة الدم','micro'],
+  'blood group':['فصيلة الدم','drop'],'hb electrophoreses':['ترحيل الهيموغلوبين','tube'],'hb electrophoresis':['ترحيل الهيموغلوبين','tube'],
+  'coagulation profile':['تخثّر الدم','drop'],'erythrocyte sedimentation rate':['سرعة الترسيب','tube'],'iron tests':['فحوصات الحديد','drop'],
+  'tests for blood diseases':['فحوصات أمراض الدم الخاصة','drop'],'flow cytometry':['التنميط المناعي (Flow Cytometry)','micro'],
+  'other hematology':['فحوصات دم أخرى','drop'],'blood gases':['غازات الدم','drop'],'other blood gas':['غازات الدم','drop'],
+  'creatinine clearance':['تصفية الكرياتينين','kidney'],
+  'liver functions':['وظائف الكبد','liver'],'kidney functions':['وظائف الكلى','kidney'],'diabetes profile':['السكري','sugar'],
+  'lipid profile':['الدهون','heart'],'cardiac profile':['القلب','heart'],'electrolytes':['الأملاح والمعادن','bolt'],
+  'pancreatic profile':['البنكرياس','flask'],'protein electrophoresis':['ترحيل البروتينات','tube'],'specific proteins':['البروتينات الخاصة','tube'],
+  'inflammatory markers':['مؤشرات الالتهاب','shield'],'therapeutic drugs':['مستوى الأدوية','pill'],'drugs of abuse':['المخدرات والمؤثرات العقلية','pill'],
+  'heavy metals':['المعادن الثقيلة والسموم','bolt'],'body fluids':['سوائل الجسم','tube'],'miscellaneous':['فحوصات متنوعة','flask'],
+  'other biochemistry':['كيمياء حياتية أخرى','flask'],
+  'thyroid hormones':['الغدة الدرقية','thyroid'],'parathyroid hormones':['الغدة جار الدرقية','hormone'],'fertility hormones':['هرمونات الخصوبة','person'],
+  'suprarenal hormones':['هرمونات الغدة الكظرية','hormone'],'pituitary hormones':['هرمونات الغدة النخامية','hormone'],
+  'pregnancy tests':['فحوصات الحمل','person'],'other hormones':['هرمونات أخرى','hormone'],
+  'autoimmunity':['المناعة الذاتية','shield'],'serology':['المصليات','shield'],'immunoglobulins & complement':['الغلوبيولينات المناعية والمتممة','shield'],
+  'allergy':['الحساسية','shield'],'other immunology':['فحوصات مناعة أخرى','shield'],
+  'widal test':['التيفوئيد (Widal)','micro'],'brucella test':['البروسيلا (الحمى المالطية)','micro'],
+  'vitamins':['الفيتامينات','pill'],'trace elements':['العناصر النادرة','bolt'],'other vitamins & minerals':['فيتامينات ومعادن أخرى','pill'],
+  'tumor markers':['دلالات الأورام','ribbon'],'other tumor markers':['دلالات أورام أخرى','ribbon'],
+  'virology':['الفيروسات','virus'],'bacteria':['الأمراض البكتيرية','micro'],'torch screen':['فحوصات TORCH','virus'],
+  'parasitic tests':['الطفيليات','micro'],'fungal tests':['الفطريات','micro'],'other infections':['أمراض معدية أخرى','virus'],
+  'routine urine':['فحص الإدرار','cup'],'urine chemistry':['كيمياء الإدرار','cup'],'other urinalysis':['فحوصات إدرار أخرى','cup'],
+  'microbiology':['الزرع الجرثومي','micro'],'molecular biology':['الفحوصات الجزيئية (PCR)','dna'],'other microbiology':['أحياء مجهرية أخرى','micro'],
+  'routine stool':['فحص الخروج','flask'],'stool chemistry':['كيمياء الخروج','flask'],'other stool':['فحوصات خروج أخرى','flask'],
+  'semen analysis':['السائل المنوي','person'],'other semen':['فحوصات سائل منوي أخرى','person'],
+  'histopathology & cytology':['الأنسجة والخلايا','micro'],'other special':['فحوصات خاصة أخرى','flask']
+};
+function autoSec(name){
+  var k=String(name==null?'':name).trim().toLowerCase().replace(/\s+/g,' ');
+  if(AR_EXACT[k]) return {n:AR_EXACT[k][0], ic:AR_EXACT[k][1]};
+  for(var i=0;i<AR_SEC.length;i++){ if(AR_SEC[i][0].test(name)) return {n:AR_SEC[i][1], ic:AR_SEC[i][2]}; } return {n:'', ic:'flask'}; }
+/* توحيد نص للمقارنة (عربي/إنجليزي) */
+function _secNorm(x){ return String(x==null?'':x).toLowerCase().replace(/[\u064B-\u0652\u0640]/g,'').replace(/[أإآ]/g,'ا').replace(/ة/g,'ه').replace(/ى/g,'ي').replace(/[^a-z0-9\u0600-\u06FF]+/g,' ').trim(); }
+/* 🗂️ خطة الأقسام: كل قسم يظهر مرة واحدة فقط.
+   المجموعات الفرعية التي تحمل نفس الاسم المعروض (اختلاف حروف كبيرة/صغيرة/مسافات/تهجئة
+   أو اسم عربي مكرر) تُدمج في قسم واحد «أساسي» تُحفظ إعداداته باسمه. */
+function _rawSec(t){ return t.subCat||t.cat||'Other'; }
+function secPlan(c, allT){
+  var prim={}, byDisp={}, order=[];
+  (allT||[]).forEach(function(t){
+    if(!t || t.isCalc) return;
+    var raw=_rawSec(t); if(Object.prototype.hasOwnProperty.call(prim,raw)) return;
+    var sc=(c&&c.sec&&c.sec[raw])||{}, a=autoSec(raw);
+    var disp=_secNorm(sc.n||a.n||raw)||_secNorm(raw)||String(raw);
+    if(Object.prototype.hasOwnProperty.call(byDisp,disp)){ prim[raw]=byDisp[disp]; }
+    else { byDisp[disp]=raw; prim[raw]=raw; order.push(raw); }
+  });
+  return { order:order, of:function(t){ var r=_rawSec(t); return Object.prototype.hasOwnProperty.call(prim,r)?prim[r]:r; } };
+}
 async function sha256Hex(s){ var b=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(function(x){return x.toString(16).padStart(2,'0');}).join(''); }
 function TS(){ return firebase.database.ServerValue.TIMESTAMP; }
 // ⭐ سجلّ طلبات المتجر يُحفظ تحت بادئة المستخدم (mlab2_<user>_mlsLog_<sid>) ليدخل تلقائياً
@@ -69177,10 +69471,10 @@ function mlsOpenFromNotif(tab){
 /* ───────── بناء الكتالوج ونشره ───────── */
 function labPrice(t){ return +t.price||0; }
 function buildCatalog(){
-  var c=cfg(), secOrder={}, secs=[], tl=[], allT=(typeof tests!=='undefined'&&tests)||[];
+  var c=cfg(), secOrder={}, secs=[], tl=[], allT=(typeof tests!=='undefined'&&tests)||[], P=secPlan(c, allT);
   allT.forEach(function(t){
     if(!t || t.isCalc) return;
-    var name=t.subCat||t.cat||'Other'; var sc=c.sec[name]||{};
+    var name=P.of(t); var sc=c.sec[name]||{};
     if(!(name in secOrder)){ secOrder[name]=secs.length; var a=autoSec(name);
       secs.push({k:secKey(name), n:(sc.n||a.n||name), en:name, ic:(sc.ic&&ICONS[sc.ic])?sc.ic:a.ic, o:(sc.o!=null&&sc.o!=='')?+sc.o:secs.length, h:!!sc.h}); }
     var ov=c.tst[t.id]||{};
@@ -69933,8 +70227,8 @@ function bindSecBar(r, savedLeft){
 
 /* ── تبويب التحاليل والأسعار ── */
 function catalogHtml(){
-  var c=cfg(), allT=(typeof tests!=='undefined'&&tests)||[], groups={}, order=[];
-  allT.forEach(function(t){ if(!t||t.isCalc) return; var n=t.subCat||t.cat||'Other'; if(!groups[n]){groups[n]=[];order.push(n);} groups[n].push(t); });
+  var c=cfg(), allT=(typeof tests!=='undefined'&&tests)||[], groups={}, order=[], P=secPlan(c, allT);
+  allT.forEach(function(t){ if(!t||t.isCalc) return; var n=P.of(t); if(!groups[n]){groups[n]=[];order.push(n);} groups[n].push(t); });
   if(!M.sec || !groups[M.sec]) M.sec=order[0];
   var secList=order.map(function(n){ var sc=c.sec[n]||{}, a=autoSec(n);
     var vis=groups[n].filter(function(t){var ov=c.tst[t.id]||{}; return ov.h!=null?!ov.h:labPrice(t)>0;}).length;
@@ -69942,7 +70236,7 @@ function catalogHtml(){
   var n=M.sec, sc=c.sec[n]||{}, a=autoSec(n), q=M.catQ.trim().toLowerCase();
   var rows=(q?allT.filter(function(t){return t&&!t.isCalc&&((t.nameEn||'')+' '+(t.nameShort||'')+' '+(t.code||'')).toLowerCase().indexOf(q)>=0;}):groups[n]||[]).map(function(t){
     var ov=c.tst[t.id]||{}, vis=ov.h!=null?!ov.h:labPrice(t)>0, base=(ov.p!=null&&ov.p!=='')?+ov.p:labPrice(t);
-    var tsc=c.sec[t.subCat||t.cat||'Other']||{};
+    var tsc=c.sec[P.of(t)]||{};
     var dp=(ov.dp!=null&&ov.dp!=='')?+ov.dp:((tsc.dp!=null&&tsc.dp!=='')?+tsc.dp:(+c.dg||0));
     var fin=Math.round(base*(1-Math.max(0,Math.min(90,dp))/100)), I=' data-t="'+esc(t.id)+'"';
     return '<tr class="'+(vis?'':'off')+'"><td><input type="checkbox" data-x="tvis"'+I+(vis?' checked':'')+'></td>'+
@@ -70598,7 +70892,7 @@ function onClick(e){
     case 'unblock': { var ph=(c.blkList||[])[i]; if(ph==null) break; var ks=(c.blkMap||{})[ph]||['p'+String(ph).replace('+','')];
       ks.forEach(function(k){ M.db.ref('stores/'+M.sid+'/blk/'+k).remove().catch(function(){}); }); c.blkList.splice(i,1); saveCfg(); render(); break; }
     case 'sec': M.sec=el.getAttribute('data-v'); M.catQ=''; render(); break;
-    case 'allvis': { var v=el.getAttribute('data-v')==='1'; (tests||[]).forEach(function(t){ if(t && !t.isCalc && (t.subCat||t.cat||'Other')===M.sec){ c.tst[t.id]=Object.assign({},c.tst[t.id]||{},{h:v?0:1}); } }); markDirty(); render(); break; }
+    case 'allvis': { var v=el.getAttribute('data-v')==='1', _P=secPlan(c, tests||[]); (tests||[]).forEach(function(t){ if(t && !t.isCalc && _P.of(t)===M.sec){ c.tst[t.id]=Object.assign({},c.tst[t.id]||{},{h:v?0:1}); } }); markDirty(); render(); break; }
     case 'cpadd': { var cc=(document.getElementById('cp-c').value||'').trim().toUpperCase().replace(/\s+/g,''), vv=+document.getElementById('cp-v').value, ty=document.getElementById('cp-ty').value;
       if(!/^[A-Z0-9]{3,20}$/.test(cc)) return notif('تنبيه','الكود من 3 إلى 20 حرفاً إنجليزياً أو رقماً','warning');
       if(!(vv>0) || (ty==='p' && vv>90)) return notif('تنبيه','قيمة الخصم غير صحيحة','warning');
@@ -70774,6 +71068,28 @@ window._waDirectSendPDF = async function(o){
 
   var r;
   try{ r = await window.waAPI.sendFile(payload); }catch(e){ r = { ok:false, code:'error' }; }
+
+  /* 🔁 «غير مرتبط» أو «لم تُفتح المحادثة» قد تكون حالة عابرة (واتساب ويب يعيد التحميل /
+     يزامن المحادثات فيظهر رمز QR لثوانٍ). لا شيء أُرسل في هاتين الحالتين ⇒ نفحص الحالة
+     الحقيقية بعد مهلة قصيرة، وإن كان الربط سليماً نعيد المحاولة مرة واحدة فقط.
+     (لا إعادة عند attach/confirm لأن الرسالة قد تكون أُرسلت فعلاً — منعاً للتكرار) */
+  if(r && !r.ok && (r.code==='logout' || r.code==='timeout') && typeof window.waAPI.status==='function'){
+    try{
+      var _st = null;
+      for(var _i=0; _i<3 && !_st; _i++){
+        await new Promise(function(res){ setTimeout(res, 4000); });
+        var _s = await Promise.race([
+          window.waAPI.status(),
+          new Promise(function(res){ setTimeout(function(){ res(null); }, 20000); })
+        ]);
+        if(_s && _s.ok && _s.state==='ready') _st='ready';
+        else if(_s && _s.ok && _s.state==='qr' && _i>=1) _st='qr';
+      }
+      if(_st==='ready'){
+        try{ r = await window.waAPI.sendFile(payload); }catch(e){ r = { ok:false, code:'error' }; }
+      }
+    }catch(e){}
+  }
 
   if(r && r.ok){
     _notif('✅ تم الإرسال','📲 وصلت نتيجة «'+(name||('+'+phone))+'» عبر واتساب' + (r.uploading ? ' (يكتمل رفع الملف خلال لحظات)' : ''),'success');
