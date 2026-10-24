@@ -4129,6 +4129,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
           <div class="tabs" id="test-cat-tabs" style="flex:1;flex-wrap:wrap;gap:4px;height:auto;overflow:visible"></div>
           <button class="btn btn-s btn-sm" onclick="openReportOrderModal()" style="flex-shrink:0;white-space:nowrap" title="ترتيب ظهور التحاليل داخل كل مجموعة فرعية في ورقة التقرير">↕️ ترتيب التحاليل في ورقة التقرير</button>
           <button class="btn btn-s btn-sm" onclick="gltOpen()" style="flex-shrink:0;white-space:nowrap" title="استيراد التحاليل (الوحدة · القيم الطبيعية · المجموعات · الأسعار) من ملف Green Lab System">📥 استيراد من Green Lab</button>
+          <button class="btn btn-s btn-sm" id="calc-print-mode-btn" onclick="openCalcPrintModeModal()" style="flex-shrink:0;white-space:nowrap" title="طريقة طباعة التحاليل المحسوبة (بورقة مستقلة / مع نفس ورقة التحاليل)">🧮 طباعة التحاليل المحسوبة</button>
           <button class="btn btn-p btn-sm" onclick="openEditTest(null)" style="flex-shrink:0;white-space:nowrap">➕ Add</button>
         </div>
       </div>
@@ -13199,8 +13200,8 @@ function openPrintModal(rid){
 
   // Build combined preview: regular report + any saved special exam reports
   const allTests=req.tests.map(tid=>tests.find(t=>t.id===tid)).filter(Boolean);
-  const regularTests=_dropDeviceCbcTest(allTests.filter(t=>!t.isSpecialExam && !t.isCalc), req);
-  const calcTests=allTests.filter(t=>t.isCalc && req.results && req.results[t.id]);
+  const regularTests=_dropDeviceCbcTest(allTests.filter(t=>!t.isSpecialExam && !_calcOwnPage(t)), req);
+  const calcTests=allTests.filter(t=>_calcOwnPage(t) && req.results && req.results[t.id]);
   const specialTests=allTests.filter(t=>t.isSpecialExam);
 
   loadUARecords(); loadStoolExamRecords(); loadSemenRecords();
@@ -17576,7 +17577,7 @@ function loadResultEntry(){
       ? _drLines.map(function(_ln,_i){return `<div style="white-space:nowrap;line-height:1.6">${_i===0?refLabel:''}${_ln}</div>`;}).join('')
       : `<span style="white-space:nowrap">${refLabel}${dispRefVal}</span>`;
     const dispRef=`<span style="background:${refBg};border:1px solid ${refBorder};border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--text);display:inline-block">${_drInner}</span>`;
-    const calcBtn=t.isCalc?`<button class="btn btn-sm btn-w" style="padding:3px 8px;font-size:10px" onclick="openCalcModal('${t.id}','${id}')" title="احسب بالمعادلة">🧮 احسب</button>`:'';
+    const calcBtn=(t.isCalc&&!_calcIsInline(t))?`<button class="btn btn-sm btn-w" style="padding:3px 8px;font-size:10px" onclick="openCalcModal('${t.id}','${id}')" title="احسب بالمعادلة">🧮 احسب</button>`:'';
     return `<tr>
       <td style="font-weight:700;font-size:12px;color:#000000 !important">
         <div style="display:flex;align-items:center;gap:4px">
@@ -17602,6 +17603,8 @@ function loadResultEntry(){
       </td>
     </tr>`;
   }).join('');
+  // 🧮 التحاليل المحسوبة مع نفس الورقة: صفوف المدخلات + الحساب التلقائي
+  try{ _calcInlineSetupEntry(req); }catch(e){ console.warn('[calc-inline] setup',e); }
   // ── Arrow Up/Down navigation بين حقول النتائج ──────────────────
   (function attachResNavigation(){
     function getNavInputs(){
@@ -18428,9 +18431,9 @@ function _resPreviewReq(){
 function _resPreviewPages(req){
   const allTests=(req.tests||[]).map(tid=>tests.find(t=>t.id===tid)).filter(Boolean);
   const regularTests=(typeof _dropDeviceCbcTest==='function')
-    ? _dropDeviceCbcTest(allTests.filter(t=>!t.isSpecialExam && !t.isCalc), req)
-    : allTests.filter(t=>!t.isSpecialExam && !t.isCalc);
-  const calcTests=allTests.filter(t=>t.isCalc && req.results && req.results[t.id]);
+    ? _dropDeviceCbcTest(allTests.filter(t=>!t.isSpecialExam && !_calcOwnPage(t)), req)
+    : allTests.filter(t=>!t.isSpecialExam && !_calcOwnPage(t));
+  const calcTests=allTests.filter(t=>_calcOwnPage(t) && req.results && req.results[t.id]);
   const specialTests=allTests.filter(t=>t.isSpecialExam);
   try{ loadUARecords(); loadStoolExamRecords(); loadSemenRecords(); }catch(e){}
   const pages=[];
@@ -19432,6 +19435,404 @@ function calcFormula(formula, vals){
   }
 }
 
+
+/* ══════════════════════════════════════════════════════════════════
+   🧮 وضع طباعة التحاليل المحسوبة  (settings.calcPrintMode)
+   ──────────────────────────────────────────────────────────────────
+   • 'separate' (الافتراضي) : كل تحليل محسوب بورقة مستقلة — السلوك القديم كما هو.
+   • 'inline'               : التحليل المحسوب يُطبع مع نفس ورقة التحاليل الأخرى
+       - في واجهة إدخال النتائج تظهر مدخلاته (مثلاً FBG + Insulin لـ HOMA-IR)
+         تلقائياً، وتُحسب النتيجة فور إدخال القيم.
+       - إن كانت المدخلات مختارة كتحاليل مستقلة في الطلب فلا تتكرر؛
+         المحسوب يأخذ قيمه منها مباشرة.
+       - القيم الطبيعية للمدخلات دائماً من قاعدة التحاليل (نفسها كتحليل مستقل).
+       - في الورقة يظهر المحسوب ضمن المجموعة الفرعية التابعة لها تحاليله.
+   • منحنى تحمّل الجلوكوز (GTT) يبقى دائماً بورقة مستقلة (له مخطط خاص).
+   ══════════════════════════════════════════════════════════════════ */
+function _calcInlineMode(){
+  try{ return !!(typeof settings!=='undefined' && settings && settings.calcPrintMode==='inline'); }catch(e){ return false; }
+}
+/* تحليل محسوب يُطبع داخل ورقة التحاليل العامة؟ */
+function _calcIsInline(t){
+  return !!(t && t.isCalc && t.calcFormula && t.calcFormula!=='gtt' && _calcInlineMode());
+}
+/* تحليل محسوب له ورقة مستقلة؟ (السلوك الافتراضي) */
+function _calcOwnPage(t){
+  return !!(t && t.isCalc && !_calcIsInline(t));
+}
+window._calcInlineMode=_calcInlineMode; window._calcIsInline=_calcIsInline; window._calcOwnPage=_calcOwnPage;
+
+/* مرادفات أكواد المدخلات — كي يُتعرَّف على التحليل المستقل في الطلب أياً كان كوده
+   (مثلاً الأنسولين قد يكون INS أو INSU-F) */
+const _CALC_CODE_SYN = {
+  'INSU-F':['INSU-F','INS','INSULIN','INS-F','F-INS','FINS','INSULIN-F'],
+  'CREAT' :['CREAT','CREA','CREATININE','S-CR','SCR'],
+  'UREA'  :['UREA','B-UREA','BUREA','BU']
+};
+function _calcCodeSyn(code){
+  if(_isGlucoseCode(code)) return _GLUCOSE_CODES.slice();
+  return _CALC_CODE_SYN[code] || [code];
+}
+function _calcIsPtInput(code){ return code==='AGE_INPUT' || code==='GENDER_INPUT'; }
+
+/* التحليل المستقل الموجود في الطلب والمطابق لمدخل المعادلة (أو null) */
+function _calcInputTestInReq(req, code){
+  try{
+    if(!req || !Array.isArray(req.tests) || typeof tests==='undefined') return null;
+    const syn=_calcCodeSyn(code).map(function(s){ return String(s).toUpperCase(); });
+    const rt=req.tests.map(function(id){ return tests.find(function(x){ return x && x.id===id; }); })
+                      .filter(function(x){ return x && !x.isCalc && !x.isSpecialExam; });
+    for(let i=0;i<syn.length;i++){
+      const hit=rt.find(function(x){ return String(x.code||'').toUpperCase()===syn[i]; });
+      if(hit) return hit;
+    }
+  }catch(e){}
+  return null;
+}
+/* تحليل قاعدة البيانات المقابل لمدخل المعادلة (للاسم والوحدة والقيم الطبيعية) */
+function _calcInputDbTest(code){
+  try{
+    let t=_findTestForCalcCode(code);
+    if(t) return t;
+    const syn=_calcCodeSyn(code).map(function(s){ return String(s).toUpperCase(); });
+    for(let i=0;i<syn.length;i++){
+      t=tests.find(function(x){ return x && !x.isCalc && String(x.code||'').toUpperCase()===syn[i]; });
+      if(t) return t;
+    }
+  }catch(e){}
+  return null;
+}
+function _calcPtOf(req){
+  try{ return (req && typeof patients!=='undefined') ? (patients.find(function(p){ return p.id===req.patientId; })||{}) : {}; }catch(e){ return {}; }
+}
+function _calcPtAge(pt){
+  return parseFloat(pt.ageVal)||Math.floor((Date.now()-new Date(pt.dob||0).getTime())/31557600000)||0;
+}
+/* تحويل نص النتيجة إلى رقم صالح للحساب — القيم ذات العلامة < > لا تصلح */
+function _calcNum(v){
+  if(v===null||v===undefined) return NaN;
+  let s=String(v).trim();
+  if(!s || s.charAt(0)==='<' || s.charAt(0)==='>') return NaN;
+  s=s.replace(/[٠-٩]/g,function(d){ return String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)); }).replace(/,/g,'.');
+  if(!/^-?\d*\.?\d+$/.test(s)) return NaN;
+  return parseFloat(s);
+}
+/* القيمة المحفوظة لمدخل افتراضي (غير موجود كتحليل مستقل) */
+function _calcSavedInput(req, code){
+  try{
+    const ci=(req && req.calcInputs) || {};
+    const ids=Object.keys(ci);
+    for(let i=0;i<ids.length;i++){
+      const o=ci[ids[i]] && ci[ids[i]][code];
+      if(o && o.value!==undefined && o.value!==null && String(o.value).trim()!=='') return String(o.value);
+    }
+  }catch(e){}
+  return '';
+}
+/* حساب نتيجة تحليل محسوب — يعيد نصاً أو null إن كانت المدخلات ناقصة */
+function _calcInlineCompute(req, ct, getVal){
+  try{
+    const defs=getCalcFormulaInputs(ct.calcFormula);
+    if(!defs.length) return null;
+    const pt=_calcPtOf(req);
+    const vals={};
+    for(let i=0;i<defs.length;i++){
+      const d=defs[i];
+      if(d.code==='AGE_INPUT'){ const a=_calcPtAge(pt); if(!(a>0)) return null; vals[d.code]=a; continue; }
+      if(d.code==='GENDER_INPUT'){ vals[d.code]=(pt.gender==='female')?0:1; continue; }
+      const n=_calcNum(getVal(d.code));
+      if(!isFinite(n)) return null;
+      vals[d.code]=n;
+    }
+    const r=calcFormula(ct.calcFormula, vals);
+    const n=parseFloat(r);
+    if(r===null || r===undefined || !isFinite(n)) return null;
+    return String(r);
+  }catch(e){ return null; }
+}
+/* المجموعة الفرعية التي يُطبع ضمنها التحليل المحسوب = مجموعة تحاليله */
+function _calcInlineGroupKey(t, req){
+  try{
+    const defs=getCalcFormulaInputs(t.calcFormula);
+    let first=null;
+    for(let i=0;i<defs.length;i++){
+      const d=defs[i];
+      if(_calcIsPtInput(d.code)) continue;
+      const inReq=_calcInputTestInReq(req, d.code);
+      if(inReq) return inReq.subCat||inReq.cat||'Other';
+      if(!first){ const db=_calcInputDbTest(d.code); if(db) first=db; }
+    }
+    if(first) return first.subCat||first.cat||'Other';
+  }catch(e){}
+  return t.subCat||t.cat||'Other';
+}
+/* داخل المجموعة: ضع كل تحليل محسوب بعد آخر تحاليله الموجودة فيها */
+function _calcInlineReorder(list, req){
+  try{
+    if(!_calcInlineMode() || !Array.isArray(list) || list.length<2) return list;
+    const calcs=list.filter(_calcIsInline);
+    if(!calcs.length) return list;
+    let out=list.slice();
+    calcs.forEach(function(ct){
+      const ids=getCalcFormulaInputs(ct.calcFormula)
+        .filter(function(d){ return !_calcIsPtInput(d.code); })
+        .map(function(d){ const x=_calcInputTestInReq(req,d.code); return x?x.id:null; })
+        .filter(Boolean);
+      if(!ids.length) return;
+      const orig=out.indexOf(ct);
+      out=out.filter(function(x){ return x!==ct; });
+      let last=-1;
+      out.forEach(function(x,i){ if(ids.indexOf(x.id)>-1) last=i; });
+      if(last<0){ out.splice(Math.max(0,Math.min(orig,out.length)),0,ct); return; }
+      out.splice(last+1,0,ct);
+    });
+    return out;
+  }catch(e){ return list; }
+}
+/* بيانات صف مدخل افتراضي في ورقة الطباعة (نفس اسم/وحدة/قيم التحليل المستقل) */
+function _calcInlinePrintInput(req, ct, inp, ptGender, ptAge, printedMap){
+  if(_calcIsPtInput(inp.code)) return null;
+  if(_calcInputTestInReq(req, inp.code)) return null;          // يُطبع كتحليل مستقل — لا تكرار
+  if(printedMap && printedMap[inp.code]) return null;           // طُبع مع محسوب آخر في نفس الورقة
+  const saved=(req.calcInputs && req.calcInputs[ct.id] && req.calcInputs[ct.id][inp.code]) || null;
+  let val=saved && saved.value!==undefined && saved.value!==null ? String(saved.value) : '';
+  if(!val.trim()) val=_calcSavedInput(req, inp.code);
+  if(!val.trim()) return null;
+  const db=_calcInputDbTest(inp.code);
+  let name, unit, refTxt='—', min=null, max=null;
+  if(db){
+    name=_sanitizeCalcInputName(inp.code, (db.nameShort&&String(db.nameShort).trim())?String(db.nameShort).trim():db.nameEn);
+    unit=db.unit||'';
+    const r=getPatientRef(db, ptGender, ptAge);
+    min=r.min; max=r.max;
+    refTxt=getRefText(db, ptGender, ptAge, null);
+  } else {
+    name=_sanitizeCalcInputName(inp.code, inp.name||inp.label);
+    unit=inp.unit||'';
+  }
+  if(printedMap) printedMap[inp.code]=1;
+  return {val:val, name:name, unit:unit, refTxt:refTxt||'—', min:min, max:max};
+}
+
+/* ── واجهة إدخال النتائج: صفوف المدخلات + الحساب التلقائي ───────────── */
+function _calcEsc(s){ return String(s===null||s===undefined?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _calcEntryReq(){
+  try{
+    const s=document.getElementById('res-req-sel'); const id=s?s.value:'';
+    return id ? (requests.find(function(r){ return r.id===id; })||null) : null;
+  }catch(e){ return null; }
+}
+function _calcVinInterp(code, req){
+  const el=document.getElementById('cvi-'+code);
+  const ip=document.getElementById('cvi-interp-'+code);
+  if(!el) return;
+  const db=_calcInputDbTest(code);
+  const v=_calcNum(el.value);
+  el.className='res-input';
+  if(ip){ ip.textContent=''; ip.className=''; }
+  if(!db || isNaN(v)) return;
+  const pt=_calcPtOf(req);
+  const ref=getPatientRef(db, pt.gender||'male', _calcPtAge(pt));
+  if(ref.min===null||ref.max===null) return;
+  let cls='normal', txt='✅ Normal', ic='res-ok';
+  if(v>ref.max){ cls='high'; txt='⬆️ High'; ic='res-high'; }
+  else if(v<ref.min){ cls='low'; txt='⬇️ Low'; ic='res-low'; }
+  el.className='res-input '+ic;
+  if(ip){ ip.textContent=txt; ip.className=cls; }
+}
+function _calcVinStore(req, code, value){
+  if(!req) return;
+  const v=String(value===null||value===undefined?'':value).trim();
+  (req.tests||[]).forEach(function(id){
+    const ct=tests.find(function(x){ return x && x.id===id; });
+    if(!_calcIsInline(ct)) return;
+    const def=getCalcFormulaInputs(ct.calcFormula).find(function(d){ return d.code===code; });
+    if(!def) return;
+    if(!req.calcInputs) req.calcInputs={};
+    if(!req.calcInputs[ct.id]) req.calcInputs[ct.id]={};
+    if(v) req.calcInputs[ct.id][code]={value:v, label:def.label};
+    else delete req.calcInputs[ct.id][code];
+  });
+  req._updatedAt=Date.now();
+}
+function _calcInlineRecalcAll(req){
+  if(!req || !_calcInlineMode()) return false;
+  let changed=false;
+  const calcs=(req.tests||[]).map(function(id){ return tests.find(function(x){ return x && x.id===id; }); }).filter(_calcIsInline);
+  calcs.forEach(function(ct){
+    const el=document.getElementById('rv-'+ct.id);
+    if(!el) return;
+    const getVal=function(code){
+      const t=_calcInputTestInReq(req, code);
+      if(t){
+        const e=document.getElementById('rv-'+t.id);
+        if(e) return e.value==='__manual__' ? ((document.getElementById('rv-manual-'+t.id)||{}).value||'') : e.value;
+        return (req.results && req.results[t.id]) || '';
+      }
+      const ve=document.getElementById('cvi-'+code);
+      if(ve) return ve.value;
+      return _calcSavedInput(req, code);
+    };
+    const res=_calcInlineCompute(req, ct, getVal);
+    if(!req._calcAuto || typeof req._calcAuto!=='object') req._calcAuto={};
+    const cur=String(el.value||'').trim();
+    const last=req._calcAuto[ct.id];
+    const free = cur==='' || (last!==undefined && cur===String(last));
+    if(!free) return;                       // قيمة كتبها الفنّي بيده — لا نلمسها
+    if(res===null){
+      if(cur!=='' && last!==undefined){
+        el.value=''; el.className='res-input'; el.removeAttribute('data-autocalc');
+        try{ el.dataset.uedit='1'; }catch(e){}
+        try{ checkResult(ct.id,''); }catch(e){}
+        const ip=document.getElementById('interp-'+ct.id); if(ip){ ip.textContent=''; ip.className=''; }
+        delete req._calcAuto[ct.id];
+        changed=true;
+      }
+      return;
+    }
+    req._calcAuto[ct.id]=res;
+    if(cur===res) return;
+    el.value=res;
+    el.setAttribute('data-autocalc','1');
+    el.title='محسوب تلقائياً بالمعادلة — يمكن تعديله يدوياً';
+    try{ el.dataset.uedit='1'; }catch(e){}
+    try{ checkResult(ct.id,res); }catch(e){}
+    changed=true;
+  });
+  return changed;
+}
+/* يُستدعى بعد رسم جدول إدخال النتائج */
+function _calcInlineSetupEntry(req){
+  const tbody=document.getElementById('res-entry-tbody');
+  if(!tbody) return;
+  Array.prototype.slice.call(tbody.querySelectorAll('tr.calc-vin-row')).forEach(function(r){ r.remove(); });
+  if(!req || !_calcInlineMode()) return;
+  const calcs=(req.tests||[]).map(function(id){ return tests.find(function(x){ return x && x.id===id; }); }).filter(_calcIsInline);
+  if(!calcs.length) return;
+  const pt=_calcPtOf(req);
+  const ptG=pt.gender||'male', ptA=_calcPtAge(pt);
+  const done={};
+  calcs.forEach(function(ct){
+    const calcEl=document.getElementById('rv-'+ct.id);
+    if(!calcEl) return;
+    const tr=calcEl.closest('tr');
+    if(!tr || !tr.parentNode) return;
+    calcEl.placeholder='تلقائي';
+    getCalcFormulaInputs(ct.calcFormula).forEach(function(d){
+      if(_calcIsPtInput(d.code)) return;
+      if(_calcInputTestInReq(req, d.code)) return;        // مختار كتحليل مستقل — لا يتكرر
+      if(done[d.code]) return;                             // مضاف مسبقاً لمحسوب آخر
+      done[d.code]=1;
+      const db=_calcInputDbTest(d.code);
+      const name=db ? _sanitizeCalcInputName(d.code,(db.nameShort&&String(db.nameShort).trim())?String(db.nameShort).trim():db.nameEn)
+                    : _sanitizeCalcInputName(d.code, d.name||d.label);
+      const unit=db ? (db.unit||'') : (d.unit||'');
+      const refTxt=db ? getRefText(db, ptG, ptA, null) : '—';
+      const usedBy=calcs.filter(function(c){ return getCalcFormulaInputs(c.calcFormula).some(function(x){ return x.code===d.code; }); })
+                        .map(function(c){ return c.nameShort||c.nameEn; }).join(' · ');
+      const row=document.createElement('tr');
+      row.className='calc-vin-row';
+      row.setAttribute('data-cvi-code', d.code);
+      row.style.background='rgba(167,139,250,0.06)';
+      row.innerHTML=
+        '<td style="font-weight:700;font-size:12px;color:#000000 !important">'
+        + '<span>'+_calcEsc(name)+'</span><br>'
+        + '<span style="font-size:9px;color:var(--text2)">'+_calcEsc(db?db.code:d.code)+'</span><br>'
+        + '<span class="bdg bdg-s" style="font-size:8px" title="مدخل للتحليل المحسوب">🧮 مدخل لـ '+_calcEsc(usedBy)+'</span>'
+        + '</td>'
+        + '<td><input type="text" class="res-input" id="cvi-'+_calcEsc(d.code)+'" data-cvi="'+_calcEsc(d.code)+'" lang="en" inputmode="text" placeholder="..." value="'+_calcEsc(_calcSavedInput(req,d.code))+'"></td>'
+        + '<td style="font-size:11px;color:#000000 !important;font-weight:700">'+_calcEsc(unit)+'</td>'
+        + '<td style="font-size:11px;color:var(--text2)">'+(refTxt&&refTxt!=='—'
+            ? '<span style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.25);border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--text);display:inline-block;white-space:nowrap">'+_calcEsc(refTxt)+'</span>'
+            : '—')+'</td>'
+        + '<td id="cvi-interp-'+_calcEsc(d.code)+'" style="font-size:12px;font-weight:700"></td>'
+        + '<td></td><td></td>';
+      tr.parentNode.insertBefore(row, tr);
+      _calcVinInterp(d.code, req);
+    });
+  });
+  if(_calcInlineRecalcAll(req)){ try{ _autoSaveResults(); }catch(e){} }
+}
+window._calcInlineSetupEntry=_calcInlineSetupEntry;
+/* مستمع موحّد: أي تغيير في مدخل ⇒ إعادة حساب التحاليل المحسوبة فوراً */
+(function(){
+  function _onCalcInput(e){
+    try{
+      const el=e && e.target;
+      if(!el || !el.id || !_calcInlineMode()) return;
+      const tb=document.getElementById('res-entry-tbody');
+      if(!tb || !tb.contains(el)) return;
+      const req=_calcEntryReq();
+      if(!req) return;
+      const code=el.getAttribute('data-cvi');
+      if(code){
+        _calcVinStore(req, code, el.value);
+        _calcVinInterp(code, req);
+        _calcInlineRecalcAll(req);
+        _autoSaveResults();
+        return;
+      }
+      if(/^rv-/.test(el.id)){
+        if(_calcInlineRecalcAll(req)) _autoSaveResults();
+      }
+    }catch(err){ console.warn('[calc-inline]', err); }
+  }
+  document.addEventListener('input', _onCalcInput, false);
+  document.addEventListener('change', _onCalcInput, false);
+})();
+
+/* ── زر «طباعة التحاليل المحسوبة» في قاعدة التحاليل ───────────────── */
+function openCalcPrintModeModal(){
+  const old=document.getElementById('m-calc-print-mode'); if(old) old.remove();
+  const cur=_calcInlineMode()?'inline':'separate';
+  const opt=function(val, icon, title, desc){
+    const on=cur===val;
+    return '<label class="cpm-opt" data-val="'+val+'" style="display:flex;gap:12px;align-items:flex-start;cursor:pointer;border:1.5px solid '+(on?'var(--primary)':'var(--border)')+';background:'+(on?'rgba(0,212,255,0.08)':'transparent')+';border-radius:12px;padding:12px 14px;margin-bottom:10px">'
+      + '<input type="radio" name="cpm-mode" value="'+val+'" '+(on?'checked':'')+' style="margin-top:4px;accent-color:var(--primary)" onchange="_cpmPick(this.value)">'
+      + '<div><div style="font-weight:800;font-size:13px;color:var(--text)">'+icon+' '+title+'</div>'
+      + '<div style="font-size:11px;color:var(--text2);margin-top:4px;line-height:1.7">'+desc+'</div></div></label>';
+  };
+  const modal=document.createElement('div');
+  modal.className='moverlay open'; modal.id='m-calc-print-mode';
+  modal.innerHTML='<div class="modal" style="max-width:560px">'
+    + '<div class="mhdr"><div class="mtitle">🧮 طباعة التحاليل المحسوبة</div><button class="mclose" onclick="document.getElementById(\'m-calc-print-mode\').remove()">×</button></div>'
+    + '<div class="mbody">'
+    + opt('separate','📄','طباعة التحليل المحسوب بورقة مستقلة (الافتراضي)','كل تحليل محسوب يُطبع في ورقة خاصة به مع مدخلاته — كما هو الحال الآن، ويُحسب من زر «🧮 احسب».')
+    + opt('inline','🧾','طباعة التحاليل المحسوبة مع نفس ورقة التحاليل الأخرى','عند اختيار تحليل محسوب (مثل HOMA-IR) تظهر مدخلاته (FBG و Fasting Insulin) تلقائياً في واجهة إدخال النتائج، وتُحسب النتيجة فور إدخال القيم. إن اختيرت المدخلات كتحاليل مستقلة لا تتكرر، والقيم الطبيعية نفسها دائماً. ويُطبع المحسوب ضمن المجموعة الفرعية التابعة لها تحاليله.<br><span style="color:var(--warning)">منحنى تحمّل الجلوكوز (GTT) يبقى بورقة مستقلة لاحتوائه على مخطط.</span>')
+    + '</div>'
+    + '<div class="mftr"><button class="btn btn-s" onclick="document.getElementById(\'m-calc-print-mode\').remove()">إلغاء</button>'
+    + '<button class="btn btn-p" onclick="saveCalcPrintMode()">💾 حفظ</button></div></div>';
+  document.body.appendChild(modal);
+}
+function _cpmPick(val){
+  document.querySelectorAll('#m-calc-print-mode .cpm-opt').forEach(function(l){
+    const on=l.getAttribute('data-val')===val;
+    l.style.borderColor=on?'var(--primary)':'var(--border)';
+    l.style.background=on?'rgba(0,212,255,0.08)':'transparent';
+  });
+}
+function saveCalcPrintMode(){
+  const r=document.querySelector('#m-calc-print-mode input[name="cpm-mode"]:checked');
+  const val=(r && r.value==='inline') ? 'inline' : 'separate';
+  settings.calcPrintMode=val;
+  try{ save('settings',settings); }catch(e){ showNotif('خطأ','تعذّر حفظ الإعداد','error'); return; }
+  const m=document.getElementById('m-calc-print-mode'); if(m) m.remove();
+  _calcUpdatePrintModeBtn();
+  showNotif('🧮 التحاليل المحسوبة', val==='inline' ? 'ستُطبع مع نفس ورقة التحاليل الأخرى' : 'ستُطبع كل منها بورقة مستقلة', 'success');
+  try{
+    const s=document.getElementById('res-req-sel');
+    if(s && s.value && typeof loadResultEntry==='function') loadResultEntry();
+  }catch(e){}
+}
+function _calcUpdatePrintModeBtn(){
+  try{
+    const b=document.getElementById('calc-print-mode-btn'); if(!b) return;
+    b.title = _calcInlineMode() ? 'الوضع الحالي: مع نفس ورقة التحاليل الأخرى' : 'الوضع الحالي: بورقة مستقلة (الافتراضي)';
+  }catch(e){}
+}
+window.openCalcPrintModeModal=openCalcPrintModeModal; window._cpmPick=_cpmPick; window.saveCalcPrintMode=saveCalcPrintMode;
+
+
 function openCalcModal(testId, reqId){
   const t=tests.find(x=>x.id===testId);if(!t||!t.isCalc)return;
   const inputs=getCalcFormulaInputs(t.calcFormula);
@@ -20094,7 +20495,7 @@ function buildPrintHTML(req, opts){
   let reqTests = req.tests.map(tid=>tests.find(t=>t.id===tid)).filter(t=>{
     if(!t) return false;
     if(t.isSpecialExam) return false; // Urine/Stool have their own report pages
-    if(t.isCalc) return false;        // Calculated tests have their own report pages
+    if(t.isCalc && !_calcIsInline(t)) return false; // Calculated tests have their own report pages (إلا في وضع «مع نفس الورقة»)
     return true;
   });
   /* 🔬 CBC وارد من الجهاز ⇒ لا يُطبع صفّاً فارغاً هنا (له صفحته المستقلة).
@@ -20102,6 +20503,7 @@ function buildPrintHTML(req, opts){
   if(!blankBody && !cbcBlank && typeof _dropDeviceCbcTest==='function'){
     reqTests = _dropDeviceCbcTest(reqTests, req);
   }
+  const _inlPrinted = {}; // 🧮 مدخلات المحسوبة المطبوعة (لمنع التكرار بين محسوبين يشتركان بمدخل)
   const today    = new Date().toLocaleDateString('en-GB');
   const showHL   = document.getElementById('tog-highlight')?.classList.contains('on');
   const showPrev = document.getElementById('tog-prev')?.classList.contains('on');
@@ -20112,7 +20514,7 @@ function buildPrintHTML(req, opts){
 
   const grouped={};
   reqTests.forEach(t=>{
-    const key=t.subCat||t.cat||'Other';
+    const key=_calcIsInline(t) ? _calcInlineGroupKey(t, req) : (t.subCat||t.cat||'Other');
     if(!grouped[key]) grouped[key]=[];
     grouped[key].push(t);
   });
@@ -20125,6 +20527,8 @@ function buildPrintHTML(req, opts){
   const sortedGroupKeys = Object.keys(grouped).sort((a,b)=>a.localeCompare(b));
   // تطبيق الترتيب الداخلي على كل مجموعة
   sortedGroupKeys.forEach(k=>{ grouped[k]=sortTestsInGroup(k, grouped[k]); });
+  // 🧮 وضع «مع نفس الورقة»: التحليل المحسوب يأتي بعد تحاليله مباشرة داخل مجموعتها
+  if(_calcInlineMode()) sortedGroupKeys.forEach(k=>{ grouped[k]=_calcInlineReorder(grouped[k], req); });
   const ptAge    = parseFloat(pt.ageVal)||Math.floor((Date.now()-new Date(pt.dob||0).getTime())/31557600000)||0;
   const ptGender = pt.gender||'male';
   // ── تاريخ الطلب الحالي (YYYY-MM-DD) لاستبعاد أي نتائج سابقة بنفس اليوم ──
@@ -20791,7 +21195,13 @@ function buildPrintHTML(req, opts){
           const matchTest = _findTestForCalcCode(inp.code);
           const cs = customSettings[inp.code] || {};
           let inpVal=null, inpName='', inpUnit='', inpRefTxt='—', inpMin=null, inpMax=null;
-          if(matchTest){
+          if(_calcIsInline(t)){
+            // 🧮 مع نفس الورقة: المدخل المختار كتحليل مستقل يُطبع في صفه فقط (لا تكرار)،
+            //    والقيم الطبيعية دائماً من قاعدة التحاليل
+            const _ir=_calcInlinePrintInput(req, t, inp, ptGender, ptAge, _inlPrinted);
+            if(!_ir) return;
+            inpVal=_ir.val; inpName=_ir.name; inpUnit=_ir.unit; inpRefTxt=_ir.refTxt; inpMin=_ir.min; inpMax=_ir.max;
+          } else if(matchTest){
             if(req.results && req.results[matchTest.id]!==undefined && req.results[matchTest.id]!==''){
               inpVal=req.results[matchTest.id];
             } else if(savedCalcInputs[inp.code]){
@@ -20839,7 +21249,7 @@ function buildPrintHTML(req, opts){
             flag: inpFlag,
             refHtml: inpRefHtml,
             prevHtml: '',
-            bullet: '○',
+            bullet: (_calcIsInline(t)?'●':'○'),
             isAbn: (inpIsHigh||inpIsLow),
             abnColor: inpValColor,
             // حقول للنماذج الجديدة:
@@ -22102,8 +22512,8 @@ function doPrint(reqId){
   const regularTests=allTests.filter(t=>!t.isSpecialExam && !t.isCalc);
   /* 🔬 ما يُطبع فعلاً في «التقرير العام»: بلا تحليل CBC الوارد من الجهاز
      (له صفحة تقرير مستقلة). regularTests تبقى كما هي لخصم المخزون. */
-  const printableTests=_dropDeviceCbcTest(regularTests, req);
-  const calcTests=allTests.filter(t=>t.isCalc && req.results && req.results[t.id]);
+  const printableTests=_dropDeviceCbcTest(allTests.filter(t=>!t.isSpecialExam && !_calcOwnPage(t)), req);
+  const calcTests=allTests.filter(t=>_calcOwnPage(t) && req.results && req.results[t.id]);
   const specialTests=allTests.filter(t=>t.isSpecialExam);
 
   // دالة طباعة تحليل محسوب واحد عبر iframe صامت
@@ -22308,8 +22718,8 @@ function generatePDFBlob(callback){
   /* 🔬 CBC من الجهاز له صفحته المستقلة ⇒ لا يُحتسب ضمن التحاليل العادية،
      فإن كان وحده لا تُولَّد صفحة تقرير عام فارغة قبل صفحة الـ CBC. */
   const regularTests=_dropDeviceCbcTest(
-    allTests.filter(function(t){return !t.isSpecialExam && !t.isCalc;}), req);
-  const calcTests=allTests.filter(function(t){return t.isCalc && req.results && req.results[t.id];});
+    allTests.filter(function(t){return !t.isSpecialExam && !_calcOwnPage(t);}), req);
+  const calcTests=allTests.filter(function(t){return _calcOwnPage(t) && req.results && req.results[t.id];});
 
   const pageHTMLs=[];
   if(regularTests.length>0) pageHTMLs.push(buildPrintHTML(req));
@@ -43610,8 +44020,8 @@ function abnShareAllPDFsViaWhatsApp(){
       var savedReqId=currentReqId;
       currentReqId=req.id;
       var allTests=req.tests.map(function(tid){return tests.find(function(x){return x.id===tid;});}).filter(Boolean);
-      var regularTests=allTests.filter(function(x){return !x.isSpecialExam&&!x.isCalc;});
-      var calcTests=allTests.filter(function(x){return x.isCalc&&req.results&&req.results[x.id];});
+      var regularTests=allTests.filter(function(x){return !x.isSpecialExam&&!_calcOwnPage(x);});
+      var calcTests=allTests.filter(function(x){return _calcOwnPage(x)&&req.results&&req.results[x.id];});
       var pageHTMLs=[];
       if(regularTests.length>0) pageHTMLs.push(buildPrintHTML(req));
       calcTests.forEach(function(ct){ pageHTMLs.push(buildCalcTestPrintHTML(req,ct)); });
@@ -54762,7 +55172,7 @@ function _pmBuildData(patientId) {
     if (r.status === 'done') {
       const hasGen = (r.tests || []).some(tid => {
         const t = tests.find(x => x.id === tid);
-        return t && !t.isSpecialExam && !t.isCalc;
+        return t && !t.isSpecialExam && !(typeof _calcOwnPage==='function' ? _calcOwnPage(t) : t.isCalc);
       });
       if (hasGen) { const d = _safeDoc('التقرير العام', () => buildPrintHTML(r)); if (d) docs.push(d); }
       if (cbc)    { const d = _safeDoc('تقرير CBC', () => _buildCBCReportHTML(cp, pt, r, (settings && settings.cbcTemplate) || '1')); if (d) docs.push(d); }
@@ -58988,8 +59398,8 @@ if(window.electronAPI && window.electronAPI.isElectron){
         return typeof tests!=='undefined'?tests.find(function(t){return t.id===tid;}):null;
       }).filter(Boolean);
 
-      var regTests =allTests.filter(function(t){return !t.isSpecialExam&&!t.isCalc;});
-      var calcTests=allTests.filter(function(t){return t.isCalc&&req.results&&req.results[t.id];});
+      var regTests =allTests.filter(function(t){return !t.isSpecialExam&&!(typeof _calcOwnPage==='function'?_calcOwnPage(t):t.isCalc);});
+      var calcTests=allTests.filter(function(t){return (typeof _calcOwnPage==='function'?_calcOwnPage(t):t.isCalc)&&req.results&&req.results[t.id];});
       var spTests  =allTests.filter(function(t){return !!t.isSpecialExam;});
 
       if(regTests.length>0&&typeof buildPrintHTML==='function'){
@@ -68987,9 +69397,9 @@ function openInMedlab(oid){
 /* ───────── إنتاج PDF النتيجة وإرسالها ───────── */
 function collectPages(req){
   var all=req.tests.map(function(id){return tests.find(function(t){return t.id===id;});}).filter(Boolean);
-  var reg=all.filter(function(t){return !t.isSpecialExam && !t.isCalc;});
+  var reg=all.filter(function(t){return !t.isSpecialExam && !(typeof _calcOwnPage==='function'?_calcOwnPage(t):t.isCalc);});
   if(typeof _dropDeviceCbcTest==='function') reg=_dropDeviceCbcTest(reg, req);
-  var calc=all.filter(function(t){return t.isCalc && req.results && req.results[t.id];});
+  var calc=all.filter(function(t){return (typeof _calcOwnPage==='function'?_calcOwnPage(t):t.isCalc) && req.results && req.results[t.id];});
   var pages=[];
   if(reg.length) pages.push(buildPrintHTML(req));
   calc.forEach(function(ct){ pages.push(buildCalcTestPrintHTML(req, ct)); });
