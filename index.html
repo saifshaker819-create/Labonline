@@ -3673,6 +3673,10 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
       <span class="ni-ic">💬</span>محادثات المختبرات
       <span class="ni-badge" id="nb-chat" style="display:none">0</span>
     </div>
+    <div class="ni" id="dvc-nav-btn" onclick="if(window.DevChat)DevChat.toggle()" title="مراسلة بين حاسبات المختبر المرتبطة بالحساب نفسه">
+      <span class="ni-ic">🖥️</span>رسائل حاسبات المختبر
+      <span class="ni-badge" id="nb-dvc" style="display:none">0</span>
+    </div>
     <div class="ni" id="dp-nav-btn" onclick="dpOpenModal()" style="color:#00e87a;">
       <span class="ni-ic">🩺</span>بوابة الطبيب
     </div>
@@ -10066,6 +10070,8 @@ function _scheduleLegacySnapshot(pk){
 // load/save
 function load(k,def){return DB.get(k)||def;}
 function save(k,v){
+  /* 🛡️ سلامة المزامنة: أي سجل تغيّر محتواه دون ختم وقت التعديل يُختم الآن (قبل الكتابة والبثّ) */
+  try{ if(typeof window._syncWatch==='function') window._syncWatch(k, v, (!_touchedBad[k] && _touched[k] && _touched[k].size) ? _touched[k] : null); }catch(e){}
   /* 🆔 رقم المزامنة المخفي: يُختم على السجلات الجديدة قبل الكتابة (ويُضاف للمعدَّلة فتُكتب معها) */
   try{
     if(typeof window._sidOnSave==='function'){
@@ -14743,7 +14749,10 @@ function _wizNewInvId(){
   let counter=parseInt(localStorage.getItem(counterKey)||'0',10)||0;
   if(counter<1000+invoices.length) counter=1000+invoices.length;
   let candidate;
-  do{ counter++; candidate='INV-'+counter; }while(invoices.find(i=>i&&i.id===candidate));
+  /* ☁️ رقم فريد بين الحاسبات: نفس بادئة رقم الحاسبة المستخدمة في إنشاء الطلب
+     (بدونها كانت حاسبتان تُصدران INV-1005 نفسه فتطمس فاتورةٌ الأخرى عبر الشبكة) */
+  const _dp=(typeof _devNo==='function' && _devNo()>1)?(_devNo()+'-'):'';
+  do{ counter++; candidate='INV-'+_dp+counter; }while(invoices.find(i=>i&&i.id===candidate));
   localStorage.setItem(counterKey, String(counter));
   return candidate;
 }
@@ -36046,16 +36055,19 @@ function filterInlineAbx(q){
   const rows=document.getElementById('cult-abx-rows'); if(!rows) return;
   const ql=(q||'').toLowerCase().trim();
   rows.querySelectorAll('[id^="cult-abx-row-"]').forEach(row=>{
+    /* ⭐ الصف شبكة (grid) بأعمدة ثابتة: الاسم ثم S/I/R ثم MIC.
+       إخفاؤه/إظهاره بـ display='' كان يُسقط display:grid من الصف فيتحوّل
+       لكتلة عادية وتنهار الأعمدة (الأزرار تنزل تحت الاسم وتنزاح). نعيده grid دائماً. */
     if(!ql){
       // مسح البحث — أظهر الكل بالترتيب الأصلي
-      row.style.display='';
+      row.style.display='grid';
       return;
     }
     const code=row.id.replace('cult-abx-row-','');
     const abx=ALL_ABX.find(a=>a.code===code)||{name:code,code};
     const match=abx.name.toLowerCase().includes(ql)||abx.code.toLowerCase().includes(ql);
     // يخفي غير المطابق فقط — المطابق يبقى في مكانه بنفس شكله
-    row.style.display=match?'':'none';
+    row.style.display=match?'grid':'none';
   });
 }
 
@@ -43854,6 +43866,13 @@ function toggleInputLang(inputId, btnId){
     // تجاهل حقول إدخال النتائج (res-input) وحقول الملاحظات (rnote-)
     if(el.classList && el.classList.contains('res-input')) return;
     if(el.id && el.id.indexOf('rnote-') === 0) return;
+    // حقل MIC للمضادات: أرقام ورموز إنجليزية فقط (≤0.5 / >=16) — بلا زر وبلا تحويل للعربي
+    if(el.id && el.id.indexOf('abx-mic-') === 0){
+      el.setAttribute('lang','en'); el.setAttribute('dir','ltr');
+      if(!window._charConvOverrides) window._charConvOverrides = {};
+      window._charConvOverrides[el.id] = 'en';
+      return;
+    }
     if(el.type === 'hidden' || el.type === 'number' || el.type === 'date' ||
        el.type === 'color'  || el.type === 'file'   || el.type === 'checkbox' ||
        el.type === 'radio'  || el.type === 'range'  || el.type === 'password') return;
@@ -60765,7 +60784,11 @@ var IC = (function(){
   /* ════ التشغيل والإيقاف ═══════════════════════════════════════ */
   function start(){
     if(_active) return;
-    if(!_ready()){ _note('📢 المنادات','فعّل الربط بين الأجهزة أولاً من قسم «الربط»','warning'); return; }
+    if(!_ready()){
+      /* ☁️ لا ربط محلي ⇒ المنادات عبر المزامنة السحابية (WebRTC) إن كانت متصلة */
+      if(window.IC2 && IC2.can()){ IC2.start(); return; }
+      _note('📢 المنادات','لا يوجد اتصال بحاسبة أخرى — فعّل الربط بين الأجهزة أو المزامنة السحابية','warning'); return;
+    }
     _active=true; _refreshBtn();
     _playCtx(); _setDuck(true);
     _send({ type:'ic:talk_start', nm:_myLabel() });   // فوراً — ليظهر المؤشّر عند الطرف الآخر بلا تأخير
@@ -60778,14 +60801,14 @@ var IC = (function(){
     });
   }
   function stop(){
-    if(!_active) return;
+    if(!_active){ if(window.IC2 && IC2.isActive()) IC2.stop(); return; }
     _active=false;
     if(_stream){ _stream.getAudioTracks().forEach(function(t){ try{ t.enabled=false; }catch(e){} }); }
     _setDuck(false);
     _send({ type:'ic:talk_stop' });
     _refreshBtn();
   }
-  function toggle(){ if(_active) stop(); else start(); }
+  function toggle(){ if(_active || (window.IC2 && IC2.isActive())) stop(); else start(); }
 
   function closeAll(){
     stop();
@@ -60894,8 +60917,9 @@ var IC = (function(){
 
   return { start:start, stop:stop, toggle:toggle, onSignal:onSignal,
            bindButton:bindButton, closeAll:closeAll, test:test, diag:diag,
-           isActive:function(){ return _active; },
-           isReceiving:function(){ return _speakers().length>0; },
+           tagShow:_tagShow, tagHide:_tagHide,
+           isActive:function(){ return _active || !!(window.IC2 && IC2.isActive()); },
+           isReceiving:function(){ return _speakers().length>0 || !!(window.IC2 && IC2.isReceiving()); },
            needRelay:function(){ return _peers===null || _peers>1; } };
 }());
 
@@ -75714,6 +75738,947 @@ SX.stats = function(){
   return o;
 };
 setTimeout(boot, 800);
+})();
+</script>
+
+<script id="sync-integrity-module">
+/* ══════════════════════════════════════════════════════════════════════════
+ * 🛡️ سلامة المزامنة (Sync Integrity v1) — لا تكرار ولا فقدان
+ * ──────────────────────────────────────────────────────────────────────────
+ *  ما وُجد في التدقيق وعولج هنا:
+ *   ① مزامنة الشبكة المحلية (LAN) تكتشف التعديل بختم الوقت _updatedAt وحده،
+ *      وعدد من المسارات يعدّل السجل دون تحديث ختمه (إدخال النتائج، تعديل
+ *      الفاتورة/الحساب، دفعات الموردين في المخزن…) ⇒ التعديل لا يُبثّ للحاسبة
+ *      الأخرى، وعند الدمج قد تفوز النسخة القديمة. الحل: مراقب محتوى لكل سجل؛
+ *      أي سجل تغيّر محتواه وبقي ختمه كما هو يُختم الآن تلقائياً قبل الكتابة.
+ *      (السحابة تكتشف التغيير بالمحتوى أصلاً — فيستفيد الطرفان.)
+ *   ② دمج الطلب في LAN كان «الأحدث يطرد الأقدم» كاملاً ⇒ حاسبتان تُدخلان
+ *      نتائج الطلب نفسه في الوقت نفسه = تضيع نتائج إحداهما. الحل: دمج
+ *      النتائج تحليلاً بتحليل (مثل السحابة تماماً) مع احترام «شاهد المسح».
+ *   ③ الفواتير والحسابات والمصروفات الجديدة تُختم بمنشئها (_org/_dev) فيميّز
+ *      حارس الأرقام بين فاتورتين مختلفتين تحملان الرقم نفسه بدل أن تطمس
+ *      إحداهما الأخرى.
+ *  لا يلمس أي سجل وارد من حاسبة أخرى (أثناء التطبيق) ولا يُعيد ختمه.
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+var WATCH = {patients:1, requests:1, invoices:1, billing:1, expenses:1, doctors:1, packages:1,
+             inventory:1, qc:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+var STAMP_NEW = {invoices:1, billing:1, expenses:1};      // تُختم بمنشئها عند الإنشاء
+var H = {};        // key → { id → [hash, ts] }
+var READY = {};    // key → خط الأساس جاهز
+var BUILDING = {};
+var SCAN_T = {}, SCAN_RUN = {}, SCAN_AGAIN = {};
+
+function fnv(s){ var h=0x811c9dc5; for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=(h+((h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24)))>>>0; } return h.toString(36)+':'+s.length.toString(36); }
+function idOf(o){ return (o && typeof o==='object' && o.id!=null && o.id!=='') ? String(o.id) : null; }
+function tsOf(o){
+  var t = o && (o._updatedAt || o.updatedAt || 0);
+  var n = (typeof t==='number') ? t : Date.parse(t);
+  return isNaN(n) ? 0 : n;
+}
+function hashOf(o){ try{ return fnv(JSON.stringify(o)); }catch(e){ return 'x'; } }
+function applying(){
+  try{ if(window._msApplying) return true; }catch(e){}
+  try{ if(typeof _lanApplying!=='undefined' && _lanApplying) return true; }catch(e){}
+  return false;
+}
+function idle(fn){ if(typeof requestIdleCallback==='function') requestIdleCallback(fn,{timeout:1200}); else setTimeout(fn,30); }
+function cur(k){ try{ var v=load(k,null); return Array.isArray(v)?v:null; }catch(e){ return null; } }
+
+/* ختم سجل جديد أنشأته هذه الحاسبة */
+function stampNew(k, o){
+  if(!STAMP_NEW[k] || !o) return;
+  try{
+    if(!o._dev) o._dev = (typeof _lanDeviceId==='string' && _lanDeviceId) ? _lanDeviceId : ('d'+((typeof _devNo==='function')?_devNo():''));
+    if(!o._org) o._org = o.ts || o.createdAt || Date.now();
+  }catch(e){}
+}
+
+/* فحص سجل واحد: تغيّر محتواه بلا ختم ⇒ اختمه الآن. يُعيد true إن خُتم */
+function check(k, o, map, allowBump){
+  var id=idOf(o); if(!id) return false;
+  var prev=map[id], ts=tsOf(o), bumped=false;
+  if(!prev){
+    if(allowBump){
+      stampNew(k, o);
+      if(!o._updatedAt){ o._updatedAt = Date.now(); bumped=true; }
+    }
+    map[id]=[hashOf(o), tsOf(o)];
+    return bumped;
+  }
+  if(prev[1]!==ts){ map[id]=[hashOf(o), ts]; return false; }   // الكود ختمه بنفسه
+  var h=hashOf(o);
+  if(h===prev[0]) return false;
+  if(allowBump){
+    o._updatedAt = Math.max(Date.now(), ts+1);
+    map[id]=[hashOf(o), o._updatedAt];
+    return true;
+  }
+  map[id]=[h, ts];
+  return false;
+}
+
+/* بناء خط الأساس لمفتاح (مجزّأ زمنياً) */
+function build(k){
+  if(BUILDING[k]) return;
+  var arr=cur(k); if(!arr){ READY[k]=true; H[k]=H[k]||{}; return; }
+  BUILDING[k]=true;
+  var map={}, i=0;
+  (function step(){
+    var end=Math.min(arr.length, i+400);
+    for(;i<end;i++){ var o=arr[i], id=idOf(o); if(id) map[id]=[hashOf(o), tsOf(o)]; }
+    if(i<arr.length){ idle(step); return; }
+    H[k]=map; READY[k]=true; BUILDING[k]=false;
+  })();
+}
+
+/* مسح كامل غير محجوب بعد حفظ كامل للمصفوفة (لا نعرف أي السجلات تغيّر) */
+function scan(k, allowBump){
+  if(SCAN_RUN[k]){ SCAN_AGAIN[k] = SCAN_AGAIN[k] || allowBump || 'base'; return; }
+  var arr=cur(k); if(!arr || !READY[k]) return;
+  SCAN_RUN[k]=true;
+  var map=H[k], i=0, bumped=[];
+  (function step(){
+    if(cur(k)!==arr){ SCAN_RUN[k]=false; scan(k, allowBump); return; }   // استُبدلت المصفوفة ⇒ أعد
+    var end=Math.min(arr.length, i+300);
+    for(;i<end;i++){
+      var o=arr[i]; if(!o || typeof o!=='object') continue;
+      var ab = allowBump && !applying();
+      if(check(k, o, map, ab)) bumped.push(o);
+    }
+    if(i<arr.length){ idle(step); return; }
+    SCAN_RUN[k]=false;
+    if(bumped.length && !applying()){
+      /* أعد الحفظ بالسجلات المختومة فقط ⇒ تُبثّ عبر LAN والسحابة فوراً */
+      try{
+        if(bumped.length<500 && typeof saveOne==='function') saveOne.apply(null,[k, arr].concat(bumped));
+        else save(k, arr);
+      }catch(e){}
+    }
+    var again=SCAN_AGAIN[k]; SCAN_AGAIN[k]=false;
+    if(again) schedule(k, again===true);
+  })();
+}
+function schedule(k, allowBump){
+  clearTimeout(SCAN_T[k]);
+  SCAN_T[k]=setTimeout(function(){ scan(k, allowBump); }, allowBump?350:900);
+}
+
+/* الخطّاف المركزي — يُستدعى من save() قبل الكتابة */
+window._syncWatch = function(k, v, touched){
+  try{
+    if(!WATCH[k] || !Array.isArray(v)) return;
+    if(!READY[k]){ build(k); return; }
+    var map=H[k];
+    if(applying()){ schedule(k, false); return; }                // وارد: حدّث الأساس فقط
+    if(touched && touched.size){
+      /* مسار سريع: السجلات المعلَنة فقط (saveOne) — تُختم قبل الكتابة والبثّ */
+      var need={}, n=0; touched.forEach(function(id){ need[String(id)]=1; n++; });
+      for(var i=0;i<v.length && n>0;i++){
+        var o=v[i], id=idOf(o);
+        if(id && need[id]){ check(k, o, map, true); n--; }
+      }
+      return;
+    }
+    schedule(k, true);
+  }catch(e){ console.warn('[SyncIntegrity]', e); }
+};
+
+/* خط الأساس لكل المفاتيح بعد اكتمال تحميل البيانات */
+(function boot(){
+  var tries=0;
+  var iv=setInterval(function(){
+    tries++;
+    if(!window._msDataReady && tries<40) return;
+    clearInterval(iv);
+    Object.keys(WATCH).forEach(function(k,ix){ setTimeout(function(){ build(k); }, 300*ix); });
+  }, 1500);
+})();
+/* إعادة البناء عند تبديل الحساب (بادئة تخزين مختلفة) */
+var _pfx=''; setInterval(function(){
+  try{ var p=(DB && DB._pfx) ? DB._pfx() : ''; if(p && _pfx && p!==_pfx){ H={}; READY={}; BUILDING={}; Object.keys(WATCH).forEach(build); } _pfx=p||_pfx; }catch(e){}
+}, 5000);
+
+/* ════════ ② دمج نتائج الطلب تحليلاً بتحليل في مزامنة LAN ════════ */
+function sameEntity(a, b){
+  if(a._org && b._org) return (a._org+'/'+(a._dev||''))===(b._org+'/'+(b._dev||''));
+  if(a.regTime && b.regTime) return String(a.regTime)===String(b.regTime);
+  if(a.createdAt && b.createdAt) return String(a.createdAt)===String(b.createdAt);
+  return true;
+}
+function hasVal(x){ return x!==undefined && x!==null && x!==''; }
+/* ما ينقص الفائز من نتائج/ملاحظات/تفاصيل الخاسر (مع احترام شاهد المسح) */
+function mergeReq(win, lose){
+  var out=null;
+  ['results','resultNotesPer','resultDetails'].forEach(function(f){
+    var L=lose && lose[f], W=win[f];
+    if(!L || typeof L!=='object' || Array.isArray(L)) return;
+    if(W!=null && (typeof W!=='object' || Array.isArray(W))) return;
+    /* 🧹 نتيجة مسحها المستخدم عمداً (شاهد مسح عند أيٍّ من النسختين) لا تُستعاد */
+    var tomb = (f==='results') ? win._resCleared : (f==='resultNotesPer' ? win._noteCleared : null);
+    var add=null;
+    for(var k in L){
+      if(!hasVal(L[k]) || (W && W[k]!==undefined) || (tomb && tomb[k])) continue;
+      (add||(add={}))[k]=L[k];
+    }
+    if(!add) return;
+    if(!out) out=Object.assign({}, win);
+    out[f]=Object.assign({}, W||{}, add);
+  });
+  return out || win;
+}
+var _reQ={}, _reT=null;
+function queueRe(o){ var id=idOf(o); if(id) _reQ[id]=1; if(!_reT) _reT=setTimeout(flushRe, 1200); }
+function flushRe(){
+  _reT=null;
+  var ids=_reQ; _reQ={};
+  if(applying()){ for(var x in ids) _reQ[x]=1; _reT=setTimeout(flushRe, 800); return; }
+  var arr=cur('requests'); if(!arr) return;
+  var recs=[];
+  for(var i=0;i<arr.length;i++){ var o=arr[i], id=idOf(o); if(id && ids[id]){ o._updatedAt=Date.now(); recs.push(o); } }
+  if(recs.length){ try{ saveOne.apply(null, ['requests', arr].concat(recs)); }catch(e){} }
+}
+(function wrap(){
+  var prev = window._lanMergeArrays;
+  if(typeof prev!=='function') return;
+  window._lanMergeArrays = function(localArr, incomingArr){
+    var pairs=null;
+    try{
+      if(Array.isArray(localArr) && Array.isArray(incomingArr) && incomingArr.length){
+        var byId={}, i, o, c;
+        for(i=0;i<localArr.length;i++){ o=localArr[i]; if(o && typeof o==='object' && o.id && o.results && typeof o.results==='object') byId[o.id]=o; }
+        for(i=0;i<incomingArr.length;i++){
+          o=incomingArr[i];
+          if(!o || typeof o!=='object' || !o.id || !o.results) continue;
+          c=byId[o.id];
+          if(c && c!==o && sameEntity(c,o)) (pairs||(pairs=[])).push([c,o,String(o.id)]);
+        }
+      }
+    }catch(e){ pairs=null; }
+    var out = prev.apply(this, arguments);
+    if(!pairs || !Array.isArray(out)) return out;
+    try{
+      var pos={}, j;
+      for(j=0;j<out.length;j++){ var r=out[j]; if(r && r.id!=null) pos[String(r.id)]=j; }
+      pairs.forEach(function(p){
+        var at=pos[p[2]]; if(at===undefined) return;
+        var w=out[at], lose=(w===p[1])?p[0]:(w===p[0]?p[1]:null);
+        if(!lose) return;
+        var m=mergeReq(w, lose);
+        if(m===w) return;
+        out[at]=m;
+        if(w===p[1]) queueRe(m);   // الفائز وارد وينقصه ما عندنا ⇒ نُعيد بثّ الاتحاد للطرف الآخر
+      });
+    }catch(e){ console.warn('[SyncIntegrity] merge', e); }
+    return out;
+  };
+})();
+
+window.SyncIntegrity = { status:function(){ var o={}; Object.keys(WATCH).forEach(function(k){ o[k]=READY[k]?Object.keys(H[k]||{}).length:'…'; }); return o; } };
+})();
+</script>
+
+<script id="intercom-cloud-module">
+/* ══════════════════════════════════════════════════════════════════════════
+ * 📢 المنادات الصوتية عبر المزامنة السحابية (IC2) — بأي نوع مزامنة
+ * ──────────────────────────────────────────────────────────────────────────
+ *  السبيكر الأصلي (v4) يعمل فوق قناة الربط المحلي (LAN) فقط، فإن كانت الحاسبات
+ *  متزامنة عبر Firebase بلا ربط محلي ظهر «فعّل الربط بين الأجهزة».
+ *  هنا: إن لم يكن الربط المحلي فعّالاً والسحابة متصلة ⇒ مكالمة WebRTC مباشرة
+ *  بين الحاسبات — نفس تقنية مكالمات واتساب:
+ *    • ترميز Opus بجودة عالية + إلغاء الصدى + كبح الضوضاء + تسوية الصوت.
+ *    • مخزن ارتجاف تكيّفي داخل محرك WebRTC نفسه ⇒ لا تقطيع ولا تردد.
+ *    • الصوت ينتقل مباشرة بين الحاسبتين (نفس الشبكة أو عبر الإنترنت بـ STUN)،
+ *      وFirebase للمصافحة فقط (رسائل صغيرة تُحذف لحظة استلامها).
+ *    • الاتصال يُجهَّز مسبقاً ويبقى جاهزاً ⇒ الضغطة تبدأ الكلام فوراً.
+ *    • احتياطي: إن منعت الشبكة الاتصال المباشر (NAT صارم) يُمرَّر الصوت عبر
+ *      السحابة بترميز Opus مضغوط (تأخير أعلى قليلاً لكنه يعمل دائماً).
+ *  الضغط مع الاستمرار على 📢 (أو مسافة مزدوجة) كما هو — لا تغيير في الاستخدام.
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+
+var ICE = [{urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302']},
+           {urls:['stun:stun.cloudflare.com:3478']}];
+var BTN_ID = 'intercom-btn';
+var CONNECT_MS = 12000;      // مهلة الاتصال المباشر قبل التحويل للمسار الاحتياطي
+var RELAY_MS = 200;          // دفعة صوت المسار الاحتياطي
+
+function MS(){ return window.MSync || null; }
+function lanReady(){ try{ return (typeof _lanMode!=='undefined') && (_lanMode==='server'||_lanMode==='client'); }catch(e){ return false; } }
+function cloudReady(){ try{ var m=MS(); return !!(m && m._connected && m._connected() && m._online && m._online().length); }catch(e){ return false; } }
+function me(){ try{ return MS()._me(); }catch(e){ return ''; } }
+function online(){ try{ return MS()._online()||[]; }catch(e){ return []; } }
+function peerName(id){
+  try{ var p=(MS()._peers()||{})[id]||{}; if(p.nm) return p.nm; if(p.no) return 'الحاسبة '+p.no; }catch(e){}
+  return 'الحاسبة الأخرى';
+}
+function myName(){
+  try{ if(settings && settings.deviceName) return settings.deviceName; }catch(e){}
+  try{ var n=MS()._name && MS()._name(); if(n) return n; }catch(e){}
+  try{ var no=MS()._no && MS()._no(); if(no) return 'الحاسبة '+no; }catch(e){}
+  return 'حاسبة أخرى';
+}
+function note(t,m,k){ try{ showNotif(t,m,k||'info'); }catch(e){} }
+function send(peer, o){ try{ var m=MS(); if(m && m._send) return m._send(peer, 'ic2', o); }catch(e){} return Promise.resolve(false); }
+
+/* ════════ الميكروفون (يُفتح مرة ويبقى؛ مُعطَّل خارج الكلام) ════════ */
+var _mic=null, _micP=null;
+function mic(){
+  if(_mic && _mic.getAudioTracks().some(function(t){ return t.readyState==='live'; })) return Promise.resolve(_mic);
+  if(_micP) return _micP;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('no-mic'));
+  _micP = navigator.mediaDevices.getUserMedia({ audio:{
+      echoCancellation:true, noiseSuppression:true, autoGainControl:true,
+      channelCount:1, sampleRate:48000 }, video:false })
+    .then(function(s){ _mic=s; _micP=null; s.getAudioTracks().forEach(function(t){ t.enabled=false; }); return s; })
+    .catch(function(e){
+      _micP=null;
+      var m='تعذّر فتح الميكروفون';
+      if(e&&e.name==='NotAllowedError')  m='الويندوز أو البرنامج يمنع الميكروفون — اسمح به من إعدادات الخصوصية › الميكروفون';
+      if(e&&e.name==='NotFoundError')    m='لا يوجد ميكروفون موصول بهذه الحاسبة';
+      if(e&&e.name==='NotReadableError') m='الميكروفون مشغول ببرنامج آخر — أغلقه ثم أعد المحاولة';
+      note('📢 المنادات', m, 'error'); throw e;
+    });
+  return _micP;
+}
+function micTrack(){ return _mic ? _mic.getAudioTracks()[0] : null; }
+
+/* ════════ اتصال WebRTC لكل حاسبة ════════ */
+var P = {};   // peer → {pc, dc, audio, state, sid, timer, relay, since}
+function polite(peer){ return me() < peer; }   // الطرف «المؤدّب» لا يبدأ العرض
+
+function waitIce(pc){
+  return new Promise(function(res){
+    if(pc.iceGatheringState==='complete') return res();
+    var t=setTimeout(res, 2500);
+    pc.addEventListener('icegatheringstatechange', function(){ if(pc.iceGatheringState==='complete'){ clearTimeout(t); res(); } });
+  });
+}
+
+function mkPeer(peer, answering){
+  var old=P[peer], keepA=old?old.audio:null; if(old) close(peer, true);
+  var pc=new RTCPeerConnection({ iceServers:ICE, bundlePolicy:'max-bundle' });
+  var o={ peer:peer, pc:pc, dc:null, audio:keepA, state:'new', sid:Math.random().toString(36).slice(2,10), timer:null, relay:false, since:Date.now() };
+  P[peer]=o;
+  /* الطرف المُجيب لا يُنشئ ناقلاً خاصاً — يأخذ ناقل العرض الوارد (وإلا ذهب صوته لناقل غير مرتبط) */
+  if(answering){ o.needTr=true; setupMedia(o); return o; }
+  setupTr(o, pc.addTransceiver('audio', { direction:'sendrecv' }));
+  setupMedia(o);
+  return o;
+}
+function setupTr(o, tr){
+  o.sender=tr.sender;
+  try{ tr.direction='sendrecv'; }catch(e){}
+  try{
+    /* تفضيل Opus بجودة كلام عالية */
+    var caps=RTCRtpSender.getCapabilities && RTCRtpSender.getCapabilities('audio');
+    if(caps && tr.setCodecPreferences){
+      var op=caps.codecs.filter(function(c){ return /opus/i.test(c.mimeType); });
+      var rest=caps.codecs.filter(function(c){ return !/opus/i.test(c.mimeType); });
+      if(op.length) tr.setCodecPreferences(op.concat(rest));
+    }
+  }catch(e){}
+  var t0=micTrack(); if(t0){ try{ o.sender.replaceTrack(t0); }catch(e){} }
+}
+function setupMedia(o){
+  var pc=o.pc, peer=o.peer;
+  o.dc=pc.createDataChannel('ic', { negotiated:true, id:7, ordered:true });
+  o.dc.onmessage=function(e){ try{ onCtl(peer, JSON.parse(e.data)); }catch(x){} };
+  pc.ontrack=function(ev){
+    var a=o.audio;
+    if(!a){ a=o.audio=new Audio(); a.autoplay=true; a.setAttribute('playsinline',''); }
+    a.srcObject=(ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
+    a.muted=!!_talking;
+    var pp=a.play(); if(pp && pp.catch) pp.catch(function(){});
+  };
+  pc.onconnectionstatechange=function(){
+    var s=pc.connectionState; o.state=s;
+    if(s==='connected'){ o.relay=false; clearTimeout(o.timer); _wantAt[peer]=0; setLbl(); }
+    else if(s==='failed'){ o.relay=true; setLbl(); setTimeout(function(){ if(P[peer]===o && cloudReady() && !lanReady()) restart(peer); }, 20000); }
+    else if(s==='disconnected'){ clearTimeout(o.timer); o.timer=setTimeout(function(){ if(P[peer]===o && pc.connectionState!=='connected') o.relay=true; }, 5000); }
+  };
+  /* إن لم يتصل مباشرة خلال المهلة ⇒ المسار الاحتياطي عبر السحابة */
+  o.timer=setTimeout(function(){ if(P[peer]===o && pc.connectionState!=='connected') o.relay=true; }, CONNECT_MS);
+}
+
+function offer(peer){
+  var o;
+  try{ o=mkPeer(peer); }catch(e){ console.warn('[IC2] rtc', e); return Promise.resolve(); }
+  var pc=o.pc;
+  return pc.createOffer().then(function(d){ return pc.setLocalDescription(d); })
+    .then(function(){ return waitIce(pc); })
+    .then(function(){ return send(peer, {k:'offer', sid:o.sid, sdp:pc.localDescription.sdp, nm:myName()}); })
+    .catch(function(e){ console.warn('[IC2] offer', e); });
+}
+function onOffer(peer, d){
+  if(!d || !d.sdp) return;
+  var o;
+  try{ o=mkPeer(peer, true); }catch(e){ console.warn('[IC2] rtc', e); return; }
+  var pc=o.pc; o.sid=d.sid||o.sid;
+  pc.setRemoteDescription({type:'offer', sdp:d.sdp})
+    .then(function(){
+      var tr=pc.getTransceivers().filter(function(t){ return t.receiver && t.receiver.track && t.receiver.track.kind==='audio'; })[0];
+      if(tr) setupTr(o, tr);
+      return pc.createAnswer();
+    })
+    .then(function(a){ return pc.setLocalDescription(a); })
+    .then(function(){ return waitIce(pc); })
+    .then(function(){ return send(peer, {k:'answer', sid:o.sid, sdp:pc.localDescription.sdp}); })
+    .catch(function(e){ console.warn('[IC2] answer', e); });
+}
+function onAnswer(peer, d){
+  var o=P[peer]; if(!o || !d || d.sid!==o.sid) return;
+  if(o.pc.signalingState!=='have-local-offer') return;
+  o.pc.setRemoteDescription({type:'answer', sdp:d.sdp}).catch(function(e){ console.warn('[IC2] setAnswer', e); });
+}
+function close(peer, keepAudio){
+  var o=P[peer]; if(!o) return;
+  clearTimeout(o.timer);
+  try{ o.dc && o.dc.close(); }catch(e){}
+  try{ o.pc.close(); }catch(e){}
+  if(!keepAudio && o.audio){ try{ o.audio.srcObject=null; }catch(e){} }
+  delete P[peer];
+}
+var _wantAt={};
+function restart(peer){
+  if(polite(peer)){
+    if(Date.now()-(_wantAt[peer]||0) < 25000) return;   // طلب سابق ما زال قيد التنفيذ
+    _wantAt[peer]=Date.now();
+    send(peer, {k:'want'});
+  } else offer(peer);
+}
+/* عرض جارٍ حديث ⇒ لا نهدمه بعرض جديد (يمنع حلقة إعادة البدء على الشبكات البطيئة) */
+function busyOffer(peer){
+  var o=P[peer];
+  return !!(o && (o.state==='new' || o.state==='connecting') && Date.now()-o.since < 20000);
+}
+/* تجهيز الاتصالات مع كل الحاسبات المفتوحة */
+function ensureAll(){
+  if(lanReady() || !cloudReady()) return;
+  var on=online();
+  on.forEach(function(peer){
+    var o=P[peer];
+    if(o && (o.state==='connected' || o.state==='connecting' || o.state==='new') && Date.now()-o.since<60000) return;
+    if(o && o.state==='connected') return;
+    restart(peer);
+  });
+  Object.keys(P).forEach(function(peer){ if(on.indexOf(peer)<0) close(peer); });
+}
+
+/* ════════ رسائل التحكم (قناة البيانات أو السحابة) ════════ */
+var _remote={}, _remoteT={};
+function ctl(peer, msg){
+  var o=P[peer];
+  if(o && o.dc && o.dc.readyState==='open' && !o.relay){ try{ o.dc.send(JSON.stringify(msg)); return; }catch(e){} }
+  send(peer, msg);
+}
+function onCtl(peer, d){
+  if(!d) return;
+  if(d.k==='ts'){
+    _remote[peer]=d.nm||peerName(peer);
+    clearTimeout(_remoteT[peer]); _remoteT[peer]=setTimeout(function(){ delete _remote[peer]; ui(); }, 30000);
+    ui(); return;
+  }
+  if(d.k==='te'){
+    clearTimeout(_remoteT[peer]);
+    _remoteT[peer]=setTimeout(function(){ delete _remote[peer]; ui(); }, 350);
+    return;
+  }
+  if(d.k==='ra'){ relayIn(peer, d); return; }
+}
+
+/* ════════ المسار الاحتياطي: صوت مضغوط عبر السحابة ════════ */
+var R={ ctx:null, src:null, node:null, enc:null, buf:[], seq:0, timer:null, mode:'' };
+var REC_SRC=[
+  'class IC2Rec extends AudioWorkletProcessor{',
+  ' constructor(){ super(); this.n=0; this.a=new Float32Array(960); }',
+  ' process(i,o){ var c=i[0]&&i[0][0]; if(c){ for(var k=0;k<c.length;k++){ this.a[this.n++]=c[k]; if(this.n===960){ this.port.postMessage(this.a.slice(0)); this.n=0; } } } return true; }',
+  '}', 'registerProcessor("ic2-rec",IC2Rec);'].join('\n');
+function b64(u8){ var s='', C=0x8000; for(var i=0;i<u8.length;i+=C) s+=String.fromCharCode.apply(null, u8.subarray(i,i+C)); return btoa(s); }
+function unb64(s){ var b=atob(s), u=new Uint8Array(b.length); for(var i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+function relayPeers(){ return Object.keys(P).filter(function(p){ return P[p].relay; }).concat(online().filter(function(p){ return !P[p]; })); }
+function relayStart(){
+  if(!relayPeers().length) return;
+  mic().then(function(s){
+    if(!_talking) return;
+    var C=window.AudioContext||window.webkitAudioContext;
+    R.ctx=R.ctx||new C({sampleRate:48000, latencyHint:'interactive'});
+    if(R.ctx.state==='suspended') R.ctx.resume();
+    R.seq=0; R.buf=[];
+    var useOpus = typeof AudioEncoder==='function';
+    R.mode = useOpus ? 'opus' : 'pcm';
+    if(useOpus){
+      R.enc=new AudioEncoder({ output:function(ch){ var u=new Uint8Array(ch.byteLength); ch.copyTo(u); R.buf.push(b64(u)); },
+                               error:function(e){ console.warn('[IC2] enc', e); } });
+      R.enc.configure({ codec:'opus', sampleRate:48000, numberOfChannels:1, bitrate:32000 });
+    }
+    var ts=0;
+    function onFrame(f){
+      if(R.mode==='opus' && R.enc && R.enc.state==='configured'){
+        try{ var ad=new AudioData({format:'f32-planar', sampleRate:48000, numberOfFrames:f.length, numberOfChannels:1, timestamp:ts, data:f}); ts+=Math.round(f.length/48*1000); R.enc.encode(ad); ad.close(); }catch(x){}
+      } else {
+        /* PCM 16kHz 16-bit (بديل إن لم يتوفر Opus) */
+        var sr=R.ctx.sampleRate, st=sr/16000, n=Math.floor(f.length/st), pcm=new Int16Array(n);
+        for(var i=0;i<n;i++){ var v=f[Math.floor(i*st)]; v=v>1?1:v<-1?-1:v; pcm[i]=v<0?v*0x8000:v*0x7FFF; }
+        R.buf.push(b64(new Uint8Array(pcm.buffer)));
+      }
+    }
+    R.src=R.ctx.createMediaStreamSource(s);
+    var sink=R.ctx.createGain(); sink.gain.value=0; sink.connect(R.ctx.destination);
+    function useScript(){
+      /* صفحات file:// تمنع تحميل AudioWorklet من blob ⇒ ScriptProcessor (يعمل دائماً) */
+      var acc=new Float32Array(960), n=0;
+      R.node=R.ctx.createScriptProcessor(1024,1,1);
+      R.node.onaudioprocess=function(ev){
+        var ch=ev.inputBuffer.getChannelData(0);
+        for(var i=0;i<ch.length;i++){ acc[n++]=ch[i]; if(n===960){ onFrame(acc.slice(0)); n=0; } }
+      };
+      R.src.connect(R.node); R.node.connect(sink);
+    }
+    var url=URL.createObjectURL(new Blob([REC_SRC],{type:'text/javascript'}));
+    return R.ctx.audioWorklet.addModule(url).then(function(){
+      if(!_talking) return;
+      R.node=new AudioWorkletNode(R.ctx,'ic2-rec');
+      R.node.port.onmessage=function(e){ onFrame(e.data); };
+      R.src.connect(R.node); R.node.connect(sink);
+    }, function(){ if(_talking) useScript(); }).then(function(){
+      if(_talking && !R.timer) R.timer=setInterval(relayFlush, RELAY_MS);
+    });
+  }).catch(function(e){ console.warn('[IC2] relay', e); });
+}
+function relayFlush(){
+  if(!R.buf.length) return;
+  var fr=R.buf; R.buf=[];
+  var msg={k:'ra', m:R.mode, q:++R.seq, f:fr};
+  relayPeers().forEach(function(p){ send(p, msg); });
+}
+function relayStop(){
+  clearInterval(R.timer); R.timer=null;
+  try{ if(R.enc && R.enc.state==='configured') R.enc.flush().then(relayFlush).catch(function(){}); else relayFlush(); }catch(e){}
+  try{ R.src && R.src.disconnect(); }catch(e){}
+  try{ if(R.node){ R.node.onaudioprocess=null; if(R.node.port) R.node.port.onmessage=null; R.node.disconnect(); } }catch(e){}
+  R.src=R.node=null;
+  setTimeout(function(){ try{ if(R.enc && R.enc.state!=='closed') R.enc.close(); }catch(e){} R.enc=null; }, 400);
+}
+/* الاستقبال الاحتياطي: فك الترميز وجدولة متصلة بمخزن ارتجاف ٣٠٠ms */
+var RX={};   // peer → {ctx, dec, head, last}
+function relayIn(peer, d){
+  var C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+  var r=RX[peer]||(RX[peer]={ctx:new C({latencyHint:'playback'}), dec:null, head:0, ts:0});
+  if(r.ctx.state==='suspended') r.ctx.resume();
+  _remote[peer]=_remote[peer]||peerName(peer); clearTimeout(_remoteT[peer]);
+  _remoteT[peer]=setTimeout(function(){ delete _remote[peer]; ui(); }, 1500); ui();
+  function play(f32, sr){
+    var ctx=r.ctx, b=ctx.createBuffer(1, f32.length, sr); b.getChannelData(0).set(f32);
+    var s=ctx.createBufferSource(); s.buffer=b;
+    if(_duckOut) { var g=ctx.createGain(); g.gain.value=0; s.connect(g); g.connect(ctx.destination); } else s.connect(ctx.destination);
+    var now=ctx.currentTime;
+    if(r.head<now+0.02) r.head=now+0.30;
+    else if(r.head-now>1.5) r.head=now+0.30;
+    s.start(r.head); r.head+=b.duration;
+  }
+  if(d.m==='opus' && typeof AudioDecoder==='function'){
+    if(!r.dec){
+      r.dec=new AudioDecoder({ output:function(ad){
+          try{ var n=ad.numberOfFrames, f=new Float32Array(n); ad.copyTo(f,{planeIndex:0, format:'f32-planar'}); play(f, ad.sampleRate); }catch(x){}
+          ad.close(); }, error:function(e){ console.warn('[IC2] dec', e); r.dec=null; } });
+      r.dec.configure({ codec:'opus', sampleRate:48000, numberOfChannels:1 });
+    }
+    (d.f||[]).forEach(function(s){
+      try{ r.dec.decode(new EncodedAudioChunk({type:'key', timestamp:(r.ts+=20000), data:unb64(s)})); }catch(x){}
+    });
+  } else if(d.m==='pcm'){
+    (d.f||[]).forEach(function(s){
+      var u=unb64(s), i16=new Int16Array(u.buffer, u.byteOffset, u.byteLength>>1), f=new Float32Array(i16.length);
+      for(var i=0;i<i16.length;i++){ var v=i16[i]; f[i]=v/(v<0?0x8000:0x7FFF); }
+      play(f, 16000);
+    });
+  }
+}
+
+/* ════════ التحدّث ════════ */
+var _talking=false, _duckOut=false;
+function setDuck(on){
+  _duckOut=on;
+  Object.keys(P).forEach(function(p){ var a=P[p].audio; if(a) a.muted=on; });
+}
+function start(){
+  if(_talking) return;
+  if(!cloudReady()){ note('📢 المنادات','لا توجد حاسبة أخرى مفتوحة ومتصلة الآن','warning'); return; }
+  _talking=true; setDuck(true); ui();
+  online().forEach(function(p){ ctl(p, {k:'ts', nm:myName()}); });
+  mic().then(function(){
+    if(!_talking) return;
+    var t=micTrack(); if(!t) return;
+    try{ ensureAll(); }catch(e){}
+    Object.keys(P).forEach(function(p){ try{ P[p].sender.replaceTrack(t); }catch(e){} });
+    t.enabled=true;
+    relayStart();
+  }).catch(function(){ stop(); });
+}
+function stop(){
+  if(!_talking) return;
+  _talking=false;
+  var t=micTrack(); if(t) t.enabled=false;
+  relayStop();
+  online().forEach(function(p){ ctl(p, {k:'te'}); });
+  setTimeout(function(){ if(!_talking) setDuck(false); }, 120);
+  ui();
+}
+
+/* ════════ الواجهة: نفس زر 📢 ونفس شريط «يتكلّم الآن» ════════ */
+function ui(){
+  var b=document.getElementById(BTN_ID);
+  var sp=Object.keys(_remote).map(function(k){ return _remote[k]; });
+  var tag=(window.Intercom && Intercom.tagShow) ? Intercom : null;
+  if(b){
+    if(_talking){ b.classList.add('ic-talking'); b.classList.remove('ic-incoming'); }
+    else if(sp.length){ b.classList.add('ic-incoming'); b.classList.remove('ic-talking'); }
+    else if(!(window.Intercom && (Intercom.isActive() || Intercom.isReceiving()))){ b.classList.remove('ic-talking','ic-incoming'); }
+  }
+  if(!tag) return;
+  if(_talking && sp.length) tag.tagShow('ic-clash','⚠️ '+sp.join(' و ')+' يتكلّم أيضاً — انتظر');
+  else if(sp.length)        tag.tagShow('ic-in','🔊 '+sp.join(' و ')+' يتكلّم الآن');
+  else if(_talking)         tag.tagShow('ic-out','🎙️ أنت تتحدّث الآن (عبر السحابة)');
+  else if(!(window.Intercom && (Intercom.isActive() || Intercom.isReceiving()))) tag.tagHide();
+}
+function setLbl(){}
+
+/* ════════ استقبال رسائل السحابة ════════ */
+function onCloud(peer, d){
+  if(!d || !peer) return;
+  if(lanReady() && d.k!=='te') { if(d.k==='ra' || d.k==='ts') onCtl(peer, d); return; }
+  if(d.k==='offer'){ onOffer(peer, d); return; }
+  if(d.k==='answer'){ onAnswer(peer, d); return; }
+  if(d.k==='want'){ /* الطرف الآخر بلا اتصال (أُعيد فتحه) ⇒ عرض جديد */ if(!polite(peer) && !busyOffer(peer)) offer(peer); return; }
+  onCtl(peer, d);
+}
+(function hook(){
+  var tries=0;
+  var iv=setInterval(function(){
+    var m=MS(); tries++;
+    if(m && m._handlers){ m._handlers.ic2=onCloud; clearInterval(iv); }
+    else if(tries>120) clearInterval(iv);
+  }, 1000);
+})();
+/* تجهيز دوري: كل ١٥ ثانية (وعند أول تفاعل) */
+setInterval(function(){ try{ ensureAll(); }catch(e){} }, 15000);
+setTimeout(function(){ try{ ensureAll(); }catch(e){} }, 9000);
+window.addEventListener('blur', function(){ if(_talking) stop(); });
+
+window.IC2 = {
+  can:function(){ return !lanReady() && cloudReady(); },
+  start:start, stop:stop,
+  isActive:function(){ return _talking; },
+  isReceiving:function(){ return Object.keys(_remote).length>0; },
+  diag:function(){ var o={}; Object.keys(P).forEach(function(p){ o[p]={state:P[p].state, relay:P[p].relay, dc:P[p].dc&&P[p].dc.readyState, track:P[p].sender&&P[p].sender.track?(P[p].sender.track.readyState+'/'+P[p].sender.track.enabled):'none', dir:(P[p].pc.getTransceivers()[0]||{}).currentDirection}; }); return {lan:lanReady(), cloud:cloudReady(), me:me(), peers:o, talking:_talking, relay:{mode:R.mode, seq:R.seq, pending:R.buf.length, running:!!R.timer, ctx:R.ctx?R.ctx.state:null, enc:R.enc?R.enc.state:null}}; },
+  /* قياس جودة الاستقبال: البايتات/الحزم المفقودة/الارتجاف/الترميز لكل حاسبة */
+  stats:function(){
+    return Promise.all(Object.keys(P).map(function(p){
+      return P[p].pc.getStats().then(function(r){
+        var o={peer:p}; r.forEach(function(x){
+          if(x.type==='inbound-rtp' && x.kind==='audio'){ o.rxBytes=x.bytesReceived; o.lost=x.packetsLost; o.jitterMs=Math.round((x.jitter||0)*1000); o.level=x.audioLevel; o.concealed=x.concealedSamples; o.codecId=x.codecId; }
+          if(x.type==='outbound-rtp' && x.kind==='audio'){ o.txBytes=x.bytesSent; }
+          if(x.type==='candidate-pair' && x.state==='succeeded' && x.nominated){ o.rttMs=Math.round((x.currentRoundTripTime||0)*1000); }
+        });
+        r.forEach(function(x){ if(x.type==='codec' && x.id===o.codecId) o.codec=x.mimeType+'@'+x.clockRate; });
+        return o;
+      });
+    }));
+  }
+};
+})();
+</script>
+
+<style id="dvc-style">
+#dvc-panel{position:fixed;inset:auto auto 18px 18px;width:min(760px,calc(100vw - 36px));height:min(560px,calc(100vh - 110px));z-index:9500;display:none;
+  background:var(--bg-modal,#0b1220);border:1px solid var(--border,#22314a);border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.45);overflow:hidden;direction:rtl}
+#dvc-panel.open{display:flex;flex-direction:column}
+#dvc-panel .dvc-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border,#22314a);background:rgba(0,212,255,.06)}
+#dvc-panel .dvc-hdr h3{margin:0;font-size:14px;font-weight:800;color:var(--text,#e6edf6);flex:1}
+#dvc-panel .dvc-x{background:none;border:none;color:var(--text2,#9fb0c6);font-size:18px;cursor:pointer;padding:2px 8px;border-radius:8px}
+#dvc-panel .dvc-x:hover{background:rgba(255,255,255,.08)}
+#dvc-panel .dvc-body{flex:1;display:flex;min-height:0}
+#dvc-panel .dvc-list{width:220px;flex-shrink:0;border-left:1px solid var(--border,#22314a);overflow-y:auto;padding:8px}
+#dvc-panel .dvc-pc{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;cursor:pointer;margin-bottom:4px;border:1px solid transparent}
+#dvc-panel .dvc-pc:hover{background:rgba(255,255,255,.04)}
+#dvc-panel .dvc-pc.on{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.35)}
+#dvc-panel .dvc-dot{width:9px;height:9px;border-radius:50%;background:#64748b;flex-shrink:0}
+#dvc-panel .dvc-dot.live{background:#00d27a;box-shadow:0 0 0 3px rgba(0,210,122,.18)}
+#dvc-panel .dvc-pc .nm{flex:1;min-width:0;font-size:12.5px;font-weight:700;color:var(--text,#e6edf6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#dvc-panel .dvc-pc .sub{display:block;font-size:10px;font-weight:600;color:var(--text2,#9fb0c6)}
+#dvc-panel .dvc-badge{background:#ff4d6d;color:#fff;border-radius:10px;font-size:10px;font-weight:800;padding:1px 7px}
+#dvc-panel .dvc-conv{flex:1;display:flex;flex-direction:column;min-width:0}
+#dvc-panel .dvc-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px}
+#dvc-panel .dvc-m{max-width:78%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;color:var(--text,#e6edf6)}
+#dvc-panel .dvc-m.me{align-self:flex-start;background:rgba(0,212,255,.14);border:1px solid rgba(0,212,255,.3);border-bottom-right-radius:4px}
+#dvc-panel .dvc-m.them{align-self:flex-end;background:rgba(255,255,255,.05);border:1px solid var(--border,#22314a);border-bottom-left-radius:4px}
+#dvc-panel .dvc-m .meta{display:block;font-size:10px;color:var(--text2,#9fb0c6);margin-top:3px;font-weight:600}
+#dvc-panel .dvc-m .who{display:block;font-size:10.5px;font-weight:800;color:var(--primary,#00d4ff);margin-bottom:2px}
+#dvc-panel .dvc-empty{margin:auto;text-align:center;color:var(--text2,#9fb0c6);font-size:12px;line-height:1.9}
+#dvc-panel .dvc-in{display:flex;gap:8px;padding:10px;border-top:1px solid var(--border,#22314a);align-items:flex-end}
+#dvc-panel .dvc-in textarea{flex:1;resize:none;min-height:40px;max-height:120px;border-radius:10px;padding:9px 11px;font-size:13px;
+  background:var(--bg-input,rgba(255,255,255,.04));color:var(--text,#e6edf6);border:1px solid var(--border,#22314a);font-family:inherit;outline:none}
+#dvc-panel .dvc-in textarea:focus{border-color:var(--primary,#00d4ff)}
+#dvc-panel .dvc-send{height:40px;padding:0 16px;border-radius:10px;border:none;font-weight:800;cursor:pointer;color:#001018;background:linear-gradient(135deg,#00d4ff,#00f593)}
+#dvc-panel .dvc-send:disabled{opacity:.45;cursor:default}
+#dvc-panel .dvc-me{font-size:11px;color:var(--text2,#9fb0c6);font-weight:600}
+@media (max-width:640px){ #dvc-panel .dvc-list{width:150px} }
+</style>
+<script id="devchat-module">
+/* ══════════════════════════════════════════════════════════════════════════
+ * 🖥️ رسائل حاسبات المختبر (DevChat) — مراسلة بين حاسبات الحساب نفسه
+ * ──────────────────────────────────────────────────────────────────────────
+ *  • كل حاسبة مرتبطة بحساب المختبر تظهر في القائمة (عبر المزامنة السحابية
+ *    أو الربط المحلي LAN) + محادثة جماعية «كل الحاسبات».
+ *  • النقل: عبر الربط المحلي إن كانت الحاسبة متصلة به، وإلا عبر السحابة
+ *    (Firebase ناقل فقط — الرسالة تُحذف لحظة استلامها). الرسائل تُحفظ محلياً
+ *    في كل حاسبة فقط.
+ *  • حاسبة مغلقة ⇒ تبقى الرسالة «بانتظار الإرسال» وتُسلَّم تلقائياً عند فتحها.
+ *  • إشعار وصوت وعدّاد غير مقروء، وعلامة ✓ عند التسليم.
+ * ══════════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+var GROUP='__all';
+var MAXM=400;
+var LAN_SEEN={};   // id → {nm,no,t}
+var cur=null;      // المحادثة المفتوحة
+var _wantFocus=false;
+var D=null;        // {th:{peer:{nm, msgs:[], unread}}, pend:[{to,msg,t}]}
+
+function MS(){ return window.MSync || null; }
+function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function me(){ try{ return (MS() && MS()._me) ? MS()._me() : _lanDeviceId; }catch(e){ try{ return _lanDeviceId; }catch(x){ return 'me'; } } }
+function myNo(){ try{ var n=MS()&&MS()._no&&MS()._no(); if(n) return n; }catch(e){} try{ return parseInt(localStorage.getItem('lis_device_no')||'0',10)||0; }catch(e){ return 0; } }
+function myName(){
+  try{ var n=localStorage.getItem('msync_dev_name'); if(n) return n; }catch(e){}
+  try{ if(settings && settings.deviceName) return settings.deviceName; }catch(e){}
+  var no=myNo(); return no ? ('الحاسبة '+no) : 'هذه الحاسبة';
+}
+function acct(){ try{ var a=MS()&&MS()._acct&&MS()._acct(); if(a) return a; }catch(e){} try{ var s=getSession(); return (s&&s.username)||'x'; }catch(e){ return 'x'; } }
+function key(){ return 'devchat_'+acct(); }
+function load(){
+  try{ D=JSON.parse(localStorage.getItem(key())||'null'); }catch(e){ D=null; }
+  if(!D || typeof D!=='object') D={th:{}, pend:[]};
+  D.th=D.th||{}; D.pend=D.pend||[];
+  D._k=key();
+}
+var _svT=null;
+function save(){ clearTimeout(_svT); _svT=setTimeout(function(){ try{ localStorage.setItem(D._k||key(), JSON.stringify({th:D.th, pend:D.pend})); }catch(e){} }, 300); }
+function ensure(){ if(!D || D._k!==key()) load(); }
+function th(peer, nm){
+  ensure();
+  var t=D.th[peer]||(D.th[peer]={nm:nm||'', msgs:[], unread:0});
+  if(nm && peer!==GROUP) t.nm=nm;
+  return t;
+}
+function lanReady(){ try{ return (typeof _lanMode!=='undefined') && (_lanMode==='server'||_lanMode==='client') && typeof _lanSendRaw==='function'; }catch(e){ return false; } }
+function cloudOn(){ try{ return !!(MS() && MS()._connected && MS()._connected()); }catch(e){ return false; } }
+function cloudPeers(){ try{ return MS()._peers()||{}; }catch(e){ return {}; } }
+function onLan(id){ var s=LAN_SEEN[id]; return !!(s && Date.now()-s.t<90000 && lanReady()); }
+function onCloud(id){ try{ return cloudOn() && (MS()._online()||[]).indexOf(id)>-1; }catch(e){ return false; } }
+function isLive(id){ return onLan(id) || onCloud(id); }
+
+/* قائمة الحاسبات = حاسبات السحابة + حاسبات الربط المحلي (بلا تكرار، بلا هذه الحاسبة) */
+function peers(){
+  var out={}, cp=cloudPeers(), mine=me(), id;
+  for(id in cp){ if(id===mine) continue; var p=cp[id]||{}; out[id]={id:id, nm:p.nm||(p.no?('الحاسبة '+p.no):''), no:p.no||0}; }
+  for(id in LAN_SEEN){ if(id===mine) continue; var s=LAN_SEEN[id]; if(Date.now()-s.t>7*86400000) continue;
+    out[id]=out[id]||{id:id, nm:'', no:0}; if(s.nm) out[id].nm=out[id].nm||s.nm; if(s.no && !out[id].no) out[id].no=s.no; }
+  ensure();
+  for(id in D.th){ if(id===GROUP||id===mine||out[id]) continue; out[id]={id:id, nm:D.th[id].nm||'', no:0}; }
+  return Object.keys(out).map(function(k){ var o=out[k]; if(!o.nm) o.nm=o.no?('الحاسبة '+o.no):'حاسبة'; return o; })
+    .sort(function(a,b){ return (isLive(b.id)?1:0)-(isLive(a.id)?1:0) || (a.no||99)-(b.no||99) || String(a.nm).localeCompare(String(b.nm),'ar'); });
+}
+
+/* ════════ النقل ════════ */
+function sendRaw(to, msg){
+  if(onLan(to)){ try{ _lanSendRaw({type:'dvc:m', to:to, from:me(), m:msg, ts:Date.now()}); return Promise.resolve(true); }catch(e){} }
+  if(onCloud(to)){ try{ return MS()._send(to, 'dvc', msg).then(function(ok){ return !!ok; }).catch(function(){ return false; }); }catch(e){} }
+  return Promise.resolve(false);
+}
+function deliver(to, msg){
+  return sendRaw(to, msg).then(function(ok){
+    if(!ok){ ensure(); if(!D.pend.some(function(p){ return p.to===to && p.m.id===msg.id; })) D.pend.push({to:to, m:msg, t:Date.now()}); save(); }
+    return ok;
+  });
+}
+function flushPending(){
+  ensure(); if(!D.pend.length) return;
+  var keep=[], jobs=D.pend.slice(); D.pend=[];
+  jobs.forEach(function(p){
+    if(Date.now()-p.t > 7*86400000) return;              // أقدم من أسبوع ⇒ تُهمَل
+    if(!isLive(p.to)){ keep.push(p); return; }
+    sendRaw(p.to, p.m).then(function(ok){ if(!ok){ ensure(); D.pend.push(p); save(); } });
+  });
+  D.pend=D.pend.concat(keep); save();
+}
+
+/* ════════ الإرسال ════════ */
+function send(){
+  var ta=document.getElementById('dvc-txt'); if(!ta || !cur) return;
+  var txt=String(ta.value||'').replace(/\s+$/,''); if(!txt.trim()) return;
+  if(txt.length>2000) txt=txt.slice(0,2000);
+  var msg={k:'msg', id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), txt:txt, ts:Date.now(), nm:myName(), no:myNo(), g:cur===GROUP?1:0};
+  var t=th(cur);
+  var rec={id:msg.id, me:1, txt:txt, ts:msg.ts, st:'wait'};
+  if(cur===GROUP){ rec.to=[]; }
+  t.msgs.push(rec); if(t.msgs.length>MAXM) t.msgs.splice(0, t.msgs.length-MAXM);
+  save(); ta.value=''; _wantFocus=true; renderConv();
+  var targets = (cur===GROUP) ? peers().map(function(p){ return p.id; }) : [cur];
+  if(!targets.length){ rec.st='wait'; renderConv(); return; }
+  targets.forEach(function(to){ deliver(to, msg); });
+}
+
+/* ════════ الاستقبال ════════ */
+function onMsg(from, m){
+  if(!m || !from || from===me()) return;
+  if(m.k==='ack'){
+    ensure();
+    var tt=D.th[m.g?GROUP:from]; if(!tt) return;
+    tt.msgs.forEach(function(x){ if(x.id===m.id && x.me){ x.st='ok'; if(m.g){ x.to=x.to||[]; if(x.to.indexOf(from)<0) x.to.push(from); } } });
+    save(); if(isOpen()) renderConv(); return;
+  }
+  if(m.k!=='msg' || typeof m.txt!=='string') return;
+  var tid = m.g ? GROUP : from;
+  var t=th(tid, m.g ? '' : (m.nm||''));
+  if(!m.g && m.nm) t.nm=m.nm;
+  if(t.msgs.some(function(x){ return x.id===m.id; })){ sendAck(from, m); return; }   // وصلت مسبقاً (نقل مزدوج)
+  t.msgs.push({id:m.id, me:0, from:from, nm:m.nm||'', txt:String(m.txt).slice(0,2000), ts:m.ts||Date.now()});
+  if(t.msgs.length>MAXM) t.msgs.splice(0, t.msgs.length-MAXM);
+  var seenNow = isOpen() && cur===tid && document.hasFocus();
+  if(!seenNow) t.unread=(t.unread||0)+1;
+  save(); sendAck(from, m);
+  badge(); if(isOpen()) render();
+  if(!seenNow){
+    try{ showNotif('🖥️ '+(m.nm||'حاسبة')+(m.g?' — للجميع':''), String(m.txt).slice(0,120), 'info'); }catch(e){}
+    chime();
+  }
+}
+function sendAck(from, m){ sendRaw(from, {k:'ack', id:m.id, g:m.g?1:0}); }
+function chime(){
+  try{
+    var C=window.AudioContext||window.webkitAudioContext; if(!C) return;
+    var c=new C(), t=c.currentTime;
+    [[880,0],[1175,0.12]].forEach(function(p){ var o=c.createOscillator(), g=c.createGain(); o.type='sine'; o.frequency.value=p[0];
+      g.gain.setValueAtTime(0.0001,t+p[1]); g.gain.exponentialRampToValueAtTime(0.18,t+p[1]+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t+p[1]+0.35);
+      o.connect(g); g.connect(c.destination); o.start(t+p[1]); o.stop(t+p[1]+0.4); });
+    setTimeout(function(){ try{ c.close(); }catch(e){} }, 1000);
+  }catch(e){}
+}
+
+/* ════════ الواجهة ════════ */
+function isOpen(){ var p=document.getElementById('dvc-panel'); return !!(p && p.classList.contains('open')); }
+function totalUnread(){ ensure(); var n=0; for(var k in D.th) n+=(D.th[k].unread||0); return n; }
+function badge(){
+  var n=totalUnread(), b=document.getElementById('nb-dvc');
+  if(b){ b.textContent=n>99?'99+':String(n); b.style.display=n?'':'none'; }
+}
+function panel(){
+  var p=document.getElementById('dvc-panel'); if(p) return p;
+  p=document.createElement('div'); p.id='dvc-panel';
+  p.innerHTML='<div class="dvc-hdr"><span style="font-size:18px">🖥️</span><h3>رسائل حاسبات المختبر</h3>'+
+    '<span class="dvc-me" id="dvc-me"></span><button class="dvc-x" title="إغلاق" onclick="DevChat.close()">✕</button></div>'+
+    '<div class="dvc-body"><div class="dvc-list" id="dvc-list"></div><div class="dvc-conv" id="dvc-conv"></div></div>';
+  document.body.appendChild(p);
+  return p;
+}
+function render(){
+  if(!isOpen()) return;
+  ensure();
+  var me1=document.getElementById('dvc-me'); if(me1) me1.textContent='أنت: '+myName();
+  var list=document.getElementById('dvc-list'); if(!list) return;
+  var ps=peers(), gT=D.th[GROUP]||{unread:0};
+  var h='<div class="dvc-pc'+(cur===GROUP?' on':'')+'" onclick="DevChat.open(\''+GROUP+'\')"><span style="font-size:15px">👥</span>'+
+    '<span class="nm">كل الحاسبات<span class="sub">رسالة جماعية</span></span>'+(gT.unread?'<span class="dvc-badge">'+gT.unread+'</span>':'')+'</div>';
+  ps.forEach(function(p){
+    var t=D.th[p.id]||{}, live=isLive(p.id);
+    h+='<div class="dvc-pc'+(cur===p.id?' on':'')+'" onclick="DevChat.open(\''+esc(p.id)+'\')"><span class="dvc-dot'+(live?' live':'')+'"></span>'+
+      '<span class="nm">'+esc(p.nm)+'<span class="sub">'+(live?(onLan(p.id)?'متصلة · الشبكة المحلية':'متصلة · السحابة'):'غير متصلة الآن')+'</span></span>'+
+      (t.unread?'<span class="dvc-badge">'+t.unread+'</span>':'')+'</div>';
+  });
+  if(!ps.length) h+='<div class="dvc-empty" style="margin-top:20px">لا توجد حاسبات أخرى مرتبطة بهذا الحساب بعد.<br>تظهر هنا كل حاسبة تفتح البرنامج بالحساب نفسه.</div>';
+  list.innerHTML=h;
+  renderConv();
+}
+function fmtT(ts){ try{ var d=new Date(ts), n=new Date(); var t=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  return (d.toDateString()===n.toDateString()) ? t : (d.getDate()+'/'+(d.getMonth()+1)+' '+t); }catch(e){ return ''; } }
+function renderConv(){
+  var box=document.getElementById('dvc-conv'); if(!box) return;
+  if(!cur){ box.innerHTML='<div class="dvc-empty">اختر حاسبة من القائمة لبدء المراسلة<br>أو «كل الحاسبات» لرسالة جماعية</div>'; return; }
+  var t=th(cur), ps=peers(), pn=(cur===GROUP)?'كل الحاسبات':((ps.filter(function(p){ return p.id===cur; })[0]||{}).nm||t.nm||'حاسبة');
+  var live = cur===GROUP ? ps.some(function(p){ return isLive(p.id); }) : isLive(cur);
+  var msgs=t.msgs.map(function(m){
+    var st = m.me ? (m.st==='ok' ? '<span title="وصلت">✓✓</span>' : '<span title="بانتظار فتح الحاسبة الأخرى">🕓</span>') : '';
+    return '<div class="dvc-m '+(m.me?'me':'them')+'">'+((!m.me && cur===GROUP)?'<span class="who">'+esc(m.nm||'حاسبة')+'</span>':'')+
+      esc(m.txt)+'<span class="meta">'+fmtT(m.ts)+' '+st+'</span></div>';
+  }).join('');
+  var prev=document.getElementById('dvc-txt'), keep=prev?prev.value:'', hadF=prev&&document.activeElement===prev;
+  box.innerHTML='<div class="dvc-msgs" id="dvc-msgs">'+(msgs||'<div class="dvc-empty">'+(live?'ابدأ المحادثة الآن':'الحاسبة غير متصلة الآن — رسالتك تُسلَّم تلقائياً عند فتحها')+'</div>')+'</div>'+
+    '<div class="dvc-in"><textarea id="dvc-txt" rows="1" lang="ar" dir="auto" placeholder="اكتب رسالة إلى '+esc(pn)+'… (Enter للإرسال · Shift+Enter سطر جديد)"></textarea>'+
+    '<button class="dvc-send" onclick="DevChat.send()">إرسال</button></div>';
+  var ta=document.getElementById('dvc-txt');
+  ta.value=keep;
+  ta.addEventListener('keydown', function(e){ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); send(); } });
+  ta.addEventListener('input', function(){ ta.style.height='auto'; ta.style.height=Math.min(120, ta.scrollHeight)+'px'; });
+  if(hadF || _wantFocus){ _wantFocus=false; try{ ta.focus(); }catch(e){} }
+  var mb=document.getElementById('dvc-msgs'); if(mb) mb.scrollTop=mb.scrollHeight;
+  if(t.unread){ t.unread=0; save(); badge(); }
+}
+
+/* ════════ قنوات الاستقبال ════════ */
+(function hookCloud(){
+  var n=0, iv=setInterval(function(){ n++; var m=MS(); if(m && m._handlers){ m._handlers.dvc=function(peer, d){ onMsg(peer, d); }; clearInterval(iv); } else if(n>120) clearInterval(iv); }, 1000);
+})();
+(function hookLan(){
+  var n=0, iv=setInterval(function(){
+    n++;
+    if(typeof window._lanHandleMessage!=='function'){ if(n>120) clearInterval(iv); return; }
+    clearInterval(iv);
+    var next=window._lanHandleMessage, RXT=/"type"\s*:\s*"(dvc:[a-z]{1,8})"/;
+    window._lanHandleMessage=function(raw){
+      try{
+        if(typeof raw==='string' && raw.length>12){
+          var mt=RXT.exec(raw.length>160?raw.substring(0,160):raw);
+          if(mt){
+            var msg=JSON.parse(raw);
+            /* السيرفير يمرّر رسائل العملاء لبعضهم (نجمة) */
+            if(typeof _lanMode!=='undefined' && _lanMode==='server' && !msg._relayed && msg.from!==me()){ msg._relayed=1; try{ _lanSendRaw(msg); }catch(e){} }
+            if(msg.from===me()) return;
+            if(mt[1]==='dvc:hi'){ LAN_SEEN[msg.from]={nm:msg.nm||'', no:msg.no||0, t:Date.now()}; if(!msg.r) hello(true); if(isOpen()) render(); flushPending(); return; }
+            if(mt[1]==='dvc:m' && msg.to===me()){ LAN_SEEN[msg.from]=LAN_SEEN[msg.from]||{t:Date.now()}; LAN_SEEN[msg.from].t=Date.now(); onMsg(msg.from, msg.m); }
+            return;
+          }
+        }
+      }catch(e){}
+      return next(raw);
+    };
+  }, 1000);
+})();
+var _hiT=0;
+function hello(reply){
+  if(!lanReady()) return;
+  if(!reply && Date.now()-_hiT<20000) return;
+  _hiT=Date.now();
+  try{ _lanSendRaw({type:'dvc:hi', from:me(), nm:myName(), no:myNo(), r:reply?1:0, ts:Date.now()}); }catch(e){}
+}
+setInterval(function(){ hello(false); flushPending(); badge(); if(isOpen()) render(); }, 30000);
+setTimeout(function(){ hello(false); flushPending(); badge(); }, 8000);
+/* حاسبة سحابية فُتحت للتو ⇒ سلّم المعلّق لها */
+var _lastOnline='';
+setInterval(function(){ try{ var o=(MS()&&MS()._online)?MS()._online().sort().join(','):''; if(o!==_lastOnline){ _lastOnline=o; flushPending(); if(isOpen()) render(); } }catch(e){} }, 5000);
+
+window.DevChat = {
+  toggle:function(){ var p=panel(); if(p.classList.contains('open')) DevChat.close(); else { p.classList.add('open'); hello(false); render(); } },
+  close:function(){ var p=document.getElementById('dvc-panel'); if(p) p.classList.remove('open'); },
+  open:function(id){ cur=id; _wantFocus=true; ensure(); if(D.th[id]) D.th[id].unread=0; save(); badge(); render(); },
+  send:send,
+  _onMsg:onMsg
+};
+document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen()) DevChat.close(); });
 })();
 </script>
 
