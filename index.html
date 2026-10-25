@@ -9627,7 +9627,7 @@ const IDB=(()=>{
   const REC_SEP='\u0001';
   const REC_END='\uffff';
   // الأطول أولاً حتى لا يطابق اسم قصير داخل اسم أطول
-  const RECORD_COLLS=['stoolExamRecords','cultureRecords','semenRecords','uaRecords',
+  const RECORD_COLLS=['stoolExamRecords','cultureRecords','semenRecords','spxRecords','uaRecords',
                       'patients','requests','invoices','billing'];
   const _lastErr={};   // pk -> آخر سبب فشل (للتشخيص)
   const _recMode={};   // pk -> true/false (كاش في الذاكرة)
@@ -9887,7 +9887,7 @@ const IDB=(()=>{
 // البيانات الكبيرة — تذهب لـ IDB مباشرة ولا تُخزَّن في localStorage
 const _IDB_KEYS=new Set(['patients','requests','invoices','doctors','packages',
   'inventory','qc','tests','testGroups','billing',
-  'cultureRecords','uaRecords','stoolExamRecords','semenRecords']);
+  'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords']);
 
 // كاش الذاكرة — يُحدَّث عند كل قراءة/كتابة لتفادي أي تأخير
 const _MC={};
@@ -10031,7 +10031,7 @@ const DB={
 //   وأي موقع يبقى على save() يعمل تماماً كما كان — لا شيء ينكسر.
 // ═════════════════════════════════════════════════════════════
 const _DELTA_KEYS=new Set(['patients','requests','invoices','billing',
-  'cultureRecords','uaRecords','stoolExamRecords','semenRecords']);
+  'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords']);
 
 const _touched={};      // k -> Set(ids)
 const _touchedBad={};   // k -> true  =>  أجبِر كتابة كاملة (مسار الأمان)
@@ -10127,7 +10127,7 @@ window.runStorageHealthCheck=async function(){
   const out=document.getElementById('storage-health-out');
   if(out){ out.style.display='block'; out.innerHTML='<span style="color:var(--text2)">\u23f3 \u062c\u0627\u0631\u064d \u0627\u0644\u0641\u062d\u0635...</span>'; }
   const names={patients:'\u0627\u0644\u0645\u0631\u0636\u0649',requests:'\u0627\u0644\u0637\u0644\u0628\u0627\u062a',invoices:'\u0627\u0644\u0641\u0648\u0627\u062a\u064a\u0631',billing:'\u0627\u0644\u0645\u062d\u0627\u0633\u0628\u0629',
-    cultureRecords:'\u0627\u0644\u0632\u0631\u0639',uaRecords:'\u0627\u0644\u0625\u062f\u0631\u0627\u0631',stoolExamRecords:'\u0627\u0644\u062e\u0631\u0648\u062c',semenRecords:'\u0627\u0644\u0633\u0627\u0626\u0644 \u0627\u0644\u0645\u0646\u0648\u064a'};
+    cultureRecords:'\u0627\u0644\u0632\u0631\u0639',uaRecords:'\u0627\u0644\u0625\u062f\u0631\u0627\u0631',stoolExamRecords:'\u0627\u0644\u062e\u0631\u0648\u062c',semenRecords:'\u0627\u0644\u0633\u0627\u0626\u0644 \u0627\u0644\u0645\u0646\u0648\u064a',spxRecords:'الفحوصات الخاصة المتقدّمة'};
   let rows='', mismatch=0, notMigrated=0, migrated=0, total=0, firstErr='';
   try{
     const pfx=DB._pfx();
@@ -10214,7 +10214,7 @@ window.runRecordMigrationNow=async function(){
 window.medlabStorageInfo=async function(){
   const pfx=DB._pfx();
   const keys=['patients','requests','invoices','billing',
-              'cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+              'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords'];
   const rows=[];
   for(const k of keys){
     const pk=pfx+k;
@@ -10880,6 +10880,10 @@ const ALL_TESTS=[
 // SEMEN
 // ══════════════════════════════════════════════════════════════
 {id:'semen001',code:'SEMEN',nameEn:'Semen Analysis',nameShort:'Semen Analysis',cat:'Semen',subCat:'Miscellaneous',unit:'qualitative',minVal:null,maxVal:null,minF:null,maxF:null,ref:'See report',time:'1 hour',price:25,notes:'Spermiogram with morphology and motility',isSpecialExam:'semen'},
+{id:'spx_mol',code:'MPN-PANEL',nameEn:'MPN Mutations Comprehensive Panel',nameShort:'MPN Panel (Molecular)',cat:'Microbiology',subCat:'Molecular Biology',unit:'qualitative',minVal:null,maxVal:null,minF:null,maxF:null,ref:'See report',time:'7 days',price:200000,notes:'Molecular Pathology Report · JAK2 / MPL / CALR / CSF3R',isSpecialExam:'mol'},
+{id:'spx_ana',code:'ANA-BLOT',nameEn:'Microblot-Array ANA plus IgG',nameShort:'ANA Panel (Microblot)',cat:'Immunology',subCat:'Autoimmunity',unit:'qualitative',minVal:null,maxVal:null,minF:null,maxF:null,ref:'See report',time:'3 days',price:30000,notes:'ANA · Myositis · Scleroderma · SLE/CTD',isSpecialExam:'ana'},
+{id:'spx_spe',code:'SPE-EP',nameEn:'Protein Electrophoresis (SPE)',nameShort:'Protein Electrophoresis (SPE)',cat:'Biochemistry',subCat:'Protein Electrophoresis',unit:'qualitative',minVal:null,maxVal:null,minF:null,maxF:null,ref:'See report',time:'2 days',price:20000,notes:'Serum protein fractions with electrophoretogram',isSpecialExam:'spe'},
+{id:'spx_ifx',code:'IFE',nameEn:'Immunofixation Serum',nameShort:'Immunofixation',cat:'Immunology',subCat:'Immunoglobulins & Complement',unit:'qualitative',minVal:null,maxVal:null,minF:null,maxF:null,ref:'See report',time:'3 days',price:40000,notes:'Immunofixation electrophoresis + free light chains',isSpecialExam:'ifx'},
 // ══════════════════════════════════════════════════════════════
 // SPECIAL
 // ══════════════════════════════════════════════════════════════
@@ -11399,11 +11403,13 @@ let testGroups=[];
 let uaRecords=[];
 let stoolExamRecords=[];
 let semenRecords=[];
+let spxRecords=[];   // 🧬 Molecular / ANA / SPE / Immunofixation
 window._smSetters = window._smSetters || {};
 window._smSetters['testGroups']       = function(v){ testGroups       = v; };
 window._smSetters['uaRecords']        = function(v){ uaRecords        = v; };
 window._smSetters['stoolExamRecords'] = function(v){ stoolExamRecords = v; };
 window._smSetters['semenRecords']     = function(v){ semenRecords     = v; };
+window._smSetters['spxRecords']       = function(v){ spxRecords       = v; };
 let currentTestCat='All';
 let wizStep=1;
 let wizPatient={};
@@ -11450,7 +11456,7 @@ function initUserData(){
   packages=[{id:'pkg1',name:'Comprehensive Blood Panel',price:380,ic:'🩸',desc:'CBC + HbA1c + Lipid Panel + LFT + KFT'},{id:'pkg2',name:'Diabetes Panel',price:200,ic:'💉',desc:'FBS + HbA1c + Insulin + Microalbumin'},{id:'pkg3',name:'Thyroid Panel',price:250,ic:'🦋',desc:'TSH + FT3 + FT4 + Anti-TPO + Anti-Tg'},{id:'pkg4',name:'Vitamins Panel',price:320,ic:'💊',desc:'Vitamin D + B12 + Folate + Zinc + Iron'},{id:'pkg5',name:'Full Health Checkup',price:650,ic:'🌟',desc:'CBC + CMP + Lipid Panel + HbA1c + Thyroid + Vit D + B12'}];
   inventory=[{id:'i1',name:'HbA1c Reagent',qty:45,unit:'test',min:20,exp:'2025-12-31',sup:'Vista Lab'},{id:'i2',name:'CBC Reagent',qty:200,unit:'test',min:50,exp:'2025-10-30',sup:'MedLab Co'},{id:'i3',name:'TSH Kit',qty:8,unit:'kit',min:10,exp:'2025-09-15',sup:'BioTech'}];
   qcRecords=[]; testGroups=[]; billingRecords=[];
-  cultureRecords=[]; uaRecords=[]; stoolExamRecords=[]; semenRecords=[];
+  cultureRecords=[]; uaRecords=[]; stoolExamRecords=[]; semenRecords=[]; spxRecords=[];
   // ⭐ تطبيق قائمة المحذوفات (من localStorage الفوري) قبل تحميل IDB
   // بهذا تظل التحاليل المحذوفة محذوفة حتى عند تحديث الصفحة أو رفع نسخة جديدة
   let _deletedIds = [];
@@ -11691,6 +11697,7 @@ async function renumberAllPatients(){
     var _uaRecords      = await _load('uaRecords');
     var _stoolRecords   = await _load('stoolExamRecords');
     var _semenRecords   = await _load('semenRecords');
+    var _spxRecords     = await _load('spxRecords');
 
     // ② بناء خريطة oldId → newId (أرقام متسلسلة فريدة تبدأ من 100001)
     var startNum = 100001;
@@ -11737,7 +11744,7 @@ async function renumberAllPatients(){
     }
     var cReq = _remap(_requests);
     _remap(_invoices); _remap(_billing); _remap(_cultureRecords);
-    _remap(_uaRecords); _remap(_stoolRecords); _remap(_semenRecords);
+    _remap(_uaRecords); _remap(_stoolRecords); _remap(_semenRecords); _remap(_spxRecords);
 
     // بعض الطلبات قد تخزّن الرقم في حقل pid/patientCode احتياطاً — لا نلمسها
     // إلا إن كانت patientId (المفتاح الرسمي للربط) كما فعلنا أعلاه.
@@ -11755,12 +11762,14 @@ async function renumberAllPatients(){
     await _save('uaRecords', _uaRecords);
     await _save('stoolExamRecords', _stoolRecords);
     await _save('semenRecords', _semenRecords);
+    if(_spxRecords.length) await _save('spxRecords', _spxRecords);
 
     // ⑥ حدّث المتغيرات العامة المحمّلة في الذاكرة (لتظهر التغييرات فوراً)
     try{ if(typeof patients!=='undefined') patients=_patients; }catch(e){}
     try{ if(typeof requests!=='undefined') requests=_requests; }catch(e){}
     try{ if(typeof invoices!=='undefined') invoices=_invoices; }catch(e){}
     try{ if(typeof billingRecords!=='undefined') billingRecords=_billing; }catch(e){}
+    try{ if(typeof spxRecords!=='undefined') spxRecords=_spxRecords; }catch(e){}
 
     // ⑦ حدّث العدّاد ليكمل من آخر رقم مُعطى (حتى لا يتكرر مع الجدد)
     var newCounter = next - 1 - 100000;
@@ -11936,7 +11945,8 @@ async function _mergeIDBInBackground(){
       tests:'tests',
       qc:'qcRecords', testGroups:'testGroups', billing:'billingRecords',
       cultureRecords:'cultureRecords', uaRecords:'uaRecords',
-      stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords'
+      stoolExamRecords:'stoolExamRecords', semenRecords:'semenRecords',
+      spxRecords:'spxRecords'
     };
 
     // ── تحسين الأداء: تحميل patients + requests أولاً بالتوازي ──
@@ -11950,7 +11960,7 @@ async function _mergeIDBInBackground(){
       if(!idbVal||!Array.isArray(idbVal)||idbVal.length===0) return;
       const globals={patients,requests,invoices,doctors,packages,inventory,
         qcRecords,testGroups,billingRecords,cultureRecords,uaRecords,
-        stoolExamRecords,semenRecords};
+        stoolExamRecords,semenRecords,spxRecords};
       const current=globals[varName]||[];
       const currentIds=new Set(current.map(x=>x.id).filter(Boolean));
       const toAdd=idbVal.filter(x=>x.id&&!currentIds.has(x.id));
@@ -11993,7 +12003,7 @@ async function _mergeIDBInBackground(){
       if(!idbVal||!Array.isArray(idbVal)||idbVal.length===0) continue;
       const globals={patients,requests,invoices,doctors,packages,inventory,
         qcRecords,testGroups,billingRecords,cultureRecords,uaRecords,
-        stoolExamRecords,semenRecords};
+        stoolExamRecords,semenRecords,spxRecords};
       const current=globals[varName]||[];
       const currentIds=new Set(current.map(x=>x.id).filter(Boolean));
       const toAdd=idbVal.filter(x=>x.id&&!currentIds.has(x.id));
@@ -12010,6 +12020,7 @@ async function _mergeIDBInBackground(){
         case 'uaRecords':        uaRecords=current; break;
         case 'stoolExamRecords': stoolExamRecords=current; break;
         case 'semenRecords':     semenRecords=current; break;
+        case 'spxRecords':       spxRecords=current; break;
       }
     }
     // التحاليل
@@ -16200,6 +16211,11 @@ function _spAllEntered(r){
           rec = (typeof _cultRecFor==='function') ? _cultRecFor(r.id, sp[i].id) : null;
           if(rec && !String(rec.organism||'').trim()) rec = null;
         }
+        else if(typeof SPX!=='undefined' && SPX.is(k)){
+          /* 🧬 الفحوصات الخاصة المتقدّمة: تُعدّ مُدخلة بعد الحفظ فقط */
+          rec = SPX.recFor(r.id, sp[i].id);
+          if(rec && !rec.saved) rec = null;
+        }
       }catch(e){}
       if(!rec) return false;
     }
@@ -17000,8 +17016,10 @@ function openViewResultsModal(rid){
       const isUA=t.isSpecialExam==='ua';
       const isSemen=t.isSpecialExam==='semen';
       const isCult=t.isSpecialExam==='culture';
-      const rec=isCult?_cultRecFor(rid,t.id):isUA?uaRecords.find(x=>x.reqId===rid):isSemen?semenRecords.find(x=>x.reqId===rid):stoolExamRecords.find(x=>x.reqId===rid);
-      const icon=isCult?'🦠':isUA?'💧':isSemen?'🔬':'🧫';
+      const isSpx=(typeof SPX!=='undefined'&&SPX.is(t.isSpecialExam));
+      const _spxR=isSpx?SPX.recFor(rid,t.id):null;
+      const rec=isSpx?((_spxR&&_spxR.saved)?_spxR:null):isCult?_cultRecFor(rid,t.id):isUA?uaRecords.find(x=>x.reqId===rid):isSemen?semenRecords.find(x=>x.reqId===rid):stoolExamRecords.find(x=>x.reqId===rid);
+      const icon=isSpx?SPX.icon(t.isSpecialExam):isCult?'🦠':isUA?'💧':isSemen?'🔬':'🧫';
       const done=!!rec;
       rows+=`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06)">
         <div style="flex:2;min-width:0">
@@ -17015,7 +17033,7 @@ function openViewResultsModal(rid){
         </div>
         <div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn btn-sm btn-p" onclick="closeModal('m-view-results');_openSpecialExamInline('${rid}','${t.isSpecialExam}','${t.id}')">${done?'✏️ تعديل':'📝 إدخال'}</button>
-          ${done?`<button class="btn btn-sm btn-ok" onclick="${isCult?`printCultureReport('${rec.id}')`:isUA?`printUAReport('${rec.id}')`:isSemen?`printSemenReport('${rec.id}')`:`printStoolReport('${rec.id}')`}">🖨️</button>`:''}
+          ${done?`<button class="btn btn-sm btn-ok" onclick="${isSpx?`SPX.print('${rec.id}')`:isCult?`printCultureReport('${rec.id}')`:isUA?`printUAReport('${rec.id}')`:isSemen?`printSemenReport('${rec.id}')`:`printStoolReport('${rec.id}')`}">🖨️</button>`:''}
         </div>
       </div>`;
       return;
@@ -17537,8 +17555,10 @@ function loadResultEntry(){
       const isUA=t.isSpecialExam==='ua';
       const isSemen=t.isSpecialExam==='semen';
       const isCult=t.isSpecialExam==='culture';
-      const existingRec=isCult?_cultRecFor(id,t.id):isUA?uaRecords.find(r=>r.reqId===id):isSemen?semenRecords.find(r=>r.reqId===id):stoolExamRecords.find(r=>r.reqId===id);
-      const icon=isCult?'🦠':isUA?'💧':isSemen?'🔬':'🧫';
+      const isSpx=(typeof SPX!=='undefined'&&SPX.is(t.isSpecialExam));
+      const _spxR=isSpx?SPX.recFor(id,t.id):null;
+      const existingRec=isSpx?((_spxR&&_spxR.saved)?_spxR:null):isCult?_cultRecFor(id,t.id):isUA?uaRecords.find(r=>r.reqId===id):isSemen?semenRecords.find(r=>r.reqId===id):stoolExamRecords.find(r=>r.reqId===id);
+      const icon=isSpx?SPX.icon(t.isSpecialExam):isCult?'🦠':isUA?'💧':isSemen?'🔬':'🧫';
       const _cultPending=isCult&&existingRec&&!String(existingRec.organism||'').trim();
       const done=!!existingRec&&!_cultPending;
       return `<tr style="background:rgba(0,212,255,0.04)">
@@ -17562,6 +17582,9 @@ function loadResultEntry(){
           <button class="btn btn-p btn-sm" onclick="_openSpecialExamInline('${id}','${t.isSpecialExam}','${t.id}')">
             ${(done||_cultPending)?'✏️ تعديل':'📝 إدخال'}
           </button>
+        </td>
+        <td style="${isPrinted?'display:none':''}">
+          <button class="btn btn-d btn-sm" style="padding:4px 8px;font-size:11px" onclick="removeTestFromReq('${t.id}','${id}')" title="حذف هذا التحليل من الطلب">🗑️</button>
         </td>
       </tr>`;
     }
@@ -18129,6 +18152,15 @@ function _openSpecialExamInline(reqId, examType, testId){
 
 function _openSpecialExamModal(reqId, examType, testId){
   const req=requests.find(r=>r.id===reqId); if(!req)return;
+  if(typeof SPX!=='undefined' && SPX.is(examType)){
+    // 🧬 Molecular / ANA / SPE / Immunofixation — نافذة إدخال خاصة مرتبطة بالطلب والتحليل
+    if(!testId){
+      const _st=(req.tests||[]).map(tid=>tests.find(t=>t.id===tid)).filter(t=>t&&t.isSpecialExam===examType)[0];
+      testId=_st?_st.id:'';
+    }
+    SPX.open(reqId, testId);
+    return;
+  }
   if(examType==='culture'){
     // 🦠 الزرع والحساسية — مرتبط بالطلب وبالتحليل نفسه (قد يحوي الطلب أكثر من زرع)
     if(!testId){
@@ -18350,7 +18382,8 @@ function _mergePatientIntoExisting(oldId, newPt){
       ['cultureRecords',  (typeof cultureRecords!=='undefined')?cultureRecords:null],
       ['uaRecords',       (typeof uaRecords!=='undefined')?uaRecords:null],
       ['stoolExamRecords',(typeof stoolExamRecords!=='undefined')?stoolExamRecords:null],
-      ['semenRecords',    (typeof semenRecords!=='undefined')?semenRecords:null]
+      ['semenRecords',    (typeof semenRecords!=='undefined')?semenRecords:null],
+      ['spxRecords',      (typeof spxRecords!=='undefined')?spxRecords:null]
     ];
     _rel.forEach(function(pair){
       var key=pair[0], list=pair[1], ch=0;
@@ -23568,7 +23601,7 @@ function renderTestsDB(){
     <td style="font-size:11px">${t.time}</td>
     <td style="color:var(--primary);font-weight:700">${t.price} ${settings.currency}</td>
     <td><div style="display:flex;gap:5px">
-      ${t.isSpecialExam==='culture'?`<span style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">🦠 زرع</span><button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')" title="تعديل السعر / البيانات">✏️</button>`:t.isSpecialExam?`<span style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">${t.isSpecialExam==='ua'?'💧':t.isSpecialExam==='culture'?'🦠':t.isSpecialExam==='semen'?'🔬':'🧫'} تقرير خاص</span><button class="btn btn-sm btn-s" onclick="nav('settings');setTimeout(()=>{document.getElementById('stc-ua-stool')&&toggleStCard('stc-ua-stool');},400)" title="إعدادات الفحص">⚙️</button>`:`<button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')">✏️</button>${(typeof _cbcIsCbcTest==='function'&&_cbcIsCbcTest(t))?`<span title="تحليل أساسي — لا يمكن حذفه" style="display:inline-flex;align-items:center;padding:3px 8px;font-size:12px;opacity:0.7">🔒</span>`:`<button class="btn btn-sm btn-d" onclick="deleteTest('${t.id}')">🗑️</button>`}`}
+      ${t.isSpecialExam==='culture'?`<span style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">🦠 زرع</span><button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')" title="تعديل السعر / البيانات">✏️</button>`:(typeof SPX!=='undefined'&&SPX.is(t.isSpecialExam))?`<span title="تحليل خاص محمي — لا يمكن حذفه ويمكن تسعيره" style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">${SPX.icon(t.isSpecialExam)} تقرير خاص</span><button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')" title="تعديل السعر">✏️</button>`:t.isSpecialExam?`<span style="font-size:10px;background:rgba(0,200,255,0.12);border:1px solid rgba(0,200,255,0.35);color:#00c8ff;border-radius:6px;padding:3px 8px;font-weight:700;display:inline-flex;align-items:center;gap:4px">${t.isSpecialExam==='ua'?'💧':t.isSpecialExam==='culture'?'🦠':t.isSpecialExam==='semen'?'🔬':'🧫'} تقرير خاص</span><button class="btn btn-sm btn-s" onclick="nav('settings');setTimeout(()=>{document.getElementById('stc-ua-stool')&&toggleStCard('stc-ua-stool');},400)" title="إعدادات الفحص">⚙️</button>`:`<button class="btn btn-sm btn-s" onclick="openEditTest('${t.id}')">✏️</button>${(typeof _cbcIsCbcTest==='function'&&_cbcIsCbcTest(t))?`<span title="تحليل أساسي — لا يمكن حذفه" style="display:inline-flex;align-items:center;padding:3px 8px;font-size:12px;opacity:0.7">🔒</span>`:`<button class="btn btn-sm btn-d" onclick="deleteTest('${t.id}')">🗑️</button>`}`}
     </div></td>
   </tr>`).join('');
 }
@@ -23582,7 +23615,7 @@ function openEditTest(id){
     }
   }catch(e){ console.warn('[CBC ranges] open', e); }
   // تحليل الأدرار والخروج لا يُعدَّل من قاعدة التحاليل — إعداداته في قسم الإعدادات فقط
-  const _protectedSpecial=tests.find(x=>x.id===id&&x.isSpecialExam&&x.isSpecialExam!=='culture');
+  const _protectedSpecial=tests.find(x=>x.id===id&&x.isSpecialExam&&x.isSpecialExam!=='culture'&&!(typeof SPX!=='undefined'&&SPX.is(x.isSpecialExam)));
   if(_protectedSpecial){
     const _examLabel=_protectedSpecial.isSpecialExam==='ua'?'💧 Urine Examination':'🧫 Stool Examination';
     showNotif('تنبيه',_examLabel+' — يُعدَّل فقط من قسم الإعدادات ⚙️','warning');
@@ -23788,6 +23821,12 @@ function saveTest(){
     // 💡 الحفاظ على النتيجة المقترحة
     if(tests[idx]&&tests[idx].defaultResult!==undefined&&t.defaultResult===undefined) t.defaultResult=tests[idx].defaultResult;
     if(tests[idx]&&tests[idx].isSpecialExam==='culture'){ t.isSpecialExam='culture'; if(tests[idx].cultureType) t.cultureType=tests[idx].cultureType; }
+    /* 🧬 الفحوصات الخاصة المتقدّمة: يبقى نوع التقرير ووحدته ومرجعه ثابتة — يتغيّر السعر والاسم فقط */
+    if(tests[idx]&&typeof SPX!=='undefined'&&SPX.is(tests[idx].isSpecialExam)){
+      t.isSpecialExam=tests[idx].isSpecialExam; t.unit='qualitative'; t.ref='See report';
+      t.minVal=null; t.maxVal=null; t.minF=null; t.maxF=null;
+      delete t.refType; delete t.qualOptions; delete t.qualDefault; delete t.ageRanges; delete t.isCalc; delete t.calcFormula;
+    }
     tests[idx]=t;
   }}
   else tests.push(t);
@@ -23808,6 +23847,7 @@ function deleteTest(id){
   // منع حذف تحاليل الأدرار والخروج الخاصة
   const _prot=tests.find(x=>x.id===id&&x.isSpecialExam&&x.isSpecialExam!=='culture');
   if(_prot){
+    if(typeof SPX!=='undefined' && SPX.is(_prot.isSpecialExam)){ showNotif('محمي','تحليل خاص محمي ولا يمكن حذفه — يمكن تعديل سعره فقط من زر ✏️','error'); return; }
     showNotif('محمي','هذا التحليل محمي ولا يمكن حذفه — يُدار من قسم الإعدادات ⚙️','error');
     return;
   }
@@ -26648,6 +26688,7 @@ function _cascadeDeleteReqs(reqIds, opts){
     if(typeof uaRecords!=='undefined'){ var a=uaRecords.length; try{ if(window._accMarkDel) _accMarkDel('uaRecords', uaRecords.filter(hit)); }catch(e){} uaRecords=uaRecords.filter(function(x){ return !hit(x); }); if(a!==uaRecords.length){ res.sp+=a-uaRecords.length; save('uaRecords',uaRecords); } }
     if(typeof stoolExamRecords!=='undefined'){ var s=stoolExamRecords.length; try{ if(window._accMarkDel) _accMarkDel('stoolExamRecords', stoolExamRecords.filter(hit)); }catch(e){} stoolExamRecords=stoolExamRecords.filter(function(x){ return !hit(x); }); if(s!==stoolExamRecords.length){ res.sp+=s-stoolExamRecords.length; save('stoolExamRecords',stoolExamRecords); } }
     if(typeof semenRecords!=='undefined'){ var m=semenRecords.length; try{ if(window._accMarkDel) _accMarkDel('semenRecords', semenRecords.filter(hit)); }catch(e){} semenRecords=semenRecords.filter(function(x){ return !hit(x); }); if(m!==semenRecords.length){ res.sp+=m-semenRecords.length; save('semenRecords',semenRecords); } }
+    if(typeof spxRecords!=='undefined'){ var x=spxRecords.length; try{ if(window._accMarkDel) _accMarkDel('spxRecords', spxRecords.filter(hit)); }catch(e){} spxRecords=spxRecords.filter(function(y){ return !hit(y); }); if(x!==spxRecords.length){ res.sp+=x-spxRecords.length; save('spxRecords',spxRecords); } }
     if(typeof cultureRecords!=='undefined'){ var c=cultureRecords.length; try{ if(window._accMarkDel) _accMarkDel('cultureRecords', cultureRecords.filter(hit)); }catch(e){} cultureRecords=cultureRecords.filter(function(x){ return !hit(x); }); if(c!==cultureRecords.length){ res.sp+=c-cultureRecords.length; save('cultureRecords',cultureRecords); } }
   }catch(e){ console.warn('[cascade] special',e); }
   try{ if(typeof renderInvoices==='function' && document.getElementById('sec-invoices') && document.getElementById('sec-invoices').classList.contains('active')) renderInvoices(); }catch(e){}
@@ -28042,14 +28083,51 @@ function removeTestFromReq(tid, id){
   const req = requests.find(r=>r.id===id); if(!req) return;
   // يُسمح بالتعديل حتى بعد الطباعة (إزالة قفل الطباعة)
   if(req.tests.length<=1){ showNotif('خطأ','يجب أن يحتوي الطلب على تحليل واحد على الأقل','error'); return; }
-  if(!confirm('حذف هذا التحليل من الطلب؟')) return;
+  /* 🧪 الفحوصات ذات نافذة الإدخال (إدرار/خروج/سائل منوي/زرع): إن كانت لها نتيجة
+     مُدخلة تُفصل عن الطلب فقط (لا تُحذف) — تبقى في قسمها ويمكن ربطها لاحقاً */
+  const _tt=(tests||[]).find(x=>x.id===tid);
+  const _sp=_tt&&_tt.isSpecialExam;
+  let _spRec=null;
+  try{ if(_sp) _spRec=_spRecordForReq(req, _tt); }catch(e){ _spRec=null; }
+  const _msg=_spRec
+    ? 'حذف «'+(_tt.nameEn||_tt.nameShort||'التحليل')+'» من الطلب؟\n\nلهذا الفحص نتيجة مُدخلة — لن تُحذف، بل تُفصل عن هذا الطلب وتبقى محفوظة في قسمها.'
+    : 'حذف هذا التحليل من الطلب؟';
+  if(!confirm(_msg)) return;
   const _hadT2=req.tests.includes(tid);
   req.tests = req.tests.filter(x=>x!==tid);
   if(req.results) delete req.results[tid];
+  if(_spRec){ try{ _spDetachRecord(req, _tt, _spRec); }catch(e){ console.warn('[special detach]', e); } }
   saveOne('requests',requests,req);
   if(_hadT2) _invAdjustForTest(req, tid, -1);   // 💵 الفاتورة والإيراد
   loadResultEntry();
   showNotif('تم','تم حذف التحليل من الطلب','success');
+}
+
+/* سجل الفحص الخاص (إدرار/خروج/منوي/زرع) المرتبط بهذا الطلب وهذا التحليل */
+function _spRecordForReq(req, t){
+  if(!req || !t || !t.isSpecialExam) return null;
+  const k=t.isSpecialExam;
+  if(k==='culture'){ try{ loadCultureRecords(); }catch(e){} return (typeof _cultRecForRaw==='function'?_cultRecForRaw(req.id, t.id):null); }
+  if(typeof SPX!=='undefined' && SPX.is(k)){ const _sr=SPX.recFor(req.id, t.id); return (_sr && _sr.testId===t.id) ? _sr : null; }
+  try{ loadUARecords(); loadStoolExamRecords(); loadSemenRecords(); }catch(e){}
+  const list = k==='ua' ? uaRecords : k==='stool' ? stoolExamRecords : k==='semen' ? semenRecords : null;
+  if(!Array.isArray(list)) return null;
+  /* أكثر من تحليل من النوع نفسه في الطلب ⇒ لا نفصل السجل (ما زال يخصّ الطلب) */
+  const same=(req.tests||[]).filter(function(id){ const x=(tests||[]).find(y=>y.id===id); return x && x.isSpecialExam===k; });
+  if(same.length>1) return null;
+  return list.find(r=>r && r.reqId===req.id) || null;
+}
+/* فصل السجل عن الطلب بلا حذف — ويُمنع تبنّيه تلقائياً لهذا الطلب مرة أخرى */
+function _spDetachRecord(req, t, rec){
+  const k=t.isSpecialExam;
+  if(typeof SPX!=='undefined' && SPX.is(k)){ SPX.detach(req, t); return; }
+  rec.reqId=''; if(rec.reqTestId!==undefined) rec.reqTestId='';
+  rec._detachedFrom=(Array.isArray(rec._detachedFrom)?rec._detachedFrom:[]).concat([req.id]).slice(-10);
+  rec._updatedAt=Date.now();
+  if(k==='culture'){ try{ saveCultureRecords(); }catch(e){} return; }
+  const key = k==='ua'?'uaRecords':k==='stool'?'stoolExamRecords':'semenRecords';
+  const list = k==='ua'?uaRecords:k==='stool'?stoolExamRecords:semenRecords;
+  try{ saveOne(key, list, rec); }catch(e){ try{ save(key, list); }catch(x){} }
 }
 
 // ============================================================
@@ -32834,7 +32912,7 @@ async function exportDatabase(){
     const pfx=DB._pfx();
     const archiveKeys=['patients','requests','invoices','doctors','packages',
       'inventory','qc','tests','testGroups','billing',
-      'cultureRecords','uaRecords','stoolExamRecords','semenRecords',
+      'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords',
       'att_employees','att_logs','att_leaves','att_settings'];
     for(const k of archiveKeys){
       const val=await IDB.get(pfx+k);
@@ -35382,6 +35460,7 @@ function _cultBestSlot(rec){
   var best=null;
   requests.forEach(function(rq){
     if(!rq || !Array.isArray(rq.tests) || !_cultSamePatient(rec, rq)) return;
+    if(Array.isArray(rec._detachedFrom) && rec._detachedFrom.indexOf(rq.id)>-1) return;   // فُصل عن هذا الطلب يدوياً
     var qd=_cultDayNum(rq.date); if(qd===null) qd=rd;
     var diff=rd-qd;                      // موجب = الطلب قبل تاريخ الزرع
     if(diff>30 || diff<-3) return;
@@ -35451,6 +35530,18 @@ function _cultPagesForReq(req){
   return out;
 }
 window._cultPagesForReq=_cultPagesForReq;
+/* 🧬 صفحات الفحوصات الخاصة المتقدّمة (Molecular / ANA / SPE / Immunofixation) تُلحق بنفس المسار
+   ⇒ تظهر في المعاينة المجمّعة · معاينة إدخال النتائج · PDF · واتساب · المتجر */
+(function(){
+  var _base=_cultPagesForReq;
+  _cultPagesForReq=function(req){
+    var out=[];
+    try{ out=_base(req)||[]; }catch(e){ out=[]; }
+    try{ if(typeof SPX!=='undefined' && SPX.pagesForReq) out=out.concat(SPX.pagesForReq(req)); }catch(e){ console.warn('[SPX pages]', e); }
+    return out;
+  };
+  window._cultPagesForReq=_cultPagesForReq;
+})();
 
 /* فتح نافذة الزرع من واجهة إدخال النتائج لطلب محدد */
 function openCultureForRequest(reqId, testId){
@@ -51145,6 +51236,17 @@ function _lisMatchReqInList(reqs, res, ptsList, _wbTried){
 
 // ── مساعد: تطبيق نتيجة على طلب وحفظه ────────────────────────────────────
 function _lisApplyResultToReq(req, res, reqs, idbKey){
+  /* 🩸 نتيجة CBC كاملة (باراميترات الجهاز) ⇒ تُكتب في بارامترات الـ CBC لا في مربع النتيجة.
+     كان النقل برقم الطلب والنقل التلقائي المُعاد (زر 📤) يمرّان من هنا فتدخل النتيجة
+     نصاً «CBC(n param)» في مربع إدخال CBC بدل جدول البارامترات. */
+  try{
+    if(res && res.cbcParams && typeof res.cbcParams==='object' && Object.keys(res.cbcParams).length
+       && typeof _lisApplyCbcToReq==='function'){
+      /* إصلاح أثر الخطأ القديم: نص «CBC(n param)» الذي دخل مربع النتيجة يُزال */
+      try{ if(req.results){ Object.keys(req.results).forEach(function(k){ if(/^CBC\(\d+\s*param\)$/i.test(String(req.results[k]||'').trim())) delete req.results[k]; }); } }catch(_){}
+      return _lisApplyCbcToReq(req, res, reqs, idbKey);
+    }
+  }catch(e){ console.warn('[LIS] CBC route', e); }
   // ⭐ إخوة القناة: إن كان الكود القادم غير مطلوب في هذا الطلب بينما «أخوه»
   //    (نفس رقم القناة: FBS/RBS · AM-CORT/PM-CORT) مطلوب — نُصحّح الكود هنا
   //    فتسير بقية الدالة بلا أي تغيير. لا يُنفّذ إذا كان الكود الأصلي مطلوباً.
@@ -52826,7 +52928,7 @@ async function _fsaBuildFullBackup(){
   const idbData = {};
   const archiveKeys=['patients','requests','invoices','doctors','packages',
     'inventory','qc','tests','testGroups','billing',
-    'cultureRecords','uaRecords','stoolExamRecords','semenRecords',
+    'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords',
     'att_employees','att_logs','att_leaves','att_settings'];
   for(const k of archiveKeys){
     const val = await IDB.get(pfx+k);
@@ -53222,7 +53324,7 @@ async function confirmImport(){
     // ── 3. امسح IDB القديم للمستخدم الحالي ───────────────
     var _IDB_DATA_KEYS = ['patients','requests','invoices','doctors','packages',
       'inventory','qc','tests','testGroups','billing',
-      'cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+      'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords'];
     await Promise.all(_IDB_DATA_KEYS.map(function(k){ return IDB.del(currentPfx+k).catch(function(){}); }));
 
     // ── 4. امسح كاش الذاكرة بالكامل ─────────────────────
@@ -53404,7 +53506,7 @@ async function _fsa_buildDownloadBackup(){
   const pfx = DB._pfx();
   const archiveKeys=['patients','requests','invoices','doctors','packages',
     'inventory','qc','tests','testGroups','billing',
-    'cultureRecords','uaRecords','stoolExamRecords','semenRecords',
+    'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords',
     'att_employees','att_logs','att_leaves','att_settings'];
   for(const k of archiveKeys){
     try{
@@ -55450,6 +55552,14 @@ function _pmBuildData(patientId) {
       try {
         const cRecs = (typeof cultureRecords !== 'undefined' && Array.isArray(cultureRecords)) ? cultureRecords.filter(x => x && x.reqId === r.id) : [];
         cRecs.forEach(c => { const d = _safeDoc('تقرير الزرع', () => _buildCultureHTML(c.id)); if (d) docs.push(d); });
+      } catch(e){}
+      /* 🧬 Molecular / ANA / SPE / Immunofixation */
+      try {
+        if (typeof SPX !== 'undefined') (r.tests || []).forEach(tid => {
+          const t = tests.find(x => x.id === tid); if (!t || !SPX.is(t.isSpecialExam)) return;
+          const sr = SPX.recFor(r.id, tid); if (!sr || !sr.saved) return;
+          SPX.pages(sr).forEach((sh, i, a) => { if (sh) { const nm = (t.nameEn || SPX.KINDS[t.isSpecialExam].title) + (a.length > 1 ? (' ' + (i + 1)) : ''); const d = _safeDoc(nm, () => sh); if (d) docs.push(d); } });
+        });
       } catch(e){}
     }
 
@@ -57642,7 +57752,7 @@ var _LAN_PORT     = 8797;
 var _LAN_SYNC_EXCLUDED = ['phoneBook'];
 var _LAN_SYNC_KEYS= ['patients','requests','doctors','testGroups',
                      'packages','inventory','qc','cultureRecords',
-                     'uaRecords','stoolExamRecords','semenRecords',
+                     'uaRecords','stoolExamRecords','semenRecords','spxRecords',
                      'invoices','billing','expenses'];
 
 /* ═══ 🔬 قاعدة التحاليل — اتجاه واحد عبر LAN (واي فاي / كابل) ═══
@@ -57709,6 +57819,7 @@ var _LAN_RENDER = {
   uaRecords:       function(){ if(window._syncLightRender)window._syncLightRender('uaRecords'); },
   stoolExamRecords:function(){ if(window._syncLightRender)window._syncLightRender('stoolExamRecords'); },
   semenRecords:    function(){ if(window._syncLightRender)window._syncLightRender('semenRecords'); },
+  spxRecords:      function(){ if(window._syncLightRender)window._syncLightRender('spxRecords'); },
   phoneBook:       function(){ if(window._syncLightRender)window._syncLightRender('phoneBook'); }
 };
 function _lanRender(key){
@@ -59704,6 +59815,8 @@ if(window.electronAPI && window.electronAPI.isElectron){
           }
         });
       }
+      /* 🧬 Molecular / ANA / SPE / Immunofixation */
+      try{ if(typeof SPX!=='undefined') SPX.pagesForReq(req).forEach(function(h){ if(h&&h.length>50) pages.push(h); }); }catch(e){}
     } catch(err){
       console.warn('[DP]',err);
     }
@@ -60122,7 +60235,7 @@ window._syncLightRender = function(key){
     }, 400);
   }
   if(key === 'uaRecords' || key === 'stoolExamRecords' ||
-     key === 'semenRecords' || key === 'cultureRecords'){
+     key === 'semenRecords' || key === 'cultureRecords' || key === 'spxRecords'){
     _refreshAfterSpecialExam();
   }
 };
@@ -61388,8 +61501,8 @@ var ACC       = ['invoices','billing','expenses'];
 /* 🗑️ حذف مريض/طلب: يُبثّ شاهد حذف أيضاً (كان الدمج يُرجع المحذوف من الحاسبة الأخرى).
    مجموعات «رقم المزامنة» (SIDX) تُعرَّف بـ _sid لا برقم الملف — رقم الملف قد يختلف بين الحاسبات،
    والسجل بلا _sid (أرشيف قديم) لا يُزامَن أصلاً فلا يُنشر له شاهد حذف (حتى لا يُحذف ملف مريض آخر بالخطأ). */
-var SIDK      = {patients:1, requests:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
-var TKEYS     = ACC.concat(['patients','requests','cultureRecords','uaRecords','stoolExamRecords','semenRecords']);
+var SIDK      = {patients:1, requests:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1, spxRecords:1};
+var TKEYS     = ACC.concat(['patients','requests','cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords']);
 var TOMB_KEY  = 'lis_acc_tombs';
 var BF_KEY    = 'lis_acc_bf';          // الحاسبات التي دُفعت لها السجلات القديمة
 var CATS_TS   = 'lis_acc_cats_ts';
@@ -61863,7 +61976,7 @@ function _belongsToLoser(rec, job){
 }
 
 var _LINKED = ['requests','cultureRecords','uaRecords','stoolExamRecords',
-               'semenRecords','invoices','billing'];
+               'semenRecords','spxRecords','invoices','billing'];
 
 function _flushRenames(){
   _renameT = null;
@@ -61956,9 +62069,9 @@ if(typeof _lanMergeArrays === 'function'){
    أكثر من حاسبة خرجت بالنتيجة نفسها بلا تكرار.
    ══════════════════════════════════════════════════════════════════ */
 
-var _SCAN = ['requests','cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+var _SCAN = ['requests','cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords'];
 var _SCAN_LBL = { requests:'الطلبات', cultureRecords:'الزرع', uaRecords:'الإدرار',
-                  stoolExamRecords:'الخروج', semenRecords:'المنوي' };
+                  stoolExamRecords:'الخروج', semenRecords:'المنوي', spxRecords:'الفحوصات الخاصة' };
 
 function _scanConflicts(){
   var pts = [];
@@ -63799,7 +63912,7 @@ var CBCRanges = (function(){
   var _openMap = {};
   function _isOpenFor(id, hasParams) {
     if (Object.prototype.hasOwnProperty.call(_openMap, id)) return !!_openMap[id];
-    return !hasParams;
+    return false;   /* مغلقة افتراضياً دائماً — تُفتح بالضغط على السهم */
   }
 
   function render() {
@@ -67515,6 +67628,7 @@ if(typeof module!=='undefined') module.exports=GLC;
       if(mode==='wipe'){
         patients=out.patientsNew; requests=out.requests; invoices=out.invoices.slice(); billingRecords=[];
         uaRecords=out.ua; stoolExamRecords=out.stool; semenRecords=out.semen; cultureRecords=out.culture;
+        if(typeof spxRecords!=='undefined') spxRecords=[];
         try{ save('phoneBook', []); }catch(e){}
       } else {
         /* المرضى الحاليون ⇒ أرقام بعد آخر رقم مستورد مباشرة (بالترتيب الزمني لتسجيلهم)
@@ -67531,7 +67645,7 @@ if(typeof module!=='undefined') module.exports=GLC;
           if(nid!==id){ _addOld(p, id); map[id]=nid; p.id=nid; p.barcode=nid; renumbered++; }
         });
         var remap=function(list){ list.forEach(function(o){ if(o && o.patientId!=null && map[String(o.patientId)]!==undefined){ o.patientId=map[String(o.patientId)]; } }); };
-        [requests, invoices, billingRecords, uaRecords, stoolExamRecords, semenRecords, cultureRecords].forEach(remap);
+        [requests, invoices, billingRecords, uaRecords, stoolExamRecords, semenRecords, cultureRecords, (typeof spxRecords!=='undefined'?spxRecords:[])].forEach(remap);
         _pushAll(patients, out.patientsNew); _pushAll(requests, out.requests);
         if(out.invoices.length) _pushAll(invoices, out.invoices);
         _pushAll(uaRecords, out.ua); _pushAll(stoolExamRecords, out.stool); _pushAll(semenRecords, out.semen); _pushAll(cultureRecords, out.culture);
@@ -67541,7 +67655,7 @@ if(typeof module!=='undefined') module.exports=GLC;
         if(window.SIDX){
           if(mode==='wipe' && SIDX.resetArchive) SIDX.resetArchive();
           else if(SIDX.markLegacy){
-            [['patients',patients],['requests',requests],['invoices',invoices],['billing',billingRecords],['uaRecords',uaRecords],['stoolExamRecords',stoolExamRecords],['semenRecords',semenRecords],['cultureRecords',cultureRecords]]
+            [['patients',patients],['requests',requests],['invoices',invoices],['billing',billingRecords],['uaRecords',uaRecords],['stoolExamRecords',stoolExamRecords],['semenRecords',semenRecords],['cultureRecords',cultureRecords],['spxRecords',(typeof spxRecords!=='undefined'?spxRecords:[])]]
               .forEach(function(x){ SIDX.markLegacy(x[0], x[1].filter(function(o){ return o && !o._sid && o.id!=null; }).map(function(o){ return o.id; })); });
           }
         }
@@ -67550,7 +67664,7 @@ if(typeof module!=='undefined') module.exports=GLC;
       /* ── الحفظ الكامل المُنتظَر ── */
       var steps=[['tests',tests,null],['doctors',doctors,null],['patients',patients,null],['requests',requests,null],
         ['invoices',invoices,null],['billing',billingRecords,null],['uaRecords',uaRecords,null],['stoolExamRecords',stoolExamRecords,null],
-        ['semenRecords',semenRecords,null],['cultureRecords',cultureRecords,null]];
+        ['semenRecords',semenRecords,null],['cultureRecords',cultureRecords,null],['spxRecords',(typeof spxRecords!=='undefined'?spxRecords:[]),null]];
       var failed=[];
       for(var si=0;si<steps.length;si++){
         var st=steps[si];
@@ -71073,7 +71187,8 @@ function _caption(name){
 
 var _ERR = {
   attach:'تعذّر إرفاق الملف', confirm:'لم يُؤكَّد الإرسال', timeout:'لم تُفتح المحادثة',
-  file:'ملف PDF غير موجود', phone:'رقم غير صالح', error:'خطأ غير متوقع'
+  file:'ملف PDF غير موجود', phone:'رقم غير صالح', error:'خطأ غير متوقع',
+  wrong_chat:'فتح واتساب محادثة غير محادثة هذا المريض — أُلغي الإرسال حمايةً من وصول النتيجة لشخص آخر'
 };
 
 window._waDirectSendPDF = async function(o){
@@ -75255,9 +75370,9 @@ body.light-mode .fid-ph{background:#e2e8f0}
 (function(){
 'use strict';
 var SX = window.SIDX = window.SIDX || {};
-var COLS   = {patients:1, requests:1, invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
-var LINK_P = {requests:1, invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
-var LINK_R = {invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+var COLS   = {patients:1, requests:1, invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1, spxRecords:1};
+var LINK_P = {requests:1, invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1, spxRecords:1};
+var LINK_R = {invoices:1, billing:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1, spxRecords:1};
 var RECENT_MS = 36*3600*1000;      // سجلات آخر ٣٦ ساعة عند التحديث تبقى قابلة للمزامنة (رقم حتمي)
 var OLD_MS    = 10*60*1000;        // سجل منشؤه قبل التحديث بأكثر من ١٠ دقائق = أرشيف
 var BULK      = 400;               // ظهور مفاجئ لأكثر من هذا العدد بلا رقم = استيراد/استعادة ⇒ أرشيف
@@ -75387,6 +75502,7 @@ function getArr(col){
       case 'uaRecords':        v = (typeof uaRecords!=='undefined') ? uaRecords : null; break;
       case 'stoolExamRecords': v = (typeof stoolExamRecords!=='undefined') ? stoolExamRecords : null; break;
       case 'semenRecords':     v = (typeof semenRecords!=='undefined') ? semenRecords : null; break;
+      case 'spxRecords':       v = (typeof spxRecords!=='undefined') ? spxRecords : null; break;
     }
   }catch(e){ v = null; }
   if(Array.isArray(v)) return v;
@@ -75713,7 +75829,7 @@ function finishBoot(p, stamped){
   SX.ready = true;
   if(stamped){
     /* الحفظ يمرّ بالخطّاف فتُضاف الروابط (_psid/_rsid) ثم يلتقطها محرّك المزامنة */
-    ['patients','requests','invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords'].forEach(function(c){
+    ['patients','requests','invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords'].forEach(function(c){
       if(stamped[c] && stamped[c].length){ try{ saveOne.apply(null, [c, getArr(c)].concat(stamped[c])); }catch(e){ try{ save(c, getArr(c)); }catch(e2){} } }
     });
     try{ console.log('[SID] first run — archive snapshot taken; recent records stamped:', JSON.stringify(Object.keys(stamped).reduce(function(o,c){ o[c]=stamped[c].length; return o; },{}))); }catch(e){}
@@ -75764,7 +75880,7 @@ setTimeout(boot, 800);
 'use strict';
 
 var WATCH = {patients:1, requests:1, invoices:1, billing:1, expenses:1, doctors:1, packages:1,
-             inventory:1, qc:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1};
+             inventory:1, qc:1, cultureRecords:1, uaRecords:1, stoolExamRecords:1, semenRecords:1, spxRecords:1};
 var STAMP_NEW = {invoices:1, billing:1, expenses:1};      // تُختم بمنشئها عند الإنشاء
 var H = {};        // key → { id → [hash, ts] }
 var READY = {};    // key → خط الأساس جاهز
@@ -76682,6 +76798,776 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen(
 })();
 </script>
 
+<style id="spx-style">
+#m-spx .modal{max-width:1120px;width:calc(100vw - 40px);max-height:calc(100vh - 40px);display:flex;flex-direction:column}
+#m-spx .mbody{overflow-y:auto;flex:1}
+.spx-sec{background:rgba(0,212,255,.035);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.spx-sec h4{margin:0 0 10px;font-size:13px;font-weight:800;color:var(--primary)}
+.spx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.spx-tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;direction:ltr}
+.spx-tbl th{background:rgba(0,212,255,.10);color:var(--text);font-weight:800;padding:7px 8px;text-align:center;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+.spx-tbl td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);vertical-align:middle}
+.spx-tbl td.nm{font-weight:700;direction:ltr;text-align:left;white-space:nowrap}
+.spx-tbl td.rg{color:var(--text2);font-size:11px;direction:ltr;text-align:center;white-space:nowrap}
+.spx-tbl input.fc,.spx-tbl select.fc{padding:5px 8px;font-size:12.5px;height:auto}
+.spx-tbl tr.st-pos td{background:rgba(255,40,60,.13)}
+.spx-tbl tr.st-pos td.nm,.spx-tbl tr.st-pos select{color:#ff5a6e !important;font-weight:900}
+.spx-tbl tr.st-bor td{background:rgba(255,170,0,.16)}
+.spx-tbl tr.st-bor td.nm,.spx-tbl tr.st-bor select{color:#ffb020 !important;font-weight:900}
+.spx-tbl tr.st-abn td{background:rgba(255,40,60,.13)}
+.spx-tbl tr.st-abn td.nm{color:#ff5a6e !important}
+.spx-tbl tr.st-low td.nt select{color:#ffd23f !important;font-weight:900}
+.spx-tbl tr.st-high td.nt select{color:#ff8a3d !important;font-weight:900}
+.spx-calc{display:inline-block;min-width:60px;padding:5px 8px;border-radius:8px;background:rgba(255,255,255,.04);border:1px dashed var(--border);direction:ltr;text-align:center;font-weight:800;color:var(--text)}
+.spx-chips{display:flex;gap:8px;flex-wrap:wrap}
+.spx-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;font-size:12px;font-weight:800;border:1px solid var(--border)}
+.spx-chip.neg{color:var(--text2)}
+.spx-chip.bor{color:#ffb020;border-color:rgba(255,176,32,.5);background:rgba(255,176,32,.1)}
+.spx-chip.pos{color:#ff5a6e;border-color:rgba(255,90,110,.5);background:rgba(255,90,110,.1)}
+.spx-imgs{display:flex;gap:14px;flex-wrap:wrap}
+.spx-img{width:170px;border:1px dashed var(--border);border-radius:10px;padding:8px;text-align:center;background:rgba(255,255,255,.02)}
+.spx-img.wide{width:330px}
+.spx-img .ph{height:130px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(0,0,0,.18);overflow:hidden;margin:6px 0}
+.spx-img.wide .ph{height:170px}
+.spx-img .ph img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.spx-img .lb{font-size:11px;font-weight:700;color:var(--text2)}
+.spx-hint{font-size:11px;color:var(--text2);line-height:1.7}
+#spx-prev-ov{position:fixed;inset:0;z-index:100500;background:rgba(5,10,20,.82);display:flex;flex-direction:column;align-items:center;padding:16px}
+#spx-prev-ov .bar{display:flex;gap:8px;margin-bottom:10px}
+#spx-prev-ov .pg{background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.5);margin:0 auto 14px;width:794px;height:1123px;border:none;transform-origin:top center}
+#spx-prev-ov .sc{overflow:auto;width:100%;flex:1}
+</style>
+<script id="spx-module">
+/* ══════════════════════════════════════════════════════════════════════════
+ * 🧪 الفحوصات الخاصة المتقدّمة (SPX) — بنفس طريقة الإدرار والخروج والسائل المنوي
+ * ──────────────────────────────────────────────────────────────────────────
+ *  mol : Molecular Pathology — MPN Mutations Comprehensive Panel
+ *  ana : Microblot-Array ANA plus IgG (ANA / Myositis / Scleroderma / SLE)
+ *  spe : Protein Electrophoresis (SPE)
+ *  ifx : Immunofixation Serum
+ *  • تحليل محمي (لا يُحذف من قاعدة التحاليل) ويُسعَّر من زر ✏️.
+ *  • بيانات المريض والرأس والذيل = نفس تقرير التحاليل (القالب المختار).
+ *  • السجلات في مجموعة spxRecords (IndexedDB) وتُزامَن عبر LAN والسحابة.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+var SPX = (function(){
+'use strict';
+
+/* ════════ تعريف الأنواع ════════ */
+var MOL_ROWS = ['JAK2 V617F mutation','JAK2 exon 12 mutation (N542_E543del)','JAK2 exon 12 mutation (E543_D544del)',
+  'JAK2 exon 12 mutation (other mutations)','MPL gene mutation (W515K)','MPL gene mutation (W515L)',
+  'MPL gene mutation (W515A or W515R)','MPL gene mutation (S505N)','CALR gene mutation (52-bp deletion)',
+  'CALR gene mutation (5-bp insertion)','CALR gene mutation (other mutations)','CSF3R gene mutation (T615A)',
+  'CSF3R gene mutation (T618I)'];
+var MOL_METHOD = 'Combined Multiplex Ligation-Dependent Probe Amplification (MLPA) and Real-Time multiplex PCR. For MLPA assay genomic DNA extracted from received Sample, and the DNA is subjected to specific Probes (P520-A2) from MRC Holland, according to manufacturer protocol, compared with normal male and female DNA (Promega) respectively, to detect exon deletion and duplication.';
+var MOL_NOTES = 'This assay covers the most frequent mutations of clinical and diagnostic relevance in MPNs. Rare or infrequent mutations are not covered. If mutation calling with MLPA is negative for a patient sample, we recommend performing sequencing of the JAK2, MPL and CALR genes to detect the rare or unknown mutations possibly present in a patient sample.';
+
+var ANA_AG = ['Jo-1','PL-7','PL-12','EJ','OJ','KS','YARS','ZoA','ZoB','HMGCR','SAE-1','SAE-2','SRP54','Mi-2','TIF1γ','MDA5',
+  'NXP2','PMScl 100','PMScl 75','M2','DFS70','Scl70','CENP A','CENP B','POLR3A','NOR90','Th/To','PDGFR-β','Fibrillarin',
+  'Ro52','Ro60','La','PCNA','P0','SmB','SmD','Nucleolin','Nucleosome','Histone','RNP A','RNP 68','RNP C','Ku','dsDNA'];
+var ANA_PANELS = [
+  {k:'ana', n:'ANA', ag:ANA_AG},
+  {k:'myo', n:'Myositis', ag:['Jo-1','PL-7','PL-12','EJ','OJ','KS','YARS','ZoA','ZoB','HMGCR','SAE-1','SAE-2','SRP54','Mi-2','TIF1γ','MDA5','NXP2','PMScl 100','PMScl 75','Ro52','Ku']},
+  {k:'scl', n:'Scleroderma', ag:['PMScl 100','PMScl 75','M2','Scl70','CENP A','CENP B','POLR3A','NOR90','Th/To','PDGFR-β','Fibrillarin','Ro52','RNP A','RNP 68','RNP C','Ku']},
+  {k:'sle', n:'SLE and other connective tissue disease (SjS, MCTD)', ag:['NOR90','Ro52','Ro60','La','PCNA','P0','SmB','SmD','Nucleolin','Nucleosome','Histone','RNP A','RNP 68','RNP C','Ku','dsDNA']}
+];
+var ANA_LO = 185, ANA_HI = 210, ANA_RANGE = '(185 - 210)';
+var ANA_LEGEND = [['ASS','Antisynthetase syndrome'],['PM','Polymyositis'],['DM','Dermatomyositis'],['ILD','Interstitial lung disease'],
+  ['IMNM','Immune-mediated necrotizing myopathy'],['NM','Necrotizing myopathy'],['CDM','Cancer-associated myositis'],['IBM','Inclusion body myositis'],
+  ['SLE','Systemic lupus erythematosus'],['MCTD','Mixed connective tissue disease'],['SSc','Systemic scleroderma'],['SjS','Sjögren´s syndrome'],
+  ['PBC','Primary biliary cirrhosis'],['SARD','Systemic autoimmune rheumatoid disease']];
+
+/* SPE: g/dl + نسب مئوية */
+var SPE_ROWS = [
+  {k:'tp',  n:'Protein Total', u:'g/dl', lo:6.4,  hi:8.3},
+  {k:'alb', n:'Albumin',       u:'g/dl', lo:4,    hi:4.76, plo:55.8, phi:66.1, pct:true},
+  {k:'glb', n:'Globulin',      u:'g/dl', lo:2.4,  hi:3.54, plo:33.9, phi:44.2, pct:true, calc:true},
+  {k:'ag',  n:'Alb./Glb. Ratio', u:'Ratio', lo:1.2, hi:1.8, calc:true},
+  {k:'a1',  n:'α1 Globulin',   u:'g/dl', lo:0.21, hi:0.35, plo:2.9,  phi:4.9,  pct:true},
+  {k:'a2',  n:'α2 Globulin',   u:'g/dl', lo:0.51, hi:0.85, plo:7.1,  phi:11.8, pct:true},
+  {k:'b1',  n:'β1 Globulin',   u:'g/dl', lo:0.34, hi:0.52, plo:4.7,  phi:7.2,  pct:true},
+  {k:'b2',  n:'β2 Globulin',   u:'g/dl', lo:0.23, hi:0.47, plo:3.2,  phi:6.5,  pct:true},
+  {k:'gm',  n:'γ Globulin',    u:'g/dl', lo:0.8,  hi:1.35, plo:11.1, phi:18.8, pct:true}
+];
+/* IFX */
+var IFX_ROWS = [
+  {k:'tp',  n:'Protein Total', u:'g/dl',  lo:6.4,   hi:8.3},
+  {k:'alb', n:'Albumin',       u:'g/dl',  lo:4,     hi:4.7,  pct:'alb', pref:'56 - 66.1'},
+  {k:'glb', n:'Globulin',      u:'g/dl',  lo:2.4,   hi:3.6,  pct:'glb', pref:'34 - 44.2', calc:true},
+  {k:'ag',  n:'Alb. / Glb Ratio', u:'Ratio', lo:1.2, hi:1.8, calc:true},
+  {k:'igg', n:'IgG',           u:'mg/dl', lo:680,   hi:1650, pct:'ig', upto:'80%'},
+  {k:'igm', n:'IgM',           u:'mg/dl', lo:40,    hi:312,  pct:'ig', upto:'5%'},
+  {k:'iga', n:'IgA',           u:'mg/dl', lo:87,    hi:475,  pct:'ig', upto:'15%'},
+  {k:'ige', n:'IgE',           u:'mg/dl', lo:0.001, hi:0.15, pct:'ig', upto:'0.001%'},
+  {k:'kap', n:'Kappa (κ) Free Light Chain',  u:'g/L', lo:1.55, hi:4.08},
+  {k:'lam', n:'Lambda (λ) Free Light Chain', u:'g/L', lo:0.83, hi:2.24},
+  {k:'kl',  n:'κ/λ Free Light Chain Ratio',  u:'Ratio', lo:1.29, hi:2.61, calc:true},
+  {k:'inv', n:'Involved / Uninvolved FLC Ratio', u:'', calc:true}
+];
+var IFX_CLASSES = ['IgG','IgA','IgM','IgD','IgE','Free Light Chain only','No monoclonal band detected'];
+
+var KINDS = {
+  mol:{icon:'🧬', title:'Molecular Pathology Report', ar:'التحليل الجزيئي — MPN Panel'},
+  ana:{icon:'🧷', title:'Microblot-Array ANA plus IgG', ar:'ANA Panel (Microblot)'},
+  spe:{icon:'📈', title:'Protein Electrophoresis (SPE)', ar:'الترحيل الكهربائي للبروتين'},
+  ifx:{icon:'🧪', title:'Immunofixation Serum', ar:'الترحيل المناعي (Immunofixation)'}
+};
+function is(k){ return !!(k && KINDS[k]); }
+function icon(k){ return (KINDS[k]||{}).icon || '🧪'; }
+
+/* ════════ أدوات ════════ */
+function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function num(v){ if(v===null||v===undefined) return NaN; var s=String(v).trim().replace(/,/g,'.').replace(/[٠-٩]/g,function(d){ return '٠١٢٣٤٥٦٧٨٩'.indexOf(d); }); s=s.replace(/^[<>≤≥=\s]+/,''); return s===''?NaN:parseFloat(s); }
+function fx(n, d){ if(!isFinite(n)) return ''; var s=n.toFixed(d==null?2:d); if(s.indexOf('.')>-1) s=s.replace(/0+$/,'').replace(/\.$/,''); return s; }
+function fx2(n){ return isFinite(n) ? n.toFixed(2) : ''; }
+function uid(){ try{ if(typeof _uid==='function') return _uid('spx-'); }catch(e){} return 'spx-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function today(){ return new Date().toISOString().split('T')[0]; }
+function dmy(iso){ var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso||'')); return m ? (m[3]+'-'+m[2]+'-'+m[1]) : String(iso||''); }
+function notif(t,m,k){ try{ showNotif(t,m,k||'info'); }catch(e){} }
+function reqOf(id){ try{ return (requests||[]).find(function(r){ return r && r.id===id; })||null; }catch(e){ return null; } }
+function testOf(id){ try{ return (tests||[]).find(function(t){ return t && t.id===id; })||null; }catch(e){ return null; } }
+
+/* ════════ التخزين ════════ */
+function loadAll(){ try{ var v=load('spxRecords', null); if(Array.isArray(v)) spxRecords=v; }catch(e){} return spxRecords; }
+function persist(rec){
+  try{ if(rec) rec._updatedAt=Date.now(); }catch(e){}
+  try{ if(rec) saveOne('spxRecords', spxRecords, rec); else window.save('spxRecords', spxRecords); }
+  catch(e){ console.warn('[SPX] save', e); try{ window.save('spxRecords', spxRecords); }catch(x){} }
+}
+function recFor(reqId, testId){
+  loadAll();
+  var l=spxRecords.filter(function(r){ return r && r.reqId && r.reqId===reqId; });
+  if(!l.length) return null;
+  var t=testId ? testOf(testId) : null;
+  return l.find(function(r){ return testId && r.testId===testId; })
+      || (t ? l.find(function(r){ return r.kind===t.isSpecialExam; }) : null)
+      || null;
+}
+function recById(id){ loadAll(); return spxRecords.find(function(r){ return r && r.id===id; })||null; }
+
+/* ════════ القيم الافتراضية ════════ */
+function blank(kind, req, testId){
+  var r={ id:uid(), kind:kind, reqId:req?req.id:'', testId:testId||'', patientId:req?req.patientId:'', patientName:req?req.patientName:'',
+          date:(req&&String(req.date||'').slice(0,10))||today(), createdAt:Date.now(), saved:false };
+  if(kind==='mol'){
+    r.specimen='Whole Blood (EDTA)'; r.collDate=r.date;
+    r.rows=MOL_ROWS.map(function(n){ return {n:n, v:'Normal'}; });
+    r.comment=''; r.commentAuto=true; r.method=MOL_METHOD; r.notes=MOL_NOTES;
+  } else if(kind==='ana'){
+    r.lot=''; r.well=''; r.cfg='';
+    r.ag={}; ANA_AG.forEach(function(a){ r.ag[a]={v:'<30', st:'Negative', man:false}; });
+    r.pc={}; ANA_PANELS.forEach(function(p){ r.pc[p.k]={c:'', l:''}; });
+    r.img1=''; r.img2='';
+  } else if(kind==='spe'){
+    r.v={}; r.p={}; r.nt={}; r.ntMan={}; r.comment=''; r.commentAuto=true; r.dx=''; r.img='';
+  } else if(kind==='ifx'){
+    r.v={}; r.nt={}; r.ntMan={}; r.cls='IgG'; r.clsPct='100%'; r.type='Kappa'; r.comment=''; r.img='';
+  }
+  return r;
+}
+
+/* ════════ منطق النتائج ════════ */
+function anaStatus(v){
+  var s=String(v==null?'':v).trim(); if(!s) return 'Negative';
+  if(s.charAt(0)==='<') return 'Negative';
+  var n=num(s); if(!isFinite(n)) return 'Negative';
+  if(s.charAt(0)==='>'){ if(n>=ANA_HI) return 'Positive'; if(n>=ANA_LO) return 'Borderline'; return 'Negative'; }
+  if(n>ANA_HI) return 'Positive';
+  if(n>=ANA_LO) return 'Borderline';
+  return 'Negative';
+}
+var RANK={Negative:0, Borderline:1, Positive:2};
+function panelResult(rec, p){
+  var best='Negative';
+  p.ag.forEach(function(a){ var s=(rec.ag[a]||{}).st||'Negative'; if(RANK[s]>RANK[best]) best=s; });
+  return best;
+}
+function molAutoComment(rec){
+  var ab=(rec.rows||[]).filter(function(x){ return x.v==='ABNORMAL'; }).map(function(x){ return x.n; });
+  if(!ab.length) return 'The result is normal. None of the tested MPN-associated mutations were detected.';
+  return 'The result is abnormal and indicates '+ab.join(', ')+'.';
+}
+function noteOf(v, lo, hi){
+  var n=num(v); if(!isFinite(n) || lo==null || hi==null) return 'Normal';
+  if(n<lo) return 'Low'; if(n>hi) return 'High'; return 'Normal';
+}
+/* SPE: يُحسب الغلوبيولين والنسبة والنِّسب المئوية */
+function speCompute(rec){
+  var v=rec.v||{}, p=rec.p||{}, tp=num(v.tp), alb=num(v.alb);
+  var out={g:{}, p:{}};
+  SPE_ROWS.forEach(function(r){ out.g[r.k]=v[r.k]; out.p[r.k]=p[r.k]; });
+  if(isFinite(tp) && isFinite(alb)){ out.g.glb=fx2(tp-alb); }
+  var glb=num(out.g.glb);
+  if(isFinite(alb) && isFinite(glb) && glb>0) out.g.ag=fx2(alb/glb);
+  if(isFinite(tp) && tp>0){
+    /* النسبة المُدخلة من الجهاز تُعرض كما هي؛ تُحسب فقط إن لم تُدخل */
+    ['alb','glb','a1','a2','b1','b2','gm'].forEach(function(k){
+      if(k!=='glb' && String(p[k]==null?'':p[k]).trim()!=='' && isFinite(num(p[k]))) return;
+      var g=num(out.g[k]); if(isFinite(g)) out.p[k]=fx(g/tp*100,1);
+    });
+    var ap=num(out.p.alb); if(String(p.alb==null?'':p.alb).trim()!=='' && isFinite(ap)) out.p.glb=fx(100-ap,1);
+  }
+  return out;
+}
+function ifxCompute(rec){
+  var v=rec.v||{}, o={}, k;
+  for(k in v) o[k]=v[k];
+  var tp=num(v.tp), alb=num(v.alb);
+  if(isFinite(tp) && isFinite(alb)) o.glb=fx(tp-alb,2);
+  var glb=num(o.glb);
+  if(isFinite(alb) && isFinite(glb) && glb>0) o.ag=fx2(alb/glb);
+  var pct={};
+  if(isFinite(tp) && tp>0){ if(isFinite(alb)) pct.alb=fx(alb/tp*100,1); if(isFinite(glb)) pct.glb=fx(glb/tp*100,1); }
+  if(isFinite(glb) && glb>0){
+    ['igg','igm','iga','ige'].forEach(function(x){ var n=num(v[x]); if(isFinite(n)){ var q=n/(glb*1000)*100; pct[x]=(q===0?'0':q<0.1? String(+q.toPrecision(2)) : fx(q,1))+'%'; } });
+  }
+  if(pct.alb) pct.alb=pct.alb; if(pct.glb) pct.glb=pct.glb;
+  var ka=num(v.kap), la=num(v.lam);
+  if(isFinite(ka) && isFinite(la) && la>0){ o.kl=fx(ka/la,1); var mx=Math.max(ka,la), mn=Math.min(ka,la); if(mn>0) o.inv=fx(mx/mn,1); }
+  var inv='';
+  var klv=num(o.kl);
+  if(isFinite(klv)){ if(klv>2.61) inv='Kappa FLC (Involved)'; else if(klv<1.29) inv='Lambda FLC (Involved)'; else inv='No involved FLC'; }
+  return {v:o, pct:pct, involved:inv};
+}
+function noteFor(rec, rowDef, val){
+  if(rec.ntMan && rec.ntMan[rowDef.k] && rec.nt && rec.nt[rowDef.k]) return rec.nt[rowDef.k];
+  if(rowDef.lo==null) return '';
+  var s=String(val==null?'':val).trim(); if(!s) return 'Normal';
+  return noteOf(s, rowDef.lo, rowDef.hi);
+}
+function speAutoComment(rec){
+  var c=speCompute(rec), out=[];
+  var map={alb:['Hypo-Albuminemia','Hyper-Albuminemia'], a1:['Decreased α1-Globulin','Increased α1-Globulin'], a2:['Decreased α2-Globulin','Increased α2-Globulin'],
+           b1:['Decreased β1-Globulin','Increased β1-Globulin'], b2:['Decreased β2-Globulin','Increased β2-Globulin'], gm:['Hypogammaglobulinemia','Hypergammaglobulinemia'],
+           tp:['Hypoproteinemia','Hyperproteinemia']};
+  SPE_ROWS.forEach(function(r){
+    if(!map[r.k]) return;
+    var n=noteFor(rec, r, c.g[r.k]);
+    if(n==='Low') out.push(map[r.k][0]); else if(n==='High') out.push(map[r.k][1]);
+  });
+  return out.length ? out.join(' — ') : 'Normal electrophoretic pattern.';
+}
+
+/* ════════ الصور: ضغط إلى JPEG (بلا قصّ) ════════ */
+function readImage(file, maxSide){
+  return new Promise(function(res, rej){
+    if(!file) return rej(new Error('no file'));
+    var fr=new FileReader();
+    fr.onerror=function(){ rej(new Error('read')); };
+    fr.onload=function(){
+      var im=new Image();
+      im.onerror=function(){ rej(new Error('image')); };
+      im.onload=function(){
+        var w=im.naturalWidth, h=im.naturalHeight, s=Math.min(1, (maxSide||1600)/Math.max(w,h));
+        var c=document.createElement('canvas'); c.width=Math.round(w*s); c.height=Math.round(h*s);
+        var x=c.getContext('2d'); x.fillStyle='#fff'; x.fillRect(0,0,c.width,c.height); x.drawImage(im,0,0,c.width,c.height);
+        res(c.toDataURL('image/jpeg', 0.88));
+      };
+      im.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* ═════════════════════════════ نافذة الإدخال ═════════════════════════════ */
+var CUR=null;   // السجل قيد التحرير (نسخة)
+function overlay(){
+  var o=document.getElementById('m-spx');
+  if(o) return o;
+  o=document.createElement('div'); o.className='moverlay'; o.id='m-spx';
+  o.innerHTML='<div class="modal"><div class="mhdr"><div class="mtitle" id="spx-title"></div><button class="mclose" onclick="SPX.cancel()">×</button></div>'+
+    '<div class="mbody" id="spx-body"></div>'+
+    '<div class="mftr" style="flex-wrap:wrap;gap:8px"><button class="btn btn-s" onclick="SPX.cancel()">إلغاء</button>'+
+    '<button class="btn btn-s" onclick="SPX.preview()">👁️ معاينة</button>'+
+    '<button class="btn btn-p" onclick="SPX.save(false)">💾 حفظ</button>'+
+    '<button class="btn btn-ok" onclick="SPX.save(true)">🖨️ حفظ وطباعة</button></div></div>';
+  document.body.appendChild(o);
+  return o;
+}
+function open(reqId, testId){
+  var req=reqOf(reqId); if(!req){ notif('خطأ','الطلب غير موجود','error'); return; }
+  var t=testOf(testId); if(!t || !is(t.isSpecialExam)) return;
+  var ex=recFor(reqId, testId);
+  CUR = ex ? JSON.parse(JSON.stringify(ex)) : blank(t.isSpecialExam, req, testId);
+  CUR.testId=testId;
+  var o=overlay();
+  document.getElementById('spx-title').textContent=icon(CUR.kind)+' '+(t.nameEn||KINDS[CUR.kind].title)+' — '+(req.patientName||'');
+  render();
+  if(typeof openModal==='function') openModal('m-spx'); else o.classList.add('open');
+}
+/* إلغاء بلا حفظ: لا يبقى وضع «الإدخال من شاشة النتائج» عالقاً */
+function cancel(){ window._specialExamInlineMode=false; close(); }
+function close(){ try{ closeModal('m-spx'); }catch(e){ var o=document.getElementById('m-spx'); if(o) o.classList.remove('open'); } CUR=null; }
+
+function render(){
+  var b=document.getElementById('spx-body'); if(!b || !CUR) return;
+  var k=CUR.kind, h='';
+  if(k==='mol') h=uiMol(); else if(k==='ana') h=uiAna(); else if(k==='spe') h=uiSpe(); else if(k==='ifx') h=uiIfx();
+  b.innerHTML=h;
+}
+/* ── Molecular ── */
+function uiMol(){
+  var r=CUR, h='<div class="spx-sec"><h4>بيانات العينة</h4><div class="spx-grid">'+
+    '<div class="fg" style="margin:0"><label class="fl">Specimen</label><input class="fc" lang="en" dir="ltr" value="'+esc(r.specimen)+'" oninput="SPX._set(\'specimen\',this.value)"></div>'+
+    '<div class="fg" style="margin:0"><label class="fl">Date of Collection</label><input class="fc" type="date" value="'+esc(r.collDate)+'" onchange="SPX._set(\'collDate\',this.value)"></div>'+
+    '</div></div>';
+  h+='<div class="spx-sec"><h4>MPN Mutations Comprehensive Panel <span class="spx-hint">— الافتراضي Normal · ABNORMAL يظهر بالأحمر</span></h4>'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px"><button class="btn btn-s btn-sm" onclick="SPX._molAll(\'Normal\')">✅ الكل Normal</button></div>'+
+    '<table class="spx-tbl"><thead><tr><th style="text-align:left">Mutation</th><th style="width:200px">Result</th></tr></thead><tbody>';
+  r.rows.forEach(function(x,i){
+    h+='<tr class="'+(x.v==='ABNORMAL'?'st-abn':'')+'"><td class="nm">'+esc(x.n)+'</td><td><select class="fc" onchange="SPX._molRow('+i+',this.value)">'+
+      '<option'+(x.v==='Normal'?' selected':'')+'>Normal</option><option value="ABNORMAL"'+(x.v==='ABNORMAL'?' selected':'')+'>ABNORMAL</option></select></td></tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div class="spx-sec"><h4>Comments <span class="spx-hint">— يُكتب تلقائياً حسب النتائج، ويمكن تعديله</span></h4>'+
+    '<textarea class="fc" id="spx-mol-c" rows="3" lang="en" dir="ltr" oninput="SPX._set(\'comment\',this.value);SPX._set(\'commentAuto\',false)">'+esc(r.commentAuto?molAutoComment(r):r.comment)+'</textarea>'+
+    '<div style="margin-top:6px"><button class="btn btn-s btn-sm" onclick="SPX._molAutoC()">✨ إعادة التعليق التلقائي</button></div></div>';
+  h+='<details class="spx-sec"><summary style="cursor:pointer;font-weight:800;color:var(--primary);font-size:13px">METHOD · NOTES and LIMITATIONS (نص ثابت قابل للتعديل)</summary>'+
+    '<div class="fg" style="margin-top:10px"><label class="fl">METHOD</label><textarea class="fc" rows="4" lang="en" dir="ltr" oninput="SPX._set(\'method\',this.value)">'+esc(r.method)+'</textarea></div>'+
+    '<div class="fg"><label class="fl">NOTES and LIMITATIONS</label><textarea class="fc" rows="4" lang="en" dir="ltr" oninput="SPX._set(\'notes\',this.value)">'+esc(r.notes)+'</textarea></div></details>';
+  return h;
+}
+/* ── ANA ── */
+function anaRowCls(st){ return st==='Positive'?'st-pos':st==='Borderline'?'st-bor':''; }
+function uiAna(){
+  var r=CUR, h='';
+  h+='<div class="spx-sec"><h4>نتيجة المجموعات (تُحسب تلقائياً من المستضدات)</h4><div class="spx-chips" id="spx-ana-chips">'+anaChips()+'</div></div>';
+  h+='<div class="spx-sec"><h4>الصورتان (اختياري) — تظهران أعلى التقرير بحجمهما في الملف الأصلي بلا قصّ</h4><div class="spx-imgs">'+
+     imgBox('img1','Image before analysis', false)+imgBox('img2','Analyzed image', false)+'</div>'+
+     '<div class="spx-grid" style="margin-top:10px">'+
+     '<div class="fg" style="margin:0"><label class="fl">Lot number (اختياري)</label><input class="fc" lang="en" dir="ltr" value="'+esc(r.lot)+'" oninput="SPX._set(\'lot\',this.value)"></div>'+
+     '<div class="fg" style="margin:0"><label class="fl">Well number (اختياري)</label><input class="fc" lang="en" dir="ltr" value="'+esc(r.well)+'" oninput="SPX._set(\'well\',this.value)"></div>'+
+     '<div class="fg" style="margin:0"><label class="fl">Configuration (اختياري)</label><input class="fc" lang="en" dir="ltr" value="'+esc(r.cfg)+'" oninput="SPX._set(\'cfg\',this.value)"></div>'+
+     '</div></div>';
+  h+='<div class="spx-sec"><h4>Antibody level [U/ml] <span class="spx-hint">— النطاق بين القوسين ثابت (185 - 210): أقل منه = Negative · ضمنه = Borderline (برتقالي) · أكبر منه = Positive (أحمر)</span></h4>'+
+     '<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="SPX._anaReset()">↺ الكل Negative (&lt;30)</button>'+
+     '<span class="spx-hint">كل مستضد يُدخل مرة واحدة ويظهر تلقائياً في كل المجموعات التي يتبع لها (M = Myositis · S = Scleroderma · L = SLE)</span></div>'+
+     '<div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:10px"><table class="spx-tbl" id="spx-ana-tbl"><thead><tr>'+
+     '<th style="text-align:left">Antigen</th><th style="width:150px">Antibody level</th><th style="width:110px">Range</th><th style="width:150px">Result</th><th style="width:80px">Panels</th></tr></thead><tbody>';
+  ANA_AG.forEach(function(a,i){
+    var x=r.ag[a]||{v:'<30',st:'Negative'};
+    var tags=ANA_PANELS.slice(1).filter(function(p){ return p.ag.indexOf(a)>-1; }).map(function(p){ return p.k==='myo'?'M':p.k==='scl'?'S':'L'; }).join(' ');
+    h+='<tr id="spx-ana-r'+i+'" class="'+anaRowCls(x.st)+'"><td class="nm">'+esc(a)+'</td>'+
+      '<td><input class="fc" lang="en" dir="ltr" style="text-align:center" value="'+esc(x.v)+'" oninput="SPX._anaVal('+i+',this.value)"></td>'+
+      '<td class="rg">'+ANA_RANGE+'</td>'+
+      '<td><select class="fc" id="spx-ana-s'+i+'" onchange="SPX._anaSt('+i+',this.value)">'+
+        ['Negative','Borderline','Positive'].map(function(s){ return '<option'+(x.st===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></td>'+
+      '<td class="rg">'+tags+'</td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  h+='<div class="spx-sec"><h4>التعليقات (اختيارية) لكل مجموعة</h4>';
+  ANA_PANELS.forEach(function(p){
+    var c=r.pc[p.k]||{c:'',l:''};
+    h+='<div style="margin-bottom:10px"><div style="font-weight:800;font-size:12px;margin-bottom:4px;direction:ltr;text-align:left">'+esc(p.n)+'</div><div class="spx-grid">'+
+      '<input class="fc" lang="en" dir="auto" placeholder="Comment" value="'+esc(c.c)+'" oninput="SPX._anaPc(\''+p.k+'\',\'c\',this.value)">'+
+      '<input class="fc" lang="en" dir="auto" placeholder="Comment of the lab" value="'+esc(c.l)+'" oninput="SPX._anaPc(\''+p.k+'\',\'l\',this.value)"></div></div>';
+  });
+  h+='</div>';
+  return h;
+}
+function anaChips(){
+  return ANA_PANELS.map(function(p){
+    var s=panelResult(CUR,p), c=s==='Positive'?'pos':s==='Borderline'?'bor':'neg';
+    return '<span class="spx-chip '+c+'">'+esc(p.k==='sle'?'SLE / CTD':p.n)+': '+s+'</span>';
+  }).join('');
+}
+function imgBox(key, label, wide){
+  var v=CUR[key];
+  return '<div class="spx-img'+(wide?' wide':'')+'"><div class="lb">'+esc(label)+'</div><div class="ph">'+(v?'<img src="'+v+'">':'<span class="spx-hint">لا توجد صورة</span>')+'</div>'+
+    '<div style="display:flex;gap:6px;justify-content:center"><label class="btn btn-s btn-sm" style="cursor:pointer">📷 '+(v?'تغيير':'إضافة')+
+    '<input type="file" accept="image/*" style="display:none" onchange="SPX._img(\''+key+'\',this)"></label>'+
+    (v?'<button class="btn btn-d btn-sm" onclick="SPX._imgDel(\''+key+'\')">🗑️</button>':'')+'</div></div>';
+}
+/* ── SPE ── */
+function uiSpe(){
+  var r=CUR, c=speCompute(r), h='<div class="spx-sec"><h4>Protein Electrophoresis <span class="spx-hint">— أدخل Protein Total ثم النِّسب % من الجهاز (أو القيم g/dl) — الباقي يُحسب تلقائياً · الملاحظة الافتراضية Normal</span></h4>'+
+    '<table class="spx-tbl"><thead><tr><th style="text-align:left">Analytes</th><th style="width:120px">Result (g/dl)</th><th style="width:130px">Notes</th><th>Units</th><th>Normal Values</th><th style="width:110px">%</th><th>Normal %</th></tr></thead><tbody>';
+  SPE_ROWS.forEach(function(d){
+    var gv=c.g[d.k], pv=c.p[d.k], note=noteFor(r,d,gv);
+    var cls=note==='Low'?'st-low':note==='High'?'st-high':'';
+    h+='<tr class="'+cls+'" id="spx-spe-'+d.k+'"><td class="nm">'+esc(d.n)+'</td>'+
+      '<td>'+(d.calc?'<span class="spx-calc" id="spx-spe-g-'+d.k+'">'+esc(gv||'—')+'</span>':'<input class="fc" lang="en" dir="ltr" style="text-align:center" value="'+esc(r.v[d.k]||'')+'" oninput="SPX._speG(\''+d.k+'\',this.value)" id="spx-spe-gi-'+d.k+'">')+'</td>'+
+      '<td class="nt"><select class="fc" onchange="SPX._note(\''+d.k+'\',this.value)">'+['Normal','Low','High'].map(function(s){ return '<option'+(note===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select></td>'+
+      '<td class="rg">'+esc(d.u)+'</td><td class="rg">'+fx(d.lo)+' - '+fx(d.hi)+'</td>'+
+      '<td>'+(d.pct?(d.calc?'<span class="spx-calc" id="spx-spe-p-'+d.k+'">'+esc(pv||'—')+'</span>':'<input class="fc" lang="en" dir="ltr" style="text-align:center" placeholder="%" value="'+esc(r.p[d.k]||'')+'" oninput="SPX._speP(\''+d.k+'\',this.value)" id="spx-spe-pi-'+d.k+'">'):'')+'</td>'+
+      '<td class="rg">'+(d.pct?fx(d.plo)+' - '+fx(d.phi):'')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div class="spx-sec"><h4>Comment <span class="spx-hint">— يُقترح تلقائياً من الملاحظات ويمكن تعديله</span></h4>'+
+    '<input class="fc" id="spx-spe-c" lang="en" dir="ltr" value="'+esc(r.commentAuto?speAutoComment(r):r.comment)+'" oninput="SPX._set(\'comment\',this.value);SPX._set(\'commentAuto\',false)">'+
+    '<div class="fg" style="margin-top:10px"><label class="fl">Provisional Diagnosis (سطر لكل تشخيص — تُرقَّم تلقائياً)</label><textarea class="fc" rows="3" lang="en" dir="ltr" oninput="SPX._set(\'dx\',this.value)">'+esc(r.dx)+'</textarea></div></div>';
+  h+='<div class="spx-sec"><h4>صورة منحنى الترحيل (اختياري)</h4><div class="spx-imgs">'+imgBox('img','Electrophoresis curve', true)+'</div></div>';
+  return h;
+}
+/* ── IFX ── */
+function uiIfx(){
+  var r=CUR, c=ifxCompute(r), h='<div class="spx-sec"><h4>Immunofixation Serum <span class="spx-hint">— الغلوبيولين والنسب والنِّسب المئوية تُحسب تلقائياً · الملاحظة الافتراضية Normal</span></h4>'+
+    '<table class="spx-tbl"><thead><tr><th style="text-align:left">Analytes</th><th style="width:120px">Result</th><th style="width:130px">Note</th><th>Normal Values</th><th>Unit</th><th>%</th><th>Normal %</th></tr></thead><tbody>';
+  IFX_ROWS.forEach(function(d){
+    var val=c.v[d.k], note=noteFor(r,d,val);
+    var cls=note==='Low'?'st-low':note==='High'?'st-high':'';
+    h+='<tr class="'+cls+'" id="spx-ifx-'+d.k+'"><td class="nm">'+esc(d.n)+'</td>'+
+      '<td>'+(d.calc?'<span class="spx-calc" id="spx-ifx-v-'+d.k+'">'+esc(val||'—')+'</span>':'<input class="fc" lang="en" dir="ltr" style="text-align:center" value="'+esc(r.v[d.k]||'')+'" oninput="SPX._ifxV(\''+d.k+'\',this.value)">')+'</td>'+
+      '<td class="nt">'+(d.lo!=null?'<select class="fc" onchange="SPX._note(\''+d.k+'\',this.value)">'+['Normal','Low','High'].map(function(s){ return '<option'+(note===s?' selected':'')+'>'+s+'</option>'; }).join('')+'</select>':'')+'</td>'+
+      '<td class="rg">'+(d.lo!=null?fx(d.lo,3)+' - '+fx(d.hi,3):'')+'</td><td class="rg">'+esc(d.u)+'</td>'+
+      '<td class="rg" id="spx-ifx-p-'+d.k+'">'+esc((d.pct?(c.pct[d.k]!=null?c.pct[d.k]+(d.pct==='ig'?'':'%'):''):''))+'</td>'+
+      '<td class="rg">'+esc(d.upto?('Up to '+d.upto):(d.pref||''))+'</td></tr>';
+  });
+  h+='</tbody></table><div style="margin-top:8px" class="spx-hint">الجانب: <b id="spx-ifx-inv" style="color:var(--primary)">'+esc(c.involved||'—')+'</b></div></div>';
+  h+='<div class="spx-sec"><h4>Comment</h4><div class="spx-grid">'+
+    '<div class="fg" style="margin:0"><label class="fl">Class</label><select class="fc" onchange="SPX._set(\'cls\',this.value)">'+IFX_CLASSES.map(function(x){ return '<option'+(r.cls===x?' selected':'')+'>'+x+'</option>'; }).join('')+'</select></div>'+
+    '<div class="fg" style="margin:0"><label class="fl">%</label><input class="fc" lang="en" dir="ltr" value="'+esc(r.clsPct)+'" oninput="SPX._set(\'clsPct\',this.value)"></div>'+
+    '<div class="fg" style="margin:0"><label class="fl">Type</label><select class="fc" onchange="SPX._set(\'type\',this.value)">'+['Kappa','Lambda','—'].map(function(x){ return '<option'+(r.type===x?' selected':'')+'>'+x+'</option>'; }).join('')+'</select></div>'+
+    '</div><div class="fg" style="margin-top:10px"><label class="fl">تعليق إضافي (اختياري)</label><input class="fc" lang="en" dir="auto" value="'+esc(r.comment)+'" oninput="SPX._set(\'comment\',this.value)"></div></div>';
+  h+='<div class="spx-sec"><h4>صورة الترحيل المناعي (اختياري)</h4><div class="spx-imgs">'+imgBox('img','Immunofixation panels', true)+'</div></div>';
+  return h;
+}
+
+/* ── معالجات الإدخال (تحدّث الحقول المحسوبة بلا إعادة بناء لتبقى الكتابة سلسة) ── */
+function _set(k, v){ if(CUR) CUR[k]=v; }
+function _molRow(i, v){ CUR.rows[i].v=v; var tr=document.querySelectorAll('#spx-body .spx-tbl tbody tr')[i]; if(tr) tr.className=(v==='ABNORMAL'?'st-abn':''); if(CUR.commentAuto){ var c=document.getElementById('spx-mol-c'); if(c) c.value=molAutoComment(CUR); } }
+function _molAll(v){ CUR.rows.forEach(function(x){ x.v=v; }); render(); }
+function _molAutoC(){ CUR.commentAuto=true; CUR.comment=''; var c=document.getElementById('spx-mol-c'); if(c) c.value=molAutoComment(CUR); }
+function _anaRefresh(i){
+  var a=ANA_AG[i], x=CUR.ag[a];
+  var tr=document.getElementById('spx-ana-r'+i); if(tr) tr.className=anaRowCls(x.st);
+  var s=document.getElementById('spx-ana-s'+i); if(s) s.value=x.st;
+  var ch=document.getElementById('spx-ana-chips'); if(ch) ch.innerHTML=anaChips();
+}
+function _anaVal(i, v){ var a=ANA_AG[i]; var x=CUR.ag[a]||(CUR.ag[a]={}); x.v=v; x.st=anaStatus(v); x.man=false; _anaRefresh(i); }
+function _anaSt(i, v){ var a=ANA_AG[i]; var x=CUR.ag[a]||(CUR.ag[a]={v:'<30'}); x.st=v; x.man=true; _anaRefresh(i); }
+function _anaReset(){ ANA_AG.forEach(function(a){ CUR.ag[a]={v:'<30', st:'Negative', man:false}; }); render(); }
+function _anaPc(k, f, v){ (CUR.pc[k]||(CUR.pc[k]={c:'',l:''}))[f]=v; }
+function _note(k, v){ CUR.nt=CUR.nt||{}; CUR.ntMan=CUR.ntMan||{}; CUR.nt[k]=v; CUR.ntMan[k]=true; _rowCls(k, v); if(CUR.kind==='spe' && CUR.commentAuto){ var c=document.getElementById('spx-spe-c'); if(c) c.value=speAutoComment(CUR); } }
+function _rowCls(k, note){ var tr=document.getElementById('spx-'+CUR.kind+'-'+k); if(tr) tr.className=(note==='Low'?'st-low':note==='High'?'st-high':''); }
+function _speRefresh(skip){
+  var c=speCompute(CUR);
+  SPE_ROWS.forEach(function(d){
+    if(d.calc){ var g=document.getElementById('spx-spe-g-'+d.k); if(g) g.textContent=c.g[d.k]||'—'; var p=document.getElementById('spx-spe-p-'+d.k); if(p) p.textContent=c.p[d.k]||'—'; }
+    else if(d.pct && skip!=='p:'+d.k){ var pi=document.getElementById('spx-spe-pi-'+d.k); if(pi && document.activeElement!==pi) pi.value=c.p[d.k]||''; }
+    if(!d.calc && skip!=='g:'+d.k){ var gi=document.getElementById('spx-spe-gi-'+d.k); if(gi && document.activeElement!==gi) gi.value=c.g[d.k]||''; }
+    if(!(CUR.ntMan && CUR.ntMan[d.k])){ var n=noteFor(CUR,d,c.g[d.k]); _rowCls(d.k,n); var tr=document.getElementById('spx-spe-'+d.k); var sel=tr&&tr.querySelector('td.nt select'); if(sel) sel.value=n; }
+  });
+  if(CUR.commentAuto){ var cc=document.getElementById('spx-spe-c'); if(cc) cc.value=speAutoComment(CUR); }
+}
+/* إدخال g/dl ⇒ النسبة % تُحسب · إدخال % ⇒ g/dl = % × Protein Total */
+function _speG(k, v){
+  CUR.v[k]=v;
+  var tp=num(CUR.v.tp);
+  if(k==='tp'){
+    /* تغيّر Protein Total ⇒ أعد حساب g/dl للكسور المُدخلة بالنسبة */
+    ['alb','a1','a2','b1','b2','gm'].forEach(function(x){
+      var p=num(CUR.p[x]), g=num(CUR.v[x]);
+      if(!isFinite(tp) || tp<=0) return;
+      if(CUR._fromP && CUR._fromP[x]){ if(isFinite(p)) CUR.v[x]=fx2(p*tp/100); }
+      else if(isFinite(g)) CUR.p[x]=fx(g/tp*100,1);
+    });
+  } else { if(CUR._fromP) delete CUR._fromP[k]; var g=num(v); if(isFinite(g) && isFinite(tp) && tp>0) CUR.p[k]=fx(g/tp*100,1); else if(!String(v).trim()) CUR.p[k]=''; }
+  _speRefresh('g:'+k);
+}
+function _speP(k, v){
+  CUR.p[k]=v; CUR._fromP=CUR._fromP||{}; CUR._fromP[k]=true;
+  var p=num(v), tp=num(CUR.v.tp);
+  if(isFinite(p) && isFinite(tp)) CUR.v[k]=fx2(p*tp/100); else if(!String(v).trim()) CUR.v[k]='';
+  _speRefresh('p:'+k);
+}
+function _ifxV(k, v){
+  CUR.v[k]=v;
+  var c=ifxCompute(CUR);
+  IFX_ROWS.forEach(function(d){
+    if(d.calc){ var e=document.getElementById('spx-ifx-v-'+d.k); if(e) e.textContent=c.v[d.k]||'—'; }
+    var p=document.getElementById('spx-ifx-p-'+d.k); if(p) p.textContent=d.pct?(c.pct[d.k]!=null?c.pct[d.k]+(d.pct==='ig'?'':'%'):''):'';
+    if(d.lo!=null && !(CUR.ntMan && CUR.ntMan[d.k])){ var n=noteFor(CUR,d,c.v[d.k]); _rowCls(d.k,n); var tr=document.getElementById('spx-ifx-'+d.k); var sel=tr&&tr.querySelector('td.nt select'); if(sel) sel.value=n; }
+  });
+  var inv=document.getElementById('spx-ifx-inv'); if(inv) inv.textContent=c.involved||'—';
+}
+function _img(key, inp){
+  var f=inp && inp.files && inp.files[0]; if(!f) return;
+  readImage(f, key==='img'?1600:800).then(function(d){ CUR[key]=d; render(); }).catch(function(){ notif('خطأ','تعذّر قراءة الصورة','error'); });
+}
+function _imgDel(key){ CUR[key]=''; render(); }
+
+/* ════════ الحفظ ════════ */
+function save(andPrint){
+  if(!CUR) return;
+  var rec=CUR;
+  if(rec.kind==='mol' && rec.commentAuto) rec.comment=molAutoComment(rec);
+  if(rec.kind==='spe'){ if(rec.commentAuto) rec.comment=speAutoComment(rec); var c=speCompute(rec); rec.calc=c; }
+  if(rec.kind==='ifx'){ rec.calc=ifxCompute(rec); }
+  rec.saved=true;
+  delete rec._fromP;
+  loadAll();
+  var i=spxRecords.findIndex(function(x){ return x.id===rec.id; });
+  var old=i>-1?spxRecords[i]:null;
+  if(old){ if(old.createdAt) rec.createdAt=old.createdAt; if(old._dev) rec._dev=old._dev; if(old._org) rec._org=old._org; spxRecords[i]=rec; }
+  else spxRecords.push(rec);
+  persist(rec);
+  /* حالة الطلب */
+  var req=reqOf(rec.reqId);
+  if(req){ try{ _spFinalizeReqStatus(req, rec.date); saveOne('requests', requests, req); }catch(e){} try{ updateBadges(); }catch(e){} }
+  var saved=JSON.parse(JSON.stringify(rec));
+  close();
+  notif('تم الحفظ', icon(saved.kind)+' تم حفظ نتيجة '+KINDS[saved.kind].title+' ✅', 'success');
+  if(window._specialExamInlineMode && saved.reqId){ try{ _spReturnToResultEntry(saved.reqId); }catch(e){} window._specialExamInlineMode=false; }
+  else { try{ var s=document.getElementById('res-req-sel'); if(s && s.value===saved.reqId) loadResultEntry(); }catch(e){} }
+  if(andPrint) setTimeout(function(){ print(saved.id); }, 250);
+}
+
+/* ═════════════════════════════ التقرير ═════════════════════════════ */
+function theme(){
+  var st=(typeof settings!=='undefined' && settings)||{};
+  var strip=st.colorResults||'#003366', sec=st.colorSection||'#003366';
+  if(/^#?f{3,6}$/i.test(String(strip).replace('#',''))) strip='#003366';
+  return { strip:strip, sec:sec, ff:st.printFontFamily||"Arial,sans-serif",
+           fs:Math.max(10, Math.min(13, parseInt(st.printFontSize)||11)) };
+}
+function baseCss(T){
+  return '<style>'+
+  '.spx-root{font-family:'+T.ff+';color:#111;direction:ltr;margin:6px 10px 0;-webkit-print-color-adjust:exact;print-color-adjust:exact}'+
+  '.spx-root *{box-sizing:border-box}'+
+  '.spx-h1{text-align:center;font-size:18px;font-weight:900;color:'+T.sec+';text-decoration:underline;text-underline-offset:5px;margin:4px 0 12px;letter-spacing:.3px}'+
+  '.spx-h2{font-size:14px;font-weight:900;color:#111;text-decoration:underline;text-underline-offset:4px;margin:4px 0 8px}'+
+  '.spx-kv{width:100%;border-collapse:collapse;font-size:'+(T.fs+2)+'px}'+
+  '.spx-kv td{padding:6px 4px;border-bottom:1px solid #e3e8ef;vertical-align:middle}'+
+  '.spx-kv td.k{width:56%;color:#1a1a1a;font-weight:600}.spx-kv td.v{font-weight:700}'+
+  '.spx-abn{display:inline-block;padding:1px 12px;border-radius:12px;background:#fff0f0;border:1.5px solid #cc0000;color:#cc0000;font-weight:900;letter-spacing:.4px}'+
+  '.spx-t{width:100%;border-collapse:separate;border-spacing:0;font-size:'+T.fs+'px;border:1.5px solid '+T.strip+';border-radius:7px;overflow:hidden}'+
+  '.spx-t th{background:'+T.strip+';color:#fff;font-weight:800;padding:6px 7px;text-align:center;border-right:1px solid rgba(255,255,255,.25);white-space:nowrap}'+
+  '.spx-t th:last-child{border-right:none}'+
+  '.spx-t td{padding:4px 7px;border-top:1px solid #dfe5ee;border-right:1px solid #e7ecf3;text-align:center;font-weight:600;white-space:nowrap}'+
+  '.spx-t.cmp th{padding:3px 6px;font-size:11.5px !important;line-height:1.3 !important}.spx-t.cmp td{padding:1.5px 6px;font-size:11.5px !important;line-height:1.3 !important;font-weight:500;white-space:nowrap}'+
+  '.spx-t.cmp td.an{font-weight:700}'+
+  '.spx-t td:last-child{border-right:none}'+
+  '.spx-t tr:nth-child(even) td{background:#f6f9fc}'+
+  '.spx-t td.an{text-align:left;font-weight:800;color:#1b2a3c;background:#eef3f9 !important}'+
+  '.spx-t td.sep{width:10px;background:#fff !important;border-top:none;border-right:none}'+
+  '.spx-t tr td.bor{background:#ffb000 !important;color:#111;font-weight:900}'+
+  '.spx-t tr td.pos{background:#ffe1e1 !important;color:#cc0000;font-weight:900}'+
+  '.spx-nt{display:inline-block;min-width:58px;padding:1px 9px;border-radius:10px;font-weight:800}'+
+  '.spx-nt.Normal{color:#1d6b33;background:#eaf7ee}'+
+  '.spx-nt.Low{color:#5a4300;background:#ffe066}'+
+  '.spx-nt.High{color:#fff;background:#ff7a2f}'+
+  '.spx-note{font-size:'+(T.fs-1)+'px;color:#333;margin:6px 2px}'+
+  '.spx-box{border:1.5px solid '+T.strip+';border-radius:8px;padding:7px 10px;margin-top:10px;font-size:'+(T.fs+1)+'px}'+
+  '.spx-box b{color:'+T.sec+'}'+
+  '.spx-imgframe{border:3px solid #2b6cb0;border-radius:4px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}'+
+  '.spx-imgframe img{max-width:100%;max-height:100%;object-fit:contain;display:block}'+
+  '.spx-hr{height:0;border-top:2px solid '+T.strip+';margin:8px 0 10px}'+
+  '.spx-avoid{break-inside:avoid;page-break-inside:avoid}'+
+  '</style>';
+}
+function blankPage(rec){
+  var req=reqOf(rec.reqId);
+  var fake;
+  if(req) fake=Object.assign({}, req, {tests:[rec.testId||'']});
+  else fake={id:rec.reqId||rec.id, patientId:rec.patientId, patientName:rec.patientName, date:rec.date, tests:[rec.testId||''], results:{}};
+  return buildPrintHTML(fake, {blankBody:true});
+}
+function inject(page, html){
+  var out=page.replace('<!--BLANK_BODY_PLACEHOLDER-->', html);
+  return out;
+}
+/* صفحة تكميلية: نفس الذيل بلا رأس ولا بيانات مريض */
+function contPage(rec, html){
+  var css='<style>#print-content[data-spx-cont]>*:not(.spx-root):not(#print-spacer){display:none !important}</style>';
+  var pg=blankPage(rec).replace('<div id="print-content" ', '<div id="print-content" data-spx-cont="1" ');
+  return inject(pg, css+'<div class="spx-root" style="height:4mm;margin:0"></div>'+html);
+}
+
+function bodyMol(rec, T){
+  var h='<div class="spx-root">'+baseCss(T)+'<div class="spx-h1">Molecular Pathology Report</div>'+
+    '<div class="spx-h2">MPN Mutations Comprehensive Panel</div><table class="spx-kv">'+
+    '<tr><td class="k">Specimen</td><td class="v">'+esc(rec.specimen||'')+'</td></tr>'+
+    '<tr><td class="k">Date of Collection</td><td class="v">'+esc(dmy(rec.collDate))+'</td></tr>';
+  (rec.rows||[]).forEach(function(x){
+    h+='<tr><td class="k">'+esc(x.n)+'</td><td class="v">'+(x.v==='ABNORMAL'?'<span class="spx-abn">ABNORMAL</span>':'Normal')+'</td></tr>';
+  });
+  h+='</table>';
+  var com=rec.commentAuto?molAutoComment(rec):rec.comment;
+  if(com) h+='<div style="margin-top:12px;font-size:'+(T.fs+2)+'px"><b style="font-size:'+(T.fs+3)+'px">Comments:</b><div style="margin-top:2px">'+esc(com)+'</div></div>';
+  if(rec.method) h+='<div style="margin-top:10px;font-size:'+(T.fs)+'px;text-align:justify;font-weight:400;line-height:1.35"><b>METHOD:</b><br>'+esc(rec.method)+'</div>';
+  if(rec.notes) h+='<div style="margin-top:5px;font-size:'+(T.fs)+'px;text-align:justify;font-weight:400;line-height:1.35"><b>NOTES and LIMITATIONS:</b><br>'+esc(rec.notes)+'</div>';
+  return h+'</div>';
+}
+/* جدول مجموعة بعمودين متوازيين (يختصر الطول للنصف دون تصغير الخط) */
+function anaTable(rec, ags){
+  var half=Math.ceil(ags.length/2), rows='';
+  function cells(a){
+    if(!a) return '<td></td><td></td><td></td>';
+    var x=rec.ag[a]||{v:'<30',st:'Negative'}, c=x.st==='Positive'?' pos':x.st==='Borderline'?' bor':'';
+    return '<td class="an'+c+'">'+esc(a)+'</td><td class="'+c.trim()+'">'+esc(x.st)+'</td><td class="'+c.trim()+'" style="white-space:nowrap">'+esc(x.v||'<30')+' '+ANA_RANGE+'</td>';
+  }
+  for(var i=0;i<half;i++) rows+='<tr>'+cells(ags[i])+'<td class="sep"></td>'+cells(ags[i+half])+'</tr>';
+  return '<table class="spx-t cmp"><thead><tr><th>Antigen name</th><th>Result</th><th>Antibody level [U/ml]</th><th class="sep" style="background:#fff;border:none"></th><th>Antigen name</th><th>Result</th><th>Antibody level [U/ml]</th></tr></thead><tbody>'+rows+'</tbody></table>';
+}
+function anaPanel(rec, p, T){
+  var res=panelResult(rec,p), col=res==='Positive'?'#cc0000':res==='Borderline'?'#e69500':'#111';
+  var fw=res==='Negative'?'600':'900';
+  var c=rec.pc[p.k]||{};
+  var td='padding:0 0;line-height:1.25 !important;font-size:12.5px !important;vertical-align:top';
+  return '<div class="spx-avoid" style="margin:9px 0 3px">'+
+    '<table style="font-size:12.5px;border-collapse:collapse;margin-bottom:4px">'+
+    '<tr><td style="width:150px;white-space:nowrap;'+td+'">Test name:</td><td style="'+td+';font-weight:'+fw+';color:'+col+'">'+esc(p.n)+'</td></tr>'+
+    '<tr><td style="white-space:nowrap;'+td+'">Result:</td><td style="'+td+';font-weight:'+fw+';color:'+col+'">'+res+'</td></tr>'+
+    '<tr><td style="white-space:nowrap;'+td+'">Comment:</td><td style="'+td+'">'+esc(c.c||'')+'</td></tr>'+
+    '<tr><td style="white-space:nowrap;'+td+'">Comment of the lab:</td><td style="'+td+'">'+esc(c.l||'')+'</td></tr></table>'+
+    anaTable(rec, p.ag)+'</div>';
+}
+function anaHead(rec, T){
+  var box=function(src, cap){
+    return '<div style="text-align:center"><div style="font-size:'+(T.fs+1)+'px;margin-bottom:4px">'+cap+'</div>'+
+      '<div style="width:36mm;height:36mm;border:1px solid #c9d3df;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">'+
+      (src?'<img src="'+src+'" style="max-width:100%;max-height:100%;object-fit:contain;display:block">':'')+'</div></div>';
+  };
+  var info='';
+  [['Lot number',rec.lot],['Well number',rec.well],['Configuration',rec.cfg]].forEach(function(x){ if(String(x[1]||'').trim()) info+='<tr><td style="padding:2px 14px 2px 0">'+x[0]+':</td><td style="font-weight:700">'+esc(x[1])+'</td></tr>'; });
+  var hasImg=!!(rec.img1||rec.img2);
+  return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px">'+
+    '<div><div style="font-size:'+(T.fs+5)+'px;font-weight:900;line-height:1.25;color:'+T.sec+'">Report for<br>Microblot-Array ANA plus IgG</div>'+
+    (info?'<table style="font-size:'+(T.fs+1)+'px;border-collapse:collapse;margin-top:6px">'+info+'</table>':'')+'</div>'+
+    (hasImg?'<div style="display:flex;gap:14px">'+box(rec.img1,'Image before analysis:')+box(rec.img2,'Analyzed image:')+'</div>':'')+
+    '</div><div class="spx-hr"></div>';
+}
+function anaLegend(T){
+  var n=Math.ceil(ANA_LEGEND.length/3), r='';
+  function c2(x){ return x ? '<td class="an" style="text-align:center;font-size:10.5px !important">'+x[0]+'</td><td style="text-align:left;white-space:normal;font-size:10.5px !important">'+x[1]+'</td>' : '<td></td><td></td>'; }
+  for(var i=0;i<n;i++) r+='<tr>'+c2(ANA_LEGEND[i])+'<td class="sep"></td>'+c2(ANA_LEGEND[i+n])+'<td class="sep"></td>'+c2(ANA_LEGEND[i+2*n])+'</tr>';
+  var sp='<th class="sep" style="background:#fff;border:none"></th>';
+  return '<div class="spx-avoid" style="margin-top:10px"><table class="spx-t cmp" style="table-layout:auto;width:100%"><thead><tr><th>Abbr.</th><th>Meaning</th>'+sp+'<th>Abbr.</th><th>Meaning</th>'+sp+'<th>Abbr.</th><th>Meaning</th></tr></thead><tbody>'+r+'</tbody></table></div>';
+}
+var ANA_NOTE='<div class="spx-note" style="margin:4px 2px">Borderline area information can be found in the table (in parentheses).</div>';
+/* صفحات ANA: ① الرأس + الصور + ANA  ② Myositis + Scleroderma + SLE + الدليل */
+function anaPagesBodies(rec, T){
+  var p1='<div class="spx-root">'+baseCss(T)+anaHead(rec,T)+anaPanel(rec, ANA_PANELS[0], T)+ANA_NOTE+'</div>';
+  var p2='<div class="spx-root" style="padding-top:2mm">'+baseCss(T)+anaPanel(rec, ANA_PANELS[1], T)+anaPanel(rec, ANA_PANELS[2], T)+anaPanel(rec, ANA_PANELS[3], T)+ANA_NOTE+anaLegend(T)+'</div>';
+  return [p1, p2];
+}
+function noteChip(n){ return n ? '<span class="spx-nt '+n+'">'+n+'</span>' : ''; }
+function bodySpe(rec, T){
+  var c=speCompute(rec);
+  var h='<div class="spx-root">'+baseCss(T)+'<div class="spx-h1">Protein Electrophoresis (SPE)</div>'+
+    '<table class="spx-t"><thead><tr><th>Analytes</th><th>Results</th><th>Notes</th><th>Units</th><th>Normal Values</th><th>%</th><th>Normal Values</th></tr></thead><tbody>';
+  SPE_ROWS.forEach(function(d){
+    var g=c.g[d.k], n=String(g==null?'':g).trim()?noteFor(rec,d,g):'';
+    h+='<tr><td class="an">'+esc(d.n)+'</td><td style="font-weight:900">'+esc(g||'')+'</td><td>'+noteChip(n)+'</td><td>'+esc(d.u)+'</td>'+
+      '<td>'+fx(d.lo)+' - '+fx(d.hi)+'</td><td style="font-weight:800">'+(d.pct?esc(c.p[d.k]||''):'')+'</td><td>'+(d.pct?fx(d.plo)+' - '+fx(d.phi):'')+'</td></tr>';
+  });
+  h+='</tbody></table>';
+  var com=rec.commentAuto?speAutoComment(rec):rec.comment;
+  if(com) h+='<div class="spx-box"><b>Comment:</b>&nbsp; '+esc(com)+'</div>';
+  var dx=String(rec.dx||'').split(/\n+/).map(function(s){ return s.trim(); }).filter(Boolean);
+  if(dx.length) h+='<div class="spx-box"><b>Provisional Diagnosis:</b><ol style="margin:4px 0 0 18px;padding:0">'+dx.map(function(s){ return '<li>'+esc(s)+'</li>'; }).join('')+'</ol></div>';
+  if(rec.img) h+='<div class="spx-avoid" style="display:flex;justify-content:center;margin-top:14px"><div class="spx-imgframe" style="width:124mm;height:64mm">'+
+    '<img src="'+rec.img+'"></div></div>';
+  return h+'</div>';
+}
+function bodyIfx(rec, T){
+  var c=ifxCompute(rec);
+  var h='<div class="spx-root">'+baseCss(T)+'<div class="spx-h1">Immunofixation Serum</div>'+
+    '<div style="display:flex;gap:10px;align-items:stretch"><div style="flex:1">'+
+    '<table class="spx-t"><thead><tr><th>Analytes</th><th>Result</th><th>Note</th><th>Normal Values</th><th>Unit</th><th>%</th><th>Normal %</th></tr></thead><tbody>';
+  IFX_ROWS.forEach(function(d){
+    var v=c.v[d.k], has=String(v==null?'':v).trim()!=='';
+    var n=(d.lo!=null && has)?noteFor(rec,d,v):'';
+    var pv=d.pct?(c.pct[d.k]!=null?c.pct[d.k]+(d.pct==='ig'?'':'%'):''):'';
+    h+='<tr><td class="an">'+esc(d.n)+'</td><td style="font-weight:900">'+esc(v||'')+'</td><td>'+noteChip(n)+'</td>'+
+      '<td>'+(d.lo!=null?fx(d.lo,3)+' - '+fx(d.hi,3):'')+'</td><td>'+esc(d.u)+'</td><td style="font-weight:800">'+esc(pv)+'</td><td>'+esc(d.upto?('Up to '+d.upto):(d.pref||''))+'</td></tr>';
+  });
+  h+='</tbody></table></div></div>';
+  var inv=c.involved;
+  h+='<div class="spx-avoid" style="display:flex;gap:10px;margin-top:10px;align-items:stretch">'+
+    '<div class="spx-box" style="margin:0;flex:1"><b>Comment:</b>'+
+      '<table style="border-collapse:collapse;margin-top:6px;font-size:'+(T.fs+2)+'px"><tr><td style="padding:3px 10px 3px 0;font-weight:800;text-decoration:underline">Class:</td>'+
+      '<td style="border:1.5px solid #333;padding:3px 14px;font-weight:900">'+esc(rec.cls||'')+'</td>'+(rec.clsPct&&rec.cls&&!/^No /.test(rec.cls)?'<td style="border:1.5px solid #333;border-left:none;padding:3px 14px;font-weight:900">'+esc(rec.clsPct)+'</td>':'')+'</tr>'+
+      (rec.type && rec.type!=='—'?'<tr><td style="padding:3px 10px 3px 0;font-weight:800;text-decoration:underline">Type:</td><td style="border:1.5px solid #333;border-top:none;padding:3px 14px;font-weight:900">'+esc(rec.type)+'</td></tr>':'')+
+      '</table>'+(rec.comment?'<div style="margin-top:6px">'+esc(rec.comment)+'</div>':'')+'</div>'+
+    (inv?'<div class="spx-box" style="margin:0;min-width:46mm;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:900;color:'+(/Involved\)/.test(inv)?'#cc0000':'#1d6b33')+'">'+esc(inv)+'</div>':'')+
+    '</div>';
+  if(rec.img) h+='<div class="spx-avoid" style="display:flex;justify-content:center;margin-top:12px"><div class="spx-imgframe" style="width:172mm;height:88mm"><img src="'+rec.img+'"></div></div>';
+  return h+'</div>';
+}
+
+/* صفحات التقرير: مصفوفة HTML لكل ورقة (للمعاينة المجمّعة و PDF) */
+function pages(rec){
+  if(!rec) return [];
+  var T=theme();
+  try{
+    if(rec.kind==='ana'){
+      var b=anaPagesBodies(rec, T);
+      return [inject(blankPage(rec), b[0]), contPage(rec, b[1])];
+    }
+    var body = rec.kind==='mol'?bodyMol(rec,T) : rec.kind==='spe'?bodySpe(rec,T) : bodyIfx(rec,T);
+    return [inject(blankPage(rec), body)];
+  }catch(e){ console.warn('[SPX] pages', e); return []; }
+}
+/* مستند طباعة واحد: الورقة الأولى بالرأس، والبقية تكملة بلا رأس */
+function printHTML(rec){
+  var T=theme();
+  if(rec.kind==='ana'){
+    var b=anaPagesBodies(rec, T);
+    return inject(blankPage(rec), b[0]+'<div style="break-before:page;page-break-before:always;height:9mm"></div>'+b[1]);
+  }
+  return pages(rec)[0]||'';
+}
+function pagesForReq(req){
+  var out=[];
+  try{
+    if(!req || !Array.isArray(req.tests)) return out;
+    loadAll();
+    req.tests.forEach(function(tid){
+      var t=testOf(tid); if(!t || !is(t.isSpecialExam)) return;
+      var r=recFor(req.id, tid); if(!r || !r.saved) return;
+      pages(r).forEach(function(h){ if(h) out.push(h); });
+    });
+  }catch(e){ console.warn('[SPX] req pages', e); }
+  return out;
+}
+function print(recId){
+  var rec=recById(recId); if(!rec){ notif('خطأ','السجل غير موجود','error'); return; }
+  var html=printHTML(rec);
+  var req=reqOf(rec.reqId);
+  if(req){ try{ if(!Array.isArray(req.spPrinted)) req.spPrinted=[]; if(req.spPrinted.indexOf(rec.kind)<0) req.spPrinted.push(rec.kind); req._updatedAt=Date.now(); saveOne('requests', requests, req); }catch(e){} }
+  var pn=(typeof settings!=='undefined' && settings && settings.printerMain)||'';
+  if(window.electronAPI && window.electronAPI.printContent && pn){
+    window.electronAPI.printContent({html:html, printer:pn, silent:true}).catch(function(){ _doPrintFallback(html); });
+  } else _doPrintFallback(html);
+  notif('🖨️ طباعة', KINDS[rec.kind].title, 'success');
+}
+/* معاينة داخل البرنامج */
+function preview(){
+  if(!CUR) return;
+  var tmp=JSON.parse(JSON.stringify(CUR)); tmp.saved=true;
+  var ps=pages(tmp);
+  var ov=document.getElementById('spx-prev-ov'); if(ov) ov.remove();
+  ov=document.createElement('div'); ov.id='spx-prev-ov';
+  ov.innerHTML='<div class="bar"><button class="btn btn-s" onclick="document.getElementById(\'spx-prev-ov\').remove()">✕ إغلاق المعاينة</button>'+
+    '<span style="color:#cfe;font-weight:700;align-self:center">'+ps.length+' ورقة</span></div><div class="sc" id="spx-prev-sc"></div>';
+  document.body.appendChild(ov);
+  var sc=document.getElementById('spx-prev-sc');
+  var z=Math.min(1, (window.innerWidth-60)/794);
+  ps.forEach(function(h){
+    var wrap=document.createElement('div'); wrap.style.cssText='width:'+Math.round(794*z)+'px;height:'+Math.round(1123*z)+'px;margin:0 auto 14px;overflow:hidden';
+    var f=document.createElement('iframe'); f.className='pg'; f.style.transform='scale('+z+')'; f.style.margin='0';
+    wrap.appendChild(f); sc.appendChild(wrap);
+    f.srcdoc=h;
+  });
+}
+
+/* حذف/فصل (من حذف التحليل من الطلب) */
+function detach(req, t){
+  var r=recFor(req.id, t.id); if(!r) return false;
+  r.reqId=''; r._detachedFrom=(Array.isArray(r._detachedFrom)?r._detachedFrom:[]).concat([req.id]).slice(-10);
+  persist(r); return true;
+}
+
+return { is:is, icon:icon, KINDS:KINDS, open:open, close:close, cancel:cancel, save:save, preview:preview, print:print,
+         recFor:recFor, recById:recById, pages:pages, pagesForReq:pagesForReq, printHTML:printHTML, loadAll:loadAll, detach:detach,
+         anaStatus:anaStatus, speCompute:speCompute, ifxCompute:ifxCompute,
+         _set:_set, _molRow:_molRow, _molAll:_molAll, _molAutoC:_molAutoC, _anaVal:_anaVal, _anaSt:_anaSt, _anaReset:_anaReset, _anaPc:_anaPc,
+         _note:_note, _speG:_speG, _speP:_speP, _ifxV:_ifxV, _img:_img, _imgDel:_imgDel };
+})();
+window.SPX = SPX;
+</script>
 <script id="msync-module">
 /* ══════════════════════════════════════════════════════════════════════════
  * ☁️ MedLab Cloud Sync (MSync v1) — مزامنة سحابية عبر Firebase كناقل لحظي فقط
@@ -76712,7 +77598,7 @@ var REPULL_MS = 30*60000;          // سحب احتياطي دوري من كل �
 
 /* ── المجموعات المُزامَنة ── */
 var REC_KEYS = ['patients','requests','invoices','billing','expenses','doctors','testGroups','packages','inventory','qc',
-                'cultureRecords','uaRecords','stoolExamRecords','semenRecords','phoneBook','tests','customAbxEntries','esrTimers'];
+                'cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords','phoneBook','tests','customAbxEntries','esrTimers'];
 var DOC_KEYS = ['customSubCats','deletedTestIds','expenseCats','expenseCatsHidden'];          // مستند كامل (+ cultAbxProfile_*)
 var UNION_DOCS = {deletedTestIds:1};                         // دمج اتحاد
 /* إعدادات خاصة بكل حاسبة — لا تُزامَن */
@@ -76726,9 +77612,9 @@ var BIG_KEYS = ['headerImg','footerImg','hdrTplLogo','wmImg','hdrImgH','ftrImgH'
                 'semenFieldsCustom','semenFieldsCustom2','semenFieldsCustom3','semenFieldsCustom4','mrtCodes'];
 var ATT_REC = ['att_employees','att_logs','att_leaves'];
 var ATT_LOCAL = {cameraId:1, camMode:1};
-var DELTA = {patients:1,requests:1,invoices:1,billing:1,cultureRecords:1,uaRecords:1,stoolExamRecords:1,semenRecords:1};
+var DELTA = {patients:1,requests:1,invoices:1,billing:1,cultureRecords:1,uaRecords:1,stoolExamRecords:1,semenRecords:1,spxRecords:1};
 /* 🆔 مجموعات «رقم المزامنة المخفي»: لا يُزامَن منها إلا ما يحمل _sid (الجديد فقط) — المفتاح هو _sid لا رقم الملف */
-var SIDC = {patients:1,requests:1,invoices:1,billing:1,cultureRecords:1,uaRecords:1,stoolExamRecords:1,semenRecords:1};
+var SIDC = {patients:1,requests:1,invoices:1,billing:1,cultureRecords:1,uaRecords:1,stoolExamRecords:1,semenRecords:1,spxRecords:1};
 function sidOn(){ return !!(window.SIDX && SIDX.adopt); }
 
 /* ═══ 🔬 قاعدة التحاليل — اتجاه واحد عبر Firebase ═══
@@ -76848,6 +77734,7 @@ function vget(k){
       case 'uaRecords': v=(typeof uaRecords!=='undefined')?uaRecords:null; break;
       case 'stoolExamRecords': v=(typeof stoolExamRecords!=='undefined')?stoolExamRecords:null; break;
       case 'semenRecords': v=(typeof semenRecords!=='undefined')?semenRecords:null; break;
+      case 'spxRecords': v=(typeof spxRecords!=='undefined')?spxRecords:null; break;
       case 'phoneBook': v=(typeof getPhoneBook==='function')?getPhoneBook():null; break;
       case 'esrTimers': v=(typeof _esrTimers!=='undefined')?_esrTimers:null; break;
     }
@@ -77857,6 +78744,7 @@ function arrOf(col){
       case 'uaRecords': return (typeof uaRecords!=='undefined' && uaRecords) || [];
       case 'stoolExamRecords': return (typeof stoolExamRecords!=='undefined' && stoolExamRecords) || [];
       case 'semenRecords': return (typeof semenRecords!=='undefined' && semenRecords) || [];
+      case 'spxRecords': return (typeof spxRecords!=='undefined' && spxRecords) || [];
     }
   }catch(e){}
   return [];
@@ -78586,8 +79474,8 @@ body.light-mode #mlu-box{background:#fff;color:#0b1b33}
 (function(){
 'use strict';
 var U = window.MLU = {};
-var COLS = ['patients','requests','invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
-var LINKED = ['invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords'];
+var COLS = ['patients','requests','invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords'];
+var LINKED = ['invoices','billing','cultureRecords','uaRecords','stoolExamRecords','semenRecords','spxRecords'];
 var VOLATILE = {id:1,reqId:1,patientId:1,patientName:1,_updatedAt:1,updatedAt:1,_sid:1,_psid:1,_rsid:1,_pidAt:1,_ridAt:1,_dev:1,_org:1,createdAt:1,ts:1,_oldIds:1};
 
 function X(){ return window.SIDX; }
@@ -78605,6 +79493,7 @@ function setArr(col, a){
     case 'invoices': invoices=a; break;           case 'billing': billingRecords=a; break;
     case 'cultureRecords': cultureRecords=a; break; case 'uaRecords': uaRecords=a; break;
     case 'stoolExamRecords': stoolExamRecords=a; break; case 'semenRecords': semenRecords=a; break;
+    case 'spxRecords': spxRecords=a; break;
   }
 }
 async function ensureLoaded(){
