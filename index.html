@@ -20696,7 +20696,13 @@ function buildPrintHTML(req, opts){
   const pageBottomMm = totalFooterH>0 ? Math.ceil(totalFooterH*0.265) : 0;
   // ─── حساب هامش @page السفلي بناءً على ارتفاع الذيل ───────
   // 1px ≈ 0.2646mm عند 96dpi
-  const _ftrMm = totalFooterH > 0 ? Math.ceil(totalFooterH * 0.2646) + 6 : 4;
+  /* 🦶 التذييل في أسفل الورقة فعلاً (نفس أسلوب تقرير CBC):
+     هامش @page السفلي صغير ثابت (شريط أمان لكل الطابعات) والتذييل مرفوع عنه قليلاً.
+     كان الهامش = ارتفاع التذييل + 6mm فيطفو التذييل فوق حافة الورقة بمسافة فارغة.
+     المسافة بين آخر تحليل والتذييل تبقى كما هي (التقسيم يُحسب من موضع التذييل الجديد). */
+  const _ftrLiftPx = totalFooterH > 0 ? 10 : 0;
+  const _ftrMm = totalFooterH > 0 ? 5 : 4;
+  const _ftrPagMm = Math.round((_ftrMm + _ftrLiftPx*0.2646)*100)/100;
   const css=`
     *{margin:0;padding:0;box-sizing:border-box;}
     html,body{background:#ffffff !important;margin:0;padding:0;}
@@ -20713,7 +20719,7 @@ function buildPrintHTML(req, opts){
     }
     #print-footer{
       position:fixed;
-      bottom:0;
+      bottom:${_ftrLiftPx}px;
       left:0;
       right:0;
       background:#ffffff;
@@ -20730,7 +20736,7 @@ function buildPrintHTML(req, opts){
       margin:0;
       padding:0;
     }
-    #print-spacer{height:${totalFooterH+40}px;display:block;}
+    #print-spacer{height:${totalFooterH+40+_ftrLiftPx}px;display:block;}
     @media print{
       @page{
         margin:0 0 ${_ftrMm}mm 0 !important;
@@ -20739,7 +20745,7 @@ function buildPrintHTML(req, opts){
       body{padding:1mm 3mm 0 3mm;}
       #print-footer{
         position:fixed;
-        bottom:0;
+        bottom:${_ftrLiftPx}px;
         left:0;
         right:0;
         background:#ffffff;
@@ -20747,11 +20753,11 @@ function buildPrintHTML(req, opts){
         line-height:0;
       }
       #print-footer img{display:block;width:100%;height:${footerH}px;object-fit:fill;margin:0;padding:0;}
-      #print-spacer{display:block;height:${totalFooterH+40}px;}
+      #print-spacer{display:block;height:${totalFooterH+40+_ftrLiftPx}px;}
       #print-sig-block{
         position:fixed;
         right:0;
-        bottom:${footerH+4}px;
+        bottom:${footerH+4+_ftrLiftPx}px;
         text-align:right;
         direction:rtl;
         padding:5px 14px 4px;
@@ -21611,7 +21617,7 @@ function buildPrintHTML(req, opts){
   if(sigParts.length){
     // ⭐ الختم/التوقيع: position:fixed مستقل عن الذيل
     // يظهر دائماً في أسفل الصفحة اليمين بدون الاعتماد على parent الذيل
-    sigBlock = `<div id="print-sig-block" style="position:fixed;right:0;bottom:${footerH+4}px;text-align:right;direction:rtl;padding:5px 14px 4px;background:transparent;line-height:normal;z-index:10000;pointer-events:none">${sigParts.join('')}</div>`;
+    sigBlock = `<div id="print-sig-block" style="position:fixed;right:0;bottom:${footerH+4+_ftrLiftPx}px;text-align:right;direction:rtl;padding:5px 14px 4px;background:transparent;line-height:normal;z-index:10000;pointer-events:none">${sigParts.join('')}</div>`;
   }
 
   let ftrInner='';
@@ -21648,7 +21654,7 @@ function buildPrintHTML(req, opts){
     <div id="print-content" style="background:#ffffff;font-family:'Inter',Arial,sans-serif;direction:ltr;width:100%;padding:1mm 3mm 0 3mm">
       ${_buildWatermarkHTML(false)}
       ${hdr}${ptBox}<!--BLANK_BODY_PLACEHOLDER-->
-      <div id="print-spacer" style="height:${totalFooterH+40}px"></div>
+      <div id="print-spacer" style="height:${totalFooterH+40+_ftrLiftPx}px"></div>
     </div>
     <div id="print-footer" style="line-height:normal">
       ${ftrInner}
@@ -21731,7 +21737,7 @@ function buildPrintHTML(req, opts){
         page-break-after:avoid !important;
         break-after:avoid !important;
       }
-      #print-footer{position:fixed;bottom:0;left:0;right:0;background:#ffffff;z-index:9999;line-height:0;}
+      #print-footer{position:fixed;bottom:${_ftrLiftPx}px;left:0;right:0;background:#ffffff;z-index:9999;line-height:0;}
     }
   `;
 
@@ -21771,9 +21777,16 @@ function buildPrintHTML(req, opts){
       //   FTR_MM   = الهامش السفلي لـ @page (ارتفاع الذيل + احتياطي)
       //   SAFE_MM  = هامش أمان إضافي مطروح من ارتفاع الصفحة (يمنع الورقة الزائدة)
       //   PAGE_H_MM = الارتفاع الفعلي المسموح لمحتوى الصفحة = 297 - FTR_MM - SAFE_MM
-      var FTR_MM = ${_ftrMm};
+      var FTR_MM = ${_ftrPagMm};
       var SAFE_MM = ${_safeMm};
       var PAGE_CONTENT_H_PX = Math.round((297 - FTR_MM - SAFE_MM) * DPI_RATIO);
+      // 🦶 التذييل صار في أسفل الورقة ⇒ حدّ المحتوى = أعلى التذييل الفعلي (يُقاس من الصفحة نفسها)
+      if(TOTAL_FOOTER_H > 0){
+        var _fEl = document.getElementById('print-footer');
+        var _fH = 0; try{ _fH = Math.ceil(_fEl ? _fEl.getBoundingClientRect().height : 0); }catch(e){}
+        if(!(_fH > 0) || _fH < TOTAL_FOOTER_H) _fH = TOTAL_FOOTER_H;
+        PAGE_CONTENT_H_PX = Math.round((297 - ${_ftrMm}) * DPI_RATIO) - ${_ftrLiftPx} - _fH;
+      }
       // الذيل + هامش أمان فوقه — حد العبور للورقة التالية (فوق الذيل بمسافة بسيطة)
       var SAFE_GAP = 14; // px فوق الذيل
       // ⭐ USABLE_H = ارتفاع محتوى الصفحة الفعلي ناقص الهامش العلوي وهامش العبور
@@ -36926,10 +36939,10 @@ function _buildCultureHTML(cid){
     *{margin:0;padding:0;box-sizing:border-box;}
     html,body{background:#fff;font-family:Arial,sans-serif;color:#000;font-size:16px;}
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+8}px;}
-    .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:0 0 ${Math.ceil(((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))*0.2646)+8}mm 0 !important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
+    .content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+18}px;}
+    .footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    @page{margin:0 0 5mm 0 !important;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @media print{ .footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
   <div class="content">
     ${_buildWatermarkHTML(false)}
@@ -37141,23 +37154,56 @@ var EXSEL = (function(){
     pop.appendChild(frag);
   }
 
+  /* مستطيل الحقل الحقيقي على الشاشة — نوافذ الإدرار/الخروج/المنوي مكبّرة بـ CSS zoom،
+     وبعض إصدارات Chromium تُرجع getBoundingClientRect بلا احتساب التكبير فتظهر القائمة
+     فوق الحقل وتغطيه. نتحقق بـ elementFromPoint ونصحّح بمعامل التكبير عند الحاجة. */
+  function _hitOk(el, x, y){
+    var h=document.elementFromPoint(x, y);
+    return !!(h && (h===el || el.contains(h)));
+  }
+  function rectOf(el){
+    var r = el.getBoundingClientRect(), z = 1, a = el.parentElement;
+    while(a && a !== document.documentElement){ var zz = parseFloat(getComputedStyle(a).zoom) || 1; z *= zz; a = a.parentElement; }
+    if(Math.abs(z-1) < 0.001) return r;
+    var vis = pop ? pop.style.visibility : '';
+    if(pop) pop.style.visibility = 'hidden';
+    try{
+      var cx = r.left + Math.min(6, r.width/2), cy = r.top + Math.min(6, r.height/2);
+      if(!_hitOk(el, cx, cy) && _hitOk(el, cx*z, cy*z)){
+        return {left:r.left*z, top:r.top*z, right:r.right*z, bottom:r.bottom*z, width:r.width*z, height:r.height*z};
+      }
+    }catch(e){}
+    finally{ if(pop) pop.style.visibility = vis; }
+    return r;
+  }
+  /* القائمة تظهر دائماً أسفل الحقل مباشرةً (لا فوقه) */
   function place(){
     var el = document.getElementById(curId);
     if(!el){ close(); return; }
-    var r = el.getBoundingClientRect();
+    var r = rectOf(el);
     if(r.bottom < -4 || r.top > window.innerHeight + 4){ close(); return; }
     pop.style.width = Math.max(r.width, 140) + 'px';
     pop.style.left  = Math.max(4, Math.min(r.left, window.innerWidth - Math.max(r.width,140) - 6)) + 'px';
     var below = window.innerHeight - r.bottom;
-    if(below < 150 && r.top > below){
-      pop.style.top = 'auto';
-      pop.style.bottom = (window.innerHeight - r.top + 4) + 'px';
-      pop.style.maxHeight = Math.min(264, r.top - 10) + 'px';
-    } else {
-      pop.style.bottom = 'auto';
-      pop.style.top = (r.bottom + 4) + 'px';
-      pop.style.maxHeight = Math.min(264, below - 10) + 'px';
-    }
+    pop.style.bottom = 'auto';
+    pop.style.top = (r.bottom + 2) + 'px';
+    pop.style.maxHeight = Math.max(90, Math.min(264, below - 10)) + 'px';
+  }
+  /* عند الفتح: إن لم تتّسع المساحة أسفل الحقل نمرّر النافذة قليلاً ليظهر الحقل وقائمته كاملين */
+  function makeRoom(el){
+    try{
+      var r = rectOf(el), below = window.innerHeight - r.bottom;
+      if(below >= 200) return;
+      var sc = el.parentElement;
+      while(sc && sc !== document.body){
+        var cs = getComputedStyle(sc);
+        if(/(auto|scroll)/.test(cs.overflowY) && sc.scrollHeight > sc.clientHeight + 2) break;
+        sc = sc.parentElement;
+      }
+      var need = 200 - below;
+      if(sc && sc !== document.body){ var before = sc.scrollTop; sc.scrollTop = before + need; }
+      else window.scrollBy(0, need);
+    }catch(e){}
   }
 
   // filterTxt = null  →  اعرض كل الخيارات (سلوك السهم / النقر)
@@ -37183,6 +37229,8 @@ var EXSEL = (function(){
       for(var i=0;i<list.length;i++){ if(!list[i].nul && list[i].v===el.value){ hi=i; break; } }
     } else if(list.length){ hi = 0; }
     paint(el.value);
+    var _wasOpen = pop.classList.contains('on');
+    if(!_wasOpen) makeRoom(el);
     pop.classList.add('on');
     place();
     scrollHi();
@@ -37793,7 +37841,7 @@ window._spPrevTd    = _spPrevTd;
  * ─────────────────────────────────────────────────────────────────── */
 function _spPageAvailPx(ftrH){
   var f = (typeof ftrH==='number' && ftrH>=10 && ftrH<=80) ? ftrH : 50;
-  var botMM = Math.ceil(f*0.2646)+8;          // هامش @page السفلي بالمليمتر
+  var botMM = 5;                              // هامش @page السفلي (التذييل في أسفل الورقة — مساحته ضمن حشو المحتوى)
   return Math.floor(1122 - 4 - botMM*3.7795); // − هامش علوي 1mm
 }
 /* سكربت يُحقن داخل صفحة الطباعة: يقيس الارتفاع ويقلّص الحشو تدريجياً */
@@ -38222,12 +38270,12 @@ function _buildUAPrintHTML(r){
     *{margin:0;padding:0;box-sizing:border-box;}
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:14px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .ua-content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+8}px;}
-    .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 6mm ${Math.ceil(((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .ua-content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+18}px;}
+    .ua-footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    @page{margin:1mm 6mm 5mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{
       body{font-size:13px;}
-      .ua-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;}
+      .ua-footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;}
       th,td{font-size:13px !important;padding:${_uaTight?'0px 7px':'2px 7px'} !important;}
       .ua-title{font-size:13px !important;} .ua-sec-hdr{font-size:13px !important;}
     }
@@ -38837,10 +38885,10 @@ function _buildStoolPrintHTML(r){
     *{margin:0;padding:0;box-sizing:border-box;}
     /* ⭐ الذيل ثابت أسفل الورقة (position:fixed) — مطابق لتقرير CBC */
     body{font-family:Arial,sans-serif;color:#000;font-size:15px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    .se-content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+8}px;}
-    .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 5mm ${Math.ceil(((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))*0.2646)+8}mm 5mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-    @media print{ .se-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;} }
+    .se-content{padding-bottom:${((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)))+18}px;}
+    .se-footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    @page{margin:1mm 5mm 5mm 5mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @media print{ .se-footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;} }
   </style></head><body>
     <div class="se-content">
       ${_buildWatermarkHTML(false)}
@@ -43486,7 +43534,7 @@ function _buildSemenPrintHTML(r, mode){
   // كل ورقة ويحجز المساحة داخل تدفّق المحتوى، فلا يلامس أي قسم الذيل أبداً.
   // القيمة تُشتقّ من ارتفاع صورة الذيل نفسه، فتتكيّف تلقائياً مع أي طابعة/هامش.
   const _smFtrPx   = ((typeof _ftrResH==='function'?_ftrResH(s):((typeof s.ftrImgH==='number'&&s.ftrImgH>=10&&s.ftrImgH<=80)?s.ftrImgH:50)));
-  const _smFtrGuard = ftrHTML ? (_smFtrPx + 10) : 0;   // +10px هامش أمان بسيط
+  const _smFtrGuard = ftrHTML ? (_smFtrPx + 20) : 0;   // +10px هامش أمان + 10px رفع التذييل عن حافة الورقة
 
   // ── الورقة الثانية: تُبنى فقط إن وُجد فيها محتوى فعلي ──
   //    تحمل نفس الترويسة وبيانات المريض ليكون التقرير ورقتين مكتملتين.
@@ -43512,10 +43560,10 @@ function _buildSemenPrintHTML(r, mode){
     .sm-sheet{width:100%;border-collapse:collapse;}
     .sm-sheet>tbody>tr>td,.sm-sheet>tfoot>tr>td{padding:0;border:0;vertical-align:top;}
     .sm-sheet>tfoot{display:table-footer-group;}
-    .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
-    @page{margin:1mm 6mm ${Math.ceil(_smFtrPx*0.2646)+8}mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    .sm-footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;line-height:0;}
+    @page{margin:1mm 6mm 5mm 6mm;size:A4 portrait;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @media print{
-      .sm-footer{position:fixed;bottom:0;left:0;right:0;background:#fff;z-index:9999;}
+      .sm-footer{position:fixed;bottom:10px;left:0;right:0;background:#fff;z-index:9999;}
       /* لا يُقطع صفّ نتيجة ولا قسم في منتصفه */
       .sm-content tr{page-break-inside:avoid;break-inside:avoid;}
       .sm-content thead{display:table-header-group;}
@@ -76799,8 +76847,12 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen(
 </script>
 
 <style id="spx-style">
-#m-spx .modal{max-width:1120px;width:calc(100vw - 40px);max-height:calc(100vh - 40px);display:flex;flex-direction:column}
-#m-spx .mbody{overflow-y:auto;flex:1}
+#m-spx{padding:10px !important}
+#m-spx .modal{max-width:none !important;width:calc(100vw - 20px) !important;height:calc(100vh - 20px) !important;max-height:none !important;margin:0 !important;display:flex;flex-direction:column}
+#m-spx .mbody{overflow-y:auto;flex:1 1 auto;min-height:0}
+#m-spx .spx-tbl input.fc,#m-spx .spx-tbl select.fc{width:100%}
+#m-spx .spx-img .ph{height:190px}#m-spx .spx-img.wide{width:420px}#m-spx .spx-img.wide .ph{height:230px}
+#m-spx .spx-sec{padding:14px 18px}
 .spx-sec{background:rgba(0,212,255,.035);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px}
 .spx-sec h4{margin:0 0 10px;font-size:13px;font-weight:800;color:var(--primary)}
 .spx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
@@ -76832,7 +76884,7 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen(
 .spx-img .ph img{max-width:100%;max-height:100%;object-fit:contain;display:block}
 .spx-img .lb{font-size:11px;font-weight:700;color:var(--text2)}
 .spx-hint{font-size:11px;color:var(--text2);line-height:1.7}
-#spx-prev-ov{position:fixed;inset:0;z-index:100500;background:rgba(5,10,20,.82);display:flex;flex-direction:column;align-items:center;padding:16px}
+#spx-prev-ov{position:fixed;inset:0;z-index:2147482000;background:rgba(5,10,20,.82);display:flex;flex-direction:column;align-items:center;padding:16px}
 #spx-prev-ov .bar{display:flex;gap:8px;margin-bottom:10px}
 #spx-prev-ov .pg{background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.5);margin:0 auto 14px;width:794px;height:1123px;border:none;transform-origin:top center}
 #spx-prev-ov .sc{overflow:auto;width:100%;flex:1}
@@ -76956,7 +77008,7 @@ function blank(kind, req, testId){
   } else if(kind==='ana'){
     r.lot=''; r.well=''; r.cfg='';
     r.ag={}; ANA_AG.forEach(function(a){ r.ag[a]={v:'<30', st:'Negative', man:false}; });
-    r.pc={}; ANA_PANELS.forEach(function(p){ r.pc[p.k]={c:'', l:''}; });
+    r.pc={}; ANA_PANELS.forEach(function(p){ r.pc[p.k]={c:'', l:''}; }); r.comment='';
     r.img1=''; r.img2='';
   } else if(kind==='spe'){
     r.v={}; r.p={}; r.nt={}; r.ntMan={}; r.comment=''; r.commentAuto=true; r.dx=''; r.img='';
@@ -77077,27 +77129,48 @@ function overlay(){
   o=document.createElement('div'); o.className='moverlay'; o.id='m-spx';
   o.innerHTML='<div class="modal"><div class="mhdr"><div class="mtitle" id="spx-title"></div><button class="mclose" onclick="SPX.cancel()">×</button></div>'+
     '<div class="mbody" id="spx-body"></div>'+
-    '<div class="mftr" style="flex-wrap:wrap;gap:8px"><button class="btn btn-s" onclick="SPX.cancel()">إلغاء</button>'+
+    '<div class="mftr" style="flex-wrap:wrap;gap:8px;align-items:center"><span id="spx-as" style="font-size:11.5px;font-weight:700;margin-inline-end:auto;color:var(--text2)"></span><button class="btn btn-s" onclick="SPX.cancel()">إغلاق</button>'+
     '<button class="btn btn-s" onclick="SPX.preview()">👁️ معاينة</button>'+
     '<button class="btn btn-p" onclick="SPX.save(false)">💾 حفظ</button>'+
     '<button class="btn btn-ok" onclick="SPX.save(true)">🖨️ حفظ وطباعة</button></div></div>';
   document.body.appendChild(o);
+  /* أي كتابة أو اختيار داخل النافذة ⇒ حفظ تلقائي بعد توقف قصير */
+  var bd=o.querySelector('#spx-body');
+  bd.addEventListener('input', _dirty);
+  bd.addEventListener('change', function(e){ if(e.target && e.target.type==='file') return; _dirty(); });
+  /* ⌨️ التنقل بين الحقول بأسهم لوحة المفاتيح (↑ ↓) — وبـ Enter للنزول */
+  bd.addEventListener('keydown', _navKey, true);
+  /* إغلاق النافذة بأي طريقة أخرى (Esc / الخلفية) ⇒ يُحفظ المعلّق فوراً */
+  try{ new MutationObserver(function(){ if(!o.classList.contains('open') && CUR){ flush(); } }).observe(o,{attributes:true,attributeFilter:['class']}); }catch(e){}
   return o;
 }
 function open(reqId, testId){
   var req=reqOf(reqId); if(!req){ notif('خطأ','الطلب غير موجود','error'); return; }
   var t=testOf(testId); if(!t || !is(t.isSpecialExam)) return;
+  flush(); AS_DIRTY=false; AS_DONE=false;
   var ex=recFor(reqId, testId);
   CUR = ex ? JSON.parse(JSON.stringify(ex)) : blank(t.isSpecialExam, req, testId);
   CUR.testId=testId;
   var o=overlay();
   document.getElementById('spx-title').textContent=icon(CUR.kind)+' '+(t.nameEn||KINDS[CUR.kind].title)+' — '+(req.patientName||'');
   render();
+  var st=document.getElementById('spx-as');
+  if(st){ st.textContent=(ex&&ex.saved)?'💾 محفوظ — أي تعديل يُحفظ تلقائياً':'💾 الحفظ تلقائي أثناء الكتابة'; st.style.color='var(--text2)'; }
   if(typeof openModal==='function') openModal('m-spx'); else o.classList.add('open');
 }
-/* إلغاء بلا حفظ: لا يبقى وضع «الإدخال من شاشة النتائج» عالقاً */
-function cancel(){ window._specialExamInlineMode=false; close(); }
-function close(){ try{ closeModal('m-spx'); }catch(e){ var o=document.getElementById('m-spx'); if(o) o.classList.remove('open'); } CUR=null; }
+/* إغلاق: يُحفظ أي تعديل معلّق أولاً (لا يضيع شيء مما كُتب) */
+function cancel(){
+  flush();
+  var rid=CUR?CUR.reqId:'', had=AS_DONE;
+  close();
+  if(had) _afterClose(rid); else window._specialExamInlineMode=false;
+}
+function close(){
+  try{ var pv=document.getElementById('spx-prev-ov'); if(pv) pv.remove(); }catch(e){}
+  try{ closeModal('m-spx'); }catch(e){ var o=document.getElementById('m-spx'); if(o) o.classList.remove('open'); }
+  if(AS_T){ clearTimeout(AS_T); AS_T=null; }
+  AS_DIRTY=false; AS_DONE=false; CUR=null;
+}
 
 function render(){
   var b=document.getElementById('spx-body'); if(!b || !CUR) return;
@@ -77142,7 +77215,7 @@ function uiAna(){
   h+='<div class="spx-sec"><h4>Antibody level [U/ml] <span class="spx-hint">— النطاق بين القوسين ثابت (185 - 210): أقل منه = Negative · ضمنه = Borderline (برتقالي) · أكبر منه = Positive (أحمر)</span></h4>'+
      '<div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap"><button class="btn btn-s btn-sm" onclick="SPX._anaReset()">↺ الكل Negative (&lt;30)</button>'+
      '<span class="spx-hint">كل مستضد يُدخل مرة واحدة ويظهر تلقائياً في كل المجموعات التي يتبع لها (M = Myositis · S = Scleroderma · L = SLE)</span></div>'+
-     '<div style="max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:10px"><table class="spx-tbl" id="spx-ana-tbl"><thead><tr>'+
+     '<div style="max-height:calc(100vh - 230px);overflow:auto;border:1px solid var(--border);border-radius:10px"><table class="spx-tbl" id="spx-ana-tbl"><thead><tr>'+
      '<th style="text-align:left">Antigen</th><th style="width:150px">Antibody level</th><th style="width:110px">Range</th><th style="width:150px">Result</th><th style="width:80px">Panels</th></tr></thead><tbody>';
   ANA_AG.forEach(function(a,i){
     var x=r.ag[a]||{v:'<30',st:'Negative'};
@@ -77155,13 +77228,8 @@ function uiAna(){
       '<td class="rg">'+tags+'</td></tr>';
   });
   h+='</tbody></table></div></div>';
-  h+='<div class="spx-sec"><h4>التعليقات (اختيارية) لكل مجموعة</h4>';
-  ANA_PANELS.forEach(function(p){
-    var c=r.pc[p.k]||{c:'',l:''};
-    h+='<div style="margin-bottom:10px"><div style="font-weight:800;font-size:12px;margin-bottom:4px;direction:ltr;text-align:left">'+esc(p.n)+'</div><div class="spx-grid">'+
-      '<input class="fc" lang="en" dir="auto" placeholder="Comment" value="'+esc(c.c)+'" oninput="SPX._anaPc(\''+p.k+'\',\'c\',this.value)">'+
-      '<input class="fc" lang="en" dir="auto" placeholder="Comment of the lab" value="'+esc(c.l)+'" oninput="SPX._anaPc(\''+p.k+'\',\'l\',this.value)"></div></div>';
-  });
+  h+='<div class="spx-sec"><h4>Comment <span class="spx-hint">— يظهر في آخر الجدول بالتقرير ويتّسع حسب النص (اختياري)</span></h4>'+
+     '<textarea class="fc" rows="3" lang="en" dir="auto" placeholder="Comment" oninput="SPX._set(\'comment\',this.value)">'+esc(r.comment||'')+'</textarea>';
   h+='</div>';
   return h;
 }
@@ -77213,21 +77281,69 @@ function uiIfx(){
       '<td class="rg" id="spx-ifx-p-'+d.k+'">'+esc((d.pct?(c.pct[d.k]!=null?c.pct[d.k]+(d.pct==='ig'?'':'%'):''):''))+'</td>'+
       '<td class="rg">'+esc(d.upto?('Up to '+d.upto):(d.pref||''))+'</td></tr>';
   });
-  h+='</tbody></table><div style="margin-top:8px" class="spx-hint">الجانب: <b id="spx-ifx-inv" style="color:var(--primary)">'+esc(c.involved||'—')+'</b></div></div>';
-  h+='<div class="spx-sec"><h4>Comment</h4><div class="spx-grid">'+
-    '<div class="fg" style="margin:0"><label class="fl">Class</label><select class="fc" onchange="SPX._set(\'cls\',this.value)">'+IFX_CLASSES.map(function(x){ return '<option'+(r.cls===x?' selected':'')+'>'+x+'</option>'; }).join('')+'</select></div>'+
-    '<div class="fg" style="margin:0"><label class="fl">%</label><input class="fc" lang="en" dir="ltr" value="'+esc(r.clsPct)+'" oninput="SPX._set(\'clsPct\',this.value)"></div>'+
-    '<div class="fg" style="margin:0"><label class="fl">Type</label><select class="fc" onchange="SPX._set(\'type\',this.value)">'+['Kappa','Lambda','—'].map(function(x){ return '<option'+(r.type===x?' selected':'')+'>'+x+'</option>'; }).join('')+'</select></div>'+
-    '</div><div class="fg" style="margin-top:10px"><label class="fl">تعليق إضافي (اختياري)</label><input class="fc" lang="en" dir="auto" value="'+esc(r.comment)+'" oninput="SPX._set(\'comment\',this.value)"></div></div>';
+  h+='</tbody></table></div>';
   h+='<div class="spx-sec"><h4>صورة الترحيل المناعي (اختياري)</h4><div class="spx-imgs">'+imgBox('img','Immunofixation panels', true)+'</div></div>';
+  /* مربع التعليق الموحّد (يظهر أسفل الصورة في التقرير) — كل الحقول قابلة للكتابة يدوياً */
+  h+='<datalist id="spx-dl-cls">'+IFX_CLASSES.map(function(x){ return '<option value="'+esc(x)+'">'; }).join('')+'</datalist>'+
+     '<datalist id="spx-dl-type"><option value="Kappa"><option value="Lambda"><option value="Kappa + Lambda"></datalist>'+
+     '<datalist id="spx-dl-pct"><option value="100%"><option value="90%"><option value="80%"><option value="70%"><option value="60%"><option value="50%"></datalist>';
+  h+='<div class="spx-sec"><h4>Comment <span class="spx-hint">— مربع واحد أسفل الصورة · اكتب أو اختر</span></h4><div class="spx-grid">'+
+    '<div class="fg" style="margin:0"><label class="fl">Class</label><input class="fc" list="spx-dl-cls" lang="en" dir="ltr" value="'+esc(r.cls||'')+'" oninput="SPX._set(\'cls\',this.value)"></div>'+
+    '<div class="fg" style="margin:0"><label class="fl">%</label><input class="fc" list="spx-dl-pct" lang="en" dir="ltr" value="'+esc(r.clsPct||'')+'" oninput="SPX._set(\'clsPct\',this.value)"></div>'+
+    '<div class="fg" style="margin:0"><label class="fl">Type</label><input class="fc" list="spx-dl-type" lang="en" dir="ltr" value="'+esc(r.type==='—'?'':(r.type||''))+'" oninput="SPX._set(\'type\',this.value)"></div>'+
+    '</div><div class="fg" style="margin-top:10px"><label class="fl">العبارة (تُكتب تلقائياً من نسبة κ/λ ويمكن تغييرها يدوياً)</label>'+
+    '<div style="display:flex;gap:8px"><input class="fc" id="spx-ifx-invtxt" lang="en" dir="ltr" style="flex:1" value="'+esc(ifxInvText(r, c))+'" oninput="SPX._ifxInv(this.value)">'+
+    '<button class="btn btn-s btn-sm" onclick="SPX._ifxInvAuto()" title="إرجاع العبارة التلقائية">✨ تلقائي</button></div></div>'+
+    '<div class="fg" style="margin-top:10px"><label class="fl">تعليق إضافي (اختياري)</label><textarea class="fc" rows="2" lang="en" dir="auto" oninput="SPX._set(\'comment\',this.value)">'+esc(r.comment||'')+'</textarea></div></div>';
   return h;
+}
+
+/* ── ⌨️ التنقل بالأسهم: داخل الجداول ينتقل لنفس العمود في الصف التالي/السابق،
+      وخارجها للحقل التالي/السابق بترتيب الصفحة ── */
+var NAV_SEL='input:not([type=hidden]):not([type=file]):not([disabled]),select:not([disabled]),textarea:not([disabled])';
+function _navList(){
+  var b=document.getElementById('spx-body'); if(!b) return [];
+  return [].slice.call(b.querySelectorAll(NAV_SEL)).filter(function(e){ var r=e.getBoundingClientRect(); return r.width>0 && r.height>0 && !e.readOnly; });
+}
+function _navCell(el, dir){
+  var td=el.closest('td'), tr=td&&td.closest('tr'), tb=tr&&tr.parentElement;
+  if(!td || !tb || !tr.closest('.spx-tbl')) return null;
+  var idx=[].indexOf.call(tr.children, td), r=tr;
+  while(true){
+    r = dir>0 ? r.nextElementSibling : r.previousElementSibling;
+    if(!r) return null;
+    var c=r.children[idx], f=c&&c.querySelector(NAV_SEL);
+    if(f) return f;
+  }
+}
+function _navKey(e){
+  if(e.key!=='ArrowDown' && e.key!=='ArrowUp' && e.key!=='Enter') return;
+  if(e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  var el=e.target; if(!el || !el.matches || !el.matches(NAV_SEL)) return;
+  var dir=(e.key==='ArrowUp')?-1:1;
+  if(el.tagName==='TEXTAREA'){
+    if(e.key==='Enter') return;                        /* Enter داخل النص = سطر جديد */
+    var v=el.value, pos=el.selectionStart;
+    if(dir>0 && v.slice(pos).indexOf('\n')>-1) return;   /* ليس في آخر سطر */
+    if(dir<0 && v.slice(0,pos).indexOf('\n')>-1) return; /* ليس في أول سطر */
+  }
+  var nx=_navCell(el, dir);
+  if(!nx){
+    var L=_navList(), i=L.indexOf(el);
+    if(i<0) return;
+    nx=L[i+dir]||null;
+  }
+  if(!nx) return;
+  e.preventDefault(); e.stopPropagation();
+  try{ nx.focus({preventScroll:true}); nx.scrollIntoView({block:'nearest'}); }catch(x){ nx.focus(); }
+  try{ if(nx.tagName==='INPUT' && nx.type!=='date' && nx.select) nx.select(); }catch(x){}
 }
 
 /* ── معالجات الإدخال (تحدّث الحقول المحسوبة بلا إعادة بناء لتبقى الكتابة سلسة) ── */
 function _set(k, v){ if(CUR) CUR[k]=v; }
 function _molRow(i, v){ CUR.rows[i].v=v; var tr=document.querySelectorAll('#spx-body .spx-tbl tbody tr')[i]; if(tr) tr.className=(v==='ABNORMAL'?'st-abn':''); if(CUR.commentAuto){ var c=document.getElementById('spx-mol-c'); if(c) c.value=molAutoComment(CUR); } }
-function _molAll(v){ CUR.rows.forEach(function(x){ x.v=v; }); render(); }
-function _molAutoC(){ CUR.commentAuto=true; CUR.comment=''; var c=document.getElementById('spx-mol-c'); if(c) c.value=molAutoComment(CUR); }
+function _molAll(v){ CUR.rows.forEach(function(x){ x.v=v; }); render(); _dirty(); }
+function _molAutoC(){ CUR.commentAuto=true; CUR.comment=''; var c=document.getElementById('spx-mol-c'); if(c) c.value=molAutoComment(CUR); _dirty(); }
 function _anaRefresh(i){
   var a=ANA_AG[i], x=CUR.ag[a];
   var tr=document.getElementById('spx-ana-r'+i); if(tr) tr.className=anaRowCls(x.st);
@@ -77236,7 +77352,7 @@ function _anaRefresh(i){
 }
 function _anaVal(i, v){ var a=ANA_AG[i]; var x=CUR.ag[a]||(CUR.ag[a]={}); x.v=v; x.st=anaStatus(v); x.man=false; _anaRefresh(i); }
 function _anaSt(i, v){ var a=ANA_AG[i]; var x=CUR.ag[a]||(CUR.ag[a]={v:'<30'}); x.st=v; x.man=true; _anaRefresh(i); }
-function _anaReset(){ ANA_AG.forEach(function(a){ CUR.ag[a]={v:'<30', st:'Negative', man:false}; }); render(); }
+function _anaReset(){ ANA_AG.forEach(function(a){ CUR.ag[a]={v:'<30', st:'Negative', man:false}; }); render(); _dirty(); }
 function _anaPc(k, f, v){ (CUR.pc[k]||(CUR.pc[k]={c:'',l:''}))[f]=v; }
 function _note(k, v){ CUR.nt=CUR.nt||{}; CUR.ntMan=CUR.ntMan||{}; CUR.nt[k]=v; CUR.ntMan[k]=true; _rowCls(k, v); if(CUR.kind==='spe' && CUR.commentAuto){ var c=document.getElementById('spx-spe-c'); if(c) c.value=speAutoComment(CUR); } }
 function _rowCls(k, note){ var tr=document.getElementById('spx-'+CUR.kind+'-'+k); if(tr) tr.className=(note==='Low'?'st-low':note==='High'?'st-high':''); }
@@ -77279,37 +77395,73 @@ function _ifxV(k, v){
     var p=document.getElementById('spx-ifx-p-'+d.k); if(p) p.textContent=d.pct?(c.pct[d.k]!=null?c.pct[d.k]+(d.pct==='ig'?'':'%'):''):'';
     if(d.lo!=null && !(CUR.ntMan && CUR.ntMan[d.k])){ var n=noteFor(CUR,d,c.v[d.k]); _rowCls(d.k,n); var tr=document.getElementById('spx-ifx-'+d.k); var sel=tr&&tr.querySelector('td.nt select'); if(sel) sel.value=n; }
   });
-  var inv=document.getElementById('spx-ifx-inv'); if(inv) inv.textContent=c.involved||'—';
+  if(CUR.invAuto!==false){ var inv=document.getElementById('spx-ifx-invtxt'); if(inv && document.activeElement!==inv) inv.value=c.involved||''; }
 }
+function ifxInvText(rec, c){ if(rec.invAuto===false) return rec.invTxt||''; return (c||ifxCompute(rec)).involved||''; }
+function _ifxInv(v){ CUR.invAuto=false; CUR.invTxt=v; }
+function _ifxInvAuto(){ CUR.invAuto=true; CUR.invTxt=''; var e=document.getElementById('spx-ifx-invtxt'); if(e) e.value=ifxCompute(CUR).involved||''; _dirty(); }
 function _img(key, inp){
   var f=inp && inp.files && inp.files[0]; if(!f) return;
-  readImage(f, key==='img'?1600:800).then(function(d){ CUR[key]=d; render(); }).catch(function(){ notif('خطأ','تعذّر قراءة الصورة','error'); });
+  readImage(f, key==='img'?1600:800).then(function(d){ if(!CUR) return; CUR[key]=d; render(); _dirty(); }).catch(function(){ notif('خطأ','تعذّر قراءة الصورة','error'); });
 }
-function _imgDel(key){ CUR[key]=''; render(); }
+function _imgDel(key){ CUR[key]=''; render(); _dirty(); }
 
 /* ════════ الحفظ ════════ */
-function save(andPrint){
-  if(!CUR) return;
-  var rec=CUR;
+/* ── حفظ السجل (يُستعمل للحفظ اليدوي والتلقائي) — يُخزَّن نسخة مستقلة عن CUR ── */
+function commit(){
+  if(!CUR) return null;
+  var rec=JSON.parse(JSON.stringify(CUR));
   if(rec.kind==='mol' && rec.commentAuto) rec.comment=molAutoComment(rec);
-  if(rec.kind==='spe'){ if(rec.commentAuto) rec.comment=speAutoComment(rec); var c=speCompute(rec); rec.calc=c; }
+  if(rec.kind==='spe'){ if(rec.commentAuto) rec.comment=speAutoComment(rec); rec.calc=speCompute(rec); }
   if(rec.kind==='ifx'){ rec.calc=ifxCompute(rec); }
   rec.saved=true;
   delete rec._fromP;
   loadAll();
   var i=spxRecords.findIndex(function(x){ return x.id===rec.id; });
   var old=i>-1?spxRecords[i]:null;
-  if(old){ if(old.createdAt) rec.createdAt=old.createdAt; if(old._dev) rec._dev=old._dev; if(old._org) rec._org=old._org; spxRecords[i]=rec; }
-  else spxRecords.push(rec);
+  if(old){
+    /* الحقول التي يضيفها نظام المزامنة (_sid/_rsid/_psid …) تبقى كما هي */
+    Object.keys(old).forEach(function(k){ if(k.charAt(0)==='_' && rec[k]===undefined) rec[k]=old[k]; });
+    if(old.createdAt) rec.createdAt=old.createdAt;
+    spxRecords[i]=rec;
+  } else spxRecords.push(rec);
   persist(rec);
-  /* حالة الطلب */
+  CUR.saved=true;
   var req=reqOf(rec.reqId);
   if(req){ try{ _spFinalizeReqStatus(req, rec.date); saveOne('requests', requests, req); }catch(e){} try{ updateBadges(); }catch(e){} }
-  var saved=JSON.parse(JSON.stringify(rec));
+  return rec;
+}
+/* ── 💾 الحفظ التلقائي أثناء الكتابة ── */
+var AS_T=null, AS_DIRTY=false, AS_DONE=false;
+function _dirty(){
+  if(!CUR) return;
+  AS_DIRTY=true;
+  var st=document.getElementById('spx-as'); if(st){ st.textContent='✏️ جارٍ الحفظ…'; st.style.color='var(--text2)'; }
+  clearTimeout(AS_T); AS_T=setTimeout(autosave, 800);
+}
+function autosave(){
+  AS_T=null;
+  if(!CUR || !AS_DIRTY) return;
+  AS_DIRTY=false;
+  try{
+    commit(); AS_DONE=true;
+    var st=document.getElementById('spx-as');
+    if(st){ var d=new Date(); st.textContent='✅ حُفظ تلقائياً '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2); st.style.color='var(--success)'; }
+  }catch(e){ console.warn('[SPX] autosave', e); }
+}
+function flush(){ if(AS_T){ clearTimeout(AS_T); AS_T=null; } if(AS_DIRTY) autosave(); }
+function _afterClose(reqId){
+  if(window._specialExamInlineMode && reqId){ try{ _spReturnToResultEntry(reqId); }catch(e){} }
+  else { try{ var s=document.getElementById('res-req-sel'); if(s && s.value===reqId) loadResultEntry(); }catch(e){} }
+  window._specialExamInlineMode=false;
+}
+function save(andPrint){
+  if(!CUR) return;
+  if(AS_T){ clearTimeout(AS_T); AS_T=null; } AS_DIRTY=false;
+  var saved=commit(); if(!saved) return;
   close();
   notif('تم الحفظ', icon(saved.kind)+' تم حفظ نتيجة '+KINDS[saved.kind].title+' ✅', 'success');
-  if(window._specialExamInlineMode && saved.reqId){ try{ _spReturnToResultEntry(saved.reqId); }catch(e){} window._specialExamInlineMode=false; }
-  else { try{ var s=document.getElementById('res-req-sel'); if(s && s.value===saved.reqId) loadResultEntry(); }catch(e){} }
+  _afterClose(saved.reqId);
   if(andPrint) setTimeout(function(){ print(saved.id); }, 250);
 }
 
@@ -77365,13 +77517,15 @@ function blankPage(rec){
 }
 function inject(page, html){
   var out=page.replace('<!--BLANK_BODY_PLACEHOLDER-->', html);
+  /* المحتوى محسوب ليبقى فوق التذييل — لا حاجة لفاصل الذيل (كان يدفع لورقة فارغة إضافية) */
+  out=out.replace(/<div id="print-spacer" style="height:\d+px"><\/div>/, '<div id="print-spacer" style="height:0"></div>');
   return out;
 }
 /* صفحة تكميلية: نفس الذيل بلا رأس ولا بيانات مريض */
 function contPage(rec, html){
   var css='<style>#print-content[data-spx-cont]>*:not(.spx-root):not(#print-spacer){display:none !important}</style>';
   var pg=blankPage(rec).replace('<div id="print-content" ', '<div id="print-content" data-spx-cont="1" ');
-  return inject(pg, css+'<div class="spx-root" style="height:4mm;margin:0"></div>'+html);
+  return inject(pg, css+'<div class="spx-root" style="height:8mm;margin:0"></div>'+html);
 }
 
 function bodyMol(rec, T){
@@ -77389,61 +77543,152 @@ function bodyMol(rec, T){
   if(rec.notes) h+='<div style="margin-top:5px;font-size:'+(T.fs)+'px;text-align:justify;font-weight:400;line-height:1.35"><b>NOTES and LIMITATIONS:</b><br>'+esc(rec.notes)+'</div>';
   return h+'</div>';
 }
-/* جدول مجموعة بعمودين متوازيين (يختصر الطول للنصف دون تصغير الخط) */
-function anaTable(rec, ags){
-  var half=Math.ceil(ags.length/2), rows='';
-  function cells(a){
-    if(!a) return '<td></td><td></td><td></td>';
-    var x=rec.ag[a]||{v:'<30',st:'Negative'}, c=x.st==='Positive'?' pos':x.st==='Borderline'?' bor':'';
-    return '<td class="an'+c+'">'+esc(a)+'</td><td class="'+c.trim()+'">'+esc(x.st)+'</td><td class="'+c.trim()+'" style="white-space:nowrap">'+esc(x.v||'<30')+' '+ANA_RANGE+'</td>';
-  }
-  for(var i=0;i<half;i++) rows+='<tr>'+cells(ags[i])+'<td class="sep"></td>'+cells(ags[i+half])+'</tr>';
-  return '<table class="spx-t cmp"><thead><tr><th>Antigen name</th><th>Result</th><th>Antibody level [U/ml]</th><th class="sep" style="background:#fff;border:none"></th><th>Antigen name</th><th>Result</th><th>Antibody level [U/ml]</th></tr></thead><tbody>'+rows+'</tbody></table>';
+/* ══ ANA بشكل قائمة (نفس ملف الـ PDF) ══
+   كل مجموعة: Test name / Result / Comment / Comment of the lab ثم جدول بعمود واحد:
+   Antigen name · Result · Antibody level [U/ml] · Probable association with
+   الحجم يُضبط تلقائياً داخل الصفحة (خط أصغر قليلاً فقط عند الحاجة) حتى لا تُقصّ ولا تتداخل مع الذيل. */
+function anaCss(T){
+  return '<style>'+
+  '.spx-fit{--afs:11.5px;--apd:1.6px}'+
+  '.spx-al{width:100%;border-collapse:collapse;border:1px solid #444;table-layout:fixed;margin-top:2px}'+
+  '.spx-al th{background:'+T.strip+';color:#fff;font-weight:700;padding:2px 6px;border:1px solid #444;text-align:center;font-size:var(--afs) !important;line-height:1.25 !important;white-space:nowrap}'+
+  '.spx-al td{padding:var(--apd) 6px;border:1px solid #8a8a8a;font-weight:400;color:#111;font-size:var(--afs) !important;line-height:1.2 !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+  '.spx-al td.n{text-align:left;padding-left:12px}.spx-al td.r{text-align:center}.spx-al td.l{text-align:right;padding-right:10px}'+
+  '.spx-al tr.bor td{background:#ffb000 !important;color:#111;font-weight:800}'+
+  '.spx-al tr.pos td{background:#ffe1e1 !important;color:#cc0000;font-weight:800}'+
+  '.spx-ph{border-collapse:collapse;margin:0 0 3px}'+
+  '.spx-ph td{padding:0;font-size:calc(var(--afs) + 1.5px) !important;line-height:1.3 !important;vertical-align:top}'+
+  '.spx-ph td.k{width:150px;white-space:nowrap;font-weight:400 !important;color:#111}'+
+  '.spx-lg{width:76%;margin:0 auto;border-collapse:collapse;border:1px solid #444}'+
+  '.spx-lg td{border:1px solid #8a8a8a;padding:var(--apd) 6px;text-align:center;font-weight:400;font-size:calc(var(--afs) - .5px) !important;line-height:1.2 !important}'+
+  '.spx-lg td:first-child{width:24%;font-weight:700}'+
+  '</style>';
 }
-function anaPanel(rec, p, T){
+/* ══ ANA: خط واحد ثابت لكل الأوراق + توزيع تلقائي للصفوف على الأوراق ══
+   الجدول الذي لا يتّسع في الورقة يُكمَل في الورقة التالية (مع تكرار عنوان الأعمدة)،
+   بدل تصغير الخط. المقاسات تُؤخذ فعلياً من نفس قالب التقرير (رأس/ذيل المختبر). */
+var ANA_COLS='<colgroup><col style="width:17%"><col style="width:15%"><col style="width:20%"><col style="width:48%"></colgroup>'+
+  '<thead><tr><th>Antigen name</th><th>Result</th><th>Antibody level [U/ml]</th><th>Probable association with</th></tr></thead>';
+function anaRow(rec, a, attr){
+  var x=rec.ag[a]||{v:'<30',st:'Negative'}, c=x.st==='Positive'?'pos':x.st==='Borderline'?'bor':'';
+  return '<tr class="'+c+'"'+(attr||'')+'><td class="n">'+esc(a)+'</td><td class="r">'+esc(x.st)+'</td><td class="l">'+esc(x.v||'<30')+' '+ANA_RANGE+'</td><td></td></tr>';
+}
+function anaPH(rec, p, attr){
   var res=panelResult(rec,p), col=res==='Positive'?'#cc0000':res==='Borderline'?'#e69500':'#111';
-  var fw=res==='Negative'?'600':'900';
+  var fw=res==='Negative'?'400':'800';
   var c=rec.pc[p.k]||{};
-  var td='padding:0 0;line-height:1.25 !important;font-size:12.5px !important;vertical-align:top';
-  return '<div class="spx-avoid" style="margin:9px 0 3px">'+
-    '<table style="font-size:12.5px;border-collapse:collapse;margin-bottom:4px">'+
-    '<tr><td style="width:150px;white-space:nowrap;'+td+'">Test name:</td><td style="'+td+';font-weight:'+fw+';color:'+col+'">'+esc(p.n)+'</td></tr>'+
-    '<tr><td style="white-space:nowrap;'+td+'">Result:</td><td style="'+td+';font-weight:'+fw+';color:'+col+'">'+res+'</td></tr>'+
-    '<tr><td style="white-space:nowrap;'+td+'">Comment:</td><td style="'+td+'">'+esc(c.c||'')+'</td></tr>'+
-    '<tr><td style="white-space:nowrap;'+td+'">Comment of the lab:</td><td style="'+td+'">'+esc(c.l||'')+'</td></tr></table>'+
-    anaTable(rec, p.ag)+'</div>';
+  return '<div style="padding:10px 0 4px"'+(attr||'')+'><table class="spx-ph" style="margin:0">'+
+    '<tr><td class="k">Test name:</td><td style="font-weight:'+fw+';color:'+col+'">'+esc(p.n)+'</td></tr>'+
+    '<tr><td class="k">Result:</td><td style="font-weight:'+fw+';color:'+col+'">'+res+'</td></tr></table></div>';
 }
 function anaHead(rec, T){
   var box=function(src, cap){
-    return '<div style="text-align:center"><div style="font-size:'+(T.fs+1)+'px;margin-bottom:4px">'+cap+'</div>'+
-      '<div style="width:36mm;height:36mm;border:1px solid #c9d3df;border-radius:4px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff">'+
+    return '<div style="text-align:center"><div style="font-size:12.5px;margin-bottom:4px">'+cap+'</div>'+
+      '<div style="width:36mm;height:36mm;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fff'+(src?'':';border:1px solid #c9d3df;border-radius:4px')+'">'+
       (src?'<img src="'+src+'" style="max-width:100%;max-height:100%;object-fit:contain;display:block">':'')+'</div></div>';
   };
   var info='';
-  [['Lot number',rec.lot],['Well number',rec.well],['Configuration',rec.cfg]].forEach(function(x){ if(String(x[1]||'').trim()) info+='<tr><td style="padding:2px 14px 2px 0">'+x[0]+':</td><td style="font-weight:700">'+esc(x[1])+'</td></tr>'; });
+  [['Lot number',rec.lot],['Well number',rec.well],['Configuration',rec.cfg]].forEach(function(x){ if(String(x[1]||'').trim()) info+='<tr><td style="padding:1px 18px 1px 0;font-size:12.5px !important">'+x[0]+':</td><td style="font-size:12.5px !important">'+esc(x[1])+'</td></tr>'; });
   var hasImg=!!(rec.img1||rec.img2);
   return '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px">'+
-    '<div><div style="font-size:'+(T.fs+5)+'px;font-weight:900;line-height:1.25;color:'+T.sec+'">Report for<br>Microblot-Array ANA plus IgG</div>'+
-    (info?'<table style="font-size:'+(T.fs+1)+'px;border-collapse:collapse;margin-top:6px">'+info+'</table>':'')+'</div>'+
-    (hasImg?'<div style="display:flex;gap:14px">'+box(rec.img1,'Image before analysis:')+box(rec.img2,'Analyzed image:')+'</div>':'')+
-    '</div><div class="spx-hr"></div>';
+    '<div><div style="font-size:16px;font-weight:800;line-height:1.25;color:#111">Report for<br>Microblot-Array ANA plus IgG</div>'+
+    (info?'<table style="border-collapse:collapse;margin-top:8px">'+info+'</table>':'')+'</div>'+
+    (hasImg?'<div style="display:flex;gap:16px">'+box(rec.img1,'Image before analysis:')+box(rec.img2,'Analyzed image:')+'</div>':'')+
+    '</div><div style="height:0;border-top:1.5px solid #222;margin:8px 0 2px"></div>';
 }
-function anaLegend(T){
-  var n=Math.ceil(ANA_LEGEND.length/3), r='';
-  function c2(x){ return x ? '<td class="an" style="text-align:center;font-size:10.5px !important">'+x[0]+'</td><td style="text-align:left;white-space:normal;font-size:10.5px !important">'+x[1]+'</td>' : '<td></td><td></td>'; }
-  for(var i=0;i<n;i++) r+='<tr>'+c2(ANA_LEGEND[i])+'<td class="sep"></td>'+c2(ANA_LEGEND[i+n])+'<td class="sep"></td>'+c2(ANA_LEGEND[i+2*n])+'</tr>';
-  var sp='<th class="sep" style="background:#fff;border:none"></th>';
-  return '<div class="spx-avoid" style="margin-top:10px"><table class="spx-t cmp" style="table-layout:auto;width:100%"><thead><tr><th>Abbr.</th><th>Meaning</th>'+sp+'<th>Abbr.</th><th>Meaning</th>'+sp+'<th>Abbr.</th><th>Meaning</th></tr></thead><tbody>'+r+'</tbody></table></div>';
+function anaLegend(attr){
+  var r=ANA_LEGEND.map(function(x){ return '<tr><td>'+x[0]+'</td><td>'+x[1]+'</td></tr>'; }).join('');
+  return '<div style="padding-top:16px"'+(attr||'')+'><table class="spx-lg"><tbody>'+r+'</tbody></table></div>';
 }
-var ANA_NOTE='<div class="spx-note" style="margin:4px 2px">Borderline area information can be found in the table (in parentheses).</div>';
-/* صفحات ANA: ① الرأس + الصور + ANA  ② Myositis + Scleroderma + SLE + الدليل */
+/* تعليق واحد في آخر الجدول — يتّسع حسب النص */
+function anaCmt(rec, attr){
+  var t=String(rec.comment||'').trim();
+  return '<div style="padding-top:0"'+(attr||'')+'><div style="border:1px solid #444;border-top:none;padding:5px 9px;min-height:24px;font-size:13px !important;line-height:1.45 !important;white-space:pre-wrap;word-break:break-word;background:#fff;opacity:1">'+
+    '<b style="font-weight:800;color:#000 !important;-webkit-text-fill-color:#000">Comment:</b> <span style="font-weight:600;color:#000 !important;-webkit-text-fill-color:#000;opacity:1">'+esc(t)+'</span></div></div>';
+}
+function anaNote(attr){ return '<div style="padding:10px 2px 0;font-weight:400;font-size:12px !important"'+(attr||'')+'>Borderline area information can be found in the table (in parentheses).</div>'; }
+/* الوحدات بالترتيب: عنوان كل مجموعة ثم صفوفها … ثم الملاحظة ثم الاختصارات */
+function anaUnits(){
+  var u=[];
+  ANA_PANELS.forEach(function(p){ u.push({t:'ph', p:p}); p.ag.forEach(function(a){ u.push({t:'row', p:p, a:a}); }); });
+  u.push({t:'cmt'}); u.push({t:'note'}); u.push({t:'leg'});
+  return u;
+}
+/* بناء HTML لمجموعة وحدات: الصفوف المتتالية لنفس المجموعة تُجمع في جدول واحد بعنوان أعمدة */
+function anaRender(rec, units, mark){
+  var h='', open=null;
+  function closeT(){ if(open){ h+='</tbody></table>'; open=null; } }
+  units.forEach(function(u){
+    var at=mark?' data-u="'+u.i+'"':'';
+    if(u.t==='row'){
+      if(open!==u.p.k){ closeT(); h+='<table class="spx-al"'+(mark?' data-tb="'+u.p.k+'"':'')+'>'+ANA_COLS+'<tbody>'; open=u.p.k; }
+      h+=anaRow(rec, u.a, at);
+    } else {
+      closeT();
+      if(u.t==='ph') h+=anaPH(rec, u.p, at);
+      else if(u.t==='note') h+=anaNote(at);
+      else if(u.t==='cmt') h+=anaCmt(rec, at);
+      else h+=anaLegend(at);
+    }
+  });
+  closeT();
+  return h;
+}
+/* قياس فعلي داخل إطار مخفي بنفس قالب الصفحة (متزامن) */
+function anaMeasure(rec, T, css){
+  var units=anaUnits(); units.forEach(function(u,i){ u.i=i; });
+  var html=inject(blankPage(rec), '<div class="spx-root">'+css+'<div class="spx-fit">'+anaHead(rec,T)+'<div data-start="1"></div>'+anaRender(rec, units, true)+'</div></div>');
+  html=html.replace(/<script[\s\S]*?<\/script>/gi,'');
+  var f=document.createElement('iframe');
+  f.style.cssText='position:fixed;left:-30000px;top:0;width:794px;height:1123px;border:0;visibility:hidden';
+  document.body.appendChild(f);
+  try{
+    var d=f.contentDocument; d.open(); d.write(html); d.close();
+    var ft=d.getElementById('print-footer'), fh=ft?ft.getBoundingClientRect().height:0;
+    var sig=d.getElementById('print-sig-block');
+    var st=d.querySelector('[data-start]').getBoundingClientRect().top;
+    var th=d.querySelector('table.spx-al thead'); var thH=th?th.getBoundingClientRect().height:20;
+    units.forEach(function(u){ var e=d.querySelector('[data-u="'+u.i+'"]'); u.h=e?e.getBoundingClientRect().height:18; });
+    if(!(st>0) || units.some(function(u){ return !(u.h>0); })) return null;
+    return {units:units, start1:st, footer:fh, thead:thH+3};
+  }catch(e){ console.warn('[SPX] ana measure', e); return null; }
+  finally{ try{ f.remove(); }catch(e){} }
+}
+/* تقسيم الوحدات على الأوراق */
+function anaPaginate(rec, T, css){
+  var M=anaMeasure(rec, T, css);
+  if(!M){   /* احتياط: مقاسات تقديرية */
+    var u0=anaUnits(); u0.forEach(function(u,i){ u.i=i; u.h=u.t==='row'?18:u.t==='ph'?44:u.t==='note'?26:u.t==='cmt'?34:250; });
+    M={units:u0, start1:420, footer:70, thead:23};
+  }
+  /* التذييل أسفل الورقة: هامش 5mm (≈19px) + رفع 10px ⇒ حدّ المحتوى فوق التذييل بمسافة بسيطة */
+  var LIMIT=M.footer>0 ? (1123-19-10-M.footer-14) : (1123-15-14), CONT0=8*3.78+6;   /* بداية الورقة التكميلية (8mm + الهامش) */
+  var rowH=18; for(var k=0;k<M.units.length;k++){ if(M.units[k].t==='row'){ rowH=M.units[k].h; break; } }
+  var pgs=[[]], y=M.start1, openP=null;
+  M.units.forEach(function(u, idx){
+    var add=u.h, need;
+    if(u.t==='row'){ if(openP!==u.p.k) add+=M.thead; need=add; }
+    else if(u.t==='ph'){ need=u.h+M.thead+rowH*3; }          /* لا يُترك عنوان مجموعة وحيداً أسفل الورقة */
+    else need=add;
+    if(y+need>LIMIT && pgs[pgs.length-1].length){
+      pgs.push([]); y=CONT0; openP=null;
+      if(u.t==='row') add=u.h+M.thead;
+    }
+    pgs[pgs.length-1].push(u); y+=add;
+    openP=(u.t==='row')?u.p.k:null;
+  });
+  return pgs;
+}
+/* أجسام أوراق ANA: [الأولى (رأس + صور + …) ، التكميلية …] */
 function anaPagesBodies(rec, T){
-  var p1='<div class="spx-root">'+baseCss(T)+anaHead(rec,T)+anaPanel(rec, ANA_PANELS[0], T)+ANA_NOTE+'</div>';
-  var p2='<div class="spx-root" style="padding-top:2mm">'+baseCss(T)+anaPanel(rec, ANA_PANELS[1], T)+anaPanel(rec, ANA_PANELS[2], T)+anaPanel(rec, ANA_PANELS[3], T)+ANA_NOTE+anaLegend(T)+'</div>';
-  return [p1, p2];
+  var css=baseCss(T)+anaCss(T);
+  var pgs=anaPaginate(rec, T, css);
+  return pgs.map(function(list, i){
+    return '<div class="spx-root">'+css+'<div class="spx-fit">'+(i===0?anaHead(rec,T):'')+anaRender(rec, list, false)+'</div></div>';
+  });
 }
 function noteChip(n){ return n ? '<span class="spx-nt '+n+'">'+n+'</span>' : ''; }
-function bodySpe(rec, T){
+function bodySpe(rec, T, imgH){
   var c=speCompute(rec);
   var h='<div class="spx-root">'+baseCss(T)+'<div class="spx-h1">Protein Electrophoresis (SPE)</div>'+
     '<table class="spx-t"><thead><tr><th>Analytes</th><th>Results</th><th>Notes</th><th>Units</th><th>Normal Values</th><th>%</th><th>Normal Values</th></tr></thead><tbody>';
@@ -77457,11 +77702,11 @@ function bodySpe(rec, T){
   if(com) h+='<div class="spx-box"><b>Comment:</b>&nbsp; '+esc(com)+'</div>';
   var dx=String(rec.dx||'').split(/\n+/).map(function(s){ return s.trim(); }).filter(Boolean);
   if(dx.length) h+='<div class="spx-box"><b>Provisional Diagnosis:</b><ol style="margin:4px 0 0 18px;padding:0">'+dx.map(function(s){ return '<li>'+esc(s)+'</li>'; }).join('')+'</ol></div>';
-  if(rec.img) h+='<div class="spx-avoid" style="display:flex;justify-content:center;margin-top:14px"><div class="spx-imgframe" style="width:124mm;height:64mm">'+
+  if(rec.img) h+='<div class="spx-avoid" style="display:flex;justify-content:center;margin-top:14px"><div class="spx-imgframe" style="width:124mm;height:'+(imgH||242)+'px">'+
     '<img src="'+rec.img+'"></div></div>';
   return h+'</div>';
 }
-function bodyIfx(rec, T){
+function bodyIfx(rec, T, imgH){
   var c=ifxCompute(rec);
   var h='<div class="spx-root">'+baseCss(T)+'<div class="spx-h1">Immunofixation Serum</div>'+
     '<div style="display:flex;gap:10px;align-items:stretch"><div style="flex:1">'+
@@ -77474,19 +77719,39 @@ function bodyIfx(rec, T){
       '<td>'+(d.lo!=null?fx(d.lo,3)+' - '+fx(d.hi,3):'')+'</td><td>'+esc(d.u)+'</td><td style="font-weight:800">'+esc(pv)+'</td><td>'+esc(d.upto?('Up to '+d.upto):(d.pref||''))+'</td></tr>';
   });
   h+='</tbody></table></div></div>';
-  var inv=c.involved;
-  h+='<div class="spx-avoid" style="display:flex;gap:10px;margin-top:10px;align-items:stretch">'+
-    '<div class="spx-box" style="margin:0;flex:1"><b>Comment:</b>'+
-      '<table style="border-collapse:collapse;margin-top:6px;font-size:'+(T.fs+2)+'px"><tr><td style="padding:3px 10px 3px 0;font-weight:800;text-decoration:underline">Class:</td>'+
-      '<td style="border:1.5px solid #333;padding:3px 14px;font-weight:900">'+esc(rec.cls||'')+'</td>'+(rec.clsPct&&rec.cls&&!/^No /.test(rec.cls)?'<td style="border:1.5px solid #333;border-left:none;padding:3px 14px;font-weight:900">'+esc(rec.clsPct)+'</td>':'')+'</tr>'+
-      (rec.type && rec.type!=='—'?'<tr><td style="padding:3px 10px 3px 0;font-weight:800;text-decoration:underline">Type:</td><td style="border:1.5px solid #333;border-top:none;padding:3px 14px;font-weight:900">'+esc(rec.type)+'</td></tr>':'')+
-      '</table>'+(rec.comment?'<div style="margin-top:6px">'+esc(rec.comment)+'</div>':'')+'</div>'+
-    (inv?'<div class="spx-box" style="margin:0;min-width:46mm;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:900;color:'+(/Involved\)/.test(inv)?'#cc0000':'#1d6b33')+'">'+esc(inv)+'</div>':'')+
-    '</div>';
-  if(rec.img) h+='<div class="spx-avoid" style="display:flex;justify-content:center;margin-top:12px"><div class="spx-imgframe" style="width:172mm;height:88mm"><img src="'+rec.img+'"></div></div>';
+  if(rec.img) h+='<div class="spx-avoid" style="display:flex;justify-content:center;margin-top:10px"><div class="spx-imgframe" style="width:172mm;height:'+(imgH||302)+'px"><img src="'+rec.img+'"></div></div>';
+  /* مربع تعليق واحد بعرض التقرير أسفل الصورة */
+  var inv=ifxInvText(rec, c), cls=String(rec.cls||'').trim(), pct=String(rec.clsPct||'').trim(), typ=String(rec.type||'').trim();
+  if(typ==='—') typ='';
+  var invRed=/involved/i.test(inv) && !/^\s*no\b/i.test(inv);
+  var cell='border:1.5px solid #333;padding:3px 14px;font-weight:900;white-space:nowrap';
+  var lab='padding:3px 10px 3px 0;font-weight:800;text-decoration:underline;white-space:nowrap';
+  h+='<div class="spx-box spx-avoid" style="margin-top:10px">'+
+    '<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">'+
+      '<b style="font-size:'+(T.fs+2)+'px">Comment:</b>'+
+      ((cls||pct)?'<table style="border-collapse:collapse;font-size:'+(T.fs+1)+'px"><tr><td style="'+lab+'">Class:</td>'+(cls?'<td style="'+cell+'">'+esc(cls)+'</td>':'')+(pct?'<td style="'+cell+(cls?';border-left:none':'')+'">'+esc(pct)+'</td>':'')+'</tr></table>':'')+
+      (typ?'<table style="border-collapse:collapse;font-size:'+(T.fs+1)+'px"><tr><td style="'+lab+'">Type:</td><td style="'+cell+'">'+esc(typ)+'</td></tr></table>':'')+
+      (inv?'<div style="margin-left:auto;font-weight:900;font-size:'+(T.fs+1)+'px;color:'+(invRed?'#cc0000':'#1d6b33')+'">'+esc(inv)+'</div>':'')+
+    '</div>'+
+    (String(rec.comment||'').trim()?'<div style="margin-top:6px;white-space:pre-wrap;word-break:break-word;font-weight:600">'+esc(rec.comment)+'</div>':'')+
+  '</div>';
   return h+'</div>';
 }
 
+/* قياس صفحة (متزامن) في إطار مخفي: أسفل المحتوى وحدّه فوق التذييل */
+function measurePage(html){
+  var f=document.createElement('iframe');
+  f.style.cssText='position:fixed;left:-30000px;top:0;width:794px;height:1123px;border:0;visibility:hidden';
+  document.body.appendChild(f);
+  try{
+    var d=f.contentDocument; d.open(); d.write(String(html).replace(/<script[\s\S]*?<\/script>/gi,'')); d.close();
+    var ft=d.getElementById('print-footer'), fh=ft?ft.getBoundingClientRect().height:0;
+    var roots=d.querySelectorAll('.spx-root'), r=roots[roots.length-1];
+    if(!r) return null;
+    return {bottom:r.getBoundingClientRect().bottom, footer:fh, limit: fh>0 ? (1123-19-10-fh-14) : (1123-15-14)};
+  }catch(e){ return null; }
+  finally{ try{ f.remove(); }catch(e){} }
+}
 /* صفحات التقرير: مصفوفة HTML لكل ورقة (للمعاينة المجمّعة و PDF) */
 function pages(rec){
   if(!rec) return [];
@@ -77494,10 +77759,20 @@ function pages(rec){
   try{
     if(rec.kind==='ana'){
       var b=anaPagesBodies(rec, T);
-      return [inject(blankPage(rec), b[0]), contPage(rec, b[1])];
+      return b.map(function(x, i){ return i===0 ? inject(blankPage(rec), x) : contPage(rec, x); });
     }
-    var body = rec.kind==='mol'?bodyMol(rec,T) : rec.kind==='spe'?bodySpe(rec,T) : bodyIfx(rec,T);
-    return [inject(blankPage(rec), body)];
+    if(rec.kind==='mol') return [inject(blankPage(rec), bodyMol(rec,T))];
+    /* SPE / IFX: ورقة واحدة دائماً — إن طال المحتوى (تعليق طويل) تُصغَّر الصورة فقط بقدر الحاجة */
+    var fn = rec.kind==='spe' ? bodySpe : bodyIfx, ih = rec.kind==='spe' ? 242 : 302;
+    var pg = inject(blankPage(rec), fn(rec,T,ih));
+    if(rec.img){
+      var m=measurePage(pg);
+      if(m && m.bottom>m.limit){
+        ih=Math.max(140, Math.floor(ih-(m.bottom-m.limit)-4));
+        pg=inject(blankPage(rec), fn(rec,T,ih));
+      }
+    }
+    return [pg];
   }catch(e){ console.warn('[SPX] pages', e); return []; }
 }
 /* مستند طباعة واحد: الورقة الأولى بالرأس، والبقية تكملة بلا رأس */
@@ -77505,7 +77780,8 @@ function printHTML(rec){
   var T=theme();
   if(rec.kind==='ana'){
     var b=anaPagesBodies(rec, T);
-    return inject(blankPage(rec), b[0]+'<div style="break-before:page;page-break-before:always;height:9mm"></div>'+b[1]);
+    var br='<div style="break-before:page;page-break-before:always;height:8mm"></div>';
+    return inject(blankPage(rec), b.join(br));
   }
   return pages(rec)[0]||'';
 }
@@ -77536,6 +77812,7 @@ function print(recId){
 /* معاينة داخل البرنامج */
 function preview(){
   if(!CUR) return;
+  flush();
   var tmp=JSON.parse(JSON.stringify(CUR)); tmp.saved=true;
   var ps=pages(tmp);
   var ov=document.getElementById('spx-prev-ov'); if(ov) ov.remove();
@@ -77547,10 +77824,17 @@ function preview(){
   var z=Math.min(1, (window.innerWidth-60)/794);
   ps.forEach(function(h){
     var wrap=document.createElement('div'); wrap.style.cssText='width:'+Math.round(794*z)+'px;height:'+Math.round(1123*z)+'px;margin:0 auto 14px;overflow:hidden';
-    var f=document.createElement('iframe'); f.className='pg'; f.style.transform='scale('+z+')'; f.style.margin='0';
+    var f=document.createElement('iframe'); f.className='pg'; f.style.transform='scale('+z+')'; f.style.transformOrigin='top left'; f.style.margin='0';
     wrap.appendChild(f); sc.appendChild(wrap);
     f.srcdoc=h;
   });
+  /* Esc يغلق المعاينة فقط (تبقى نافذة الإدخال مفتوحة) */
+  /* يُسجَّل على window (مرحلة الالتقاط) فيسبق معالج Esc العام الذي يغلق النوافذ */
+  var kh=function(e){
+    if(!document.getElementById('spx-prev-ov')){ window.removeEventListener('keydown', kh, true); return; }
+    if(e.key==='Escape'){ e.preventDefault(); e.stopImmediatePropagation(); e.stopPropagation(); var x=document.getElementById('spx-prev-ov'); if(x) x.remove(); window.removeEventListener('keydown', kh, true); }
+  };
+  window.addEventListener('keydown', kh, true);
 }
 
 /* حذف/فصل (من حذف التحليل من الطلب) */
@@ -77564,7 +77848,7 @@ return { is:is, icon:icon, KINDS:KINDS, open:open, close:close, cancel:cancel, s
          recFor:recFor, recById:recById, pages:pages, pagesForReq:pagesForReq, printHTML:printHTML, loadAll:loadAll, detach:detach,
          anaStatus:anaStatus, speCompute:speCompute, ifxCompute:ifxCompute,
          _set:_set, _molRow:_molRow, _molAll:_molAll, _molAutoC:_molAutoC, _anaVal:_anaVal, _anaSt:_anaSt, _anaReset:_anaReset, _anaPc:_anaPc,
-         _note:_note, _speG:_speG, _speP:_speP, _ifxV:_ifxV, _img:_img, _imgDel:_imgDel };
+         _note:_note, _ifxInv:_ifxInv, _ifxInvAuto:_ifxInvAuto, _speG:_speG, _speP:_speP, _ifxV:_ifxV, _img:_img, _imgDel:_imgDel };
 })();
 window.SPX = SPX;
 </script>
