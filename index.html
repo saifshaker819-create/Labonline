@@ -5596,6 +5596,20 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                         <span>طباعة تلقائية بعد «حفظ وإنشاء الطلب»</span>
                         <div class="tog" id="tog-auto-worksheet" onclick="this.classList.toggle('on');_savePrinter('autoPrintWorksheet',this.classList.contains('on'))"><div class="tog-t"></div></div>
                       </div>
+                      <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);display:flex;flex-direction:column;gap:7px;font-size:10.5px;color:var(--text2)">
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                          <span>🔤 إظهار الاسم الكامل فقط (من قاعدة التحاليل)</span>
+                          <div class="tog" id="tog-ws-onlyname" onclick="_wsDispToggle('wsOnlyName')"><div class="tog-t"></div></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                          <span>🔠 إظهار الكود المختصر فقط (من قاعدة التحاليل)</span>
+                          <div class="tog" id="tog-ws-onlycode" onclick="_wsDispToggle('wsOnlyCode')"><div class="tog-t"></div></div>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+                          <span>🕘 إظهار النتائج السابقة (آخر ٣ نتائج تحت كل تحليل)</span>
+                          <div class="tog" id="tog-ws-prev" onclick="_wsDispToggle('wsShowPrev')"><div class="tog-t"></div></div>
+                        </div>
+                      </div>
                     </div>
                     <div>
                       <label class="fl" style="margin-bottom:4px;font-size:11px">🧾 طابعة وصل الحساب (58 ملم)</label>
@@ -6794,8 +6808,17 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                 </div>
                 <div id="ws-delay-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
                   <div style="min-width:0;flex:1">
-                    <div style="font-size:13px;font-weight:800">⏱️ المناداة بعد ١٥ ثانية من الطباعة</div>
-                    <div style="font-size:11px;color:var(--text2);line-height:1.7">بعد طباعة النتيجة ينتظر البرنامج ١٥ ثانية ثم يُنادي المريض (زر «نداء» اليدوي يبقى فورياً).</div>
+                    <div style="font-size:13px;font-weight:800">⏱️ المناداة بعد <span id="ws-delay-lbl">١٥ ثانية</span> من الطباعة</div>
+                    <div style="font-size:11px;color:var(--text2);line-height:1.7">بعد طباعة النتيجة ينتظر البرنامج المدة المحددة ثم يُنادي المريض (زر «نداء» اليدوي يبقى فورياً).</div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">
+                      <span style="font-size:11px;font-weight:700;color:var(--text2)">المدة:</span>
+                      <input type="number" id="ws-delay-val" min="1" step="1" value="15" style="width:90px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-glass);color:var(--text);font-weight:800;font-size:13px;text-align:center" onchange="wsCallDelayChange()" oninput="wsCallDelayChange(true)">
+                      <select id="ws-delay-unit" style="padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--bg-glass);color:var(--text);font-weight:700;font-size:12px" onchange="wsCallDelayChange()">
+                        <option value="s">ثانية</option>
+                        <option value="m">دقيقة</option>
+                      </select>
+                      <span style="font-size:10px;color:var(--text2)">(من ١٠ ثوانٍ إلى ١٥ دقيقة)</span>
+                    </div>
                   </div>
                   <div class="tog" id="ws-delay-tog" onclick="wsCallDelayToggle()" title="المناداة بعد ١٥ ثانية"><div class="tog-t"></div></div>
                 </div>
@@ -12204,6 +12227,8 @@ function startApp(){
   }).catch(e=>console.warn('[MedLab] loadAllBigToCache failed',e));
 
   setTimeout(()=>showNotif('مرحباً','النظام جاهز للعمل 🔬','success'),500);
+  // 🏥 شاشة الإعداد الأولي للمختبر (حساب جديد فقط — مرة واحدة)
+  setTimeout(function(){ try{ if(window._labSetupMaybe) _labSetupMaybe(); }catch(e){} }, 3500);
   // 📢 تفعيل زر المنادات الصوتية + 🖨️ تهيئة واجهة وضع الطباعة
   try{ if(window.Intercom) Intercom.bindButton(); }catch(e){}
   // ⌨️ اختصار: الضغط على مسطرة المسافة مرتين بسرعة يفتح/يغلق التحدّث بالمنادات
@@ -16598,6 +16623,11 @@ window.rrOpen = function(triggerBtn){
         { cls:'c-edit',   icon:'✏️', lbl:'تعديل',   fn: function(){ goToResult(rid); } },
         { cls:'c-label',  icon:'🏷️', lbl:'ملصق',    fn: function(){ openLabelCopiesPopup(rid); } },
         { cls:'c-call',   icon:'📣', lbl:'نداء',    fn: function(){ wsManualCall(rid); } },
+        (function(){
+          var _rq=null; try{ _rq=requests.find(function(x){ return x.id===rid; }); }catch(e){}
+          var _dv=!!(_rq && _rq.wsDelivered);
+          return { cls:'c-deliv', icon:(_dv?'↩️':'🤝'), lbl:(_dv?'إلغاء التسليم':'تم التسليم'), fn: function(){ wsMarkDelivered(rid, !_dv); } };
+        })(),
         { cls:'c-delete', icon:'🗑️', lbl:'حذف',     fn: function(){ deleteReq(rid); } }
       ]
     : [
@@ -16612,38 +16642,39 @@ window.rrOpen = function(triggerBtn){
   var cy     = rect.top  + rect.height / 2;
   var vw     = window.innerWidth;
   var vh     = window.innerHeight;
-  var R      = 68; // نصف قطر القوس
   var count  = btns.length;
+  /* نصف القطر يكبر مع عدد الأزرار كي لا تتلامس الأزرار ولا تحجب النصوص بعضها */
+  var R      = count >= 6 ? 112 : (count >= 5 ? 100 : 84);
 
-  // تحديد اتجاه القوس: إذا الزر قريب من اليسار — القوس يفتح لليمين (زوايا صغيرة)
-  // إذا قريب من اليمين — يفتح لليسار
-  // إذا قريب من الأعلى — يفتح للأسفل، إلخ
-  // الحل الأذكى: نحسب المركز ونوجه القوس نحو مركز الشاشة
+  // القوس يفتح باتجاه مركز الشاشة
   var angleToCenter = Math.atan2(vh/2 - cy, vw/2 - cx); // بالراديان
   var angleDeg      = angleToCenter * 180 / Math.PI;
-
-  // القوس يفتح باتجاه مركز الشاشة، بفتحة 140 درجة
-  var spread  = 140;
+  var spread  = count >= 6 ? 165 : (count >= 5 ? 150 : 120);
   var startAng = angleDeg - spread/2;
 
   var createdItems = [];
+  var LW = 62, LH = 16;  /* مقاس تقريبي لوسم النص */
 
   btns.forEach(function(b, i){
-    var angle = (startAng + (spread / (count - 1 || 1)) * i) * Math.PI / 180;
+    var ang = (startAng + (spread / (count - 1 || 1)) * i);
+    var angle = ang * Math.PI / 180;
     var tx    = cx + R * Math.cos(angle);
     var ty    = cy + R * Math.sin(angle);
 
-    // ضمان عدم الخروج من الشاشة
-    tx = Math.max(24, Math.min(vw - 24, tx));
-    ty = Math.max(24, Math.min(vh - 40, ty));
+    // ضمان عدم الخروج من الشاشة (مع هامش للنص)
+    tx = Math.max(34, Math.min(vw - 34, tx));
+    ty = Math.max(28, Math.min(vh - 28, ty));
 
     var el = document.createElement('button');
     el.className = 'rri ' + b.cls;
     el.style.left = (tx - 19) + 'px';
     el.style.top  = (ty - 19) + 'px';
     el.style.transform = 'scale(0)';
-    var lblTop = (b.cls === 'c-print' || b.cls === 'c-result');
-    el.innerHTML = b.icon + '<span class="rri-lbl" style="'+(lblTop ? 'bottom:auto;top:-17px;' : '')+'">' + b.lbl + '</span>';
+    /* النص يوضع خارج القوس (بعيداً عن مركز القوس) كي لا يختفي خلف زر مجاور */
+    var ux = Math.cos(angle), uy = Math.sin(angle);
+    var half = Math.abs(ux)*(LW/2) + Math.abs(uy)*(LH/2) + 3;
+    var lx = ux*(19 + half), ly = uy*(19 + half);
+    el.innerHTML = b.icon + '<span class="rri-lbl" style="left:'+(19+lx).toFixed(1)+'px;top:'+(19+ly).toFixed(1)+'px;bottom:auto;transform:translate(-50%,-50%)">' + b.lbl + '</span>';
 
     // ربط الحدث بـ addEventListener — هذا يحل مشكلة عدم الاستجابة
     (function(btnFn){
@@ -29624,6 +29655,11 @@ function _wsCallModeUI(){
   var a=document.getElementById('ws-autocall-tog'), d=document.getElementById('ws-delay-tog'), row=document.getElementById('ws-delay-row');
   if(a) a.classList.toggle('on', ws.autoCallOff===true);
   if(d) d.classList.toggle('on', ws.callDelay15===true);
+  try{
+    var sec=_wsDelaySec(), vEl=document.getElementById('ws-delay-val'), uEl=document.getElementById('ws-delay-unit'), lEl=document.getElementById('ws-delay-lbl');
+    if(vEl && document.activeElement!==vEl){ if(sec>=60 && sec%60===0){ vEl.value=sec/60; if(uEl) uEl.value='m'; } else { vEl.value=sec; if(uEl) uEl.value='s'; } }
+    if(lEl) lEl.textContent=_wsDelayText(sec);
+  }catch(_){}
   if(row){ row.style.opacity = ws.autoCallOff===true ? '0.45' : ''; row.style.pointerEvents = ws.autoCallOff===true ? 'none' : ''; }
 }
 function _wsCallModeSave(msg){
@@ -29639,7 +29675,37 @@ function wsAutoCallOffToggle(){
 }
 function wsCallDelayToggle(){
   var ws=_wsGetSettings(); ws.callDelay15 = !(ws.callDelay15===true);
-  _wsCallModeSave(ws.callDelay15 ? '⏱️ يُنادى المريض بعد ١٥ ثانية من الطباعة' : '⚡ يُنادى المريض فور الطباعة');
+  _wsCallModeSave(ws.callDelay15 ? '⏱️ يُنادى المريض بعد '+_wsDelayText(_wsDelaySec())+' من الطباعة' : '⚡ يُنادى المريض فور الطباعة');
+}
+/* ⏱️ مدة التأخير قبل المناداة — قابلة للتغيير (١٠ ثوانٍ … ١٥ دقيقة) — الافتراضي ١٥ ثانية */
+function _wsDelaySec(){
+  var ws=(settings&&settings.waitScreen)||{};
+  var n=Number(ws.callDelaySec);
+  if(!isFinite(n)||n<=0) n=15;
+  return Math.max(10, Math.min(900, Math.round(n)));
+}
+function _wsDelayText(sec){
+  if(sec>=60 && sec%60===0){ var m=sec/60; return m+(m===1?' دقيقة':(m<=10?' دقائق':' دقيقة')); }
+  if(sec>60){ return Math.floor(sec/60)+' د و '+(sec%60)+' ث'; }
+  return sec+(sec<=10?' ثوانٍ':' ثانية');
+}
+function wsCallDelayChange(live){
+  var vEl=document.getElementById('ws-delay-val'), uEl=document.getElementById('ws-delay-unit'); if(!vEl) return;
+  var v=parseFloat(vEl.value);
+  if(!isFinite(v)||v<=0){ if(live===true) return; v=15; }
+  var sec=Math.round(v*((uEl&&uEl.value==='m')?60:1));
+  if(live===true && (sec<10||sec>900)) return;          /* أثناء الكتابة: لا نفرض الحدود حتى ينتهي من الكتابة */
+  var clamped=Math.max(10,Math.min(900,sec));
+  var ws=_wsGetSettings(); ws.callDelaySec=clamped;
+  save('settings', settings);
+  if(live!==true){
+    if(clamped!==sec){ showNotif('تنبيه','المدة المسموحة من ١٠ ثوانٍ إلى ١٥ دقيقة — تم التعديل تلقائياً','warning'); }
+    _wsCallModeUI();
+    try{ _pushWaitScreenData(); }catch(e){}
+    try{ if(window._tvCastActive) _pushTvCastData(); }catch(e){}
+  } else {
+    var lEl=document.getElementById('ws-delay-lbl'); if(lEl) lEl.textContent=_wsDelayText(clamped);
+  }
 }
 
 // تهيئة واجهة إعدادات شاشة الانتظار عند فتح القسم
@@ -44871,7 +44937,7 @@ function openWaitScreen(mode){
 
   // ── بناء البيانات مباشرةً عند الفتح ──
   var today = new Date().toISOString().slice(0,10);
-  var todayReqs = requests.filter(function(r){ return (r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r); });
+  var todayReqs = requests.filter(function(r){ return (r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r) && !r.wsDelivered; });
   var filteredReqs = _wsFilterRequests(todayReqs);
   // ⭐ نفس منطق التحديث الدوري (_wsEffStatus) حتى لا تختلف اللقطة الأولى عمّا بعدها
   var initCnt = {
@@ -45628,9 +45694,25 @@ function wsManualCall(reqId){
   }catch(e){ console.warn('[wsManualCall]', e); }
 }
 
-/* ⏱️ «المناداة بعد ١٥ ثانية»: الطلب الجاهز يُحجب عن قائمة النداء ١٥ ثانية من لحظة جاهزيته
+/* 🤝 «تم التسليم»: المراجع استلم نتيجته ⇒ يختفي اسمه من شاشة الانتظار (النافذة + التلفزيون + البث).
+   العلامة r.wsDelivered تُحفظ مع الطلب وتتزامن مع بقية الأجهزة؛ «إلغاء التسليم» يعيده للشاشة. */
+function wsMarkDelivered(reqId, on){
+  try{
+    var r = requests.find(function(x){ return x.id === reqId; });
+    if(!r){ showNotif('تنبيه','الطلب غير موجود','error'); return; }
+    if(on){ r.wsDelivered = true; r.wsDeliveredAt = Date.now(); }
+    else  { delete r.wsDelivered; delete r.wsDeliveredAt; }
+    r._updatedAt = Date.now();
+    saveOne('requests', requests, r);
+    try{ updateWaitScreen(); }catch(_){}
+    try{ if(typeof renderRequests==='function'){ var _ap=document.querySelector('#sec-requests .req-pill[data-filter].active'); var _se=document.getElementById('req-srch-inp'); renderRequestsFiltered(_ap?_ap.getAttribute('data-filter'):'today',(_se&&_se.value)||''); } }catch(_){}
+    showNotif(on?'🤝 تم التسليم':'↩️ أُلغي التسليم', on ? ('أُخفي «'+(r.patientName||'')+'» من شاشة الانتظار') : ('أُعيد «'+(r.patientName||'')+'» إلى شاشة الانتظار'), 'success');
+  }catch(e){ console.warn('[wsMarkDelivered]', e); }
+}
+
+/* ⏱️ «المناداة بعد مدة»: الطلب الجاهز يُحجب عن قائمة النداء المدة المحددة (الافتراضي ١٥ ثانية) من لحظة جاهزيته
    ثم يُنادى — على كل شاشات الانتظار (الحجب يبدأ من أول لحظة رُئي فيها جاهزاً على هذه الحاسبة). */
-var _WS_DELAY_MS = 15000;
+function _wsDelayMs(){ return _wsDelaySec()*1000; }
 var _wsReadySeen = null, _wsHoldT = {};
 function _wsCallHeld(r){
   try{
@@ -45645,7 +45727,7 @@ function _wsCallHeld(r){
     var t0 = _wsReadySeen[r.id];
     if(t0 === undefined){ t0 = _wsReadySeen[r.id] = now; }
     if(t0 === 1) return false;
-    var left = t0 + _WS_DELAY_MS - now;
+    var left = t0 + _wsDelayMs() - now;
     if(left <= 0) return false;
     if(!_wsHoldT[r.id]){
       _wsHoldT[r.id] = setTimeout(function(){
@@ -45673,7 +45755,7 @@ function _wsCallPatient(reqId, _afterDelay){
       var _r0 = requests.find(function(x){ return x.id === reqId; });
       if(_r0) _wsCallHeld(_r0);                          /* يسجّل لحظة الجاهزية إن لم تُسجَّل بعد */
       var _t0 = (_wsReadySeen && _wsReadySeen[reqId] > 1) ? _wsReadySeen[reqId] : Date.now();
-      setTimeout(function(){ try{ _wsCallPatient(reqId, true); }catch(_){} }, Math.max(0, _t0 + _WS_DELAY_MS - Date.now()));
+      setTimeout(function(){ try{ _wsCallPatient(reqId, true); }catch(_){} }, Math.max(0, _t0 + _wsDelayMs() - Date.now()));
       return;
     }
     var r = requests.find(function(x){ return x.id === reqId; });
@@ -45721,7 +45803,7 @@ function _pushWaitScreenData(){
   const win = window._waitScreenWin;
   if(!win || win.closed) return;
   const today = new Date().toISOString().slice(0,10);
-  const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r));
+  const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r) && !r.wsDelivered);
   const filteredReqs = _wsFilterRequests(todayReqs);
   const cnt = {
     pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
@@ -45771,7 +45853,7 @@ function _pushTvCastData(){
   if(!window._tvCastActive) return;
   try{
     const today = new Date().toISOString().slice(0,10);
-    const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r));
+    const todayReqs = requests.filter(r=>(r.date||'').slice(0,10)===today && !_wsIsAutoDeviceReq(r) && !r.wsDelivered);
     const filteredReqs = _wsFilterRequests(todayReqs);
     const cnt = {
       pending:    todayReqs.filter(r=>_wsEffStatus(r)==='pending').length,
@@ -55312,8 +55394,10 @@ body.light-mode .pm-note{color:rgba(10,42,37,.38)}
 .rri:active{transform:scale(0.88) !important;}
 .rri-lbl{
   position:absolute;bottom:-17px;left:50%;transform:translateX(-50%);
-  font-size:8px;font-weight:800;white-space:nowrap;
-  color:#fff;text-shadow:0 1px 6px rgba(0,0,0,1);
+  font-size:10px;font-weight:800;white-space:nowrap;line-height:1.3;
+  color:#fff;background:rgba(8,14,28,.88);padding:1px 6px;border-radius:7px;
+  border:1px solid rgba(255,255,255,.18);
+  text-shadow:none;z-index:2;
   pointer-events:none;font-family:'Cairo','Inter',sans-serif;
 }
 /* ألوان الأزرار */
@@ -55321,6 +55405,7 @@ body.light-mode .pm-note{color:rgba(10,42,37,.38)}
 .rri.c-edit  {background:linear-gradient(135deg,#ff9800,#d84000);}
 .rri.c-label {background:linear-gradient(135deg,#aa00ff,#6600aa);}
 .rri.c-call  {background:linear-gradient(135deg,#00c46a,#008a4a);}
+.rri.c-deliv{background:linear-gradient(135deg,#00bcd4,#00697a);}
 .rri.c-delete{background:linear-gradient(135deg,#f44336,#b71c1c);}
 .rri.c-result{background:linear-gradient(135deg,#1e90ff,#0040bb);}
 
@@ -71357,6 +71442,9 @@ window._wsrSyncSettingsUI = function(){
   tog('tog-wa-direct',      s.waDirectResults !== false);   // الافتراضي تشغيل
   tog('tog-auto-worksheet', s.autoPrintWorksheet === true); // الافتراضي إطفاء
   tog('tog-auto-receipt',   s.autoPrintReceipt === true);   // الافتراضي إطفاء
+  tog('tog-ws-onlyname',    s.wsOnlyName === true);
+  tog('tog-ws-onlycode',    s.wsOnlyCode === true);
+  tog('tog-ws-prev',        s.wsShowPrev === true);
   // اسم الطابعة المحفوظ يظهر في القائمة حتى قبل الضغط على 🔄
   [['st-printer-worksheet', s.printerWorksheet], ['st-printer-receipt', s.printerReceipt]].forEach(function(x){
     var sel=document.getElementById(x[0]); if(!sel || !x[1]) return;
@@ -71611,6 +71699,54 @@ var FONT = "'Segoe UI',Tahoma,'Arial',sans-serif";
 /* ══════════════════════════════════════════════════════════════
    3) 📋 ورقة العمل — A5
    ══════════════════════════════════════════════════════════════ */
+/* ⚙️ خيارات عرض ورقة العمل: الاسم الكامل فقط / الكود فقط (متنافيان) / النتائج السابقة */
+window._wsDispToggle = function(key){
+  var S=_S(); S[key] = !(S[key]===true);
+  if(S[key]===true){
+    if(key==='wsOnlyName') S.wsOnlyCode=false;
+    if(key==='wsOnlyCode') S.wsOnlyName=false;
+  }
+  _saveSettings();
+  try{ window._wsrSyncSettingsUI(); }catch(e){}
+};
+/* 💳 حالة الدفع: paid=مدفوع · none=غير مدفوع · due=مطلوب (دُفع جزء وبقي متبقٍّ) · null=بلا فاتورة */
+function _wsPayState(req){
+  try{
+    var inv=(typeof invoices!=='undefined' ? invoices : []).find(function(i){ return i && i.reqId===req.id; }) || null;
+    if(!inv) return null;
+    var list=_testsOf(req);
+    var sum=list.reduce(function(a,t){ return a+t.price; },0);
+    var raw=inv.rawTotal!=null ? (parseFloat(inv.rawTotal)||0) : sum;
+    var disc=parseFloat(inv.discountAmt)||(raw*(parseFloat(inv.discount)||0)/100)||0;
+    var net=inv.total!=null ? (parseFloat(inv.total)||0) : (raw-disc);
+    var paid=0;
+    try{ paid=(typeof _invPaidAmt==='function') ? _invPaidAmt(inv) : (parseFloat(inv.paidAmt)||0); }catch(e){ paid=parseFloat(inv.paidAmt)||0; }
+    var due=Math.max(0, Math.round((net-paid)*100)/100);
+    if(due<=0) return {kind:'paid', due:0, paid:paid, net:net};
+    return {kind:(paid>0?'due':'none'), due:due, paid:paid, net:net};
+  }catch(e){ return null; }
+}
+function _wsFmtDate(d){
+  var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||''));
+  return m ? (m[3]+'/'+m[2]+'/'+m[1].slice(2)) : String(d||'');
+}
+/* 🕘 آخر ٣ نتائج سابقة لنفس المريض لهذا التحليل (بدون الطلب الحالي) */
+function _wsPrevResults(req, tid, max){
+  try{
+    var all=(typeof requests!=='undefined' && requests) ? requests : [];
+    var pid=req.patientId; if(!pid) return [];
+    var arr=[];
+    all.forEach(function(r){
+      if(!r || r.id===req.id || r.patientId!==pid) return;
+      var v=r.results ? r.results[tid] : undefined;
+      if(v==null || typeof v==='object') return;
+      v=String(v).trim(); if(!v) return;
+      arr.push({v:v, d:String(r.date||''), t:String(r.time||''), ts:(r._updatedAt||0)});
+    });
+    arr.sort(function(a,b){ return (b.d+' '+b.t).localeCompare(a.d+' '+a.t) || (b.ts-a.ts); });
+    return arr.slice(0, max||3);
+  }catch(e){ return []; }
+}
 async function _buildWorksheet(req, fitMul){
   var pt = _pt(req), s = _S(), now = _now(), SZ = _wsSize();
   // 📐 ملاءمة تلقائية: إن زاد المحتوى عن صفحة واحدة يُصغَّر الإطار بهذا المعامل (انظر _printWorksheet)
@@ -71647,14 +71783,29 @@ async function _buildWorksheet(req, fitMul){
   function info(lbl, val, cls){
     return '<div class="it'+(cls?' '+cls:'')+'"><span class="l">'+lbl+'</span><span class="v">'+_esc(val||'—')+'</span></div>';
   }
+  var _onlyName = (s.wsOnlyName === true), _onlyCode = (s.wsOnlyCode === true && !_onlyName), _showPrev = (s.wsShowPrev === true);
   var rows = list.map(function(t,i){
-    return '<div class="row">' +
+    var nm = t.name, showCd = (t.code && t.code!==t.name);
+    if(_onlyCode && t.code){ nm = t.code; showCd = false; }
+    else if(_onlyName){ showCd = false; }
+    var prevHtml = '';
+    if(_showPrev){
+      var pv = _wsPrevResults(req, (req.tests||[])[i], 3);
+      if(pv.length){
+        var un = ''; try{ var tt=(typeof tests!=='undefined'?tests:[]).find(function(x){ return x.id===(req.tests||[])[i]; }); un=(tt&&tt.unit&&!/^(qualitative|blood-group|multiple|titer)$/.test(tt.unit))?tt.unit:''; }catch(_){}
+        prevHtml = '<span class="pv"><b>Prev:</b> ' + pv.map(function(x){
+          return '<span class="pvi"><span class="pvv">'+_esc(x.v)+(un&&/^[<>≤≥]?\s*-?[\d.,]+$/.test(x.v)?' '+_esc(un):'')+'</span><span class="pvd">'+_esc(_wsFmtDate(x.d))+'</span></span>';
+        }).join('') + '</span>';
+      }
+    }
+    return '<div class="row'+(prevHtml?' hp':'')+'">' +
       '<span class="chk"></span>' +
       '<span class="no">'+_two(i+1)+'</span>' +
-      '<span class="nm">'+_esc(t.name)+'</span>' +
-      (t.code && t.code!==t.name ? '<span class="cd">'+_esc(t.code)+'</span>' : '') +
+      '<span class="nm">'+_esc(nm)+'</span>' +
+      (showCd ? '<span class="cd">'+_esc(t.code)+'</span>' : '') +
       '<span class="fill"></span>' +
       (t.cat && !twoCol ? '<span class="ct">'+_esc(t.cat)+'</span>' : '') +
+      prevHtml +
     '</div>';
   }).join('');
 
@@ -71722,6 +71873,16 @@ async function _buildWorksheet(req, fitMul){
       (twoCol ? ';column-count:2;column-gap:0;column-rule:0.3mm solid #000' : '') + '}' +
     '.row{display:flex;align-items:center;gap:'+(twoCol?'1.6mm':'2.4mm')+';padding:'+rowPad+' '+(twoCol?'2mm':'3mm')+';font-size:'+rowFs+';break-inside:avoid;border-bottom:0.2mm solid #000}' +
     '.row:last-child{border-bottom:none}' +
+    '.row.hp{flex-wrap:wrap;row-gap:.2mm}' +
+    '.pv{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:0 3.2mm;align-items:baseline;padding-right:'+(dense?'4.5mm':'6mm')+';direction:ltr;font-size:'+(dense?'6.2pt':'6.8pt')+';color:#000;line-height:1.3}' +
+    '.pv b{font-weight:800}' +
+    '.pvi{white-space:nowrap}' +
+    '.pvv{font-weight:900}' +
+    '.pvd{font-weight:600;margin-left:1mm;color:#000;opacity:.8;font-size:.9em}' +
+    '.pay{display:inline-block;font-weight:900;border:0.4mm solid #000;border-radius:10mm;padding:0 2.6mm;line-height:1.5}' +
+    '.pay.paid{color:#0a7a2f;border-color:#0a7a2f}' +
+    '.pay.none{color:#c4001a;border-color:#c4001a}' +
+    '.pay.due{color:#b45a00;border-color:#b45a00;border-style:dashed}' +
     '.chk{width:'+(dense?'2.8mm':'3.2mm')+';height:'+(dense?'2.8mm':'3.2mm')+';border:0.35mm solid #000;border-radius:.7mm;flex-shrink:0}' +
     '.no{font-family:"Courier New",monospace;font-weight:900;color:#000;font-size:'+(dense?'7pt':'8pt')+';flex-shrink:0}' +
     '.nm{font-weight:900;color:#000;line-height:1.15;min-width:0}' +
@@ -71761,6 +71922,14 @@ async function _buildWorksheet(req, fitMul){
       info('وقت الطباعة:', now.date+'  '+now.time) +
       info('الأولوية:', req.priority||'Routine') +
     '</div>';
+  try{
+    var _ps = _wsPayState(req);
+    if(_ps){
+      var _pl = _ps.kind==='paid' ? 'مدفوع' : (_ps.kind==='due' ? 'مطلوب' : 'غير مدفوع');
+      infoHTML += '<div class="ir"><div class="it"><span class="l">الدفع:</span><span class="v" style="overflow:visible"><span class="pay '+_ps.kind+'">'+_pl+'</span></span></div>' +
+        (_ps.kind==='due' ? info('المتبقي:', _money(_ps.due)) : '') + '</div>';
+    }
+  }catch(_){}
 
   return '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>ورقة العمل</title><style>'+css+'</style></head><body>' +
     '<div class="frame">' +
@@ -71958,6 +72127,7 @@ window.printReceiptFromResults = function(){
   _printReceipt(id, false);
 };
 window._wsrPrintWorksheet = _printWorksheet;
+window._wsrBuildWorksheet = _buildWorksheet;
 window._wsrPrintReceipt   = _printReceipt;
 
 /* ══════════════════════════════════════════════════════════════
@@ -76846,6 +77016,278 @@ document.addEventListener('keydown', function(e){ if(e.key==='Escape' && isOpen(
 })();
 </script>
 
+<script id="labsetup-module">
+(function(){
+'use strict';
+/* ═══════════════════════════════════════════════════════════════════════
+   🏥 شاشة الإعداد الأولي للمختبر (حساب جديد)
+   تظهر مرة واحدة بعد أول تسجيل دخول وموافقة الشروط، وتطلب:
+     اسم المختبر · اسم صاحب الإجازة · العنوان · رقم الهاتف
+   ثم اختيار رأس وتذييل جاهزين (بدون أي تعديل) — الرأس يأخذ اسم المختبر واسم
+   الطبيب، والتذييل يأخذ العنوان والهاتف. كل شيء يُحفظ في الإعدادات القائمة:
+     settings.name / dir / addr / phone
+     settings.hdrSrc='tpl' · hdrTpl · hdrTplData
+     settings.ftrMode='txt' · ftrTpl · ftrAddress · ftrPhone
+   settings.labSetupDone = true بعد الحفظ أو التخطي فلا تظهر مجدداً.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+var DEFAULT_NAME = 'مختبر النور الطبي';
+var _shown = false, _t = null;
+var V = { name:'', owner:'', addr:'', phone:'', hdr:'n1', ftr:'0' };
+
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* هل هذا حساب جديد لم يُجهَّز بعد؟ */
+function isNewLab(){
+  try{
+    if(typeof settings==='undefined' || !settings || settings.labSetupDone) return false;
+    var cnt = function(a){ try{ return (typeof a!=='undefined' && Array.isArray(a)) ? a.length : 0; }catch(e){ return 0; } };
+    var p = (typeof patients!=='undefined') ? patients : [], r = (typeof requests!=='undefined') ? requests : [], v = (typeof invoices!=='undefined') ? invoices : [];
+    if(cnt(p) || cnt(r) || cnt(v)) return false;
+    var nm = String(settings.name||'').trim();
+    if(nm && nm !== DEFAULT_NAME) return false;
+    if(settings.hdrSrc==='tpl' || settings.headerImg || settings.footerImg) return false;
+    if(settings.ftrMode==='txt' && (settings.ftrAddress || settings.ftrPhone)) return false;
+    return true;
+  }catch(e){ return false; }
+}
+
+function headerData(v){
+  return {
+    nameAr: v.name, subAr:'للتحليلات المرضية', nameEn:'', subEn:'', slogan:'',
+    address: v.addr, hours:'', phone: v.phone, phone2:'', email:'', tag:'مختبر',
+    docName: v.owner, docTitle:'', docQual:'', docEmail:'', doc2Name:'', doc2Title:'',
+    cert1:'', cert2:'', cert3:''
+  };
+}
+
+/* معاينة مصغّرة لقالب الرأس (نفس مُولِّد الطباعة) */
+function hdrThumb(id, boxW, live){
+  var d = headerData({ name: V.name || 'اسم المختبر', owner: V.owner || 'اسم الطبيب', addr: V.addr || 'العنوان', phone: V.phone || '07xx xxx xxxx' });
+  var s = Object.assign({}, settings, { hdrSrc:'tpl', hdrTpl:id, hdrTplData:d, blankHdr:false });
+  var inner = '';
+  try{ inner = _hdrTplHTML(s, 170, {}); }catch(e){ inner = ''; }
+  var sc = Math.min(1, boxW/794);
+  return '<div style="width:'+Math.round(794*sc)+'px;height:'+Math.round(170*sc)+'px;overflow:hidden;margin:0 auto;position:relative;background:#fff">'
+    + '<div style="width:794px;transform:scale('+sc+');transform-origin:top right;position:absolute;top:0;right:0">'+inner+'</div></div>';
+}
+/* معاينة مصغّرة لقالب الذيل */
+function ftrThumb(i, boxW){
+  var s = Object.assign({}, settings, { ftrMode:'txt', ftrTpl:String(i), ftrNote:'',
+    ftrAddress: V.addr || 'العنوان الكامل للمختبر', ftrPhone: V.phone || '07xx xxx xxxx' });
+  var blk = null;
+  try{ blk = _ftrTextBlock(s); }catch(e){}
+  if(!blk) return '';
+  var sc = Math.min(1, boxW/794);
+  return '<div style="width:'+Math.round(794*sc)+'px;height:'+Math.round(blk.h*sc)+'px;overflow:hidden;margin:0 auto;background:#fff">'
+    + '<div style="width:794px;transform:scale('+sc+');transform-origin:top right;direction:ltr">'+blk.inner+'</div></div>';
+}
+
+var CSS = ''
++ '#ls-ov{position:fixed;inset:0;z-index:2147482500;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:26px 16px 40px;direction:rtl;font-family:inherit;'
++   'background:radial-gradient(ellipse at 20% 0%,rgba(0,212,255,.18),transparent 55%),radial-gradient(ellipse at 90% 100%,rgba(123,47,255,.16),transparent 55%),#050a14;animation:lsFade .35s ease}'
++ '@keyframes lsFade{from{opacity:0}to{opacity:1}}@keyframes lsUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}'
++ '#ls-ov *{box-sizing:border-box}'
++ '.ls-card{width:min(1000px,100%);background:var(--bg-card,#0f1720);border:1px solid var(--border,#22303c);border-radius:24px;box-shadow:0 30px 90px rgba(0,0,0,.6);overflow:hidden;animation:lsUp .45s ease}'
++ '.ls-hero{padding:30px 30px 22px;text-align:center;background:linear-gradient(135deg,rgba(0,212,255,.14),rgba(123,47,255,.12));border-bottom:1px solid var(--border,#22303c)}'
++ '.ls-ico{width:72px;height:72px;margin:0 auto 12px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-size:38px;background:linear-gradient(135deg,#00d4ff,#7b2fff);box-shadow:0 10px 30px rgba(0,212,255,.35)}'
++ '.ls-hero h1{margin:0 0 6px;font-size:24px;font-weight:900;color:var(--text,#e8ecef)}'
++ '.ls-hero p{margin:0;font-size:13px;line-height:1.9;color:var(--text2,#8b97a3)}'
++ '.ls-body{padding:24px 30px 8px}'
++ '.ls-sec{margin-bottom:26px}'
++ '.ls-h{display:flex;align-items:center;gap:10px;margin-bottom:12px;font-size:15px;font-weight:900;color:var(--text,#e8ecef)}'
++ '.ls-n{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;color:#04121a;background:linear-gradient(135deg,#00d4ff,#00ffa3);flex-shrink:0}'
++ '.ls-sub{font-size:11.5px;color:var(--text2,#8b97a3);margin:-6px 0 12px;line-height:1.8}'
++ '.ls-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}'
++ '.ls-f label{display:block;font-size:12px;font-weight:800;margin-bottom:5px;color:var(--text,#e8ecef)}'
++ '.ls-f label i{color:#ff4d6d;font-style:normal}'
++ '.ls-f input{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border,#22303c);background:rgba(255,255,255,.04);color:var(--text,#e8ecef);font-family:inherit;font-size:14px;font-weight:700;outline:none;transition:border-color .15s,box-shadow .15s}'
++ '.ls-f input:focus{border-color:#00d4ff;box-shadow:0 0 0 3px rgba(0,212,255,.18)}'
++ '.ls-f input.bad{border-color:#ff4d6d;box-shadow:0 0 0 3px rgba(255,77,109,.18)}'
++ '.ls-big{background:#fff;border-radius:12px;padding:6px;margin-bottom:14px;border:2px solid #00d4ff;box-shadow:0 8px 26px rgba(0,212,255,.18)}'
++ '.ls-big-t{font-size:11px;font-weight:800;color:#0a6a85;margin:0 4px 4px}'
++ '.ls-gt{font-size:12px;font-weight:800;color:var(--text2,#8b97a3);margin:14px 0 8px}'
++ '.ls-opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:10px}'
++ '.ls-o{cursor:pointer;border:2px solid var(--border,#22303c);border-radius:12px;padding:6px;background:rgba(255,255,255,.02);transition:transform .12s,border-color .12s,background .12s;position:relative}'
++ '.ls-o:hover{transform:translateY(-2px);border-color:rgba(0,212,255,.55)}'
++ '.ls-o.on{border-color:#00d4ff;background:rgba(0,212,255,.1);box-shadow:0 6px 20px rgba(0,212,255,.18)}'
++ '.ls-o .nm{font-size:11.5px;font-weight:800;margin-bottom:5px;color:var(--text2,#8b97a3);display:flex;justify-content:space-between}'
++ '.ls-o.on .nm{color:#00d4ff}'
++ '.ls-o .pv{border-radius:7px;overflow:hidden;pointer-events:none;background:#fff}'
++ '.ls-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 30px;background:var(--bg-card,#0f1720);border-top:1px solid var(--border,#22303c)}'
++ '.ls-err{flex:1;min-width:180px;font-size:12.5px;font-weight:800;color:#ff4d6d}'
++ '.ls-go{padding:13px 30px;border-radius:13px;border:none;background:linear-gradient(135deg,#00d4ff,#00ffa3);color:#04121a;font-family:inherit;font-size:15px;font-weight:900;cursor:pointer;box-shadow:0 8px 24px rgba(0,212,255,.3)}'
++ '.ls-go:hover{filter:brightness(1.06)}.ls-go:disabled{opacity:.6;cursor:default}'
++ '.ls-skip{background:none;border:none;color:var(--text2,#8b97a3);font-family:inherit;font-size:12px;cursor:pointer;text-decoration:underline;padding:6px}'
++ '@media(max-width:640px){.ls-grid{grid-template-columns:1fr}.ls-body{padding:18px 16px 6px}.ls-bar{padding:12px 16px}}';
+
+function build(){
+  var st = document.createElement('style'); st.id = 'ls-style'; st.textContent = CSS; document.head.appendChild(st);
+  var ov = document.createElement('div'); ov.id = 'ls-ov';
+  ov.innerHTML =
+  '<div class="ls-card">'
+  + '<div class="ls-hero"><div class="ls-ico">🏥</div>'
+  +   '<h1>أهلاً بك في MedLab Pro 👋</h1>'
+  +   '<p>خطوة واحدة فقط لتجهيز مختبرك — اكتب بيانات المختبر واختر شكل رأس وتذييل التقارير،<br>وسيظهر كل شيء جاهزاً على تقاريرك تلقائياً. يمكنك تغيير أي شيء لاحقاً من الإعدادات.</p></div>'
+  + '<div class="ls-body">'
+  +   '<div class="ls-sec"><div class="ls-h"><span class="ls-n">١</span>بيانات المختبر</div>'
+  +     '<div class="ls-grid">'
+  +       '<div class="ls-f"><label>اسم المختبر <i>*</i></label><input id="ls-name" lang="ar" autocomplete="off" placeholder="مثال: مختبر الأمل للتحليلات المرضية"></div>'
+  +       '<div class="ls-f"><label>اسم صاحب الإجازة / الطبيب</label><input id="ls-owner" lang="ar" autocomplete="off" placeholder="مثال: د. أحمد علي"></div>'
+  +       '<div class="ls-f"><label>عنوان المختبر</label><input id="ls-addr" lang="ar" autocomplete="off" placeholder="مثال: بغداد – الكرادة – شارع ..."></div>'
+  +       '<div class="ls-f"><label>رقم هاتف المختبر</label><input id="ls-phone" lang="en" dir="ltr" autocomplete="off" placeholder="07xx xxx xxxx" style="text-align:right"></div>'
+  +     '</div></div>'
+  +   '<div class="ls-sec"><div class="ls-h"><span class="ls-n">٢</span>اختر رأس التقرير</div>'
+  +     '<div class="ls-sub">تصاميم جاهزة كما هي داخل البرنامج — يظهر فيها اسم المختبر واسم الطبيب ومعلومات التواصل التي كتبتها أعلاه.</div>'
+  +     '<div class="ls-big"><div class="ls-big-t">✓ الرأس المختار</div><div id="ls-hbig"></div></div>'
+  +     '<div id="ls-hopts"></div></div>'
+  +   '<div class="ls-sec"><div class="ls-h"><span class="ls-n">٣</span>اختر تذييل التقرير</div>'
+  +     '<div class="ls-sub">يأخذ العنوان ورقم الهاتف اللذين كتبتهما أعلاه.</div>'
+  +     '<div class="ls-opts" id="ls-fopts"></div></div>'
+  + '</div>'
+  + '<div class="ls-bar"><div class="ls-err" id="ls-err"></div>'
+  +   '<button class="ls-skip" id="ls-skip" type="button">تخطي الآن</button>'
+  +   '<button class="ls-go" id="ls-go" type="button">✅ حفظ وبدء العمل</button></div>'
+  + '</div>';
+  document.body.appendChild(ov);
+  return ov;
+}
+
+function renderHdr(){
+  var big = $('ls-hbig'), box = $('ls-hopts'); if(!box || !big) return;
+  var bw = Math.max(300, (big.clientWidth || 900) - 4);
+  big.innerHTML = hdrThumb(V.hdr, bw);
+  var groups = (typeof HDR_GROUPS!=='undefined') ? HDR_GROUPS : [{ name:'التصاميم', ids:Object.keys(HDR_TPLS) }];
+  var html = '';
+  groups.forEach(function(g){
+    html += '<div class="ls-gt">'+esc(g.name)+'</div><div class="ls-opts">';
+    g.ids.forEach(function(id){
+      var on = (id === V.hdr);
+      html += '<div class="ls-o'+(on?' on':'')+'" data-h="'+id+'"><div class="nm"><span>'+(on?'✓ ':'')+esc(HDR_TPLS[id].name)+'</span></div><div class="pv">'+hdrThumb(id, 250)+'</div></div>';
+    });
+    html += '</div>';
+  });
+  box.innerHTML = html;
+}
+function renderFtr(){
+  var box = $('ls-fopts'); if(!box) return;
+  var names = (typeof FTR_TPL_NAMES!=='undefined') ? FTR_TPL_NAMES : ['1','2','3','4','5','6'];
+  var html = '';
+  for(var i=0;i<names.length;i++){
+    var on = (String(i) === V.ftr);
+    html += '<div class="ls-o'+(on?' on':'')+'" data-f="'+i+'"><div class="nm"><span>'+(on?'✓ ':'')+(i+1)+'. '+esc(names[i])+'</span></div><div class="pv">'+ftrThumb(i, 250)+'</div></div>';
+  }
+  box.innerHTML = html;
+}
+function renderAll(){ renderHdr(); renderFtr(); }
+function renderSoon(){ clearTimeout(_t); _t = setTimeout(renderAll, 220); }
+
+function readFields(){
+  V.name  = ($('ls-name').value||'').trim();
+  V.owner = ($('ls-owner').value||'').trim();
+  V.addr  = ($('ls-addr').value||'').trim();
+  V.phone = ($('ls-phone').value||'').trim();
+}
+
+function close(){
+  try{ var o = $('ls-ov'); if(o) o.remove(); var s = $('ls-style'); if(s) s.remove(); }catch(e){}
+  _shown = false;
+}
+
+function finish(skipped){
+  try{
+    settings.labSetupDone = true;
+    if(skipped){ settings.labSetupSkipped = true; save('settings', settings); close(); return; }
+    settings.name = V.name;
+    settings.dir  = V.owner;
+    settings.addr = V.addr;
+    settings.phone = V.phone;
+    settings.hdrMode = 'img';
+    settings.hdrSrc  = 'tpl';
+    settings.hdrTpl  = String(V.hdr);
+    settings.hdrTplData = headerData(V);
+    settings.ftrMode = 'txt';
+    settings.ftrTpl  = String(V.ftr);
+    settings.ftrAddress = V.addr;
+    settings.ftrPhone   = V.phone;
+    settings.ftrNote    = '';
+    save('settings', settings);
+    /* حدّث واجهة الإعدادات والشريط الجانبي كي لا تُكتب القيم القديمة فوق الجديدة */
+    try{ loadSettings(); }catch(e){}
+    try{ var a = $('sb-labname'); if(a) a.textContent = '🏥 ' + settings.name; var b = $('sb-director'); if(b) b.textContent = settings.dir || ''; }catch(e){}
+    try{ var ss = getSession(); if(ss) updateLabDirectoryOnLogin(ss.username); }catch(e){}
+    close();
+    try{ showNotif('تم', 'تم حفظ بيانات المختبر والرأس والتذييل ✅', 'success'); }catch(e){}
+  }catch(e){
+    console.warn('[labsetup]', e);
+    var er = $('ls-err'); if(er) er.textContent = '⚠️ تعذّر الحفظ — حاول مرة أخرى';
+  }
+}
+
+function show(prefill){
+  if(_shown || $('ls-ov')) return;
+  _shown = true;
+  var ov = build();
+  var n = $('ls-name');
+  if(prefill) n.value = prefill;
+  readFields();
+  /* أحداث */
+  ['ls-name','ls-owner','ls-addr','ls-phone'].forEach(function(id){
+    $(id).addEventListener('input', function(){ this.classList.remove('bad'); var er=$('ls-err'); if(er) er.textContent=''; readFields(); renderSoon(); });
+    $(id).addEventListener('keydown', function(e){
+      if(e.key !== 'Enter') return; e.preventDefault();
+      var order = ['ls-name','ls-owner','ls-addr','ls-phone'], i = order.indexOf(id);
+      if(i < order.length-1) $(order[i+1]).focus(); else $('ls-go').focus();
+    });
+  });
+  ov.addEventListener('click', function(e){
+    var h = e.target.closest && e.target.closest('[data-h]');
+    if(h){ V.hdr = h.getAttribute('data-h'); renderHdr(); return; }
+    var f = e.target.closest && e.target.closest('[data-f]');
+    if(f){ V.ftr = f.getAttribute('data-f'); renderFtr(); return; }
+  });
+  $('ls-go').addEventListener('click', function(){
+    readFields();
+    if(!V.name){
+      var ni = $('ls-name'); ni.classList.add('bad'); ni.focus();
+      $('ls-err').textContent = '⚠️ يرجى كتابة اسم المختبر';
+      try{ ov.scrollTo({top:0, behavior:'smooth'}); }catch(e){}
+      return;
+    }
+    this.disabled = true; this.textContent = '⏳ جارٍ الحفظ...';
+    finish(false);
+  });
+  $('ls-skip').addEventListener('click', function(){ finish(true); });
+  renderAll();
+  setTimeout(function(){ try{ n.focus(); }catch(e){} }, 300);
+}
+
+/* نقطة الدخول — تُستدعى من startApp بعد تأخير قصير كي تصل المزامنة أولاً */
+window._labSetupMaybe = function(){
+  var tries = 0;
+  (function tick(){
+    if(_shown) return;
+    if(tries++ > 60) return;
+    try{
+      var login = $('login-screen');
+      var busy = $('consent-gate') || (login && !login.classList.contains('hidden'));
+      if(busy){ setTimeout(tick, 800); return; }
+      if(!isNewLab()) return;
+      var pre = '';
+      try{
+        var ss = getSession(), u = ss && getAdminUsers().find(function(x){ return x.username === ss.username; });
+        if(u && u.labName) pre = u.labName;
+      }catch(e){}
+      show(pre);
+    }catch(e){ console.warn('[labsetup]', e); }
+  })();
+};
+window._labSetupShow = function(){ _shown = false; show(''); };   /* للاختبار اليدوي */
+window._labSetupIsNew = isNewLab;
+})();
+
+</script>
 <style id="spx-style">
 #m-spx{padding:10px !important}
 #m-spx .modal{max-width:none !important;width:calc(100vw - 20px) !important;height:calc(100vh - 20px) !important;max-height:none !important;margin:0 !important;display:flex;flex-direction:column}
@@ -77888,7 +78330,7 @@ var UNION_DOCS = {deletedTestIds:1};                         // دمج اتحا�
 /* إعدادات خاصة بكل حاسبة — لا تُزامَن */
 var LOCAL_SETTINGS = {printerMain:1,printerBarcode:1,printerWorksheet:1,printerReceipt:1,printScope:1,labelW:1,labelH:1,
   wsZoom:1,wsW:1,wsH:1,wsPaper:1,wsAutoPaper:1,rcZoom:1,rcW:1,rcH:1,scanApp:1,sectionDevices:1,deviceName:1,
-  autoPrintCBC:1,autoPrintWorksheet:1,autoPrintReceipt:1,waitScreen:1,lic:1,waDirectResults:1,prevPrintCount:1,
+  autoPrintCBC:1,autoPrintWorksheet:1,autoPrintReceipt:1,wsOnlyName:1,wsOnlyCode:1,wsShowPrev:1,waitScreen:1,lic:1,waDirectResults:1,prevPrintCount:1,
   _examFieldsMigV2:1,_examFieldsMigV3:1,publicUrl:1,tgBot:1};
 /* حقول كبيرة تعيش في مخزن «big» وتُزامَن عبره */
 var BIG_IN_SETTINGS = {headerImg:1,footerImg:1,hdrTplLogo:1,wmImg:1,hdrImgH:1,ftrImgH:1,_uaFieldsCustom:1,_stoolFieldsCustom:1,_semenFieldsCustom:1};
