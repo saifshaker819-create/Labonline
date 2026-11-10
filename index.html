@@ -31982,7 +31982,10 @@ function saveAdminUsers(users){
       }
       obj[u.username] = o;
     });
-    fbDb.ref('admin/users').set(obj).catch(e => console.error('saveAdminUsers error:', e));
+    // update لكل حساب (لا set للقائمة كاملة): الحذف يتم صراحةً بـ remove، وحساب «تفعيل المتجر»
+    // الذي أُنشئ بعد آخر تحميل للقائمة لا يُمسح عند حفظ أي تعديل آخر.
+    const _up = {}; Object.keys(obj).forEach(k => { if(_fbKeyOk(k)) _up[k] = obj[k]; });
+    if(Object.keys(_up).length) fbDb.ref('admin/users').update(_up).catch(e => console.error('saveAdminUsers error:', e));
     if(window._pwMoved && Object.keys(pw).length) _pwWriteMany(pw);
   }
 }
@@ -32060,7 +32063,8 @@ function _pwWriteMany(map){
     .catch(e => console.error('pw write', e));
 }
 function _pwMove(oldU, newU){
-  if(!(window._pwMoved && fbReady && fbDb && _isFbAdmin()) || !oldU || !newU || oldU===newU) return Promise.resolve();
+  /* تُنقل البصمة دائماً إن وُجدت (حسابات «تفعيل المتجر» بصمتها في admin/pw حتى قبل الترحيل) */
+  if(!(fbReady && fbDb && _isFbAdmin()) || !oldU || !newU || oldU===newU) return Promise.resolve();
   return fbDb.ref('admin/pw/'+oldU).once('value').then(sn => {
     const v = sn.val(); const up = {}; up['admin/pw/'+oldU] = null; up['admin/chk/'+oldU] = null;
     if(v) up['admin/pw/'+newU] = v;
@@ -55005,6 +55009,8 @@ function hasPermission(key){
   const users = getAdminUsers();
   const u = users.find(x=>x.username===session.username);
   if(!u) return false;
+  // 🛵 حساب «تفعيل المتجر» الذاتي: المفعّل صراحةً فقط — أي صلاحية غير مذكورة مقفولة
+  if(u.selfReg) return !!(u.permissions && u.permissions[key] === true);
   // إذا لم تُعيَّن صلاحيات أصلاً (حساب قديم) → كل الصلاحيات
   if(!u.permissions) return true;
   // إذا كانت الصلاحيات كائناً فارغاً {} → لا صلاحيات
@@ -66821,6 +66827,7 @@ function _showConsentGate() {
   };
 }
 
+window._mlShowConsentGate = _showConsentGate;   /* 🛵 للحساب الذاتي الجديد: تُعرض الشروط بعد إنشائه */
 function _consentInit() {
   _injectLoginConsent();
   if (!_hasConsent()) _showConsentGate();
@@ -70239,8 +70246,9 @@ function getLog(){ try{ return JSON.parse(localStorage.getItem(logKey())||'{}');
 function putLog(oid,o){ try{ var L=getLog(); L[oid]=o; var ks=Object.keys(L); if(ks.length>400){ ks.sort(function(a,b){return (L[a].ts||0)-(L[b].ts||0);}); ks.slice(0,ks.length-400).forEach(function(k){delete L[k];}); } localStorage.setItem(logKey(),JSON.stringify(L)); }catch(e){} }
 function defStore(){
   var s=S()||{};
+  var _lab=!!(s.labSetupDone && !s.labSetupSkipped);          // بيانات مختبر مُدخلة فعلاً ⇒ تُستخدم للمتجر
   return { sid:'', secret:'', code:'', url:DEFAULT_URL, on:true, createdAt:Date.now(), dev1:!!(window._tdbIsMaster && window._tdbIsMaster()),
-    info:{ nm:s.labName||'', ph:s.phone||'', wa:s.phone||'', ad:'', hr:'', msg:'', open:true, fm:'fixed', fv:capMin(), fa:0, mn:0, ars:[], ret:3, lg:'' },
+    info:{ nm:String(s.labName||(_lab?s.name:'')||'').slice(0,80), ph:s.phone||'', wa:s.phone||'', ad:String(_lab?(s.addr||''):'').slice(0,200), hr:'', msg:'', open:true, fm:'fixed', fv:capMin(), fa:0, mn:0, ars:[], ret:3, lg:'' },
     sec:{}, tst:{}, dg:0, cps:[], bns:[], pks:[], sound:true, dirty:true, pubAt:0 };
 }
 
@@ -72016,6 +72024,7 @@ async function sendForReq(rid){
 }
 function orderState(oid){ var o=oid&&M.orders[oid]; return o?o.st:null; }
 window.MLStore = { onShow:function(){ M.accOpen=null; render(); }, publish:function(){ return publish(false); }, sendForReq:sendForReq, orderState:orderState, _m:M,
+  hasStore:function(){ return !!cfg(); }, canEnable:function(){ return !cfg() && !syncPending() && defaultReady(); }, enable:function(){ return enableStore(); },
   /* تقرير الطلب بصيغة PDF — نفس صفحات الطباعة تماماً (يُستخدم أيضاً لإرسال النتيجة لبرنامج العيادة) */
   pdfForReq:async function(req){ var pages=collectPages(req), b=null; try{ b=await vectorPdf(pages); }catch(e){ b=null; } if(!b) b=await rasterPdf(req); return b; } };
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
@@ -84725,5 +84734,205 @@ body .resize-handle-s{ cursor:s-resize !important; }
     });
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
+})();
+</script>
+
+<style id="ml-sr-style">
+/* 🛵 تفعيل المتجر — تسجيل حساب ذاتي */
+.sr-open-btn{width:100%;margin-top:10px;padding:11px 14px;border-radius:12px;border:1.5px solid rgba(0,255,163,.45);background:linear-gradient(135deg,rgba(0,255,163,.10),rgba(0,212,255,.08));color:#00ffa3;font-family:inherit;font-size:14px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .12s,box-shadow .12s,background .12s}
+.sr-open-btn:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,255,163,.18);background:linear-gradient(135deg,rgba(0,255,163,.16),rgba(0,212,255,.12))}
+.sr-open-btn small{font-size:10.5px;font-weight:700;color:rgba(255,255,255,.55)}
+#sr-ov{position:fixed;inset:0;z-index:2147483100;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,7,14,.92);backdrop-filter:blur(6px);direction:rtl;font-family:inherit;overflow:auto;animation:srFade .25s ease}
+@keyframes srFade{from{opacity:0}to{opacity:1}}@keyframes srUp{from{opacity:0;transform:translateY(14px) scale(.98)}to{opacity:1;transform:none}}
+#sr-ov *{box-sizing:border-box}
+.sr-card{width:min(460px,100%);background:var(--bg-card,#0f1720);border:1px solid var(--border,#22303c);border-radius:22px;box-shadow:0 28px 80px rgba(0,0,0,.6);overflow:hidden;animation:srUp .35s cubic-bezier(.2,.8,.25,1)}
+.sr-hero{padding:22px 24px 16px;text-align:center;background:linear-gradient(135deg,rgba(0,255,163,.12),rgba(0,212,255,.10));border-bottom:1px solid var(--border,#22303c)}
+.sr-ic{width:60px;height:60px;margin:0 auto 10px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-size:32px;background:linear-gradient(135deg,#00ffa3,#00d4ff);box-shadow:0 10px 26px rgba(0,212,255,.3)}
+.sr-hero h2{margin:0 0 4px;font-size:19px;font-weight:900;color:var(--text,#e8ecef)}
+.sr-hero p{margin:0;font-size:12px;line-height:1.9;color:var(--text2,#8b97a3)}
+.sr-body{padding:18px 24px 6px}
+.sr-f{margin-bottom:13px}
+.sr-f label{display:block;font-size:12.5px;font-weight:800;margin-bottom:5px;color:var(--text,#e8ecef)}
+.sr-f input{width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border,#22303c);background:rgba(255,255,255,.04);color:var(--text,#e8ecef);font-family:inherit;font-size:16px;font-weight:800;letter-spacing:.5px;outline:none;text-align:center}
+.sr-f input:focus{border-color:#00d4ff;box-shadow:0 0 0 3px rgba(0,212,255,.18)}
+.sr-f input.bad{border-color:#ff4d6d;box-shadow:0 0 0 3px rgba(255,77,109,.18)}
+.sr-f input.pin{letter-spacing:8px;font-size:20px}
+.sr-hint{font-size:11px;color:var(--text2,#8b97a3);margin-top:4px;line-height:1.7}
+.sr-note{font-size:11.5px;line-height:1.95;color:var(--text,#e8ecef);background:rgba(255,170,0,.07);border:1px solid rgba(255,170,0,.3);border-radius:12px;padding:10px 12px;margin:4px 0 12px}
+.sr-err{min-height:18px;font-size:12.5px;font-weight:800;color:#ff4d6d;margin-bottom:8px;text-align:center}
+.sr-bar{display:flex;gap:10px;padding:0 24px 20px}
+.sr-go{flex:2;padding:13px;border-radius:12px;border:none;background:linear-gradient(135deg,#00ffa3,#00d4ff);color:#04121a;font-family:inherit;font-size:15px;font-weight:900;cursor:pointer}
+.sr-go:disabled{opacity:.6;cursor:default}
+.sr-x{flex:1;padding:13px;border-radius:12px;border:1px solid var(--border,#22303c);background:transparent;color:var(--text2,#8b97a3);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer}
+.sr-done{text-align:center}
+.sr-cred{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;background:rgba(0,212,255,.06);border:1.5px dashed rgba(0,212,255,.5);border-radius:14px;padding:14px 16px;margin:6px 0 12px;text-align:right}
+.sr-cred b{font-size:12px;color:var(--text2,#8b97a3)}
+.sr-cred span{font-size:20px;font-weight:900;color:var(--text,#e8ecef);direction:ltr;text-align:left;letter-spacing:1.5px}
+</style>
+<script id="ml-sr-module">
+/* ══════════════════════════════════════════════════════════════
+   🛵 تفعيل المتجر — تسجيل حساب ذاتي من واجهة الدخول
+   • الحساب يُنشأ دفعة واحدة (ذرّياً): admin/users/<اسم> + admin/pw/<اسم>
+     وقواعد Firebase تسمح فقط بإنشاء حساب «جديد غير موجود» بصلاحيات المتجر المحددة
+     (لا تعديل لحساب موجود، ولا صلاحيات إضافية، ولا قراءة للرمز) — الحماية على الخادم لا هنا.
+   • الرمز يُحفظ كبصمة SHA-256 في admin/pw غير المقروءة، والدخول يتحقق على الخادم (admin/chk).
+   • بعد الإنشاء: دخول تلقائي ← الموافقة على الشروط ← بيانات المختبر ← تفعيل المتجر تلقائياً.
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window.MLSelfReg) return;
+  var PIN_LEN=6, FLOW_KEY='mlab_selfreg_flow';
+  /* الصلاحيات الافتراضية للحساب الذاتي — يطابق قواعد Firebase حرفياً (أي مفتاح غير مذكور = مقفول) */
+  var ALLOW=['patients','requests','results','semen','ua_stool','esr','culture','print','testsdb','database',
+             'store','store_orders','store_chat','store_catalog','store_dues','store_caps','store_settings'];
+  function perms(){
+    var o={}, keys=[];
+    try{ keys=(PERMISSIONS_DEF||[]).map(function(p){ return p.key; }); }catch(e){}
+    ALLOW.forEach(function(k){ if(keys.indexOf(k)<0) keys.push(k); });
+    keys.forEach(function(k){ o[k]=ALLOW.indexOf(k)>=0; });
+    return o;
+  }
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+
+  function close(){ var o=$('sr-ov'); if(o) o.remove(); }
+  function open(){
+    close();
+    var ov=document.createElement('div'); ov.id='sr-ov';
+    ov.innerHTML='<div class="sr-card" role="dialog" aria-modal="true">'
+      +'<div class="sr-hero"><div class="sr-ic">🛵</div><h2>تفعيل المتجر</h2>'
+      +'<p>أنشئ حسابك بنفسك خلال دقيقة — ثم املأ بيانات المختبر ويتفعّل متجرك تلقائياً</p></div>'
+      +'<div class="sr-body">'
+      +'<div class="sr-f"><label>👤 اسم المستخدم</label><input id="sr-u" dir="ltr" lang="en" maxlength="20" autocomplete="off" spellcheck="false" placeholder="mylab">'
+      +'<div class="sr-hint">أحرف إنجليزية صغيرة فقط (من 3 إلى 20 حرفاً) — بدون مسافات أو أرقام.</div></div>'
+      +'<div class="sr-f"><label>🔒 الرمز (أرقام فقط)</label><input id="sr-p" class="pin" type="password" dir="ltr" inputmode="numeric" maxlength="'+PIN_LEN+'" autocomplete="new-password" placeholder="••••••"></div>'
+      +'<div class="sr-f"><label>🔁 أعد كتابة الرمز</label><input id="sr-p2" class="pin" type="password" dir="ltr" inputmode="numeric" maxlength="'+PIN_LEN+'" autocomplete="new-password" placeholder="••••••">'
+      +'<div class="sr-hint">نطلبه مرتين حتى تتأكد منه ولا تنساه.</div></div>'
+      +'<div class="sr-note">🔐 ضع رمزاً من <b>'+PIN_LEN+' أرقام</b> بسيطاً تتذكره (تجنّب 123456 و 000000).<br>'
+      +'الحساب يعمل على <b>هذه الحاسبة فقط</b>، فلا يستطيع أحد فتحه من حاسبة أخرى حتى لو عرف الرمز.<br>'
+      +'اكتب اسم المستخدم والرمز في ورقة واحتفظ بها.</div>'
+      +'<div class="sr-err" id="sr-err"></div>'
+      +'</div>'
+      +'<div class="sr-bar"><button class="sr-x" id="sr-x" type="button">إلغاء</button><button class="sr-go" id="sr-go" type="button">✓ إنشاء الحساب</button></div>'
+      +'</div>';
+    document.body.appendChild(ov);
+    var u=$('sr-u'), p=$('sr-p'), p2=$('sr-p2');
+    u.addEventListener('input', function(){ var v=this.value.toLowerCase().replace(/[^a-z]/g,''); if(v!==this.value) this.value=v; clr(this); });
+    [p,p2].forEach(function(el){ el.addEventListener('input', function(){ var v=this.value.replace(/[^0-9]/g,'').slice(0,PIN_LEN); if(v!==this.value) this.value=v; clr(this); }); });
+    [u,p,p2].forEach(function(el,i,a){ el.addEventListener('keydown', function(e){ if(e.key!=='Enter') return; e.preventDefault(); if(i<a.length-1) a[i+1].focus(); else submit(); }); });
+    $('sr-x').onclick=close;
+    $('sr-go').onclick=submit;
+    setTimeout(function(){ try{ u.focus(); }catch(e){} }, 60);
+  }
+  function clr(el){ el.classList.remove('bad'); var e=$('sr-err'); if(e) e.textContent=''; }
+  function fail(msg, el){ var e=$('sr-err'); if(e) e.textContent=msg; if(el){ el.classList.add('bad'); try{ el.focus(); }catch(_){} } var b=$('sr-go'); if(b){ b.disabled=false; b.textContent='✓ إنشاء الحساب'; } }
+
+  function weakPin(p){
+    if(/^(\d)\1+$/.test(p)) return true;                                   // 000000 · 111111
+    var up=true, dn=true;
+    for(var i=1;i<p.length;i++){ if(+p[i]!==(+p[i-1]+1)%10) up=false; if(+p[i]!==(+p[i-1]+9)%10) dn=false; }
+    return up||dn;                                                          // 123456 · 654321
+  }
+
+  async function submit(){
+    var u=$('sr-u'), p=$('sr-p'), p2=$('sr-p2'), b=$('sr-go');
+    var un=(u.value||'').trim(), pin=(p.value||'').trim(), pin2=(p2.value||'').trim();
+    if(!/^[a-z]{3,20}$/.test(un)) return fail('⚠️ اسم المستخدم: أحرف إنجليزية صغيرة فقط (3 إلى 20 حرفاً)', u);
+    if(un==='saif') return fail('⚠️ هذا الاسم محجوز — اختر اسماً آخر', u);
+    if(!new RegExp('^[0-9]{'+PIN_LEN+'}$').test(pin)) return fail('⚠️ الرمز يجب أن يكون '+PIN_LEN+' أرقام', p);
+    if(weakPin(pin)) return fail('⚠️ هذا الرمز سهل التخمين — اختر رمزاً آخر', p);
+    if(pin!==pin2) return fail('⚠️ الرمزان غير متطابقين — أعد كتابة الرمز', p2);
+    b.disabled=true; b.textContent='⏳ جارٍ إنشاء الحساب...';
+    try{
+      var net=true; try{ net=await _checkRealInternet(); }catch(e){}
+      if(!net) return fail('❌ يحتاج إنشاء الحساب اتصالاً بالإنترنت');
+      var ok=await loadFirebase();
+      if(!(ok && fbDb && fbAuth)) return fail('❌ تعذّر الاتصال بالخادم — حاول مرة أخرى');
+      if(!fbAuth.currentUser) await fbAuth.signInAnonymously();
+      /* الاسم مستخدم؟ (القواعد ترفض الكتابة فوق أي حساب موجود على كل حال) */
+      var ex=await fbDb.ref('admin/users/'+un).once('value');
+      if(ex.exists()) return fail('⚠️ اسم المستخدم «'+un+'» مستخدم مسبقاً — اختر اسماً آخر', u);
+      var h=await hashPassword(pin);
+      var rec={ username:un, type:'permanent', durationType:'permanent', disabled:false, selfReg:true, maxDevices:1,
+                created:new Date().toISOString().split('T')[0], createdAt:firebase.database.ServerValue.TIMESTAMP, permissions:perms() };
+      var up={}; up['users/'+un]=rec; up['pw/'+un]=h;
+      await fbDb.ref('admin').update(up);
+      try{ localStorage.setItem(FLOW_KEY, un); localStorage.setItem('mlab_saved_username', un); }catch(e){}
+      done(un, pin);
+    }catch(e){
+      var c=String((e&&(e.code||e.message))||'');
+      if(/permission/i.test(c)) return fail('❌ تعذّر إنشاء الحساب — الاسم محجوز أو غير مسموح. جرّب اسماً آخر');
+      return fail('❌ تعذّر إنشاء الحساب — تحقق من الإنترنت وحاول مرة أخرى');
+    }
+  }
+
+  /* شاشة النجاح: تذكير باسم المستخدم والرمز ثم دخول تلقائي */
+  function done(un, pin){
+    var card=document.querySelector('#sr-ov .sr-card'); if(!card) return;
+    card.innerHTML='<div class="sr-hero"><div class="sr-ic">✅</div><h2>تم إنشاء حسابك</h2><p>احتفظ بهذه البيانات — ستحتاجها لتسجيل الدخول</p></div>'
+      +'<div class="sr-body sr-done"><div class="sr-cred"><b>اسم المستخدم</b><span>'+esc(un)+'</span><b>الرمز</b><span>'+esc(pin)+'</span></div>'
+      +'<div class="sr-hint" style="margin-bottom:14px">الخطوة التالية: الموافقة على الشروط ثم إدخال بيانات المختبر، وبعدها يتفعّل متجرك تلقائياً.</div></div>'
+      +'<div class="sr-bar"><button class="sr-go" id="sr-in" type="button">🔐 دخول ومتابعة</button></div>';
+    $('sr-in').onclick=function(){
+      close();
+      try{
+        $('login-user').value=un; $('login-pass').value=pin;
+        doLogin();                                   // يقرأ الحقول فوراً
+        $('login-pass').value='';                    // لا يبقى الرمز ظاهراً في الحقل
+      }catch(e){}
+    };
+    setTimeout(function(){ try{ $('sr-in').focus(); }catch(e){} }, 60);
+  }
+
+  /* ── ما بعد الدخول: الشروط ← بيانات المختبر ← تفعيل المتجر (للحساب الذي أُنشئ للتو فقط) ── */
+  var flowT=null;
+  function flowUser(){ try{ return localStorage.getItem(FLOW_KEY)||''; }catch(e){ return ''; } }
+  function endFlow(){ try{ localStorage.removeItem(FLOW_KEY); }catch(e){} if(flowT){ clearInterval(flowT); flowT=null; } }
+  function startFlow(){
+    if(flowT || !flowUser()) return;
+    var t0=Date.now(), consentShown=false, enabling=false, tries=0;
+    flowT=setInterval(function(){
+      try{
+        var fu=flowUser(); if(!fu){ endFlow(); return; }
+        var ss=(typeof getSession==='function')?getSession():null;
+        var login=$('login-screen');
+        if(!ss || ss.username!==fu || (login && !login.classList.contains('hidden'))){ if(Date.now()-t0>20*60000) endFlow(); return; }
+        /* ① الموافقة على الشروط — تظهر لهذا الحساب الجديد حتى لو سبقت الموافقة على هذه الحاسبة */
+        if(!consentShown){ consentShown=true; try{ if(!$('consent-gate') && window._mlShowConsentGate) window._mlShowConsentGate(); }catch(e){} return; }
+        if($('consent-gate') || $('ls-ov') || $('sr-ov')) return;
+        /* ② بيانات المختبر: تنتظر حتى تُحفظ (أو تُتخطّى) */
+        var st=(typeof settings!=='undefined')?settings:null;
+        if(!st || !st.labSetupDone){
+          if(Date.now()-t0>6000 && window._labSetupIsNew && !_labSetupIsNew() && st){ /* بيانات موجودة (مزامنة) ⇒ نكمل */ }
+          else { if(Date.now()-t0>20*60000) endFlow(); return; }
+        }
+        /* ③ تفعيل المتجر تلقائياً ببيانات المختبر */
+        var S=window.MLStore;
+        if(!S || typeof S.hasStore!=='function'){ if(++tries>120) endFlow(); return; }
+        if(S.hasStore()){ endFlow(); try{ nav('mystore'); if(S.onShow) S.onShow(); }catch(e){} return; }
+        if(enabling || !S.canEnable()){ if(++tries>240) endFlow(); return; }
+        enabling=true;
+        Promise.resolve(S.enable()).then(function(){
+          enabling=false;
+          if(S.hasStore()){ endFlow(); try{ nav('mystore'); if(S.onShow) S.onShow(); }catch(e){} }
+        }).catch(function(){ enabling=false; });
+      }catch(e){ console.warn('[selfreg flow]', e); }
+    }, 700);
+  }
+  /* يبدأ عند الدخول (ويكمل لو أُغلق البرنامج في منتصف الخطوات) */
+  setInterval(function(){ if(!flowT && flowUser()) startFlow(); }, 2000);
+
+  /* زر «تفعيل المتجر» في واجهة الدخول */
+  function addBtn(){
+    var box=$('login-staff-section'); if(!box || $('sr-open')) return;
+    var links=box.querySelector('.login-links');
+    var b=document.createElement('button'); b.type='button'; b.id='sr-open'; b.className='sr-open-btn';
+    b.innerHTML='🛵 تفعيل المتجر <small>— حساب جديد</small>';
+    b.onclick=function(e){ e.preventDefault(); open(); };
+    if(links) box.insertBefore(b, links); else box.appendChild(b);
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', addBtn); else addBtn();
+
+  window.MLSelfReg={ open:open, _perms:perms, _weak:weakPin };
 })();
 </script>
