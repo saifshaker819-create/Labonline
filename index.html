@@ -1349,6 +1349,10 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .nav-grp{padding:12px 10px 4px;}
 .nav-grp-lbl{font-size:11px;letter-spacing:2px;color:var(--text2);padding:0 6px;margin-bottom:6px;text-transform:uppercase;}
 .ni{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:9px;cursor:pointer;transition:all 0.18s;color:#ffffff;font-size:13px;font-weight:700;margin-bottom:1px;position:relative;}
+/* 🔒 قسم بلا صلاحية (حسابات «تفعيل المتجر»): ظاهر لكنه مقفول */
+.ni.ni-locked{opacity:.42;cursor:not-allowed;filter:saturate(.4)}
+.ni.ni-locked:hover{background:transparent!important;transform:none!important}
+.ni.ni-locked::after{content:'🔒';margin-inline-start:auto;font-size:11px;opacity:.9}
 .ni:hover{background:var(--bg-glass);color:#ffffff;}
 .ni.active{background:linear-gradient(135deg,rgba(0,212,255,0.14),rgba(123,47,255,0.09));color:var(--primary);border:1px solid rgba(0,212,255,0.18);}
 .ni.active::before{content:'';position:absolute;right:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,var(--primary),var(--secondary));border-radius:2px 0 0 2px;}
@@ -3671,7 +3675,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
   <div class="nav-grp" data-perm-group="patients">
     <div class="nav-grp-lbl">المرضى</div>
     <div class="ni" data-perm="patients" onclick="nav('patients')"><span class="ni-ic">👥</span>قائمة المرضى<span class="ni-badge" id="nb-patients">0</span></div>
-    <div class="ni" data-perm="patients" onclick="startNewPatient()"><span class="ni-ic">➕</span>مريض جديد</div>
+    <div class="ni" data-perm="patients_add" onclick="startNewPatient()"><span class="ni-ic">➕</span>مريض جديد</div>
   </div>
   <div class="nav-grp" data-perm-group="lab">
     <div class="nav-grp-lbl">التحاليل</div>
@@ -12734,16 +12738,21 @@ function renderAll(){
 function applyPermissionsToSidebar(){
   if(typeof hasPermission !== 'function') return;
 
-  // ① إظهار/إخفاء كل عنصر nav حسب data-perm
+  const _lockMode = (typeof _isSelfRegAcct==='function') && _isSelfRegAcct();   // 🛵 حساب «تفعيل المتجر»
+
+  // ① إظهار/إخفاء كل عنصر nav حسب data-perm (حساب التسجيل الذاتي: الكل ظاهر والمقفول بقفل 🔒)
   document.querySelectorAll('.ni[data-perm]').forEach(el=>{
     const perm = el.getAttribute('data-perm');
-    el.style.display = hasPermission(perm) ? '' : 'none';
+    const ok = hasPermission(perm);
+    if(_lockMode){ el.style.display=''; el.classList.toggle('ni-locked', !ok); }
+    else { el.style.display = ok ? '' : 'none'; el.classList.remove('ni-locked'); }
   });
 
   // ② إخفاء المجموعة كاملة إذا لم يكن فيها أي عنصر ظاهر
   document.querySelectorAll('.nav-grp[data-perm-group]').forEach(grp=>{
     const group = grp.getAttribute('data-perm-group');
     if(group === 'dashboard') return; // لوحة التحكم دائماً ظاهرة
+    if(_lockMode){ grp.style.display=''; return; }
     const visibleItems = grp.querySelectorAll('.ni[data-perm]');
     const anyVisible = Array.from(visibleItems).some(el => el.style.display !== 'none');
     grp.style.display = anyVisible ? '' : 'none';
@@ -13555,7 +13564,9 @@ function markWpNameEnManual(){
 // ============================================================
 // WIZARD - NEW PATIENT WITH AUTOCOMPLETE
 // ============================================================
-function startNewPatient(){try{ if(window.FaceID && FaceID.onWizardStart) FaceID.onWizardStart(); }catch(e){}wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;_wizEditResetState();renderWizStep();openModal('m-wizard');}
+function startNewPatient(){
+  if(typeof hasPermission==='function' && !hasPermission('patients_add')){ showNotif('🚫 غير مسموح','لا توجد صلاحية لإضافة مريض جديد الآن','error'); return; }
+  try{ if(window.FaceID && FaceID.onWizardStart) FaceID.onWizardStart(); }catch(e){}wizStep=1;wizPatient={};wizSelectedTests=[];_wizEditPatientOnly=false;_wizEditOrigPatientId=null;_wizEditOrigReqId=null;_wizEditResetState();renderWizStep();openModal('m-wizard');}
 /* ══════════════════════════════════════════════════════════════
    📊 بيانات خاصة بالدراسات (الطول · الوزن · الضغط الانقباضي/الانبساطي)
    • تُحفظ في الطلب نفسه (req.study) — قياسات هذه الزيارة فقط.
@@ -15095,6 +15106,7 @@ function wizFinish(){
   const today=new Date().toISOString().split('T')[0];
   // ⚠️ البحث يكون فقط بـ id — رقم الهاتف لا يُستخدم أبداً لتحديد هوية المريض
   let pt=wizPatient.id?patients.find(p=>p.id===wizPatient.id):null;
+  if(!pt && typeof hasPermission==='function' && !hasPermission('patients_add')){ showNotif('🚫 غير مسموح','لا توجد صلاحية لإضافة مريض جديد الآن','error'); return; }
   if(!pt){
     // ⭐ رقم ملف فريد بين كل الحاسبات — يحمل رقم هذه الحاسبة في مقدّمته
     //    (حاسبة 1 ⇒ 1000001…  حاسبة 2 ⇒ 2000001…) فلا يتكرّر أبداً بعد المزامنة
@@ -36929,6 +36941,7 @@ async function saveCultureEntry(opts){
     if(existPt){
       ptId=existPt.id;
     } else {
+      if(typeof hasPermission==='function' && !hasPermission('patients_add')){ showNotif('🚫 غير مسموح','لا توجد صلاحية لإضافة مريض جديد — اختر مريضاً مسجلاً من القائمة','error'); return; }
       const newPt={
         id:ptId, name:ptName,
         title: window._cultTitle||'',
@@ -43211,6 +43224,7 @@ function saveSemenEntry(){
     if(existPt){
       ptId=existPt.id;
     } else {
+      if(typeof hasPermission==='function' && !hasPermission('patients_add')){ showNotif('🚫 غير مسموح','لا توجد صلاحية لإضافة مريض جديد — اختر مريضاً مسجلاً من القائمة','error'); return; }
       const newPt={
         id:ptId, name:ptName,
         phone:(document.getElementById('semen-pt-phone')||{}).value||'',
@@ -43330,6 +43344,7 @@ function _semenAutoPersist(snap, detached){
     var existPt=patients.find(function(p){ return p.name===snap.ptName; });
     if(existPt){ ptId=existPt.id; }
     else {
+      if(typeof hasPermission==='function' && !hasPermission('patients_add')) return;   // لا مريض جديد بلا صلاحية
       ptId=_newPatientId();
       var newPt={
         id:ptId, name:snap.ptName, phone:snap.phone||'',
@@ -54831,6 +54846,7 @@ const PERM_GROUPS = [
 const PERMISSIONS_DEF = [
   /* ── الاستقبال والمرضى ── */
   { group:'reception', key:'patients',       icon:'👥', label:'إدارة المرضى',         desc:'إضافة وتعديل المرضى وعرض ملفاتهم' },
+  { group:'reception', key:'patients_add',   icon:'➕', label:'إضافة مريض جديد',       desc:'تسجيل مريض جديد من «مريض جديد» وقائمة المرضى وقسم الطلبات (حسابات «تفعيل المتجر» مقفولة حتى تفتحها)', inherit:'patients' },
   { group:'reception', key:'patients_delete',icon:'🗑️', label:'حذف المرضى',           desc:'حذف مريض (ومعه طلباته) نهائياً', inherit:'patients' },
   { group:'reception', key:'requests',       icon:'📋', label:'طلبات التحاليل',        desc:'إضافة وإدارة طلبات الفحص' },
   { group:'reception', key:'requests_delete',icon:'🗑️', label:'حذف الطلبات',          desc:'حذف طلب مع فاتورته ونتائجه', inherit:'requests' },
@@ -55004,6 +55020,18 @@ function savePermissions(){
   showNotif('✅ تم','تم حفظ الصلاحيات بنجاح','success');
 }
 
+/* 🛵 هل الحساب الحالي أُنشئ من «تفعيل المتجر»؟ */
+function _isSelfRegAcct(){
+  try{ const s=getSession(); if(!s) return false; const u=getAdminUsers().find(x=>x.username===s.username); return !!(u && u.selfReg); }catch(e){ return false; }
+}
+/* 🔒 نقر على قسم مقفول: لا يُنفَّذ أي إجراء (لا nav ولا onclick) وتظهر رسالة */
+document.addEventListener('click', function(e){
+  try{
+    const el = e.target && e.target.closest && e.target.closest('.ni.ni-locked'); if(!el) return;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    showNotif('🚫 غير مسموح','لا توجد صلاحية لهذا القسم الآن','error');
+  }catch(err){}
+}, true);
 function hasPermission(key){
   const session = getSession(); if(!session) return false;
   const users = getAdminUsers();
