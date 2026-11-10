@@ -3613,6 +3613,13 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
 .ms-reno-row input{width:70px;text-align:center;font-weight:900;font-size:14px}
 .ms-reno-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}
 .ms-dev{display:flex;align-items:center;gap:10px;padding:7px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg-card)}
+/* 🔢 رقم قابل للتعديل أمام كل حاسبة */
+.ms-dev .ms-dn-edit{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.ms-dev .ms-dn-edit input{width:58px;text-align:center;font-weight:900;font-size:14px;padding:4px 6px}
+.ms-dev.chg{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary) inset;background:rgba(0,212,255,.06)}
+.ms-dev .ms-m1{font-size:9.5px;padding:1px 7px}
+.ms-reno-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ms-reno-bar .ms-hint{flex:1;min-width:180px}
 .ms-dev.me{border-color:var(--primary)}
 .ms-dn{min-width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-family:'Inter',sans-serif;font-weight:900;font-size:13px;background:rgba(0,212,255,.12);color:var(--primary)!important}
 .ms-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
@@ -79955,16 +79962,30 @@ MS.renumber = function(map){
   });
 };
 /* واجهة الترقيم داخل بطاقة المزامنة */
+/* الرقم الحالي لحاسبة: لهذه الحاسبة رقمها المحلي، ولغيرها رقمها المسجّل في السحابة */
+function _renoCur(id){ var p=(S.peers||{})[id]||{}; return (id===S.me?(S.no||p.no):p.no)||''; }
+/* S._renoDraft = التعديلات فقط {معرّف: رقم} — تبقى محفوظة حتى لو أُعيد رسم البطاقة */
 MS._renoOpen = function(){
-  var d={}; Object.keys(S.peers||{}).forEach(function(id){ d[id]=(S.peers[id]&&S.peers[id].no)||''; });
-  if(S.me && d[S.me]==null) d[S.me]=S.no||'';
-  S._renoDraft=d; S._renoOpen=true; renderCard();
-  setTimeout(function(){ var el=document.querySelector('.ms-reno input'); if(el){ el.focus(); if(el.select) el.select(); } }, 30);
+  renderCard();
+  setTimeout(function(){ var el=document.querySelector('.ms-dn-edit input:not([disabled])'); if(el){ el.focus(); if(el.select) el.select(); } }, 30);
 };
 MS._renoCancel = function(){ S._renoOpen=false; S._renoDraft=null; renderCard(); };
-MS._renoInput = function(id, v){ if(S._renoDraft) S._renoDraft[id]=v; };
+MS._renoInput = function(id, v){
+  var ed=S._renoDraft||(S._renoDraft={});
+  if(String(v).trim()===String(_renoCur(id))) delete ed[id]; else ed[id]=v;
+  /* تحديث بصري بدون إعادة رسم (حتى لا يضيع التركيز) */
+  try{
+    var box=document.getElementById('msync-card-body'); if(!box) return;
+    box.querySelectorAll('.ms-dev[data-msid]').forEach(function(r){ var k=r.getAttribute('data-msid'); r.classList.toggle('chg', Object.prototype.hasOwnProperty.call(ed,k)); });
+    var dirty=Object.keys(ed).length>0, sv=box.querySelector('.ms-reno-save'), un=box.querySelector('.ms-reno-undo');
+    if(sv) sv.disabled=!(dirty && S.on && S.regDone);
+    if(un) un.style.display=dirty?'':'none';
+  }catch(e){}
+};
 MS._renoSave = function(){
-  var d=S._renoDraft||{}, peers=S.peers||{}, lines=[], changed=false;
+  var ed=S._renoDraft||{}, peers=S.peers||{}, lines=[], changed=false, d={};
+  Object.keys(peers).forEach(function(id){ d[id]=Object.prototype.hasOwnProperty.call(ed,id)?ed[id]:_renoCur(id); });
+  if(S.me && d[S.me]==null) d[S.me]=Object.prototype.hasOwnProperty.call(ed,S.me)?ed[S.me]:_renoCur(S.me);
   Object.keys(d).forEach(function(id){
     var p=peers[id]||{}, from=(id===S.me?(S.no||p.no):p.no)||'—', to=parseInt(d[id],10);
     if(String(from)!==String(to)) changed=true;
@@ -80120,7 +80141,8 @@ var _uiT=null;
 function ui(){ clearTimeout(_uiT); _uiT=setTimeout(renderCard, 250); }
 function renderCard(){
   var box=document.getElementById('msync-card-body'); if(!box) return;
-  try{ var _ae=document.activeElement; if(S._renoOpen && _ae && box.contains(_ae) && _ae.closest && _ae.closest('.ms-reno')) return; }catch(e){}
+  /* لا يُعاد الرسم أثناء الكتابة في خانة رقم حاسبة (وإلا يضيع التركيز) */
+  try{ var _ae=document.activeElement; if(_ae && _ae.tagName==='INPUT' && box.contains(_ae) && _ae.closest && _ae.closest('.ms-dn-edit')) return; }catch(e){}
   var st=S.stats||{}, peers=S.peers||{}, ids=Object.keys(peers).sort(function(a,b){ return (peers[a].no||99)-(peers[b].no||99); });
   var pill = S.status==='ok' ? '<span class="ms-pill ok">🟢 متصلة ومتزامنة</span>'
     : S.status==='denied' ? '<span class="ms-pill bad">🔴 مرفوضة من قواعد Firebase</span>'
@@ -80135,30 +80157,25 @@ function renderCard(){
     +'<div class="ms-hint">الرقم فريد بين حاسبات الحساب — الملفات الجديدة هنا تبدأ بـ '+((S.no||1)*1000000+1)+'</div></div></div>';
   h+='<div class="ms-devs">';
   if(!ids.length) h+='<div class="ms-hint" style="text-align:center;padding:8px">لا توجد حاسبات مسجّلة بعد</div>';
+  var _canReno=ids.length>=2, _renoLive=!!(S.on&&S.regDone), _ed=S._renoDraft||{}, _dirty=false;
   ids.forEach(function(id){
-    var p=peers[id]||{}, me=id===S.me, last=st.peers&&st.peers[id];
-    h+='<div class="ms-dev'+(me?' me':'')+'"><span class="ms-dot '+(p.on?'on':'off')+'"></span><b class="ms-dn">'+(p.no||'?')+'</b>'
-      +'<div style="flex:1;min-width:0"><div class="ms-lb">'+esc(p.nm||('حاسبة '+(p.no||'')))+(me?' <span class="ms-pill info" style="font-size:9.5px;padding:1px 7px">هذه</span>':'')+'</div>'
-      +'<div class="ms-hint">'+(p.on?'مفتوحة الآن':'آخر ظهور: '+ago(p.seen))+(me?'':' · آخر مزامنة: '+(last?ago(last+(S.offset||0)):'—'))+'</div></div></div>';
+    var p=peers[id]||{}, me=id===S.me, last=st.peers&&st.peers[id], cur=_renoCur(id);
+    var has=Object.prototype.hasOwnProperty.call(_ed,id), val=has?_ed[id]:cur, chg=has && String(_ed[id])!==String(cur);
+    if(chg) _dirty=true;
+    h+='<div class="ms-dev'+(me?' me':'')+(chg?' chg':'')+'" data-msid="'+esc(id)+'"><span class="ms-dot '+(p.on?'on':'off')+'"></span><b class="ms-dn">'+(p.no||'?')+'</b>'
+      +'<div style="flex:1;min-width:0"><div class="ms-lb">'+esc(p.nm||('حاسبة '+(p.no||'')))+(me?' <span class="ms-pill info" style="font-size:9.5px;padding:1px 7px">هذه</span>':'')
+      +(String(p.no)==='1'?' <span class="ms-pill ok ms-m1" title="تصدّر قاعدة التحاليل ولا تستوردها">⭐ الرئيسية</span>':'')+'</div>'
+      +'<div class="ms-hint">'+(p.on?'مفتوحة الآن':'آخر ظهور: '+ago(p.seen))+(me?'':' · آخر مزامنة: '+(last?ago(last+(S.offset||0)):'—'))+'</div></div>'
+      +(_canReno?'<div class="ms-dn-edit" title="الرقم الجديد لهذه الحاسبة"><span class="ms-hint">رقم</span><input class="fc" type="number" min="1" max="99" lang="en" value="'+esc(val==null?'':val)+'"'
+        +(_renoLive?'':' disabled')+' oninput="MSync._renoInput(\''+esc(id)+'\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();MSync._renoSave();}"></div>':'')
+      +'</div>';
   });
   h+='</div>';
   /* 🔢 تغيير أرقام الحاسبات (من أي حاسبة) */
-  if(ids.length>=2 || S._renoOpen){
-    h+='<div class="ms-reno">';
-    if(S._renoOpen && S._renoDraft){
-      h+='<div class="ms-reno-box"><div class="ms-lb" style="margin-bottom:4px">🔢 تغيير أرقام الحاسبات</div>'
-        +'<div class="ms-hint" style="margin-bottom:6px">اكتب الرقم الجديد لكل حاسبة (يمكن تبديل الأرقام بينها). الحاسبة رقم 1 هي الرئيسية.</div>';
-      ids.forEach(function(id){
-        var p=peers[id]||{}, me=id===S.me, cur=(me?(S.no||p.no):p.no)||'?';
-        h+='<div class="ms-reno-row"><span class="ms-dot '+(p.on?'on':'off')+'"></span><b class="ms-dn">'+esc(cur)+'</b>'
-          +'<div style="flex:1;min-width:0" class="ms-lb">'+esc(p.nm||('حاسبة '+cur))+(me?' <span class="ms-pill info" style="font-size:9.5px;padding:1px 7px">هذه</span>':'')+'</div>'
-          +'<span class="ms-hint">←</span><input class="fc" type="number" min="1" max="99" lang="en" value="'+esc(S._renoDraft[id]==null?'':S._renoDraft[id])+'" oninput="MSync._renoInput(\''+esc(id)+'\',this.value)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();MSync._renoSave();}"></div>';
-      });
-      h+='<div class="ms-reno-acts"><button class="btn btn-s btn-sm" onclick="MSync._renoCancel()">إلغاء</button><button class="btn btn-p btn-sm" onclick="MSync._renoSave()">💾 حفظ الأرقام</button></div></div>';
-    } else {
-      h+='<button class="btn btn-s btn-sm" style="width:100%" onclick="MSync._renoOpen()" '+((S.on&&S.regDone)?'':'disabled title="يتطلب اتصال المزامنة"')+'>🔢 تغيير أرقام الحاسبات (من هذه الحاسبة)</button>';
-    }
-    h+='</div>';
+  if(_canReno){
+    h+='<div class="ms-reno-bar"><span class="ms-hint">🔢 غيّر الرقم أمام أي حاسبة ثم احفظ (يمكن تبديل الأرقام بينها). الحاسبة رقم <b>1</b> هي الرئيسية: تصدّر قاعدة التحاليل ولا تستوردها.'+(_renoLive?'':' — <b>يتطلب اتصال المزامنة</b>')+'</span>'
+      +'<button class="btn btn-s btn-sm ms-reno-undo" onclick="MSync._renoCancel()"'+(_dirty?'':' style="display:none"')+'>تراجع</button>'
+      +'<button class="btn btn-p btn-sm ms-reno-save" onclick="MSync._renoSave()"'+((_dirty&&_renoLive)?'':' disabled')+'>💾 حفظ الأرقام</button></div>';
   }
   h+='<div class="ms-stats"><div><b>'+(st.sR||0)+'</b><span>سجل مُرسَل اليوم</span></div><div><b>'+(st.rR||0)+'</b><span>سجل مُستلَم اليوم</span></div>'
     +'<div><b>'+fmtB((st.mSB||0)+(st.mRB||0))+'</b><span>استهلاك هذا الشهر</span></div><div><b>'+(S.lastSync?ago(S.lastSync+(S.offset||0)):'—')+'</b><span>آخر نشاط</span></div></div>';
@@ -84603,5 +84620,110 @@ body .resize-handle-s{ cursor:s-resize !important; }
   document.addEventListener('mouseout', function(e){ if(ring && !e.relatedTarget) ring.classList.remove('on'); }, true);
   window.addEventListener('blur', function(){ if(ring) ring.classList.remove('on'); });
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', make); else make();
+})();
+</script>
+
+<script id="ml-sx-module">
+/* ══════════════════════════════════════════════════════════════
+   🎬 حركات انتقال الأقسام — خفيفة (Web Animations API · transform/opacity/clip-path فقط)
+   • الطلبات / إدخال النتائج  ⇒ «ستارة» تنزل من الأعلى مع خط مضيء عند حافتها.
+   • قائمة المرضى / مريض جديد ⇒ الشاشة تنطلق من نفس الزر المضغوط (وإن فُتحت برمجياً ⇒ ستارة).
+   • لا تلمس nav() ولا openModal(): تراقب كلاس العنصر فقط (MutationObserver على 4 عناصر).
+   • لا شيء يبقى بعد انتهاء الحركة (fill:none) — والحركة تُلغى تلقائياً عند الانتقال السريع.
+   • تتوقف تلقائياً مع «تقليل الحركة» في النظام، أو: localStorage.ml_sx_off = '1'
+   ══════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  if(window.__mlSx) return; window.__mlSx=1;
+  var RM=false; try{ RM=!!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches); }catch(e){}
+  var LITE=(navigator.hardwareConcurrency||4)<=2;            // أجهزة ضعيفة ⇒ حركة أقصر
+  function disabled(){ if(RM||document.hidden) return true; try{ return localStorage.getItem('ml_sx_off')==='1'; }catch(e){ return false; } }
+
+  /* آخر زر ضُغط (يُلتقط قبل تنفيذ onclick) — مصدر حركة «الانطلاق من الزر» */
+  var last=null;
+  document.addEventListener('click', function(e){
+    var t=e.target && e.target.closest && e.target.closest('.ni,button,.btn,.req-pill,[onclick]');
+    if(t) last={el:t, t:Date.now()};
+  }, true);
+  function origin(){
+    if(!last || Date.now()-last.t>900 || !last.el.isConnected) return null;
+    var r=last.el.getBoundingClientRect();
+    return (r.width>2 && r.height>2) ? r : null;
+  }
+
+  function fx(css, z){ var d=document.createElement('div'); d.setAttribute('aria-hidden','true'); d.style.cssText='position:fixed;pointer-events:none;z-index:'+z+';'+css; document.body.appendChild(d); return d; }
+  function done(a, d){ var f=function(){ if(d&&d.parentNode) d.parentNode.removeChild(d); }; a.onfinish=f; a.oncancel=f; }
+
+  /* 🪟 ستارة: كشف من الأعلى للأسفل (clip-path) — بلا transform كي لا تتأثر العناصر الثابتة داخل القسم */
+  function curtain(el, r, isModal){
+    var vb=Math.min(r.bottom, window.innerHeight), vis=Math.max(30, vb-r.top);
+    var dur=LITE?320:560, ease='cubic-bezier(.33,.75,.22,1)';
+    var a=el.animate([
+      {clipPath:'inset(0px 0px '+r.height+'px 0px)', opacity:.25},
+      {clipPath:'inset(0px 0px '+Math.max(0, r.bottom-vb)+'px 0px)', opacity:1, offset:.86},
+      {clipPath:'inset(0px 0px 0px 0px)', opacity:1}
+    ], {duration:dur, easing:ease});
+    el.__sxA=a;
+    if(LITE) return;
+    /* خط الستارة المضيء */
+    var ln=fx('left:'+r.left+'px;top:'+r.top+'px;width:'+r.width+'px;height:3px;border-radius:3px;'
+      +'background:linear-gradient(90deg,transparent,var(--primary,#00d4ff) 18%,#fff 50%,var(--primary,#00d4ff) 82%,transparent);'
+      +'box-shadow:0 0 14px 2px var(--primary,#00d4ff),0 6px 22px rgba(0,212,255,.35);', isModal?10000002:9000);
+    done(ln.animate([
+      {transform:'translateY(0px)', opacity:1},
+      {transform:'translateY('+vis+'px)', opacity:.95, offset:.86},
+      {transform:'translateY('+vis+'px)', opacity:0}
+    ], {duration:dur, easing:ease}), ln);
+  }
+
+  /* 🚀 انطلاق من الزر: تكبير من نقطة الزر نفسها مع موجة ضوء خفيفة عند الزر */
+  function grow(el, r, o){
+    var bx=o.left+o.width/2, by=o.top+o.height/2;
+    var org=(bx-r.left).toFixed(1)+'px '+(by-r.top).toFixed(1)+'px';
+    var dur=LITE?300:520;
+    var a=el.animate([
+      {transformOrigin:org, transform:'scale(.04)', opacity:0},
+      {transformOrigin:org, transform:'scale(.6)',  opacity:1, offset:.38},
+      {transformOrigin:org, transform:'scale(1.008)', opacity:1, offset:.82},
+      {transformOrigin:org, transform:'scale(1)',   opacity:1}
+    ], {duration:dur, easing:'cubic-bezier(.2,.8,.25,1)'});
+    el.__sxA=a;
+    if(LITE) return;
+    var s=44, rp=fx('left:'+(bx-s/2)+'px;top:'+(by-s/2)+'px;width:'+s+'px;height:'+s+'px;border-radius:50%;'
+      +'background:radial-gradient(circle,rgba(255,255,255,.75),var(--primary,#00d4ff) 45%,transparent 70%);', 10000003);
+    done(rp.animate([{transform:'scale(.4)',opacity:.9},{transform:'scale(7)',opacity:0}], {duration:480, easing:'cubic-bezier(.2,.7,.3,1)'}), rp);
+  }
+
+  function play(el, mode, isModal){
+    if(!el || typeof el.animate!=='function' || disabled()) return;
+    try{ if(el.__sxA) el.__sxA.cancel(); }catch(e){}
+    try{
+      var r=el.getBoundingClientRect();
+      if(r.width<20 || r.height<20) return;
+      var o=(mode==='grow') ? origin() : null;
+      if(o) grow(el, r, o); else curtain(el, r, isModal);
+    }catch(e){ try{ console.warn('[ml-sx]', e); }catch(_){} }
+  }
+
+  /* مراقبة: يعمل فقط عند «الدخول» للقسم (لم يكن ظاهراً قبل الدفعة) */
+  function watch(id, cls, cb){
+    var el=document.getElementById(id); if(!el || el.__sxW) return; el.__sxW=1;
+    var re=new RegExp('(^|\\s)'+cls+'(\\s|$)');
+    new MutationObserver(function(ms){
+      if(!ms.length || re.test(ms[0].oldValue||'')) return;      // كان ظاهراً أصلاً ⇒ لا حركة
+      if(el.classList.contains(cls)) cb(el);
+    }).observe(el, {attributes:true, attributeFilter:['class'], attributeOldValue:true});
+  }
+  function init(){
+    watch('sec-requests','active', function(el){ play(el,'curtain'); });
+    watch('sec-results', 'active', function(el){ play(el,'curtain'); });
+    watch('sec-patients','active', function(el){ play(el,'grow'); });
+    watch('m-wizard','open', function(ov){
+      var m=document.getElementById('m-wizard-inner') || ov.querySelector('.modal');
+      if(!disabled() && typeof ov.animate==='function'){ try{ ov.animate([{opacity:0},{opacity:1}], {duration:LITE?120:220, easing:'ease-out'}); }catch(e){} }
+      play(m,'grow',true);
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
 </script>
