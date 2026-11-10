@@ -32030,6 +32030,8 @@ function _mergeUserIntoCache(uname, rec){
   }
   _fbUsersCache = users;
   localStorage.setItem(ADMIN_KEY, JSON.stringify(users));
+  /* 🔓 الصلاحيات قد تتغير من لوحة الأدمن أثناء عمل البرنامج ⇒ حدّث الأقفال فوراً */
+  try{ if(uname && typeof getSession==='function'){ const _s=getSession(); if(_s && _s.username===uname && typeof applyPermissionsToSidebar==='function') applyPermissionsToSidebar(); } }catch(e){}
   return users;
 }
 /* يحفظ بصمة كلمة المرور محلياً بعد تحقق ناجح (للدخول بدون إنترنت لاحقاً) */
@@ -55028,6 +55030,8 @@ function _isSelfRegAcct(){
 document.addEventListener('click', function(e){
   try{
     const el = e.target && e.target.closest && e.target.closest('.ni.ni-locked'); if(!el) return;
+    const _pm = el.getAttribute('data-perm');
+    if(_pm && hasPermission(_pm)){ el.classList.remove('ni-locked'); return; }   // صلاحية فُتحت للتو ⇒ يمرّ النقر
     e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
     showNotif('🚫 غير مسموح','لا توجد صلاحية لهذا القسم الآن','error');
   }catch(err){}
