@@ -18713,6 +18713,7 @@ function _mergePatientIntoExisting(oldId, newPt){
       // حافظ على أي بيانات اتصال أُدخلت حديثاً ولم تكن موجودة في الملف القديم
       if(!newPt.phone && oldPt.phone) newPt.phone=oldPt.phone;
       if(!newPt.addr  && oldPt.addr)  newPt.addr =oldPt.addr;
+      try{ if(window._accMarkDel) _accMarkDel('patients', oldPt); }catch(e){}
       patients=patients.filter(function(p){ return String(p.id)!==String(oldId); });
       save('patients',patients);
       saveOne('patients',patients,newPt);
@@ -27848,7 +27849,7 @@ var AuditLog=(function(){
     var A=ACT[e.act]||ACT.edit, W=WATCH[e.coll]||{lbl:e.coll,ic:''};
     var old=document.getElementById('m-audit-detail'); if(old) old.remove();
     var head='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:14px">'
-      +[['العملية',(e.act==='bulk'?((ACT[e.sub]||A).lbl+' جماعي'):A.lbl)],['القسم',W.ic+' '+W.lbl],['التاريخ',e.d],['الوقت',e.t],['المستخدم',e.u||'—'],['الحاسبة',e.dev||'—'],['المصدر',e.src==='lan'?'مزامنة LAN':e.src==='tg'?'Telegram':'هذه الحاسبة'],['المعرّف',e.rid||'—']]
+      +[['العملية',(e.act==='bulk'?((ACT[e.sub]||A).lbl+' جماعي'):A.lbl)],['القسم',W.ic+' '+W.lbl],['التاريخ',e.d],['الوقت',e.t],['المستخدم',e.u||'—'],['الحاسبة',e.dev||'—'],['المصدر',e.src==='lan'?'مزامنة LAN (حاسبة أخرى)':e.src==='cloud'?'مزامنة سحابية (حاسبة أخرى عبر الإنترنت)':e.src==='tg'?'Telegram':'هذه الحاسبة'],['المعرّف',e.rid||'—']]
         .map(function(x){ return '<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:7px 10px"><div style="font-size:10.5px;color:var(--text2)">'+x[0]+'</div><div style="font-size:12.5px;font-weight:800" dir="auto">'+_rpEsc(x[1])+'</div></div>'; }).join('')+'</div>';
     var chg='';
     if(e.act==='edit' && e.chg && e.chg.length){
@@ -27869,9 +27870,27 @@ var AuditLog=(function(){
     mod.innerHTML='<div class="modal" style="max-width:820px;width:100%;max-height:88vh;display:flex;flex-direction:column">'
       +'<div class="mhdr" style="flex-shrink:0"><div class="mtitle">'+A.ic+' '+_rpEsc(e.title)+'</div><button class="mclose" onclick="document.getElementById(\'m-audit-detail\').remove()">×</button></div>'
       +'<div class="mbody" style="overflow-y:auto;flex:1;padding:16px">'+head+chg+items+full+'</div>'
-      +'<div class="mftr" style="flex-shrink:0"><button class="btn btn-s" onclick="document.getElementById(\'m-audit-detail\').remove()">إغلاق</button></div></div>';
+      +'<div class="mftr" style="flex-shrink:0">'+((e.act==='del'&&e.snap&&(e.coll==='requests'||e.coll==='patients'))?'<button class="btn btn-ok" onclick="AuditLog.restore(\''+e.id+'\')">↩️ استرجاع هذا السجل</button>':'')+'<button class="btn btn-s" onclick="document.getElementById(\'m-audit-detail\').remove()">إغلاق</button></div></div>';
     mod.addEventListener('click',function(ev){ if(ev.target===mod) mod.remove(); });
     document.body.appendChild(mod);
+  }
+  /* ↩️ استرجاع طلب/مريض محذوف من لقطته المحفوظة في السجل (للحذف غير المقصود أو الناتج عن المزامنة) */
+  function restore(id){
+    var e=(_log||[]).find(function(x){ return x.id===id; });
+    if(!e||e.act!=='del'||!e.snap||(e.coll!=='requests'&&e.coll!=='patients')) return;
+    var arr=(e.coll==='requests')?requests:patients, s;
+    try{ s=JSON.stringify(e.snap); }catch(x){ s=''; }
+    if(!s||s.indexOf('[بيانات كبيرة')>-1){ showNotif('تعذّر الاسترجاع','هذا السجل يحوي بيانات كبيرة لم تُحفظ كاملة في السجل — لا يمكن استرجاعه بأمان','error'); return; }
+    if(arr.some(function(x){ return x&&String(x.id)===String(e.snap.id); })){ showNotif('موجود','هذا السجل موجود حالياً ولا يحتاج استرجاعاً','info'); return; }
+    if(!confirm('استرجاع «'+e.title+'» كما كان لحظة حذفه؟')) return;
+    var rec=JSON.parse(s);
+    rec._updatedAt=Date.now();            /* أحدث من أي شاهد حذف ⇒ لا يُرفض من المزامنة */
+    try{ if(window._accUnDel) window._accUnDel(e.coll, rec); }catch(x){}
+    arr.push(rec);
+    try{ saveOne(e.coll, arr, rec); }catch(x){ save(e.coll, arr); }
+    try{ renderAll(); updateBadges(); updateDashboard(); }catch(x){}
+    var m=document.getElementById('m-audit-detail'); if(m) m.remove();
+    showNotif('✅ تم الاسترجاع','أُعيد «'+e.title+'» وسيصل لبقية الحاسبات','success');
   }
   function excel(){
     var list=filtered(); if(!list.length){ showNotif('تنبيه','لا توجد عمليات للتصدير','warning'); return; }
@@ -27899,7 +27918,7 @@ var AuditLog=(function(){
     persist(); render();
   }
   WATCH._log={lbl:'سجل العمليات',ic:'📜',f:[],title:function(){ return ''; }};
-  return { onSave:onSave, prime:prime, reset:reset, open:open, render:render, detail:detail, setQ:setQ, setAct:setAct, setColl:setColl, setUser:setUser, more:more, excel:excel, clearAll:clearAll,
+  return { onSave:onSave, prime:prime, reset:reset, open:open, render:render, detail:detail, restore:restore, setQ:setQ, setAct:setAct, setColl:setColl, setUser:setUser, more:more, excel:excel, clearAll:clearAll,
            _flushAll:function(){ Object.keys(_pend).forEach(flush); } };
 })();
 window.AuditLog=AuditLog;
@@ -62491,6 +62510,13 @@ window._accMarkDel = function(k, recs){
   }catch(e){}
 };
 
+/* هل سُجِّل حذف صريح (من واجهة الحذف أو من حذف وارد) لهذا المعرّف؟ — يُستعمل لتمييز الحذف الحقيقي عن الغياب المُستنتَج */
+window._accHasDel = function(k, id){ try{ return !!(tombs[k] && tombs[k][String(id)]); }catch(e){ return false; } };
+/* إلغاء شاهد حذف سجل يُسترجَع عمداً */
+window._accUnDel = function(k, rec){
+  try{ var id = _tid(k, rec); if(id && tombs[k] && tombs[k][id]){ delete tombs[k][id]; _saveTombs(); } }catch(e){}
+};
+
 /* ── تصفية الوارد: لا يُقبل سجل أقدم من شاهد حذفه ─────────────────── */
 function _filter(key, arr){
   if(!Array.isArray(arr) || !_hasTombs(key)) return arr;
@@ -70010,6 +70036,49 @@ body.light-mode #mls-root table.mls-t th{background:#fff}
 #mls-root .mls-due.owe{border-color:color-mix(in srgb,var(--danger) 55%,transparent);background:color-mix(in srgb,var(--danger) 7%,var(--bg-card))}
 #mls-root .mls-due.ok{border-color:color-mix(in srgb,var(--success) 50%,transparent)}
 #mls-root .mls-due-v{font-size:26px;font-weight:900;margin:2px 0}
+/* 💳 دفع المستحقات + قائمة المدفوعات */
+#mls-root .mlsp-btn{padding:6px 14px;border-radius:9px;border:0;cursor:pointer;font-family:inherit;font-weight:800;font-size:12px;color:#fff;background:linear-gradient(135deg,#059669,#047857);box-shadow:0 3px 10px rgba(5,150,105,.35);transition:transform .15s,box-shadow .15s}
+#mls-root .mlsp-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(5,150,105,.45)}
+#mls-root .mlsp-list{margin-bottom:12px;border:1px solid var(--border);border-radius:14px;background:var(--bg-card);padding:12px 14px}
+#mls-root .mlsp-list h4{margin:0 0 4px;font-size:13.5px;font-weight:800}
+#mls-root .mlsp-tot{font-size:11.5px;color:var(--text2);margin-bottom:10px}
+#mls-root .mlsp-d{border:1px solid var(--border);border-radius:11px;background:var(--bg-glass);margin-bottom:7px;overflow:hidden}
+#mls-root .mlsp-d>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:10px 12px;font-weight:700}
+#mls-root .mlsp-d>summary::-webkit-details-marker{display:none}
+#mls-root .mlsp-d>summary::after{content:"▾";margin-right:auto;color:var(--text2);transition:transform .2s}
+#mls-root .mlsp-d[open]>summary::after{transform:rotate(180deg)}
+#mls-root .mlsp-d[open]{border-color:color-mix(in srgb,var(--success) 50%,transparent)}
+#mls-root .mlsp-a{color:var(--success);font-size:14px}
+#mls-root .mlsp-dt{color:var(--text2);font-size:11.5px;font-weight:600}
+#mls-root .mlsp-b{padding:2px 14px 12px;display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:12px}
+#mls-root .mlsp-b span:nth-child(odd){color:var(--text2)}
+/* نافذة دفع المستحقات (خارج #mls-root) */
+#mls-paydlg .mlsp-modal{max-width:520px;width:96%;padding:0;overflow:hidden;border-radius:18px}
+#mls-paydlg .mlsp-hd{background:linear-gradient(135deg,#059669,#065f46);color:#fff;padding:18px 20px;display:flex;align-items:center;gap:12px}
+#mls-paydlg .mlsp-hd .ic{font-size:30px;line-height:1}
+#mls-paydlg .mlsp-hd .tt{font-size:17px;font-weight:900}
+#mls-paydlg .mlsp-hd .sb{font-size:11.5px;opacity:.85;margin-top:2px}
+#mls-paydlg .mlsp-x{margin-right:auto;background:rgba(255,255,255,.18);border:0;color:#fff;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer}
+#mls-paydlg .mlsp-bd{padding:18px 20px;max-height:calc(100vh - 210px);overflow-y:auto}
+#mls-paydlg .mlsp-f{margin-bottom:13px}
+#mls-paydlg .mlsp-f label{display:block;font-size:12px;font-weight:800;margin-bottom:5px}
+#mls-paydlg .mlsp-f label i{color:var(--danger);font-style:normal}
+#mls-paydlg .mlsp-drop{display:block;border:2px dashed var(--border);border-radius:14px;padding:16px;text-align:center;cursor:pointer;background:var(--bg-glass);transition:border-color .2s}
+#mls-paydlg .mlsp-drop:hover{border-color:#059669}
+#mls-paydlg .mlsp-drop.bad{border-color:var(--danger);animation:mlspShake .35s}
+#mls-paydlg .mlsp-drop img{max-width:100%;max-height:230px;border-radius:10px;display:block;margin:0 auto 8px}
+#mls-paydlg .mlsp-drop b{display:block;font-size:13px}
+#mls-paydlg .mlsp-drop span{font-size:11px;color:var(--text2)}
+@keyframes mlspShake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+#mls-paydlg .mlsp-warn{margin-top:9px;padding:9px 12px;border-radius:10px;font-size:12px;font-weight:700;line-height:1.7;background:color-mix(in srgb,var(--danger) 10%,transparent);border:1px solid color-mix(in srgb,var(--danger) 45%,transparent);color:var(--danger)}
+#mls-paydlg .mlsp-card{margin:0 0 16px;padding:14px 16px;border-radius:14px;color:#fff;background:linear-gradient(135deg,#1e293b,#0f172a 60%,#064e3b);position:relative;overflow:hidden}
+#mls-paydlg .mlsp-card::after{content:"";position:absolute;top:-40px;left:-40px;width:120px;height:120px;border-radius:50%;background:rgba(16,185,129,.25)}
+#mls-paydlg .mlsp-card .l{font-size:11px;opacity:.75}
+#mls-paydlg .mlsp-card .n{font-size:22px;font-weight:900;letter-spacing:3px;margin:4px 0 8px;direction:ltr;text-align:right;position:relative;z-index:1}
+#mls-paydlg .mlsp-card button{position:relative;z-index:1;border:0;border-radius:8px;padding:5px 12px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer;background:rgba(255,255,255,.18);color:#fff}
+#mls-paydlg .mlsp-save{margin-top:10px;font-size:11px;color:var(--text2);text-align:center}
+#mls-paydlg .mlsp-ft{display:flex;gap:10px;padding:14px 20px;border-top:1px solid var(--border)}
+#mls-paydlg .mlsp-send{flex:1;border:0;border-radius:11px;padding:11px;font-family:inherit;font-weight:900;font-size:14px;color:#fff;cursor:pointer;background:linear-gradient(135deg,#25d366,#128c7e);box-shadow:0 4px 14px rgba(18,140,126,.4)}
 #mls-root .mls-due.owe .mls-due-v{color:var(--danger)}
 #mls-root .mls-qs{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px}
 #mls-root .mls-q{margin:0}
@@ -71032,7 +71101,7 @@ var ACT_PERM={};
 ['acceptonly','accept','convert','reject','onway','collected','inlab','send','msg','del','adel','block','unblock','cptsend','cptstop','cptun','cptwa'].forEach(function(k){ ACT_PERM[k]='store_orders'; });
 ['csend','cretry','rdel'].forEach(function(k){ ACT_PERM[k]='store_chat'; });
 ['allvis','cpadd','cpdel','bnadd','bndel','pkadd','pkrm','pkdel','bimgdel','publish'].forEach(function(k){ ACT_PERM[k]='store_catalog'; });
-['duesre','dprint'].forEach(function(k){ ACT_PERM[k]='store_dues'; });
+['duesre','dprint','paydlg','paytog'].forEach(function(k){ ACT_PERM[k]='store_dues'; });
 ['open','code','enable','logodel','aradd','ardel','fm','fxreset','locpick','locme','locpaste','poster'].forEach(function(k){ ACT_PERM[k]='store_settings'; });
 function spTab(t){ return sp(TAB_PERM[t]||'store'); }
 function spDeny(what){ try{ notif('🚫 غير مسموح','ليس لديك صلاحية '+(what||'هذا الإجراء')+' في المتجر','error'); }catch(e){} return false; }
@@ -71444,7 +71513,8 @@ function duesHtml(){
   '<div class="mls-due '+(bal>0?'owe':'ok')+'"><div><div class="mls-muted">المبلغ المستحق للمبرمج (للتسديد)</div><div class="mls-due-v">'+money(Math.max(0,bal))+'</div>'+
     '<div class="mls-muted" style="font-size:11px">إجمالي النسبة '+fmt(ALL.com)+' − المدفوع '+fmt(paid)+(bal<0?' · رصيد لصالحك '+fmt(-bal):'')+'</div></div>'+
     '<div style="text-align:left"><div class="mls-muted" style="font-size:11px">النسبة لكل تحليل</div><b style="font-size:16px">'+fmt(rate())+' '+esc(cur())+'</b>'+
-    '<div style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end"><button class="mls-chip" data-x="duesre">🔄 تحديث</button><button class="btn btn-p btn-sm" data-x="dprint">🖨️ كشف حساب</button></div></div></div>'+
+    '<div style="margin-top:8px;display:flex;gap:6px;justify-content:flex-end"><button class="mls-chip" data-x="duesre">🔄 تحديث</button><button class="btn btn-p btn-sm" data-x="dprint">🖨️ كشف حساب</button><button class="mlsp-btn" data-x="paydlg">💳 دفع المستحقات</button><button class="mls-chip'+(M.payOpen?' on':'')+'" data-x="paytog">💵 المدفوعات'+(pays.length?' ('+pays.length+')':'')+'</button></div></div></div>'+
+  (M.payOpen?payPanelHtml(pays,paid):'')+
   (hasT||!ALL.acc?'':'<div class="mls-warn" style="margin-bottom:10px">الطلبات السابقة لهذا التحديث لا تحمل مبلغ الطلب، فتظهر مبيعاتها صفراً؛ النسبة والعدد دقيقان.</div>')+
   // ── اليوم / الشهر / السنة ──
   '<div class="mls-qs">'+quick('اليوم',T)+quick('هذا الشهر',Mo)+quick('هذه السنة',Y)+'</div>'+
@@ -71493,6 +71563,109 @@ function printDues(){
   var fr=document.getElementById('mls-print-fr');
   if(!fr){ fr=document.createElement('iframe'); fr.id='mls-print-fr'; fr.style.cssText='position:fixed;width:0;height:0;border:0;left:-9999px'; document.body.appendChild(fr); }
   fr.srcdoc=html; fr.onload=function(){ setTimeout(function(){ try{ fr.contentWindow.focus(); fr.contentWindow.print(); }catch(e){} },300); };
+}
+
+/* ── 💳 دفع المستحقات (نافذة + مسودة محفوظة + إرسال واتساب) ── */
+var PAY_MASTER='7115489788', PAY_WA='07807632797', PAY_P={nm:'',ph:'',amt:'',img:''};
+function payKey(){ return DB._pfx()+'mlsPayDraft_'+(M.sid||''); }
+function paySaveDraft(){ try{ localStorage.setItem(payKey(),JSON.stringify(PAY_P)); return true; }catch(e){ return false; } }
+function payClearDraft(){ try{ localStorage.removeItem(payKey()); }catch(e){} }
+function payCollect(){
+  var el=document.getElementById('mls-paydlg'); if(!el) return;
+  ['nm','ph','amt'].forEach(function(k){ var i=el.querySelector('[data-p="'+k+'"]'); if(i) PAY_P[k]=i.value; });
+  if(!paySaveDraft() && !PAY_P._qw){ PAY_P._qw=1; notif('تنبيه','تعذّر حفظ المسودة تلقائياً (ذاكرة المتصفح ممتلئة)','warning'); }
+}
+function payImgFromFile(file){
+  return new Promise(function(res,rej){ var fr=new FileReader(); fr.onerror=rej;
+    fr.onload=function(){ var im=new Image(); im.onerror=rej; im.onload=function(){
+      var k=Math.min(1,1400/Math.max(im.width,im.height)), cv=document.createElement('canvas');
+      cv.width=Math.max(1,Math.round(im.width*k)); cv.height=Math.max(1,Math.round(im.height*k));
+      var cx=cv.getContext('2d'); cx.fillStyle='#fff'; cx.fillRect(0,0,cv.width,cv.height); cx.drawImage(im,0,0,cv.width,cv.height);
+      res(cv.toDataURL('image/jpeg',0.82)); }; im.src=fr.result; };
+    fr.readAsDataURL(file); });
+}
+function payDropHtml(){
+  return PAY_P.img ? '<img src="'+PAY_P.img+'" alt=""><b>✅ تم إرفاق صورة الحوالة</b><span>اضغط لتغيير الصورة</span>'
+                   : '<div style="font-size:30px">📸</div><b>اضغط لإرفاق سكرين أو صورة واضحة للحوالة</b><span>JPG / PNG</span>';
+}
+function payOpenDlg(){
+  var c=cfg(); if(!c) return;
+  var d={}; try{ d=JSON.parse(localStorage.getItem(payKey())||'null')||{}; }catch(e){}
+  PAY_P={nm:d.nm!=null&&d.nm!==''?d.nm:String((c.info&&c.info.nm)||''), ph:d.ph!=null&&d.ph!==''?d.ph:String((c.info&&(c.info.ph||c.info.wa))||''), amt:d.amt||'', img:d.img||''};
+  var el=document.getElementById('mls-paydlg');
+  if(!el){ el=document.createElement('div'); el.className='moverlay'; el.id='mls-paydlg'; document.body.appendChild(el); }
+  el.innerHTML='<div class="modal mlsp-modal">'+
+    '<div class="mlsp-hd"><div class="ic">💳</div><div><div class="tt">دفع المستحقات</div><div class="sb">أدخل البيانات وأرفق الحوالة ثم أرسلها</div></div><button class="mlsp-x" data-pa="close" title="إغلاق">×</button></div>'+
+    '<div class="mlsp-bd">'+
+      '<div class="mlsp-card top"><div class="l">رقم الماستر كارد للتحويل</div><div class="n" id="mlsp-num">'+PAY_MASTER+'</div><button data-pa="copy">📋 نسخ الرقم</button></div>'+
+      '<div class="mlsp-f"><label>🏥 اسم المختبر <i>*</i></label><input class="fc" data-p="nm" maxlength="80" value="'+esc(PAY_P.nm)+'" placeholder="اسم المختبر"></div>'+
+      '<div class="mlsp-f"><label>📞 رقم الهاتف <i>*</i></label><input class="fc" data-p="ph" type="tel" dir="ltr" style="text-align:right" maxlength="20" value="'+esc(PAY_P.ph)+'" placeholder="07XXXXXXXXX"></div>'+
+      '<div class="mlsp-f"><label>💰 المبلغ المحوَّل (اختياري) ('+esc(cur())+')</label><input class="fc" data-p="amt" type="text" inputmode="decimal" dir="ltr" style="text-align:right" maxlength="20" value="'+esc(PAY_P.amt)+'" placeholder="0"></div>'+
+      '<div class="mlsp-f"><label>🧾 صورة الحوالة <i>*</i></label><label class="mlsp-drop" id="mlsp-drop" for="mlsp-file">'+payDropHtml()+'</label>'+
+        '<input type="file" id="mlsp-file" accept="image/*" style="display:none">'+
+        '<div class="mlsp-warn">⚠️ ملاحظة: في حال لم تُرفق صورة للتحويل يُعتبر التحويل باطلاً.</div></div>'+
+      '<div class="mlsp-save">🔒 بياناتك محفوظة تلقائياً ولن تضيع إن أغلقت النافذة، وتُحذف فقط بعد الإرسال.</div>'+
+    '</div>'+
+    '<div class="mlsp-ft"><button class="btn btn-s" data-pa="close">إغلاق</button><button class="mlsp-send" data-pa="send">📤 إرسال عبر واتساب</button></div></div>';
+  if(!el._mlspBound){
+    el._mlspBound=1;
+    el.addEventListener('input',function(e){ if(e.target.closest('[data-p]')) payCollect(); });
+    el.addEventListener('change',async function(e){
+      if(e.target.id!=='mlsp-file') return;
+      var f=e.target.files&&e.target.files[0]; if(!f) return;
+      if(!/^image\//.test(f.type)){ notif('خطأ','الملف المختار ليس صورة','error'); return; }
+      try{ PAY_P.img=await payImgFromFile(f); }catch(er){ notif('خطأ','تعذّر قراءة الصورة','error'); return; }
+      var dp=document.getElementById('mlsp-drop'); if(dp){ dp.classList.remove('bad'); dp.innerHTML=payDropHtml(); }
+      payCollect(); e.target.value='';
+    });
+    el.addEventListener('click',function(e){
+      var b=e.target.closest('[data-pa]'); if(b){ var a=b.getAttribute('data-pa');
+        if(a==='close'){ payCollect(); try{ closeModal('mls-paydlg'); }catch(er){ el.classList.remove('open'); } }
+        else if(a==='copy'){ try{ navigator.clipboard.writeText(PAY_MASTER); notif('تم النسخ','تم نسخ رقم الماستر كارد','success'); }catch(er){ notif('تعذّر النسخ','انسخ الرقم يدوياً: '+PAY_MASTER,'warning'); } }
+        else if(a==='send') paySend();
+        return; }
+      if(e.target===el){ payCollect(); try{ closeModal('mls-paydlg'); }catch(er){ el.classList.remove('open'); } }
+    });
+  }
+  try{ openModal('mls-paydlg'); }catch(e){ el.classList.add('open'); }
+}
+/* يفتح تطبيق واتساب مباشرة (بروتوكول whatsapp://) دون صفحة ويب؛ الويب يُستخدم فقط إن لم يكن التطبيق مثبّتاً في المتصفح العادي */
+function payOpenWA(ph, txt){
+  var q='phone='+ph+'&text='+encodeURIComponent(txt), app='whatsapp://send?'+q;
+  try{ if(window.electronAPI && window.electronAPI.openExternal){ window.electronAPI.openExternal(app); return; } }catch(e){}
+  var fr=document.createElement('iframe'); fr.style.cssText='display:none;width:0;height:0;border:0;position:fixed;left:-999px';
+  fr.src=app; document.body.appendChild(fr);
+  var tm=setTimeout(function(){ try{ fr.remove(); }catch(e){} window.open('https://wa.me/'+ph+'?text='+encodeURIComponent(txt),'_blank'); },1500);
+  window.addEventListener('blur',function(){ clearTimeout(tm); try{ fr.remove(); }catch(e){} },{once:true});
+}
+async function paySend(){
+  payCollect();
+  var el=document.getElementById('mls-paydlg'), c=cfg()||{}, nm=String(PAY_P.nm||'').trim(), ph=String(PAY_P.ph||'').trim();
+  if(!nm){ notif('ناقص','أدخل اسم المختبر','warning'); var a=el.querySelector('[data-p="nm"]'); if(a) a.focus(); return; }
+  if(ph.replace(/[^0-9]/g,'').length<10){ notif('ناقص','أدخل رقم هاتف صحيح','warning'); var b=el.querySelector('[data-p="ph"]'); if(b) b.focus(); return; }
+  if(!PAY_P.img){ var dp=document.getElementById('mlsp-drop'); if(dp){ dp.classList.remove('bad'); void dp.offsetWidth; dp.classList.add('bad'); }
+    notif('أرفق الحوالة','لا يمكن الإرسال بدون صورة الحوالة — التحويل بدونها يُعتبر باطلاً','error'); return; }
+  var amt=String(PAY_P.amt||'').trim();
+  var txt='💳 *دفع مستحقات — طلبات المتجر*\n\n'+
+    '🏥 المختبر: '+nm+'\n📞 الهاتف: '+ph+'\n'+(amt?'💰 المبلغ: '+amt+' '+cur()+'\n':'')+
+    (c.code?'🔑 كود المتجر: '+c.code+'\n':'')+'🏦 رقم الماستر المحوَّل إليه: '+PAY_MASTER+'\n📅 التاريخ: '+new Date().toLocaleString('ar-IQ')+'\n\n🧾 صورة الحوالة مرفقة.';
+  // واتساب لا يقبل إرفاق صورة عبر الرابط ⇒ نضع الصورة في الحافظة (للّصق Ctrl+V) وإلا نُنزّلها
+  var copied=false;
+  try{
+    var png=await new Promise(function(res,rej){ var im=new Image(); im.onerror=rej; im.onload=function(){ var cv=document.createElement('canvas'); cv.width=im.width; cv.height=im.height; cv.getContext('2d').drawImage(im,0,0); cv.toBlob(function(bl){ bl?res(bl):rej(); },'image/png'); }; im.src=PAY_P.img; });
+    await navigator.clipboard.write([new ClipboardItem({'image/png':png})]); copied=true;
+  }catch(e){}
+  if(!copied){ try{ var a2=document.createElement('a'); a2.href=PAY_P.img; a2.download='حوالة-'+Date.now()+'.jpg'; document.body.appendChild(a2); a2.click(); a2.remove(); }catch(e){} }
+  payOpenWA(phoneIntl(PAY_WA), txt);
+  payClearDraft(); PAY_P={nm:'',ph:'',amt:'',img:''};
+  try{ closeModal('mls-paydlg'); }catch(e){ el.classList.remove('open'); }
+  notif('تم فتح المحادثة', copied?'صورة الحوالة منسوخة — الصقها داخل المحادثة (Ctrl+V) ثم اضغط إرسال':'نُزِّلت صورة الحوالة — أرفقها داخل المحادثة ثم اضغط إرسال','success');
+}
+function payPanelHtml(pays,paid){
+  return '<div class="mlsp-list"><h4>💵 المدفوعات</h4><div class="mlsp-tot">عدد الدفعات: <b>'+pays.length+'</b> — إجمالي المدفوع: '+money(paid)+'</div>'+
+    (pays.map(function(p){ var d=new Date(p.ts);
+      return '<details class="mlsp-d"><summary><span class="mlsp-a">'+money(p.amt)+'</span><span class="mlsp-dt">'+d.toLocaleDateString('ar-IQ')+'</span></summary>'+
+        '<div class="mlsp-b"><span>المبلغ</span><span>'+money(p.amt)+'</span><span>التاريخ</span><span>'+d.toLocaleDateString('ar-IQ',{year:'numeric',month:'long',day:'numeric'})+'</span><span>الوقت</span><span>'+d.toLocaleTimeString('ar-IQ',{hour:'numeric',minute:'2-digit'})+'</span>'+(p.nt?'<span>ملاحظة</span><span>'+esc(p.nt)+'</span>':'')+'</div></details>'; }).join('')||'<div class="mls-muted">لا توجد مدفوعات مسجّلة بعد.</div>')+'</div>';
 }
 
 /* ── تبويب الإعدادات ── */
@@ -71898,6 +72071,8 @@ function onClick(e){
     case 'duesre': M.dues=null; loadDues(true); render(); break;
     case 'dpre': M.dr={pre:el.getAttribute('data-v')}; render(); break;
     case 'dprint': printDues(); break;
+    case 'paydlg': payOpenDlg(); break;
+    case 'paytog': M.payOpen=!M.payOpen; render(); break;
     case 'filter': M.filter=el.getAttribute('data-v'); M.accOpen=null; render(); break;
     case 'open': setOpen(!(c.info.open!==false)); break;
     case 'publish': publish(false); break;
@@ -79435,6 +79610,7 @@ function fullDiff(col){
     // الحذف: معرّفات كانت موجودة واختفت
     var gone=[];
     for(var id in meta){ if(meta[id][0]!==0 && !seen[id]) gone.push(id); }
+    gone=guardGone(col, gone);
     var alive=list.length+gone.length;
     var mass = !isFields(col) && gone.length>20 && gone.length > alive*0.25;
     if(mass){
@@ -79451,6 +79627,44 @@ function fullDiff(col){
     if(_diffAgain[col]){ _diffAgain[col]=0; scheduleDiff(col); }
   };
   step();
+}
+/* 🛡️ حماية المرضى والطلبات من «حذف مُستنتَج» كاذب.
+   السبب الجذري: المزامنة كانت تستنتج الحذف من غياب السجل عن القائمة المحلية ثم تبثّه لكل الحاسبات.
+   لكن السجل الذي يفقد رقمه المخفي (_sid) أثناء إعادة بناء/استبدال كائنه لا يظهر في القائمة (idOf يرجع null)
+   فيُعدّ «محذوفاً» ويُبثّ حذفه فيختفي طلبه من كل الحاسبات ويبقى المريض بلا زيارات.
+   الحل: ① كل سجل ما زال موجوداً بلا _sid يستعيد رقمه ولا يُحسب محذوفاً.
+         ② المرضى/الطلبات لا يُبثّ حذفهم إلا إن سُجِّل حذف صريح (واجهة الحذف / حذف وارد)؛ الغياب بلا حذف صريح
+            لا يُبثّ أبداً ويُطلب السجل من الحاسبات الأخرى. */
+var _lossResyncT=null;
+function guardGone(col, gone){
+  if(!gone.length || isFields(col) || (col!=='patients' && col!=='requests')) return gone;
+  var c=COL(col); if(!c) return gone;
+  var arr=c.arr()||[], gs={}, i, restored=[];
+  gone.forEach(function(id){ gs[id]=1; });
+  var map=(window.SIDX && SIDX._S && SIDX._S.sidById && SIDX._S.sidById[col]) || {};
+  for(i=0;i<arr.length;i++){
+    var o=arr[i];
+    if(!o || typeof o!=='object' || o._sid || o.id==null || o.id==='') continue;
+    var sid=map[String(o.id)];
+    if(sid && gs[sid]){ o._sid=sid; delete gs[sid]; restored.push(o); }
+  }
+  var out=[], lost=0, meta=S.meta[col]||{};
+  gone.forEach(function(id){
+    if(!gs[id]) return;
+    var explicit=true;
+    try{ if(typeof window._accHasDel==='function') explicit=window._accHasDel(col, id); }catch(e){ explicit=true; }
+    if(explicit){ out.push(id); }
+    else { delete meta[id]; lost++; }
+  });
+  if(restored.length){
+    setTimeout(function(){ try{ saveOne.apply(null, [col, c.arr()].concat(restored)); }catch(e){} }, 60);
+  }
+  if(lost){
+    MS.lastWarn='منع حذف مشبوه في «'+col+'» ('+lost+' سجل غاب بلا حذف صريح) — لم يُبثّ، ويُطلب من الحاسبات الأخرى';
+    try{ console.warn('[MSync] '+MS.lastWarn); }catch(e){}
+    if(!_lossResyncT){ _lossResyncT=setTimeout(function(){ _lossResyncT=null; try{ if(S.on && typeof MS.resync==='function') MS.resync(); }catch(e){} }, 4000); }
+  }
+  return out;
 }
 /* بناء meta لأول مرة (بدون اعتبار ما هو موجود «تغييراً» — الإصدار من ختم السجل) */
 function primeMeta(col){
