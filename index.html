@@ -1369,7 +1369,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:pulse 3s infinite;}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.45}}
 .main{flex:1;margin-right:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column;}
-.hdr{background:linear-gradient(135deg,rgba(4,8,20,0.97) 0%,rgba(0,20,40,0.97) 50%,rgba(4,8,20,0.97) 100%);backdrop-filter:blur(20px);border-bottom:1px solid rgba(0,212,255,0.25);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:9999;gap:10px;overflow:visible;box-shadow:0 2px 20px rgba(0,0,0,0.5),inset 0 1px 0 rgba(0,212,255,0.08);}
+.hdr{background:linear-gradient(135deg,rgba(4,8,20,0.97) 0%,rgba(0,20,40,0.97) 50%,rgba(4,8,20,0.97) 100%);border-bottom:1px solid rgba(0,212,255,0.25);padding:18px 32px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:9999;gap:10px;overflow:visible;box-shadow:0 2px 20px rgba(0,0,0,0.5),inset 0 1px 0 rgba(0,212,255,0.08);}
 .hdr-left{display:flex;flex-direction:column;flex:1;min-width:0;}
 .page-title{font-size:11px;font-weight:800;}
 .page-bc{font-size:11px;color:var(--text2);margin-top:1px;}
@@ -2907,7 +2907,7 @@ body.light-mode .wnb-icon {
   user-select:none;
 }
 body.light-mode .wnb-text { color:rgba(0,50,120,0.2); }
-.wnb-text .wnb-char { display:inline; transition:color .05s,text-shadow .05s; }
+.wnb-text .wnb-char { display:inline; } /* ⚡ بلا transition: كان يضاعف إعادة الرسم 3× كل 85ms — الفرق غير مرئي */
 .wnb-text .wnb-char.neon-active {
   color:#ffffff;
   text-shadow: 0 0 6px #00d4ff, 0 0 14px #00d4ff, 0 0 28px #00d4ff, 0 0 50px rgba(0,212,255,.7);
@@ -20920,6 +20920,8 @@ function buildPrintHTML(req, opts){
   opts = opts || {};
   const blankBody = opts.blankBody === true;
   const cbcBlank  = opts.cbcBlank  === true;  // طباعة CBC الفارغة → رأس بارتفاع 120
+  // 📏 الهامش الجانبي لتقرير التحاليل العامة (كان 3mm → 5mm) — طباعة CBC الفارغة تبقى 3mm
+  const _sideMm   = cbcBlank ? 3 : 5;
   const pt       = patients.find(p=>p.id===req.patientId)||{};
   // Only exclude special exams (UA/Stool) from regular report — they print separately
   // التحاليل المحسوبة (isCalc) تطبع أيضاً في صفحة منفردة
@@ -21023,7 +21025,7 @@ function buildPrintHTML(req, opts){
     body{
       font-family:${reportFontFamily};color:#000;font-weight:${reportFontWeight};
       -webkit-print-color-adjust:exact;print-color-adjust:exact;
-      padding:1mm 3mm 0 3mm;
+      padding:1mm ${_sideMm}mm 0 ${_sideMm}mm;
     }
     #print-footer{
       position:fixed;
@@ -21050,7 +21052,7 @@ function buildPrintHTML(req, opts){
         margin:0 0 ${_ftrMm}mm 0 !important;
         size:A4 portrait;
       }
-      body{padding:1mm 3mm 0 3mm;}
+      body{padding:1mm ${_sideMm}mm 0 ${_sideMm}mm;}
       #print-footer{
         position:fixed;
         bottom:${_ftrLiftPx}px;
@@ -21959,7 +21961,7 @@ function buildPrintHTML(req, opts){
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <style>${css}</style></head>
     <body>
-    <div id="print-content" style="background:#ffffff;font-family:'Inter',Arial,sans-serif;direction:ltr;width:100%;padding:1mm 3mm 0 3mm">
+    <div id="print-content" style="background:#ffffff;font-family:'Inter',Arial,sans-serif;direction:ltr;width:100%;padding:1mm ${_sideMm}mm 0 ${_sideMm}mm">
       ${_buildWatermarkHTML(false)}
       ${hdr}${ptBox}<!--BLANK_BODY_PLACEHOLDER-->
       <div id="print-spacer" style="height:${totalFooterH+40+_ftrLiftPx}px"></div>
@@ -22102,13 +22104,13 @@ function buildPrintHTML(req, opts){
       var USABLE_H = PAGE_CONTENT_H_PX - TOP_MARGIN_PX - SAFE_GAP;
       if(USABLE_H < 200) USABLE_H = 200; // حد أدنى للأمان
 
-      // مقاس probe ثابت بـ px يعادل 210mm A4 = ~793.7px (نطرح هامش 3mm من كل جانب = 22.7px)
-      var PROBE_W_PX = Math.round(210 * DPI_RATIO) - Math.round(6 * DPI_RATIO); // عرض المحتوى الفعلي
+      // مقاس probe ثابت بـ px يعادل 210mm A4 = ~793.7px (نطرح الهامش الجانبي من كل جانب)
+      var PROBE_W_PX = Math.round(210 * DPI_RATIO) - Math.round(${_sideMm*2} * DPI_RATIO); // عرض المحتوى الفعلي
 
       function buildPage(chunksForPage, isFirst, isLast){
         var div = document.createElement('div');
         div.className = 'report-page';
-        div.style.padding = '1mm 3mm 0 3mm';
+        div.style.padding = '1mm ${_sideMm}mm 0 ${_sideMm}mm';
         var html = WM_HTML + HDR_HTML + COL_HDR_HTML;
         for(var i=0;i<chunksForPage.length;i++){
           // chunksForPage[i] قد يكون object {cat,html,catDividerHtml} أو string (توافق رجعي)
@@ -22150,7 +22152,7 @@ function buildPrintHTML(req, opts){
           // لا توجد تحاليل — صفحة واحدة بالـ header فقط
           var p = document.createElement('div');
           p.className = 'report-page';
-          p.style.padding = '1mm 3mm 0 3mm';
+          p.style.padding = '1mm ${_sideMm}mm 0 ${_sideMm}mm';
           p.innerHTML = WM_HTML + HDR_HTML + COL_HDR_HTML +
             '<div class="page-footer-spacer" style="height:8px"></div>';
           container.appendChild(p);
@@ -22335,7 +22337,7 @@ function buildPrintHTML(req, opts){
           if(container){
             var fp = document.createElement('div');
             fp.className = 'report-page';
-            fp.style.padding = '1mm 3mm 0 3mm';
+            fp.style.padding = '1mm ${_sideMm}mm 0 ${_sideMm}mm';
             var fhtml = WM_HTML + HDR_HTML + COL_HDR_HTML;
             for(var ii=0;ii<CAT_CHUNKS.length;ii++){
               var fb_ch = CAT_CHUNKS[ii];
@@ -57108,32 +57110,34 @@ const _wnbTokens = {};
 function _wnbAnimate(textElId) {
   const el = document.getElementById(textElId);
   if (!el) return;
-
-  // إلغاء أي سلسلة setTimeout سابقة لنفس العنصر
   if (_wnbTokens[textElId]) _wnbTokens[textElId].cancelled = true;
   const token = { cancelled: false };
   _wnbTokens[textElId] = token;
-
   const text = el.textContent || el.innerText;
   el.textContent = '';
   const chars = [];
+  const frag = document.createDocumentFragment();
   for (const ch of text) {
     const s = document.createElement('span');
     s.className = 'wnb-char';
     s.textContent = ch;
-    el.appendChild(s);
+    frag.appendChild(s);
     chars.push(s);
   }
-
-  let idx = 0;
-  function clearAll() { chars.forEach(c => c.classList.remove('neon-active','neon-trail')); }
+  el.appendChild(frag);
+  // ⚡ أداء: تُزال الإضاءة من الأحرف المضيئة فقط (لا من كل الأحرف)، والحركة تتوقف
+  //    تلقائياً عندما تكون النافذة مصغّرة أو البانر مخفياً، وتعود وحدها عند الظهور.
+  let idx = 0, lit = [];
+  function clearAll() { for (let i = 0; i < lit.length; i++) lit[i].classList.remove('neon-active','neon-trail'); lit = []; }
+  function idle() { return document.hidden || !el.isConnected || el.offsetParent === null; }
   function step() {
     if (token.cancelled) return;
+    if (idle()) { clearAll(); idx = 0; setTimeout(step, 1000); return; }
     clearAll();
     if (idx < chars.length) {
-      chars[idx].classList.add('neon-active');
+      chars[idx].classList.add('neon-active'); lit.push(chars[idx]);
       for (let t = 1; t <= NEON_TRAIL; t++) {
-        if (idx - t >= 0) chars[idx - t].classList.add('neon-trail');
+        if (idx - t >= 0) { chars[idx - t].classList.add('neon-trail'); lit.push(chars[idx - t]); }
       }
       idx++;
       setTimeout(step, NEON_SPEED);
@@ -71457,8 +71461,22 @@ async function loadDues(force){
   try{
     var a=await Promise.all([M.db.ref('led/'+M.sid).once('value'), M.db.ref('pay/'+M.sid).once('value')]);
     M.dues={at:Date.now(), led:a[0].val()||{}, pay:a[1].val()||{}};
+    payWatch();
   }catch(e){ M.dues={at:Date.now(), err:true, led:{}, pay:{}}; }
   if(isShown() && M.tab==='dues') render();
+}
+/* 💵 أي دفعة تسجّلها الإدارة (أو تحذفها) تظهر فوراً وتُخصم من المستحق دون الحاجة لتحديث الصفحة */
+function payWatch(){
+  if(!M.db || !M.conn || !M.sid) return;
+  if(M.payRef && M.refs.indexOf(M.payRef)>=0) return;
+  var r=M.db.ref('pay/'+M.sid); M.payRef=r; M.refs.push(r); M.payJ=JSON.stringify((M.dues&&M.dues.pay)||{});
+  r.on('value',function(sn){
+    var v=sn.val()||{}, j=JSON.stringify(v); if(j===M.payJ || !M.dues || M.dues.err) return;
+    var more=Object.keys(v).length>Object.keys(M.dues.pay||{}).length;
+    M.payJ=j; M.dues.pay=v;
+    if(more) notif('💵 تم تسجيل دفعة','خُصمت من المبلغ المستحق','success');
+    if(isShown() && M.tab==='dues') render();
+  },function(){});
 }
 function dayStart(t){ var d=new Date(t); return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(); }
 function ymdL(t){ var d=new Date(t); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
