@@ -31922,6 +31922,26 @@ function isSubscriptionExpired(user){
   return getTrustedNow() > user.expiry;
 }
 
+// ⏰ مؤقّت انتهاء الاشتراك أثناء الجلسة.
+// setTimeout لا يقبل أكثر من 2^31 ملّي ثانية (≈24.8 يوم) — المدة الأطول (تمديد شهر/سنة)
+// كانت تُنفَّذ فوراً فتظهر «انتهت صلاحية الحساب» بعد الدخول مباشرة.
+// هنا ننتظر على دفعات (6 ساعات كحد أقصى) ونعيد قراءة سجل المستخدم كل مرة،
+// فيُحتسب أي تمديد من لوحة الأدمن أثناء عمل البرنامج.
+let _expiryTimerId = null;
+function _scheduleExpiryCheck(uname, onExpire){
+  if(_expiryTimerId){ clearTimeout(_expiryTimerId); _expiryTimerId = null; }
+  (function tick(){
+    _expiryTimerId = null;
+    const s = getSession();
+    if(!s || s.username !== uname) return;              // خرج المستخدم أو تبدّل
+    const u = getAdminUsers().find(x => x.username === uname);
+    if(!u || u.type !== 'temp' || !u.expiry) return;    // دائم الآن
+    if(isSubscriptionExpired(u)){ onExpire(); return; }
+    const left = u.expiry - getTrustedNow();
+    _expiryTimerId = setTimeout(tick, Math.min(Math.max(left + 1000, 1000), 6*60*60*1000));
+  })();
+}
+
 // ════════════════════════════════════════════════════════════════════
 //  ⏰ التنبيه قبل انتهاء الاشتراك (تجديد سلس)
 // ════════════════════════════════════════════════════════════════════
@@ -32251,7 +32271,7 @@ function checkAuth(){
     // تنبيه قبل الانتهاء + مزامنة وقت الخادم
     if(user.type==='temp'){
       setTimeout(()=>{ _ttSyncServerTime(); maybeShowExpiryWarning(user); }, 3000);
-      setTimeout(()=>{ if(isSubscriptionExpired(user)){ _autoDisableExpiredUser(session.username); clearSession(); document.getElementById('expired-banner').classList.add('show'); } }, Math.max(0, user.expiry - getTrustedNow()));
+      _scheduleExpiryCheck(session.username, ()=>{ _autoDisableExpiredUser(session.username); clearSession(); document.getElementById('expired-banner').classList.add('show'); });
     }
     // Firebase في الخلفية
     setTimeout(()=>{
@@ -32301,11 +32321,11 @@ function _completeAuthCheck(session){
       document.getElementById('expired-banner').classList.add('show');
       return;
     }
-    setTimeout(()=>{
+    _scheduleExpiryCheck(session.username, ()=>{
       _autoDisableExpiredUser(session.username);
       clearSession();
       document.getElementById('expired-banner').classList.add('show');
-    }, user.expiry - getTrustedNow());
+    });
     // تنبيه قبل الانتهاء + مزامنة وقت الخادم
     setTimeout(()=>{ _ttSyncServerTime(); maybeShowExpiryWarning(user); }, 3000);
   }
@@ -32574,7 +32594,7 @@ function _finalizeLogin(uname, user){
   const loggedEl = document.getElementById('sb-logged-user');
   if(loggedEl) loggedEl.textContent = '👤 ' + uname;
   if(user && user.type==='temp'){
-    setTimeout(()=>{ clearSession(); document.getElementById('expired-banner').classList.add('show'); }, user.expiry-getTrustedNow());
+    _scheduleExpiryCheck(uname, ()=>{ clearSession(); document.getElementById('expired-banner').classList.add('show'); });
     // تنبيه قبل الانتهاء + مزامنة وقت الخادم
     setTimeout(()=>{ _ttSyncServerTime(); maybeShowExpiryWarning(user); }, 3000);
   }
