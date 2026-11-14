@@ -70167,6 +70167,18 @@ body.light-mode #mls-root .mls-bub.me .tk.rd{color:#9BE7FF}
 /* ⭐ التقييمات */
 #mls-root .mls-stars{color:#F5B301;letter-spacing:1px;font-size:15px;white-space:nowrap}
 #mls-root .mls-stars i{font-style:normal;color:var(--border)}
+#mls-root .mls-cav img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+#mls-root .mls-cav.cap{background:linear-gradient(135deg,#F28C1B,#C2570C);font-size:17px}
+#mls-root .mls-ctag{font-size:9.5px;font-weight:800;color:#C2570C;background:color-mix(in srgb,#F28C1B 16%,transparent);border-radius:99px;padding:1px 7px;margin-inline-start:5px;vertical-align:1px}
+#mls-root .mls-capc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid color-mix(in srgb,#F28C1B 38%,var(--border));background:color-mix(in srgb,#F28C1B 7%,var(--bg-card))}
+#mls-root .mls-capav{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;background:linear-gradient(135deg,#F28C1B,#C2570C);overflow:hidden;box-shadow:0 0 0 3px color-mix(in srgb,#F28C1B 25%,transparent)}
+#mls-root .mls-capav img{width:100%;height:100%;object-fit:cover;display:block}
+#mls-root .mls-capm{flex:1;min-width:150px;display:flex;flex-direction:column;gap:2px;line-height:1.45}
+#mls-root .mls-capm small{font-size:11px;color:var(--text2)}
+#mls-root .mls-capm b{font-size:14.5px}
+#mls-root .mls-capr{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px}
+#mls-root .mls-capr .mls-stars{font-size:14px}
+#mls-root .mls-capb{display:flex;gap:6px;flex-wrap:wrap}
 #mls-root .mls-rd{display:flex;align-items:center;gap:8px;font-size:11.5px;margin:3px 0}
 #mls-root .mls-rd span:first-child{width:30px;color:var(--text2)}
 #mls-root .mls-rd .bar{flex:1;height:7px;border-radius:99px;background:var(--bg-glass);overflow:hidden;border:1px solid var(--border)}
@@ -70251,7 +70263,7 @@ var AR_SEC = [
 ];
 
 /* ───────── حالة الوحدة ───────── */
-var M = { app:null, db:null, uid:null, sid:null, conn:false, owner:false, err:'', orders:{}, tab:'orders', filter:'new', ctl:{}, dues:null, bimg:null,
+var M = { app:null, db:null, uid:null, sid:null, conn:false, owner:false, err:'', orders:{}, lc:{}, tab:'orders', filter:'new', ctl:{}, dues:null, bimg:null,
           q:'', sec:null, catQ:'', busy:{}, timer:null, lastNew:0, refs:[], seen:{}, pkSel:[],
           cx:{}, chatOid:null, cq:'', rf:'all', rtNew:0, skew:0, ordLoaded:false };
 
@@ -70462,7 +70474,7 @@ async function connect(){
     if(!auth.currentUser) await auth.signInAnonymously();
     M.uid=auth.currentUser.uid; M.db=M.app.database();
     detach();
-    M.sid=c.sid; M.orders={}; M.cx={}; M.ordLoaded=false;
+    M.sid=c.sid; M.orders={}; M.cx={}; M.lc={}; M.ordLoaded=false;
     await M.db.ref('stores/'+c.sid+'/owner/'+M.uid).set(c.secret);   // تسجيل هذه الحاسبة كمالك (يتحقق منه الخادم بالمفتاح السري)
     M.owner=true; M.err='';
     attach();
@@ -70482,7 +70494,7 @@ function attach(){
   oref.on('child_added', function(s){ onOrder(s.key, s.val(), true); });
   oref.on('child_changed', function(s){ onOrder(s.key, s.val(), false); });
   oref.on('child_removed', function(s){ delete M.orders[s.key]; refresh();
-    if(RX_OID.test(s.key)){ M.db.ref(base+'/cx/'+s.key).remove().catch(function(){}); }   // 💬 حذف الطلب ⇒ تُحذف محادثته من الخادم (تبقى محفوظة محلياً)
+    if(RX_OID.test(s.key)){ M.db.ref(base+'/cx/'+s.key).remove().catch(function(){}); M.db.ref('lc/'+M.sid+'/'+s.key).remove().catch(function(){}); }   // 💬 حذف الطلب ⇒ تُحذف محادثتاه من الخادم (تبقى محفوظة محلياً)
   });
   oref.once('value', function(){ M.ordLoaded=true; });
   var aref=M.db.ref(base+'/ack');
@@ -70502,6 +70514,12 @@ function attach(){
   var kref=M.db.ref('.info/serverTimeOffset');
   kref.on('value', function(s){ M.skew=+s.val()||0; });
   M.refs.push(xref, rref, kref);
+  // 🛵 المراسلة مع موظف السحب (lc/<sid>/<oid>) — خاصة بالمختبر والساحب، فارغة عادةً
+  var lref=M.db.ref('lc/'+M.sid), noop=function(e){ console.warn('[mlstore] lc', e&&e.code); };
+  lref.on('child_added', function(s){ onLc(s.key, s.val()); }, noop);
+  lref.on('child_changed', function(s){ onLc(s.key, s.val()); }, noop);
+  lref.on('child_removed', function(s){ delete M.lc[s.key]; }, noop);
+  M.refs.push(lref);
 }
 function onOrder(oid,o,added){
   if(!RX_OID.test(oid) || !o || typeof o!=='object') return;
@@ -70899,6 +70917,58 @@ function sNow(){ return Date.now()+(M.skew||0); }
 function chatUnread(){ var C=getChats(); return Object.keys(C).reduce(function(s,k){ return s+(+C[k].un||0); },0); }
 function chatViewing(oid){ return isShown() && M.tab==='chat' && M.chatOid===oid && !document.hidden; }
 function ordInfo(oid){ return M.orders[oid] || getLog()[oid] || {}; }
+/* محادثة المراجع مفتاحها <oid>، ومحادثة موظف السحب مفتاحها c_<oid> (نفس المخزن المحلي) */
+var CAPK='c_', CAP_LIVE=['onway','collected','inlab'];
+function tSplit(tid){ tid=String(tid||''); return tid.indexOf(CAPK)===0 ? {cap:true, oid:tid.slice(CAPK.length)} : {cap:false, oid:tid}; }
+function capLive(o){ return !!(o && o.cap && CAP_LIVE.indexOf(o.st)>=0); }
+function capMeta(c,o){ if(o.cn) c.nm=String(o.cn).slice(0,80); if(o.cph) c.ph=String(o.cph).slice(0,20); if(o.cap) c.cap=String(o.cap).slice(0,128); }
+function onLc(oid, th){
+  if(!RX_OID.test(oid) || !th || typeof th!=='object') return;
+  M.lc[oid]=th;
+  var tid=CAPK+oid, C=getChats(), c=C[tid]||(C[tid]={ms:[],un:0,lt:0}), o=ordInfo(oid), viewing=chatViewing(tid);
+  if(!Array.isArray(c.ms)) c.ms=[];
+  capMeta(c,o);
+  var m=(th.m&&typeof th.m==='object')?th.m:{}, fresh=0, ch=false;
+  Object.keys(m).forEach(function(id){
+    var v=m[id]; if(!RX_MID.test(id) || !v || typeof v.t!=='string') return;
+    var x=c.ms.find(function(y){return y.id===id;});
+    if(v.f==='c'){ if(!x){ c.ms.push({id:id, f:'c', t:v.t.slice(0,1000), ts:+v.ts||Date.now()}); fresh++; } schedRm('lc/'+M.sid+'/'+oid+'/m/'+id, true); }
+    else if(v.f==='l'){
+      if(!x){ c.ms.push({id:id, f:'l', t:v.t.slice(0,1000), ts:+v.ts||Date.now(), st:'sent'}); ch=true; }
+      else{ if(x.st==='sending'||x.st==='fail'){ x.st='sent'; ch=true; } if(typeof v.ts==='number' && x.ts!==v.ts){ x.ts=v.ts; ch=true; } }
+    }
+  });
+  c.ms.forEach(function(x){ if(x.f==='l' && x.st==='sent' && !m[x.id]){ x.st='dlv'; ch=true; } });   // اختفت ⇒ وصلت لهاتف موظف السحب
+  var rc=+th.rc||0; if(rc) c.ms.forEach(function(x){ if(x.f==='l' && (x.st==='sent'||x.st==='dlv') && rc>=x.ts){ x.st='read'; ch=true; } });
+  if(fresh){ c.ms.sort(function(a,b){return a.ts-b.ts;}); if(c.ms.length>300) c.ms=c.ms.slice(-300); if(!viewing) c.un=(+c.un||0)+fresh; c.lt=Date.now(); }
+  if(fresh||ch) putChats(C);
+  if(fresh){ if(viewing) markRead(tid); else msgAlert(tid,c); }
+  chatRefresh(tid);
+  if(fresh && isShown() && M.tab==='orders') refresh();   // شارة «مراسلة» على بطاقة الطلب
+}
+/* ⭐ ملف موظف السحب العام (صورته، اسمه، تقييمه، رحلاته) من capr/<uid> — يُحفظ على الحاسبة 3 ساعات */
+var CAPP_KEY='mlsCapProf';
+function capProfAll(){ try{ var v=JSON.parse(localStorage.getItem(CAPP_KEY)||'{}'); return (v&&typeof v==='object')?v:{}; }catch(e){ return {}; } }
+function capProf(uid){
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(uid||'')) return null;
+  var P=capProfAll()[uid]; if(!P || Date.now()-(+P.at||0)>3*3600e3) loadCapProf(uid);
+  return P||null;
+}
+function loadCapProf(uid){
+  M._cpl=M._cpl||{}; if(!M.conn || !M.db || Date.now()-(M._cpl[uid]||0)<60e3) return; M._cpl[uid]=Date.now();
+  Promise.all(['i','s','n','t','nm'].map(function(k){ return M.db.ref('capr/'+uid+'/'+k).once('value').then(function(x){ return x.val(); }); })).then(function(r){
+    var n=Math.max(0,Math.floor(+r[2]||0)), sm=+r[1]||0, A=capProfAll();
+    A[uid]={ i:(typeof r[0]==='string' && r[0].indexOf('data:image/jpeg;base64,')===0 && r[0].length<=40000 && /^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/.test(r[0]))?r[0]:'',
+      s:(n>0 && sm>=n && sm<=5*n)?sm:0, n:(n>0 && sm>=n && sm<=5*n)?n:0, t:Math.max(0,Math.floor(+r[3]||0)), nm:typeof r[4]==='string'?r[4].slice(0,60):'', at:Date.now() };
+    var ks=Object.keys(A); if(ks.length>80){ ks.sort(function(a,b){return (A[a].at||0)-(A[b].at||0);}); ks.slice(0,ks.length-80).forEach(function(k){ delete A[k]; }); }
+    try{ localStorage.setItem(CAPP_KEY, JSON.stringify(A)); }catch(e){}
+    if(!isShown()) return;
+    if(M.tab==='chat'){ if(M.chatOid) chatPaint(M.chatOid,false); else { var l=document.getElementById('mls-clist'); if(l) l.innerHTML=chatListHtml(); } }
+    else if(M.tab==='orders') refresh();
+  }).catch(function(){});
+}
+function capAvHtml(P, nm, cls){ return '<span class="'+(cls||'mls-cav cap')+'">'+(P&&P.i?'<img src="'+esc(P.i)+'" alt="">':esc(String(nm||'🛵').trim().charAt(0)||'🛵'))+'</span>'; }
+function capStarsHtml(P){ if(!P || !P.n) return '<span class="mls-muted">لا تقييمات بعد</span>'; var v=P.s/P.n; return starsHtml(v)+' <b>'+v.toFixed(1)+'</b> <span class="mls-muted">('+P.n+' تقييم)</span>'; }
 
 function onCx(oid, th){
   if(!RX_OID.test(oid) || !th || typeof th!=='object') return;
@@ -70923,9 +70993,10 @@ function onCx(oid, th){
   if(fresh){ if(viewing) markRead(oid); else msgAlert(oid,c); }
   chatRefresh(oid);
 }
-function schedRm(path){
-  M._rm=M._rm||{}; if(M._rm[path]) return;
-  M._rm[path]=setTimeout(function(){ delete M._rm[path]; if(M.conn) M.db.ref('stores/'+M.sid+'/'+path).remove().catch(function(){}); }, RM_DELAY);
+function schedRm(path, abs){
+  var full=abs?path:'stores/'+M.sid+'/'+path;
+  M._rm=M._rm||{}; if(M._rm[full]) return;
+  M._rm[full]=setTimeout(function(){ delete M._rm[full]; if(M.conn) M.db.ref(full).remove().catch(function(){}); }, RM_DELAY);
 }
 function ping(){
   try{ var C=new (window.AudioContext||window.webkitAudioContext)(), t=C.currentTime, o=C.createOscillator(), g=C.createGain();
@@ -70933,37 +71004,42 @@ function ping(){
     g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.18,t+.02); g.gain.exponentialRampToValueAtTime(0.0001,t+.35);
     o.connect(g); g.connect(C.destination); o.start(t); o.stop(t+.4); setTimeout(function(){ try{C.close();}catch(e){} },800); }catch(e){}
 }
-function msgAlert(oid,c){
-  var cf=cfg(), last=c.ms.filter(function(x){return x.f==='p';}).pop();
+function msgAlert(tid,c){
+  var cf=cfg(), last=c.ms.filter(function(x){return x.f!=='l';}).pop(), cap=tSplit(tid).cap;
+  var ttl=cap?'🛵 رسالة من موظف السحب '+(c.nm||''):'💬 رسالة من '+(c.nm||'مراجع');
   if(!cf || cf.sound!==false) ping();
-  notif('💬 رسالة من '+(c.nm||'مراجع'), last?last.t.slice(0,90):'', 'info');
-  try{ if((document.hidden || !document.hasFocus()) && 'Notification' in window && Notification.permission!=='denied'){ var _cn=new Notification('💬 رسالة من '+(c.nm||'مراجع'), {body:last?last.t.slice(0,120):''}); _cn.onclick=function(){ mlsOpenFromNotif('chat'); try{_cn.close();}catch(e){} }; } }catch(e){}
+  notif(ttl, last?last.t.slice(0,90):'', 'info');
+  try{ if((document.hidden || !document.hasFocus()) && 'Notification' in window && Notification.permission!=='denied'){ var _cn=new Notification(ttl, {body:last?last.t.slice(0,120):''}); _cn.onclick=function(){ M.chatOid=tid; mlsOpenFromNotif('chat'); try{_cn.close();}catch(e){} }; } }catch(e){}
   updBadge();
 }
-function markRead(oid){
-  var C=getChats(), c=C[oid]; if(c && c.un){ c.un=0; putChats(C); updBadge(); }
-  if(!M.conn || !M.cx[oid]) return;
-  M._rl=M._rl||{}; if(Date.now()-(M._rl[oid]||0)<3000) return; M._rl[oid]=Date.now();
-  M.db.ref('stores/'+M.sid+'/cx/'+oid+'/rl').set(TS()).catch(function(){});
+function markRead(tid){
+  var C=getChats(), c=C[tid]; if(c && c.un){ c.un=0; putChats(C); updBadge(); }
+  var p=tSplit(tid), oid=p.oid;
+  if(!M.conn || !(p.cap?M.lc[oid]:M.cx[oid])) return;
+  M._rl=M._rl||{}; if(Date.now()-(M._rl[tid]||0)<3000) return; M._rl[tid]=Date.now();
+  M.db.ref((p.cap?'lc/'+M.sid+'/':'stores/'+M.sid+'/cx/')+oid+'/rl').set(TS()).catch(function(){});
 }
-function chatSend(oid, text){
+function chatSend(tid, text){
   if(!sp('store_chat')) return spDeny('مراسلة مراجعي المتجر');
+  var p=tSplit(tid), oid=p.oid;
   text=String(text||'').trim().slice(0,1000); if(!text || !RX_OID.test(oid)) return;
   if(!M.conn) return notif('غير متصل','تحقّق من الإنترنت','error');
-  var ref=M.db.ref('stores/'+M.sid+'/cx/'+oid+'/m').push(), id=ref.key;
-  var C=getChats(), c=C[oid]||(C[oid]={ms:[],un:0,lt:0}), o=ordInfo(oid);
-  if(o.nm) c.nm=o.nm; if(o.ph) c.ph=o.ph;
-  c.ms.push({id:id, f:'l', t:text, ts:sNow(), st:'sending'}); c.lt=Date.now(); putChats(C); chatPaint(oid,true);
+  var o=ordInfo(oid);
+  if(p.cap && !capLive(M.orders[oid])) return notif('انتهت الرحلة','لا يمكن مراسلة موظف السحب بعد انتهاء رحلته','info');
+  var ref=M.db.ref((p.cap?'lc/'+M.sid+'/':'stores/'+M.sid+'/cx/')+oid+'/m').push(), id=ref.key;
+  var C=getChats(), c=C[tid]||(C[tid]={ms:[],un:0,lt:0});
+  if(p.cap) capMeta(c,o); else { if(o.nm) c.nm=o.nm; if(o.ph) c.ph=o.ph; }
+  c.ms.push({id:id, f:'l', t:text, ts:sNow(), st:'sending'}); c.lt=Date.now(); putChats(C); chatPaint(tid,true);
   ref.set({f:'l', t:text, ts:TS()}).then(function(){
-    var C2=getChats(), x=C2[oid] && C2[oid].ms.find(function(y){return y.id===id;}); if(x && x.st==='sending'){ x.st='sent'; putChats(C2); chatPaint(oid,false); }
-    pushApi('msg',{c:'cx', sid:M.sid, oid:oid, mid:id});   // 🔔 تصل للمراجع كإشعار يحمل الرسالة (تُحذف من الخادم فور استلامها)
+    var C2=getChats(), x=C2[tid] && C2[tid].ms.find(function(y){return y.id===id;}); if(x && x.st==='sending'){ x.st='sent'; putChats(C2); chatPaint(tid,false); }
+    pushApi('msg',{c:p.cap?'lc':'cx', sid:M.sid, oid:oid, mid:id});   // 🔔 تصل للمراجع/لموظف السحب كإشعار يحمل الرسالة (تُحذف من الخادم فور استلامها)
   }).catch(function(e){
-    var C2=getChats(), x=C2[oid] && C2[oid].ms.find(function(y){return y.id===id;}); if(x){ x.st='fail'; putChats(C2); chatPaint(oid,false); }
+    var C2=getChats(), x=C2[tid] && C2[tid].ms.find(function(y){return y.id===id;}); if(x){ x.st='fail'; putChats(C2); chatPaint(tid,false); }
     notif('تعذّر الإرسال', (e&&e.code==='PERMISSION_DENIED')?'تحقّق من تحديث قواعد Firebase للمتجر':'تحقّق من الاتصال', 'error');
   });
 }
 function chatTyping(oid){
-  if(!M.conn || !RX_OID.test(oid)) return; M._tl=M._tl||0; if(Date.now()-M._tl<3500) return; M._tl=Date.now();
+  if(!M.conn || !RX_OID.test(oid)) return;   // محادثة موظف السحب (c_<oid>) بلا «يكتب الآن» M._tl=M._tl||0; if(Date.now()-M._tl<3500) return; M._tl=Date.now();
   M.db.ref('stores/'+M.sid+'/cx/'+oid+'/tl').set(TS()).catch(function(){});
 }
 function onRate(oid, v){
@@ -70988,15 +71064,22 @@ function chatCleanup(){
     if(M.ordLoaded && !M.orders[oid]){ M.db.ref(base+'/cx/'+oid).remove().catch(function(){}); return; }
     Object.keys(m).forEach(function(id){ var v=m[id]; if(v && typeof v.ts==='number' && now-v.ts>CHAT_TTL) M.db.ref(base+'/cx/'+oid+'/m/'+id).remove().catch(function(){}); });
   });
+  // 🛵 محادثات موظفي السحب: تُحذف من الخادم بحذف الطلب أو انتهائه، والرسائل غير المستلمة بعد 6 ساعات
+  Object.keys(M.lc||{}).forEach(function(oid){
+    var th=M.lc[oid]||{}, m=th.m||{}, o=M.orders[oid], lb='lc/'+M.sid+'/'+oid;
+    if(M.ordLoaded && (!o || ['done','rejected','cancelled'].indexOf(o.st)>=0)){ M.db.ref(lb).remove().catch(function(){}); return; }
+    Object.keys(m).forEach(function(id){ var v=m[id]; if(v && typeof v.ts==='number' && now-v.ts>6*3600e3) M.db.ref(lb+'/m/'+id).remove().catch(function(){}); });
+  });
 }
 
 /* ── الواجهة: المراسلات ── */
-function tickHtml(st){
+function tickHtml(st, who){
+  who=who||'المراجع';
   if(st==='sending') return '<span class="tk" title="جاري الإرسال">🕓</span>';
   if(st==='fail') return '<span class="tk bad" title="فشل الإرسال">⚠️</span>';
-  if(st==='read') return '<span class="tk rd" title="قرأها المراجع">✓✓</span>';
-  if(st==='dlv') return '<span class="tk" title="وصلت لهاتف المراجع">✓✓</span>';
-  return '<span class="tk" title="أُرسلت — بانتظار أن يفتح المراجع التطبيق">✓</span>';
+  if(st==='read') return '<span class="tk rd" title="قرأها '+who+'">✓✓</span>';
+  if(st==='dlv') return '<span class="tk" title="وصلت لهاتف '+who+'">✓✓</span>';
+  return '<span class="tk" title="أُرسلت — بانتظار أن يفتح '+who+' التطبيق">✓</span>';
 }
 function hmL(ts){ try{ return new Date(ts).toLocaleTimeString('ar-IQ',{hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
 function dayL(ts){ var d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.getDate()-1);
@@ -71004,13 +71087,13 @@ function dayL(ts){ var d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.g
   try{ return d.toLocaleDateString('ar-IQ',{day:'numeric',month:'long'}); }catch(e){ return d.toDateString(); } }
 function chatThreads(){
   var C=getChats(), ids={}, out=[];
-  Object.keys(C).forEach(function(k){ if(RX_OID.test(k) && (C[k].ms||[]).length) ids[k]=1; });
-  Object.keys(M.orders).forEach(function(k){ var st=M.orders[k].st; if(['rejected','cancelled'].indexOf(st)<0) ids[k]=1; });
+  Object.keys(C).forEach(function(k){ if(RX_OID.test(tSplit(k).oid) && (C[k].ms||[]).length) ids[k]=1; });
+  Object.keys(M.orders).forEach(function(k){ var o=M.orders[k]; if(['rejected','cancelled'].indexOf(o.st)<0) ids[k]=1; if(capLive(o)) ids[CAPK+k]=1; });
   if(M.chatOid) ids[M.chatOid]=1;
-  Object.keys(ids).forEach(function(k){ var c=C[k]||{ms:[],un:0}, o=ordInfo(k), last=(c.ms||[])[(c.ms||[]).length-1];
-    out.push({oid:k, c:c, o:o, nm:c.nm||o.nm||'مراجع', last:last, t:(last&&last.ts)||c.lt||o.upd||o.ts||0}); });
+  Object.keys(ids).forEach(function(k){ var p=tSplit(k), c=C[k]||{ms:[],un:0}, o=ordInfo(p.oid), last=(c.ms||[])[(c.ms||[]).length-1];
+    out.push({tid:k, oid:p.oid, cap:p.cap, c:c, o:o, nm:p.cap?(c.nm||o.cn||'موظف السحب'):(c.nm||o.nm||'مراجع'), last:last, t:(last&&last.ts)||c.lt||o.upd||o.ts||0}); });
   var q=(M.cq||'').trim().toLowerCase();
-  if(q) out=out.filter(function(r){ return (r.nm+' '+(r.o.ph||r.c.ph||'')+' '+shortNo(r.oid)).toLowerCase().indexOf(q)>=0; });
+  if(q) out=out.filter(function(r){ return (r.nm+' '+(r.cap?(r.o.cph||r.c.ph||'')+' '+(r.o.nm||'')+' موظف السحب':(r.o.ph||r.c.ph||''))+' '+shortNo(r.oid)).toLowerCase().indexOf(q)>=0; });
   out.sort(function(a,b){ return ((b.c.un?1:0)-(a.c.un?1:0)) || (b.t-a.t); });
   return out;
 }
@@ -71019,24 +71102,33 @@ function chatListHtml(){
   if(!rows.length) return '<div class="mls-empty" style="padding:30px 10px"><b>لا توجد محادثات</b>تظهر هنا رسائل المراجعين فور وصولها، ويمكنك بدء محادثة من بطاقة أي طلب.</div>';
   return rows.slice(0,150).map(function(r){
     var o=r.o, st=ST[o.st]||null;
-    return '<button class="mls-cli'+(M.chatOid===r.oid?' on':'')+(r.c.un?' un':'')+'" data-x="copen" data-o="'+r.oid+'">'+
-      '<span class="mls-cav">'+esc(String(r.nm).trim().charAt(0)||'م')+'</span>'+
-      '<span class="mls-cmain"><span class="mls-ctop"><b>'+esc(r.nm)+'</b><small>'+(r.t?ago(r.t):'')+'</small></span>'+
-      '<span class="mls-clast">'+(r.last?(r.last.f==='l'?tickHtml(r.last.st)+' ':'')+esc(r.last.t.slice(0,60)):'<i class="mls-muted">#'+shortNo(r.oid)+(st?' · '+st[0]:'')+'</i>')+'</span></span>'+
+    return '<button class="mls-cli'+(M.chatOid===r.tid?' on':'')+(r.c.un?' un':'')+'" data-x="copen" data-o="'+r.oid+'"'+(r.cap?' data-k="c"':'')+'>'+
+      (r.cap?capAvHtml(capProf(o.cap||r.c.cap), r.nm):'<span class="mls-cav">'+esc(String(r.nm).trim().charAt(0)||'م')+'</span>')+
+      '<span class="mls-cmain"><span class="mls-ctop"><b>'+esc(r.nm)+(r.cap?'<i class="mls-ctag">موظف سحب</i>':'')+'</b><small>'+(r.t?ago(r.t):'')+'</small></span>'+
+      '<span class="mls-clast">'+(r.last?(r.last.f==='l'?tickHtml(r.last.st, r.cap?'موظف السحب':'')+' ':'')+esc(r.last.t.slice(0,60)):'<i class="mls-muted">#'+shortNo(r.oid)+(r.cap&&o.nm?' · المراجع '+esc(o.nm):'')+(st?' · '+st[0]:'')+'</i>')+'</span></span>'+
       (r.c.un?'<span class="mls-cbadge">'+r.c.un+'</span>':'')+'</button>';
   }).join('');
 }
-function chatMsgsHtml(oid){
-  var c=getChats()[oid];
-  if(!c || !(c.ms||[]).length) return '<div class="mls-chello">💬<b>ابدأ المحادثة</b>تصل رسالتك إلى تطبيق المراجع فوراً، وتظهر علامة ✓✓ عند استلامها و<span style="color:#2E9BF0">✓✓</span> عند قراءتها.</div>';
+function chatMsgsHtml(tid){
+  var c=getChats()[tid], p=tSplit(tid), who=p.cap?'موظف السحب':'المراجع';
+  if(!c || !(c.ms||[]).length) return '<div class="mls-chello">'+(p.cap?'🛵':'💬')+'<b>ابدأ المحادثة</b>تصل رسالتك إلى تطبيق '+who+' فوراً'+(p.cap?' كإشعار، ولا يراها المراجع':'')+'، وتظهر علامة ✓✓ عند استلامها و<span style="color:#2E9BF0">✓✓</span> عند قراءتها.</div>';
   var out='', lastDay='';
   c.ms.forEach(function(x){
     var dl=dayL(x.ts); if(dl!==lastDay){ out+='<div class="mls-cday"><span>'+esc(dl)+'</span></div>'; lastDay=dl; }
-    out+='<div class="mls-bub '+(x.f==='l'?'me':'them')+(x.st==='fail'?' fail':'')+'"'+(x.st==='fail'?' data-x="cretry" data-o="'+oid+'" data-m="'+esc(x.id)+'" title="اضغط لإعادة الإرسال"':'')+'><span class="bt">'+esc(x.t)+'</span><span class="bm">'+hmL(x.ts)+(x.f==='l'?' '+tickHtml(x.st):'')+'</span></div>';
+    out+='<div class="mls-bub '+(x.f==='l'?'me':'them')+(x.st==='fail'?' fail':'')+'"'+(x.st==='fail'?' data-x="cretry" data-o="'+p.oid+'"'+(p.cap?' data-k="c"':'')+' data-m="'+esc(x.id)+'" title="اضغط لإعادة الإرسال"':'')+'><span class="bt">'+esc(x.t)+'</span><span class="bm">'+hmL(x.ts)+(x.f==='l'?' '+tickHtml(x.st, who):'')+'</span></div>';
   });
   return out;
 }
-function chatHeadHtml(oid){
+function chatHeadHtml(tid){
+  var p=tSplit(tid);
+  if(p.cap){
+    var cc=getChats()[tid]||{}, co=ordInfo(p.oid), cst=ST[co.st], P=capProf(co.cap||cc.cap), cnm=cc.nm||co.cn||'موظف السحب', cph=co.cph||cc.ph||'';
+    return '<button class="btn btn-s btn-sm mls-cback" data-x="cback">→</button>'+capAvHtml(P, cnm)+
+      '<div class="mls-chtt"><b>'+esc(cnm)+' <i class="mls-ctag">موظف سحب</i></b><small><span class="mls-capr">'+capStarsHtml(P)+'</span>'+
+        '#'+shortNo(p.oid)+(co.nm?' · المراجع '+esc(co.nm):'')+(cst?' · '+cst[0]:'')+(cph?' · <span dir="ltr">'+esc(cph)+'</span>':'')+'</small></div>'+
+      (M.orders[p.oid]?'<button class="btn btn-s btn-sm" data-x="cgo" data-o="'+p.oid+'" title="عرض الطلب">🧾 الطلب</button>':'');
+  }
+  var oid=tid;
   var c=getChats()[oid]||{}, o=ordInfo(oid), st=ST[o.st], tp=+((M.cx[oid]||{}).tp)||0;
   var typing=tp && (sNow()-tp)<6000;
   var live=!!M.orders[oid];
@@ -71046,16 +71138,18 @@ function chatHeadHtml(oid){
       '#'+shortNo(oid)+(st?' · '+st[0]:'')+(o.by?' · الساحب: '+esc(o.by):'')+(o.ph||c.ph?' · <span dir="ltr">'+esc(o.ph||c.ph)+'</span>':''))+'</small></div>'+
     (live?'<button class="btn btn-s btn-sm" data-x="cgo" data-o="'+oid+'" title="عرض الطلب">🧾 الطلب</button>':'');
 }
+var LQUICK_C=['المراجع بانتظارك — يرجى الإسراع 🙏','العينة جاهزة للاستلام؟','اتصل بالمختبر رجاءً 📞','شكراً لك 🌷'];
+function chatQuick(tid){ return tSplit(tid).cap?LQUICK_C:LQUICK; }
 function chatHtml(){
-  var oid=M.chatOid, live=oid && !!M.orders[oid];
+  var oid=M.chatOid, cp=tSplit(oid), live=oid && (cp.cap?capLive(M.orders[cp.oid]):!!M.orders[oid]);
   return '<div class="mls-chat'+(oid?' has-open':'')+'">'+
     '<div class="mls-clistw"><input class="fc" data-x="cq" placeholder="🔍 اسم، هاتف، أو رقم الطلب" value="'+esc(M.cq||'')+'"><div class="mls-clist" id="mls-clist">'+chatListHtml()+'</div></div>'+
     '<div class="mls-cpane">'+(oid?
       '<div class="mls-chead" id="mls-chead">'+chatHeadHtml(oid)+'</div>'+
       '<div class="mls-cmsgs" id="mls-cmsgs">'+chatMsgsHtml(oid)+'</div>'+
-      (live?'<div class="mls-ccomp"><div class="mls-cqr">'+LQUICK.map(function(q,i){return '<button data-x="cq1" data-i="'+i+'">'+esc(q)+'</button>';}).join('')+'</div>'+
-        '<div class="mls-crow"><textarea class="fc" id="mls-cin" data-x="cin" rows="1" maxlength="1000" placeholder="اكتب رسالة للمراجع…" title="Enter للإرسال — Shift+Enter لسطر جديد"></textarea><button class="btn btn-p" data-x="csend" title="إرسال">➤</button></div></div>'
-       :'<div class="mls-info" style="margin:10px">انتهى هذا الطلب وحُذف من الخادم — المحادثة محفوظة للعرض فقط على هذه الحاسبة.</div>')
+      (live?'<div class="mls-ccomp"><div class="mls-cqr">'+chatQuick(oid).map(function(q,i){return '<button data-x="cq1" data-i="'+i+'">'+esc(q)+'</button>';}).join('')+'</div>'+
+        '<div class="mls-crow"><textarea class="fc" id="mls-cin" data-x="cin" rows="1" maxlength="1000" placeholder="'+(cp.cap?'اكتب رسالة لموظف السحب…':'اكتب رسالة للمراجع…')+'" title="Enter للإرسال — Shift+Enter لسطر جديد"></textarea><button class="btn btn-p" data-x="csend" title="إرسال">➤</button></div></div>'
+       :'<div class="mls-info" style="margin:10px">'+(cp.cap?'انتهت رحلة موظف السحب لهذا الطلب — المحادثة محفوظة للعرض فقط على هذه الحاسبة.':'انتهى هذا الطلب وحُذف من الخادم — المحادثة محفوظة للعرض فقط على هذه الحاسبة.')+'</div>')
       :'<div class="mls-empty" style="margin:auto"><b>اختر محادثة</b>رسائل المراجعين تصل هنا فوراً مع تنبيه صوتي.</div>')+
     '</div></div>';
 }
@@ -71231,7 +71325,7 @@ function orderCard(o){
     if(o.st==='ready') acts.push('<button class="btn btn-s btn-sm" data-x="send"'+D+(busy?' disabled':'')+'>'+(busy?'⏳…':'🔁 إعادة إرسال النتيجة')+'</button>');
     acts=acts.concat(capActs(o));
     var _un=((getChats()[oid]||{}).un)||0;
-    acts.push('<button class="btn btn-s btn-sm" data-x="copen"'+D+'>💬 مراسلة'+(_un?' <b class="mls-cbadge">'+_un+'</b>':'')+'</button>');
+    acts.push('<button class="btn btn-s btn-sm" data-x="copen"'+D+'>💬 مراسلة'+(o.cap?' المراجع':'')+(_un?' <b class="mls-cbadge">'+_un+'</b>':'')+'</button>');
     acts.push('<button class="btn btn-s btn-sm" data-x="wa"'+D+'>واتساب</button>');
     acts.push('<button class="btn '+(['done','rejected','cancelled'].indexOf(o.st)>=0?'btn-s':'btn-d')+' btn-sm" data-x="del"'+D+'>🗑️ حذف الطلب</button>');
     if(o.st==='new') acts.push('<button class="btn btn-s btn-sm" data-x="block"'+D+' title="منع هذا الرقم من الطلب">🚫 حظر</button>');
@@ -72043,9 +72137,16 @@ function capSettingsHtml(){
 function capOrderHtml(o){
   var oid=o.oid, D=M.dsp[oid], L=(getLog()[oid]||{}).dp||{}, out='';
   if(o.cap && o.cn){
-    var ph=String(o.cph||''), mins=o.ct?Math.max(0,Math.round((Date.now()-(+o.ct))/60000)):0;
-    out+='<div class="mls-info" style="margin-top:6px">🛵 <b>'+esc(o.cn)+'</b> <span dir="ltr">'+esc(ph)+'</span> — '+(o.st==='onway'?esc(CS_TXT[o.cs]||'قبل الطلب')+' <span class="mls-muted">(منذ '+mins+' د)</span>':o.st==='collected'?'سحب العينة وهو في الطريق إليك':esc(ST[o.st]?ST[o.st][0]:''))+
-      (o.va&&o.st==='onway'?' <span class="mls-muted">· محاولات الرمز '+(+o.va)+'/5</span>':'')+'</div>';
+    var ph=String(o.cph||''), mins=o.ct?Math.max(0,Math.round((Date.now()-(+o.ct))/60000)):0, P=capProf(o.cap), un=((getChats()[CAPK+oid]||{}).un)||0;
+    var stx=o.st==='onway'?esc(CS_TXT[o.cs]||'قبل الطلب')+' <span class="mls-muted">(منذ '+mins+' د)</span>':o.st==='collected'?'سحب العينة وهو في الطريق إليك':esc(ST[o.st]?ST[o.st][0]:'');
+    out+='<div class="mls-capc">'+capAvHtml(P, o.cn, 'mls-capav')+
+      '<div class="mls-capm"><small>🛵 موظف السحب · '+stx+(o.va&&o.st==='onway'?' · محاولات الرمز '+(+o.va)+'/5':'')+'</small>'+
+        '<b>'+esc(o.cn)+'</b>'+
+        '<span class="mls-capr">'+capStarsHtml(P)+(P&&P.t?' <span class="mls-muted">· '+P.t+' رحلة سحب</span>':'')+'</span>'+
+        (ph?'<span class="mls-muted" dir="ltr" style="text-align:right">'+esc(ph)+'</span>':'')+'</div>'+
+      '<div class="mls-capb">'+(capLive(o)?'<button class="btn btn-p btn-sm" data-x="copen" data-k="c" data-o="'+oid+'">💬 مراسلة موظف السحب'+(un?' <b class="mls-cbadge">'+un+'</b>':'')+'</button>':'')+
+        (ph && CAP_LIVE.indexOf(o.st)>=0?'<button class="btn btn-s btn-sm" data-x="cptwa" data-o="'+oid+'">واتساب</button>':'')+'</div>'+
+    '</div>';
   } else if(D && D.state==='run'){
     out+='<div class="mls-info" style="margin-top:6px">📡 جاري البحث عن موظف سحب — جولة <b>'+(D.r||1)+'/'+CAP_ROUNDS+'</b>'+(D.near!=null?' · '+(+D.near||0)+' موظف سحب قريب':'')+'</div>';
   } else if(o.st==='accepted' && (L.res==='none' || L.res==='timeout')){
@@ -72057,7 +72158,6 @@ function capActs(o){
   var D=' data-o="'+o.oid+'"', a=[], run=M.dsp[o.oid] && M.dsp[o.oid].state==='run';
   if(o.st==='accepted' && !o.cap){ a.push(run?'<button class="btn btn-s btn-sm" data-x="cptstop"'+D+'>⏹ إيقاف البحث</button>':'<button class="btn btn-p btn-sm" data-x="cptsend"'+D+'>📡 إرسال لموظفي السحب</button>'); }
   if(o.cap && ['onway','collected'].indexOf(o.st)>=0){
-    if(o.cph) a.push('<button class="btn btn-s btn-sm" data-x="cptwa"'+D+'>واتساب موظف السحب</button>');
     if(o.st==='onway') a.push('<button class="btn btn-d btn-sm" data-x="cptun"'+D+'>↩️ سحب الطلب من موظف السحب</button>');
   }
   return a;
@@ -72097,12 +72197,12 @@ function onClick(e){
   switch(x){
     case 'enable': enableStore(); break;
     case 'tab': M.tab=el.getAttribute('data-v'); if(M.tab==='dues') loadDues(); if(M.tab==='offers') M.bimg=null; if(M.tab==='rates') M.rtNew=0; render(); if(M.tab==='chat' && M.chatOid) markRead(M.chatOid); break;
-    case 'copen': chatOpenOid(oid); break;
+    case 'copen': chatOpenOid((el.getAttribute('data-k')==='c'?CAPK:'')+oid); break;
     case 'cback': M.chatOid=null; render(); break;
     case 'cgo': M.tab='orders'; M.filter=(FILTERS.find(function(f){ return f[2].indexOf((M.orders[oid]||{}).st)>=0; })||FILTERS[0])[0]; M.q=shortNo(oid); render(); break;
     case 'csend': chatSendUI(); break;
-    case 'cq1': { var tq=document.getElementById('mls-cin'); if(tq){ tq.value=LQUICK[i]||''; chatSendUI(); } break; }
-    case 'cretry': { var mid=el.getAttribute('data-m'), C0=getChats(), c0=C0[oid], x0=c0&&c0.ms.find(function(y){return y.id===mid;}); if(x0){ c0.ms=c0.ms.filter(function(y){return y.id!==mid;}); putChats(C0); chatSend(oid,x0.t); } break; }
+    case 'cq1': { var tq=document.getElementById('mls-cin'); if(tq){ tq.value=chatQuick(M.chatOid)[i]||''; chatSendUI(); } break; }
+    case 'cretry': { var tid0=(el.getAttribute('data-k')==='c'?CAPK:'')+oid, mid=el.getAttribute('data-m'), C0=getChats(), c0=C0[tid0], x0=c0&&c0.ms.find(function(y){return y.id===mid;}); if(x0){ c0.ms=c0.ms.filter(function(y){return y.id!==mid;}); putChats(C0); chatSend(tid0,x0.t); } break; }
     case 'rf': M.rf=el.getAttribute('data-v'); render(); break;
     case 'rdel': if(confirm('حذف هذا التقييم من سجل هذه الحاسبة؟')){ var R0=getRates(); delete R0[oid]; putRates(R0); render(); } break;
     case 'bimgdel': if(!confirm('حذف هذه الصورة من التطبيق؟')) break; M.bimg.splice(i,1); saveBimg().then(function(){ notif('تم','حُذفت الصورة من تطبيق المراجعين','success'); render(); }).catch(function(){ notif('خطأ','تعذّر الحذف','error'); }); break;
