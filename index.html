@@ -8103,6 +8103,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
       <button class="btn btn-s" onclick="closeModal('m-culture')">إلغاء</button>
       <button class="btn btn-ok btn-lg" onclick="saveCultureEntry({print:true})">🖨️ حفظ وطباعة</button>
       <button class="btn btn-p btn-lg" onclick="saveCultureEntry()">💾 حفظ نتيجة الزرع</button>
+      <button class="btn btn-s btn-lg" style="color:var(--warning);border-color:rgba(255,214,10,0.45)" onclick="try{window._cultPrintAppt&&window._cultPrintAppt();}catch(e){}">🧾 طباعة وصل موعد الزرع</button>
     </div>
   </div>
 </div>
@@ -36454,6 +36455,10 @@ function _buildCultureModalBody(c){
         <label class="fl">تاريخ السحب</label>
         <input class="fc" type="date" id="cult-date" value="${c?c.date:today}">
       </div>
+      <div class="fg" style="margin-bottom:0">
+        <label class="fl">📅 موعد استلام النتيجة (لوصل الموعد)</label>
+        <input class="fc" type="date" id="cult-pickup" value="${c&&c.pickupDate?c.pickupDate:''}">
+      </div>
     </div>
     <div id="cult-clsi-note" style="display:none;margin-top:10px;background:rgba(255,214,10,0.07);border:1px solid rgba(255,214,10,0.3);border-radius:8px;padding:8px 12px;font-size:10px;color:var(--warning);direction:ltr"></div>
   </div>
@@ -37190,6 +37195,7 @@ async function saveCultureEntry(opts){
     cultureType: type,
     specimenDetail: (document.getElementById('cult-specimen')||{}).value||'',
     date: (document.getElementById('cult-date')||{}).value||new Date().toISOString().split('T')[0],
+    pickupDate: (document.getElementById('cult-pickup')||{}).value||'',
     doctorId: _getCultDoctor().id,
     doctorName: _getCultDoctor().name,
     ageOverride: (document.getElementById('cult-age-val')||{}).value||'',
@@ -47669,13 +47675,30 @@ function lisInit(){
 // ═══════════════════════════════════════════════
 // PERSISTENCE
 // ═══════════════════════════════════════════════
-function lisSaveState(){
+/* ⚡ «النتائج الواردة» كانت تكبر بلا حد (كل نتيجة من كل جهاز منذ أول يوم)، وتُحوَّل
+   كلها لنص وتُكتب في localStorage مع كل نتيجة جديدة + تُعدّ وتُفلتر في كل تحديث.
+   النتائج المنقولة موجودة أصلاً في طلبات المرضى ⇒ نُبقي آخر 1500 منها فقط.
+   غير المنقولة (بانتظار الربط اليدوي) تبقى كلها حتى 3000 — لا يضيع ما ينتظر الربط. */
+var _LIS_KEEP_DONE=1500, _LIS_KEEP_PEND=3000;
+function _lisTrimResults(){
   try{
-    localStorage.setItem('lis_v3_devices',  JSON.stringify(lisDevices));
-    localStorage.setItem('lis_v3_results',  JSON.stringify(lisResults));
-    localStorage.setItem('lis_v3_mappings', JSON.stringify(lisMappings));
-    localStorage.setItem('lis_v3_settings', JSON.stringify(_lisSettings));
+    if(!Array.isArray(lisResults) || lisResults.length<=_LIS_KEEP_DONE) return;
+    var nd=0, np=0, out=[], cut=false;
+    for(var i=0;i<lisResults.length;i++){        // الأحدث أولاً (unshift)
+      var r=lisResults[i];
+      if(r && r.transferred){ if(nd<_LIS_KEEP_DONE){ out.push(r); nd++; } else cut=true; }
+      else { if(np<_LIS_KEEP_PEND){ out.push(r); np++; } else cut=true; }
+    }
+    if(cut) lisResults=out;
   }catch(e){}
+}
+function lisSaveState(){
+  _lisTrimResults();
+  // كل مفتاح في محاولة مستقلة: امتلاء مساحة النتائج لا يمنع حفظ الإعدادات والروابط
+  try{ localStorage.setItem('lis_v3_devices',  JSON.stringify(lisDevices)); }catch(e){}
+  try{ localStorage.setItem('lis_v3_results',  JSON.stringify(lisResults)); }catch(e){}
+  try{ localStorage.setItem('lis_v3_mappings', JSON.stringify(lisMappings)); }catch(e){}
+  try{ localStorage.setItem('lis_v3_settings', JSON.stringify(_lisSettings)); }catch(e){}
 }
 function lisLoadState(){
   // ── تحديد وضع الرمز الديناميكي (المتطلب ٤) ──────────────────
@@ -52316,10 +52339,25 @@ async function lisTransferToMedlabPro(list){
   // البيانات الكبيرة (patients/requests) تُحفظ في IDB فقط وتُمسح من localStorage
   let idbReqs=null;
   let idbPts=null;
+  /* ⚡ كانت كل دفعة نتائج تقرأ «كل» الطلبات و«كل» المرضى من IDB (آلاف السجلات تُفكّ
+     في الواجهة) فقط لإضافة ما قد ينقص الذاكرة — وهو نادر جداً. الآن: عدٌّ سريع
+     (بلا قراءة سجلات) — إن كانت الذاكرة تحوي نفس العدد أو أكثر فلا حاجة للقراءة.
+     أي شك (ليس وضع سجلات / فشل العدّ / IDB أكثر من الذاكرة) ⇒ القراءة الكاملة كما كانت. */
+  async function _lisNeedIdbRead(key, memArr){
+    try{
+      if(!Array.isArray(memArr) || !memArr.length) return true;
+      if(typeof IDB==='undefined' || typeof IDB.isRecordMode!=='function' || typeof IDB.countRecords!=='function') return true;
+      if(!(await IDB.isRecordMode(key))) return true;
+      const n=await IDB.countRecords(key);
+      return !(n>=0 && n<=memArr.length);
+    }catch(e){ return true; }
+  }
   try{
     if(typeof IDB!=='undefined'){
-      idbReqs=await IDB.get(_idbReqKey);
-      idbPts =await IDB.get(_idbPtKey);
+      const _memR=(typeof requests!=='undefined'&&Array.isArray(requests))?requests:null;
+      const _memP=(typeof patients!=='undefined'&&Array.isArray(patients))?patients:null;
+      if(await _lisNeedIdbRead(_idbReqKey,_memR)) idbReqs=await IDB.get(_idbReqKey);
+      if(await _lisNeedIdbRead(_idbPtKey,_memP))  idbPts =await IDB.get(_idbPtKey);
     }
   }catch(e){ console.warn('[LIS] IDB read error',e); }
 
@@ -52476,9 +52514,27 @@ function _lisResultsBadges(shown){
     if(el('lis-rl-done'))   el('lis-rl-done').textContent=done;
   }catch(e){}
 }
+// ⚡ أداء: الجدول موجود داخل النافذة المنبثقة فقط، وكان يُعاد بناؤه بالكامل
+//    (كل النتائج المحفوظة) مع كل نتيجة واردة حتى والنافذة مغلقة. الآن: إن
+//    كانت مغلقة نُحدّث العدادات فقط ونؤجّل الرسم إلى لحظة فتحها.
+var _lisResDirty=false;
 function lisRenderResults(){
   const tbody=document.getElementById('lis-results-body');
   if(!tbody){ _lisResultsBadges(); return; }
+  try{
+    const _ov=document.getElementById('m-lis-results');
+    if(_ov && !_ov.classList.contains('open')){
+      _lisResDirty=true; _lisResultsBadges();
+      if(!_ov._lisResObs && typeof MutationObserver==='function'){
+        _ov._lisResObs=new MutationObserver(function(){
+          if(_lisResDirty && _ov.classList.contains('open')) lisRenderResults();
+        });
+        _ov._lisResObs.observe(_ov,{attributes:true,attributeFilter:['class']});
+      }
+      return;
+    }
+  }catch(_){}
+  _lisResDirty=false;
   const q=(document.getElementById('lis-res-search')?.value||'').toLowerCase();
   const filtered=lisResults.filter(r=>!q||
     (r.sampleId+'').toLowerCase().includes(q)||
@@ -52559,7 +52615,7 @@ function lisFmtTime(iso){
 //    وكانت كل مرة تُعيد بناء السجل بالكامل عبر innerHTML. الآن تُدمج كل
 //    الأسطر الواصلة في عملية رسم واحدة — نفس المحتوى تماماً، بلا تكرار.
 //    عرضٌ فقط: لا يمسّ أي منطق استقبال أو إرسال للأجهزة.
-var _lisLogRenderPending=false;
+var _lisLogRenderPending=false, _lisLogLastRender=0;
 function _lisScheduleLogRender(){
   if(_lisLogRenderPending) return;
   _lisLogRenderPending=true;
@@ -52572,15 +52628,27 @@ function _lisScheduleLogRender(){
       if(sec&&sec.style.display!=='none') lisRenderFullLog();
     }catch(e){}
   };
+  // ⚡ سقف ٥ رسومات بالثانية أثناء التدفق المستمر (Serial يرسل قطعاً صغيرة متتالية،
+  //    والسجل الكامل حتى ٥٠٠ سطر كان يُعاد بناؤه في كل إطار شاشة).
+  var _wait=Math.max(0,200-(Date.now()-_lisLogLastRender));
+  var _go2=function(){ _lisLogLastRender=Date.now(); _go(); };
   // rAF متوقف عندما تكون النافذة مخفية/مصغّرة — نسقط على setTimeout حينها
-  if(typeof requestAnimationFrame==='function' && document.visibilityState!=='hidden') requestAnimationFrame(_go);
-  else setTimeout(_go,50);
+  if(_wait>0) setTimeout(_go2,_wait);
+  else if(typeof requestAnimationFrame==='function' && document.visibilityState!=='hidden') requestAnimationFrame(_go2);
+  else setTimeout(_go2,50);
 }
 function lisAddLog(type,msg){
   const ts=new Date().toLocaleTimeString('ar');
   lisLogEntries.unshift({type,msg,ts});
   if(lisLogEntries.length>500) lisLogEntries.pop();
   _lisScheduleLogRender();
+}
+/* ⚡ نص السجل يُعرض كنص لا كـ HTML: رموز الأجهزة مثل <CR> <STX> <ETX> كانت تُفسَّر
+   عناصر HTML مفتوحة متداخلة بالآلاف ⇒ بطء شديد وتجمّد. + سقف طول العرض للسطر الواحد. */
+function _lisLogMsgHtml(m){
+  m=String(m==null?'':m);
+  if(m.length>4000) m=m.slice(0,4000)+' …';
+  return lisEscHtml(m);
 }
 function lisLogIcon(t){return{ok:'✅',err:'❌',warn:'⚠️',info:'ℹ️',astm:'📡',data:'📥'}[t]||'•';}
 function lisLogColor(t){return{ok:'var(--success)',err:'var(--danger)',warn:'var(--warning)',info:'var(--primary)',astm:'#7dd3fc',data:'rgba(255,255,255,0.7)'}[t]||'var(--text2)';}
@@ -52590,7 +52658,7 @@ function lisRenderMiniLog(){
   el.innerHTML=lisLogEntries.slice(0,20).map(e=>`
     <div style="display:flex;gap:6px;margin-bottom:3px">
       <span style="color:rgba(0,212,255,0.4);flex-shrink:0;font-size:10px">${e.ts}</span>
-      <span style="color:${lisLogColor(e.type)};font-size:10px">${lisLogIcon(e.type)} ${e.msg}</span>
+      <span style="color:${lisLogColor(e.type)};font-size:10px">${lisLogIcon(e.type)} ${_lisLogMsgHtml(e.msg)}</span>
     </div>`).join('');
 }
 function lisRenderFullLog(){
@@ -52600,7 +52668,7 @@ function lisRenderFullLog(){
   el.innerHTML=filtered.map(e=>`
     <div style="display:flex;gap:8px;margin-bottom:3px">
       <span style="color:rgba(0,212,255,0.4);flex-shrink:0">${e.ts}</span>
-      <span style="color:${lisLogColor(e.type)}">${lisLogIcon(e.type)} ${e.msg}</span>
+      <span style="color:${lisLogColor(e.type)}">${lisLogIcon(e.type)} ${_lisLogMsgHtml(e.msg)}</span>
     </div>`).join('');
 }
 function lisFilterLog(f,btn){
@@ -53079,9 +53147,20 @@ server.listen(WS_PORT, () => {
 // ═══════════════════════════════════════════════
 // AUDIO
 // ═══════════════════════════════════════════════
+// ⚡ أداء: كان كل نتيجة تُنشئ AudioContext جديداً ولا يُغلَق أبداً — كل واحد
+//    يحجز خيط صوت حقيقي في Chromium، فأجهزة الكيمياء عبر Serial (نتيجة لكل
+//    تحليل) تراكم عشرات السياقات الصوتية الحيّة ويثقل البرنامج تدريجياً.
+//    الآن: سياق واحد مشترك يُعاد استخدامه، ونغمة واحدة لكل دفعة متتالية
+//    (لا تتكرر أسرع من مرة كل 250ms) — نفس الصوت ونفس التنبيه.
+var _lisBeepCtx=null, _lisBeepLast=0;
 function lisPlayBeep(){
   try{
-    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const _now=Date.now();
+    if(_now-_lisBeepLast<250) return;
+    _lisBeepLast=_now;
+    if(!_lisBeepCtx || _lisBeepCtx.state==='closed') _lisBeepCtx=new(window.AudioContext||window.webkitAudioContext)();
+    const ctx=_lisBeepCtx;
+    if(ctx.state==='suspended' && ctx.resume) ctx.resume().catch(function(){});
     const o=ctx.createOscillator();
     const g=ctx.createGain();
     o.connect(g);g.connect(ctx.destination);
@@ -72728,6 +72807,14 @@ window._waDirectSendPDF = async function(o){
   _notif('❌ تعذّر الإرسال','تعذّر إرسال نتيجة «'+label+'» ('+(_ERR[code]||code)+') بعد '+MAX+' محاولات — أعد الضغط على زر واتساب للطلب','error');
 };
 
+/* ⚡ تسخين واتساب ويب: يُحمَّل مخفياً بعد تشغيل البرنامج ويبقى جاهزاً
+   ⇒ أول نتيجة تُفتح محادثتها فوراً بدل انتظار إقلاع واتساب ويب كاملاً */
+function _waWarm(){
+  try{ if(_directEnabled() && _directAvailable() && typeof window.waAPI.status==='function') window.waAPI.status().catch(function(){}); }catch(e){}
+}
+setTimeout(_waWarm, 20000);
+setInterval(_waWarm, 15*60000);
+
 /* بعد ربط واتساب بنجاح: أرسل ما كان ينتظر الربط */
 window._waFlushPending = function(){
   var list = _waPending.splice(0, _waPending.length);
@@ -73347,6 +73434,147 @@ async function _printWorksheet(reqId, silentNotif){
     if(ok && !silentNotif) _notif('🖨️ تم','📋 أُرسلت ورقة العمل للطباعة','success');
   }catch(e){ console.warn('[worksheet]', e); _notif('خطأ','تعذّرت طباعة ورقة العمل','error'); }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   🧾 وصل موعد الزرع — A5 على طابعة ورقة العمل (نفس المقاس والطريقة)
+   يُبنى من حقول واجهة إدخال الزرع الحالية (لا يحتاج حفظاً مسبقاً)
+   ══════════════════════════════════════════════════════════════ */
+var _AR_DAYS = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+function _apptParse(ymd){
+  var m=/^(\d{4})-(\d{2})-(\d{2})/.exec(String(ymd||'')); if(!m) return null;
+  var d=new Date(+m[1], +m[2]-1, +m[3]);
+  return { day:_AR_DAYS[d.getDay()], date:m[3]+'/'+m[2]+'/'+m[1] };
+}
+async function _buildCultAppt(o, fitMul){
+  var s=_S(), now=_now(), SZ=_wsSize();
+  var _fm = (isFinite(fitMul) && fitMul>0 && fitMul<1) ? fitMul : 1;
+  var z = SZ.z*_fm;
+  var pk = _apptParse(o.pickup) || {day:'—', date:'—'};
+  var dr = _apptParse(o.date);
+  var wa = String(s.phone||s.ftrPhone||'').trim();
+  var bc = o.bcId ? await _barcodePng(o.bcId) : '';
+  function info(lbl, val, cls){
+    return '<div class="it'+(cls?' '+cls:'')+'"><span class="l">'+lbl+'</span><span class="v">'+_esc(val||'—')+'</span></div>';
+  }
+  var css =
+    '*{margin:0;padding:0;box-sizing:border-box}' +
+    '@page{size:'+SZ.w+'mm '+SZ.h+'mm;margin:0}html,body{width:'+SZ.w+'mm;background:#fff}' +
+    'body{font-family:'+FONT+';color:#000;padding:6mm;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.frame{zoom:'+z+';min-height:'+((SZ.h-12.5)/z).toFixed(2)+'mm;border:0.55mm solid #0033cc;border-radius:4.5mm;padding:4.5mm 5mm;display:flex;flex-direction:column}' +
+    '.hd{display:flex;justify-content:space-between;align-items:center;gap:4mm;padding-bottom:2mm;border-bottom:0.35mm solid #000}' +
+    '.lab{font-size:12.5pt;font-weight:900;color:#0033cc;line-height:1.2}' +
+    '.sub{font-size:7.4pt;margin-top:.6mm;font-weight:700}' +
+    '.badge{display:inline-block;white-space:nowrap;margin-top:1.3mm;background:#000;color:#fff;font-size:7.6pt;font-weight:800;padding:.7mm 3mm;border-radius:10mm}' +
+    '.bc{text-align:center;flex-shrink:0}' +
+    '.bc-img,.bc svg{display:block;height:11.5mm;width:auto;max-width:52mm;margin:0 auto}' +
+    '.bcn{font-family:"Courier New",monospace;font-size:8.5pt;font-weight:900;letter-spacing:1.6px;margin-top:.5mm}' +
+    '.info{display:flex;flex-direction:column;gap:.9mm;margin:2.2mm 0;border:0.3mm solid #000;border-radius:2mm;padding:1.6mm 2.6mm}' +
+    '.ir{display:flex;align-items:baseline;gap:5mm;min-width:0}' +
+    '.it{display:flex;gap:1.2mm;font-size:8.6pt;align-items:baseline;min-width:0;line-height:1.4;flex:0 0 auto}' +
+    '.it.grow{flex:1 1 auto}' +
+    '.it .l{font-weight:700;white-space:nowrap}' +
+    '.it .v{font-weight:900;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.it.name .v{font-size:10.5pt}' +
+    '.type{margin:1.5mm 0 0;text-align:center;border:0.4mm solid #000;border-radius:2.5mm;padding:2mm 3mm}' +
+    '.type .t1{font-size:8.5pt;font-weight:700}' +
+    '.type .t2{font-size:15pt;font-weight:900;direction:ltr;margin-top:.6mm}' +
+    '.type .t3{font-size:8.5pt;font-weight:700;margin-top:.4mm}' +
+    '.mid{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4mm 0}' +
+    '.appt{width:100%;text-align:center;border:0.7mm solid #0033cc;border-radius:4mm;padding:5mm 4mm}' +
+    '.appt .a1{font-size:11pt;font-weight:900}' +
+    '.appt .a2{font-size:30pt;font-weight:900;color:#0033cc;line-height:1.25;margin-top:2mm}' +
+    '.appt .a3{font-size:20pt;font-weight:900;direction:ltr;letter-spacing:1px;margin-top:1mm}' +
+    '.note{border:0.4mm dashed #000;border-radius:2.5mm;padding:2.2mm 3mm;font-size:9.5pt;font-weight:800;line-height:1.7;text-align:center}' +
+    '.note .wa{display:inline-block;margin-top:1mm;font-size:13pt;font-weight:900;direction:ltr;border:0.4mm solid #000;border-radius:10mm;padding:.3mm 4mm}' +
+    '.ft{margin-top:3mm;display:flex;justify-content:space-between;align-items:flex-end;font-size:8pt}' +
+    '.sig{border-top:0.3mm solid #000;width:38mm;text-align:center;padding-top:1mm;font-weight:700}' +
+    '.pr{font-weight:700}';
+  var header =
+    '<div class="hd"><div>' +
+      '<div class="lab">'+_esc(s.name||'المختبر الطبي')+'</div>' +
+      (s.addr||s.phone ? '<div class="sub">'+_esc([s.addr, s.phone].filter(Boolean).join('  ·  '))+'</div>' : '') +
+      '<div class="badge">🧾 وصل موعد الزرع · Culture Appointment</div>' +
+    '</div>' +
+    (bc ? '<div class="bc">'+bc+'<div class="bcn">'+_esc(o.bcId)+'</div></div>' : '') +
+    '</div>';
+  var infoHTML =
+    '<div class="ir">' +
+      '<div class="it name grow"><span class="l">المريض:</span><span class="v">'+_esc(o.name||'—')+'</span></div>' +
+      (o.phone ? info('الهاتف:', o.phone) : '') +
+    '</div>' +
+    '<div class="ir">' +
+      info('الطبيب:', o.doctor, 'grow') +
+      (o.reqNo ? info('رقم الطلب:', o.reqNo) : (o.pid ? info('رقم الملف:', o.pid) : '')) +
+    '</div>' +
+    '<div class="ir">' +
+      info('تاريخ السحب:', dr ? (dr.day+'  '+dr.date) : '—', 'grow') +
+      info('وقت الطباعة:', now.date+'  '+now.time) +
+    '</div>';
+  var typeHTML = '<div class="type"><div class="t1">نوع الزرع</div><div class="t2">'+_esc(o.typeEn||o.type||'—')+'</div>' +
+    (o.typeAr && o.typeAr!==o.typeEn ? '<div class="t3">'+_esc(o.typeAr)+'</div>' : '') +
+    (o.specimen ? '<div class="t3">العينة: '+_esc(o.specimen)+'</div>' : '') + '</div>';
+  var apptHTML = '<div class="mid"><div class="appt">' +
+      '<div class="a1">📅 موعد استلام النتيجة</div>' +
+      '<div class="a2">'+_esc(pk.day)+'</div>' +
+      '<div class="a3">'+_esc(pk.date)+'</div>' +
+    '</div></div>';
+  var noteHTML = '<div class="note">⚠️ ملاحظة: يجب مراسلة المختبر عبر واتساب قبل يوم من موعد المراجعة' +
+    (wa ? '<br><span class="wa">📱 '+_esc(wa)+'</span>' : '') + '</div>';
+  return '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>وصل موعد الزرع</title><style>'+css+'</style></head><body>' +
+    '<div class="frame">' + header + '<div class="info">'+infoHTML+'</div>' + typeHTML + apptHTML + noteHTML +
+    '<div class="ft"><div class="sig">توقيع الموظف</div><div class="pr">MedLab Pro</div><div class="sig">ختم المختبر</div></div>' +
+    '</div></body></html>';
+}
+function _cultApptData(){
+  function v(id){ var e=document.getElementById(id); return e ? String(e.value||'').trim() : ''; }
+  var type = (typeof _cultTypeValue==='function') ? _cultTypeValue() : v('cult-type');
+  var ct = null;
+  try{ ct = (typeof CULTURE_TYPES!=='undefined' && Array.isArray(CULTURE_TYPES)) ? CULTURE_TYPES.find(function(t){ return t.id===type; }) : null; }catch(e){}
+  var doc = ''; try{ doc = (typeof _getCultDoctor==='function') ? (_getCultDoctor().name||'') : ''; }catch(e){}
+  var pid = v('cult-pt-id');
+  var pt = (typeof patients!=='undefined' ? patients : []).find(function(p){ return p.id===pid; }) || {};
+  var req = window._cultReqId ? _req(window._cultReqId) : null;
+  var bcId = '', reqNo = '';
+  try{
+    if(req){
+      reqNo = req.orderNo || req.id;
+      bcId = (typeof _reportBarcodeId==='function') ? _reportBarcodeId(req.orderNo, pt.barcode, pt.id, req.id)
+           : String(req.orderNo||pt.id||req.id||'').replace(/[^0-9A-Za-z]/g,'');
+    }
+  }catch(e){}
+  return {
+    name: v('cult-pt-search') || pt.name || '', phone: v('cult-pt-phone') || pt.phone || '', pid: pid,
+    type: type, typeEn: ct ? (ct.en||ct.ar) : type, typeAr: ct ? ct.ar : '',
+    specimen: v('cult-specimen'), doctor: doc, date: v('cult-date'), pickup: v('cult-pickup'),
+    reqNo: reqNo, bcId: bcId
+  };
+}
+window._cultPrintAppt = async function(){
+  var o = _cultApptData();
+  if(!o.name){ _notif('تنبيه','يرجى اختيار المريض أولاً','error'); return; }
+  if(!o.type){ _notif('تنبيه','يرجى اختيار نوع الزرع أولاً','error'); return; }
+  if(!_apptParse(o.pickup)){
+    _notif('تنبيه','حدّد «موعد استلام النتيجة» أولاً','warning');
+    try{ var pe=document.getElementById('cult-pickup'); if(pe){ pe.focus(); try{ pe.showPicker && pe.showPicker(); }catch(_){} } }catch(e){}
+    return;
+  }
+  try{
+    var SZ = _wsSize(), html = await _buildCultAppt(o);
+    try{
+      var mul = 1;
+      for(var k=0; k<3; k++){
+        var f = await _wsOverflow(html, SZ.w, SZ.h);
+        if(!(f>0 && f<0.995)) break;
+        mul = Math.max(0.6, mul*f*0.985);
+        html = await _buildCultAppt(o, mul);
+        if(mul<=0.6) break;
+      }
+    }catch(_){}
+    var ok = await _printHTML(html, _S().printerWorksheet||'', SZ.w, SZ.h, 'وصل موعد الزرع',
+                              SZ.mode==='custom' ? '' : SZ.autoPaper);
+    if(ok) _notif('🖨️ تم','🧾 أُرسل وصل موعد الزرع للطباعة','success');
+  }catch(e){ console.warn('[culture appt]', e); _notif('خطأ','تعذّرت طباعة وصل موعد الزرع','error'); }
+};
 
 /* ══════════════════════════════════════════════════════════════
    4) 🧾 وصل الحساب — 58 ملم
@@ -85204,7 +85432,7 @@ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded'
 })();
 </script>
 
-<!-- ══════════ 🖱️ مؤشّر الماوس: سهم أحمر + دائرة سوداء تومض حوله (لا يغيّر أي سلوك آخر) ══════════ -->
+<!-- ══════════ 🖱️ مؤشّر الماوس: سهم أحمر (أُزيلت الدائرة الوامضة حوله) ══════════ -->
 <style id="ml-cursor-style">
 html, body, body *{ cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 26 26'%3E%3Cpath d='M3 2 L3 20 L7.8 15.6 L11 22.6 L14.2 21.2 L11 14.4 L17.6 14.4 Z' fill='%23ff1a1a' stroke='%23000' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E") 3 2, auto !important; }
 body input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=reset]):not([type=range]):not([type=color]):not([type=file]):not([type=image]),
@@ -85212,46 +85440,7 @@ body textarea, body [contenteditable=""], body [contenteditable="true"]{ cursor:
 body .resize-handle-se{ cursor:sw-resize !important; }
 body .resize-handle-e{ cursor:w-resize !important; }
 body .resize-handle-s{ cursor:s-resize !important; }
-#ml-cursor-ring{ position:fixed; left:0; top:0; width:30px; height:30px; margin:-15px 0 0 -15px; border-radius:50%;
-  border:2.5px solid #000; box-shadow:0 0 0 1px rgba(255,255,255,.55), inset 0 0 0 1px rgba(255,255,255,.35);
-  pointer-events:none; z-index:2147483647; opacity:0; will-change:transform;
-  transition:width .15s, height .15s, margin .15s; }
-#ml-cursor-ring.on{ animation:mlCurBlink 1s ease-in-out infinite; }
-#ml-cursor-ring.hot{ width:38px; height:38px; margin:-19px 0 0 -19px; }
-#ml-cursor-ring.down{ width:22px; height:22px; margin:-11px 0 0 -11px; }
-@keyframes mlCurBlink{ 0%,100%{ opacity:1; } 50%{ opacity:.12; } }
-@media (hover:none), (pointer:coarse){ #ml-cursor-ring{ display:none !important; } }
-@media print{ #ml-cursor-ring{ display:none !important; } }
 </style>
-<script id="ml-cursor-module">
-(function(){
-  'use strict';
-  var ring=null, x=-100, y=-100, tgt=null, pend=false;
-  var HOT='a,button,select,label,summary,[onclick],[role="button"],.btn,input[type=checkbox],input[type=radio],input[type=button],input[type=submit]';
-  function make(){
-    if(ring || !document.body) return;
-    ring=document.createElement('div'); ring.id='ml-cursor-ring'; ring.setAttribute('aria-hidden','true');
-    document.body.appendChild(ring);
-  }
-  function paint(){
-    pend=false; if(!ring) return;
-    ring.style.transform='translate3d('+x+'px,'+y+'px,0)';
-    var hot=false; try{ hot=!!(tgt && tgt.closest && tgt.closest(HOT)); }catch(e){}
-    if(ring.classList.contains('hot')!==hot) ring.classList.toggle('hot', hot);
-  }
-  document.addEventListener('mousemove', function(e){
-    if(!ring) make(); if(!ring) return;
-    x=e.clientX; y=e.clientY; tgt=e.target;
-    if(!ring.classList.contains('on')) ring.classList.add('on');
-    if(!pend){ pend=true; requestAnimationFrame(paint); }
-  }, {passive:true, capture:true});
-  document.addEventListener('mousedown', function(){ if(ring) ring.classList.add('down'); }, true);
-  document.addEventListener('mouseup',   function(){ if(ring) ring.classList.remove('down'); }, true);
-  document.addEventListener('mouseout', function(e){ if(ring && !e.relatedTarget) ring.classList.remove('on'); }, true);
-  window.addEventListener('blur', function(){ if(ring) ring.classList.remove('on'); });
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', make); else make();
-})();
-</script>
 
 <script id="ml-sx-module">
 /* ══════════════════════════════════════════════════════════════
