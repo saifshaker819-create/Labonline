@@ -70472,6 +70472,16 @@ body.light-mode #mls-root .mls-bub.me .tk.rd{color:#9BE7FF}
 #mls-root .mls-cav img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 #mls-root .mls-cav.cap{background:linear-gradient(135deg,#F28C1B,#C2570C);font-size:17px}
 #mls-root .mls-ctag{font-size:9.5px;font-weight:800;color:#C2570C;background:color-mix(in srgb,#F28C1B 16%,transparent);border-radius:99px;padding:1px 7px;margin-inline-start:5px;vertical-align:1px}
+#mls-root .mls-ctag.gen{color:#0F7C74;background:color-mix(in srgb,#14B8A6 16%,transparent)}
+#mls-root .mls-bub.hasimg{padding:4px 4px 4px}
+#mls-root .mls-bub.hasimg .bt{padding:4px 7px 0}
+#mls-root .mls-bub.hasimg .bm{padding:0 7px}
+#mls-root .mls-bimg{display:block;border-radius:12px;overflow:hidden;cursor:zoom-in;min-width:140px;min-height:100px;background:rgba(127,127,127,.12)}
+#mls-root .mls-bimg img{display:block;max-width:260px;max-height:280px;width:auto;height:auto}
+#mls-root .mls-bimg.miss{display:grid;place-items:center;cursor:default}
+#mls-root .mls-bimg.miss::after{content:'📷 صورة';font-size:12px;opacity:.7}
+.mls-imgov{position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.82);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;cursor:zoom-out;padding:20px}
+.mls-imgov img{max-width:92vw;max-height:82vh;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5);background:#fff}
 #mls-root .mls-capc{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px;padding:11px 12px;border-radius:12px;border:1px solid color-mix(in srgb,#F28C1B 38%,var(--border));background:color-mix(in srgb,#F28C1B 7%,var(--bg-card))}
 #mls-root .mls-capav{width:56px;height:56px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:22px;font-weight:800;color:#fff;background:linear-gradient(135deg,#F28C1B,#C2570C);overflow:hidden;box-shadow:0 0 0 3px color-mix(in srgb,#F28C1B 25%,transparent)}
 #mls-root .mls-capav img{width:100%;height:100%;object-fit:cover;display:block}
@@ -70567,7 +70577,7 @@ var AR_SEC = [
 /* ───────── حالة الوحدة ───────── */
 var M = { app:null, db:null, uid:null, sid:null, conn:false, owner:false, err:'', orders:{}, lc:{}, tab:'orders', filter:'new', ctl:{}, dues:null, bimg:null,
           q:'', sec:null, catQ:'', busy:{}, timer:null, lastNew:0, refs:[], seen:{}, opened:{}, remAt:0, pkSel:[],
-          cx:{}, chatOid:null, cq:'', rf:'all', rtNew:0, skew:0, ordLoaded:false };
+          cx:{}, lx:{}, chatOid:null, cq:'', rf:'all', rtNew:0, skew:0, ordLoaded:false };
 
 /* ───────── أدوات ───────── */
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
@@ -70843,7 +70853,7 @@ async function connect(){
     if(!auth.currentUser) await auth.signInAnonymously();
     M.uid=auth.currentUser.uid; M.db=M.app.database();
     detach();
-    M.sid=c.sid; M.orders={}; M.cx={}; M.lc={}; M.ordLoaded=false;
+    M.sid=c.sid; M.orders={}; M.cx={}; M.lc={}; M.lx={}; M.ordLoaded=false;
     await M.db.ref('stores/'+c.sid+'/owner/'+M.uid).set(c.secret);   // تسجيل هذه الحاسبة كمالك (يتحقق منه الخادم بالمفتاح السري)
     M.owner=true; M.err='';
     attach();
@@ -70856,7 +70866,7 @@ async function connect(){
     console.warn('[mlstore] connect',e);
   }finally{ M._connecting=false; if(isShown()) render(); }
 }
-function detach(){ M.refs.forEach(function(r){ try{ r.off(); }catch(e){} }); M.refs=[]; M.conn=false; }
+function detach(){ if(M.conn) lxPresence(false); clearInterval(M._lonT); M.refs.forEach(function(r){ try{ r.off(); }catch(e){} }); M.refs=[]; M.conn=false; }
 function attach(){
   var base='stores/'+M.sid;
   var oref=M.db.ref(base+'/orders');
@@ -70889,6 +70899,16 @@ function attach(){
   lref.on('child_changed', function(s){ onLc(s.key, s.val()); }, noop);
   lref.on('child_removed', function(s){ delete M.lc[s.key]; }, noop);
   M.refs.push(lref);
+  // 💬 المراسلة العامة مع المراجعين (lx/<sid>) — فارغة عادةً: كل رسالة تُحذف بعد حفظها هنا
+  var xgref=M.db.ref('lx/'+M.sid), noop2=function(e){ console.warn('[mlstore] lx', e&&e.code); };
+  xgref.on('child_added', function(s){ onLx(s.key, s.val()); }, noop2);
+  xgref.on('child_changed', function(s){ onLx(s.key, s.val()); }, noop2);
+  xgref.on('child_removed', function(s){ lxGone(s.key); }, noop2);
+  // 🟢 حضور البرنامج: هواتف المراجعين ترفع رسائلها فقط والبرنامج مفتوح
+  var pref=M.db.ref('.info/connected');
+  pref.on('value', function(s){ if(s.val()===true) lxPresence(true); });
+  clearInterval(M._lonT); M._lonT=setInterval(function(){ if(M.conn && M.online!==false) M.db.ref('lon/'+M.sid+'/'+M.uid).set(TS()).catch(function(){}); }, 30*60e3);
+  M.refs.push(xgref, pref);
 }
 function onOrder(oid,o,added){
   if(!RX_OID.test(oid) || !o || typeof o!=='object') return;
@@ -71322,7 +71342,8 @@ function chatViewing(oid){ return isShown() && M.tab==='chat' && M.chatOid===oid
 function ordInfo(oid){ return M.orders[oid] || getLog()[oid] || {}; }
 /* محادثة المراجع مفتاحها <oid>، ومحادثة موظف السحب مفتاحها c_<oid> (نفس المخزن المحلي) */
 var CAPK='c_', CAP_LIVE=['onway','collected','inlab'];
-function tSplit(tid){ tid=String(tid||''); return tid.indexOf(CAPK)===0 ? {cap:true, oid:tid.slice(CAPK.length)} : {cap:false, oid:tid}; }
+function tSplit(tid){ tid=String(tid||''); if(tid.indexOf('u_')===0) return {cap:false, gen:true, uid:tid.slice(2), oid:''}; return tid.indexOf(CAPK)===0 ? {cap:true, oid:tid.slice(CAPK.length)} : {cap:false, oid:tid}; }
+function tAttr(p){ return p.gen ? ' data-u="'+esc(p.uid)+'"' : ' data-o="'+p.oid+'"'+(p.cap?' data-k="c"':''); }   // سمات الزر لكل نوع محادثة
 function capLive(o){ return !!(o && o.cap && CAP_LIVE.indexOf(o.st)>=0); }
 function capMeta(c,o){ if(o.cn) c.nm=String(o.cn).slice(0,80); if(o.cph) c.ph=String(o.cph).slice(0,20); if(o.cap) c.cap=String(o.cap).slice(0,128); }
 function onLc(oid, th){
@@ -71396,6 +71417,92 @@ function onCx(oid, th){
   if(fresh){ if(viewing) markRead(oid); else msgAlert(oid,c); }
   chatRefresh(oid);
 }
+/* ═══════════ 💬 المراسلة العامة مع المراجعين (بلا طلب) — lx/<sid>/<uid> ═══════════
+   • هاتف المراجع يحتفظ برسالته ولا يرفعها إلا وهذا البرنامج مفتوح (lon/<sid>/<هذه الحاسبة>)
+     ⇒ تصل هنا فوراً ⇒ تُحفظ على الحاسبة (النص في المخزن المحلي، الصور في IndexedDB)
+     ⇒ تُحذف من الخادم بعد التأكد من حفظها ⇒ تظهر للمراجع ✓✓.
+   • رد المختبر يُكتب على الخادم + إشعار للمراجع يحمل الرسالة ⇒ هاتفه يحفظها ويحذفها.
+   • المحادثة مفتاحها u_<uid> في نفس مخزن المحادثات. */
+var LXP='u_', RX_UID=/^[A-Za-z0-9_-]{1,128}$/, RX_JPG=/^data:image\/jpeg;base64,[A-Za-z0-9+\/=]+$/;
+var LQUICK_G=['أهلاً بك، كيف يمكننا مساعدتك؟','نعم، التحليل متوفر لدينا ✅','يمكنك الطلب من التطبيق مباشرة وسيصلك الساحب 🛵','يرجى الصيام 8–12 ساعة قبل التحليل','شكراً لتواصلك معنا 🌷'];
+var LXI={ _db:null, mem:{}, memK:[],
+  open:function(){ var s=this; if(s._db) return Promise.resolve(s._db); return new Promise(function(res,rej){ var q=indexedDB.open('mls-lximg',1); q.onupgradeneeded=function(){ q.result.createObjectStore('i',{keyPath:'id'}); }; q.onsuccess=function(){ s._db=q.result; res(s._db); }; q.onerror=function(){ rej(q.error); }; }); },
+  get:function(id){ var s=this; if(s.mem[id]) return Promise.resolve(s.mem[id]);
+    return s.open().then(function(d){ return new Promise(function(res){ try{ var r=d.transaction('i','readonly').objectStore('i').get(id); r.onsuccess=function(){ var v=r.result&&typeof r.result.d==='string'?r.result.d:''; if(v){ s.mem[id]=v; s.memK.push(id); if(s.memK.length>40) delete s.mem[s.memK.shift()]; } res(v); }; r.onerror=function(){ res(''); }; }catch(e){ res(''); } }); }).catch(function(){ return ''; }); },
+  put:function(id, data){ var s=this;
+    return s.open().then(function(d){ return new Promise(function(res,rej){ var t=d.transaction('i','readwrite'); t.objectStore('i').put({id:id, d:data, sid:M.sid, ts:Date.now()}); t.oncomplete=function(){ res(); }; t.onerror=t.onabort=function(){ rej(t.error); }; }); })
+      .then(function(){ delete s.mem[id]; return s.get(id); }).then(function(back){ if(back!==data) throw new Error('img not saved'); return true; }); }
+};
+/* تأكيد أن الرسالة محفوظة فعلاً على الحاسبة (المخزن المحلي قد يمتلئ) قبل حذفها من الخادم */
+function lxSaved(tid, id){ var c=getChats()[tid]; return !!(c && (c.ms||[]).some(function(x){ return x.id===id; })); }
+function onLx(uid, th){
+  if(!RX_UID.test(uid) || !th || typeof th!=='object') return;
+  M.lx[uid]=th;
+  var tid=LXP+uid, C=getChats(), c=C[tid]||(C[tid]={ms:[],un:0,lt:0,gen:1}), viewing=chatViewing(tid);
+  if(!Array.isArray(c.ms)) c.ms=[];
+  var m=(th.m&&typeof th.m==='object')?th.m:{}, fresh=0, ch=false, got=[], base='lx/'+M.sid+'/'+uid;
+  Object.keys(m).forEach(function(id){
+    var v=m[id]; if(!RX_MID.test(id) || !v || typeof v.t!=='string') return;
+    var x=c.ms.find(function(y){return y.id===id;});
+    if(v.f==='p'){
+      if(typeof v.n==='string' && v.n.trim()) c.nm=v.n.trim().slice(0,80);
+      if(typeof v.ph==='string' && /^\+?[0-9]{7,15}$/.test(v.ph)) c.ph=v.ph;
+      var img=typeof v.i==='string' && v.i.length<=450000 && RX_JPG.test(v.i) ? v.i : '';
+      if(!x){
+        var sts=+v.ts||Date.now(), ct=+v.ct||0;
+        x={id:id, f:'p', t:v.t.slice(0,1000), ts:(ct && ct<=sts+60e3 && sts-ct<30*864e5)?ct:sts, sts:sts};   // وقت كتابتها على الهاتف (قد تُرفع لاحقاً)
+        if(img) x.im=1;
+        c.ms.push(x); fresh++;
+      }
+      got.push([id, img]);
+    } else if(v.f==='l'){
+      if(!x){ c.ms.push({id:id, f:'l', t:v.t.slice(0,1000), ts:+v.ts||Date.now(), st:'sent'}); ch=true; }   // أرسلتها حاسبة أخرى في المختبر
+      else{ if(x.st==='sending'||x.st==='fail'){ x.st='sent'; ch=true; } if(typeof v.ts==='number' && x.ts!==v.ts){ x.ts=v.ts; ch=true; } }
+    }
+  });
+  c.ms.forEach(function(x){ if(x.f==='l' && x.st==='sent' && !m[x.id]){ x.st='dlv'; ch=true; } });   // اختفت ⇒ وصلت لهاتف المراجع
+  var rp=+th.rp||0;
+  if(rp){ c.ms.forEach(function(x){ if(x.f==='l' && (x.st==='sent'||x.st==='dlv') && rp>=x.ts){ x.st='read'; ch=true; } }); schedRm(base+'/rp', true); }
+  if(fresh){ c.ms.sort(function(a,b){return a.ts-b.ts;}); if(c.ms.length>300) c.ms=c.ms.slice(-300); if(!viewing) c.un=(+c.un||0)+fresh; c.lt=Date.now(); }
+  if(fresh||ch) putChats(C);
+  // 🧹 الحذف من الخادم فقط بعد التأكد من الحفظ على هذه الحاسبة (والصورة في IndexedDB)
+  got.forEach(function(g){
+    var id=g[0], img=g[1], path=base+'/m/'+id;
+    if(!lxSaved(tid, id)){ console.warn('[mlstore] lx not saved', id); return; }
+    if(!img){ schedRm(path, true); return; }
+    LXI.get(id).then(function(have){ return have===img ? true : LXI.put(id, img); })
+      .then(function(){ schedRm(path, true); if(isShown() && M.tab==='chat' && M.chatOid===tid) lxHydrate(); })
+      .catch(function(e){ console.warn('[mlstore] lx img', e); });
+  });
+  if(fresh){ if(viewing) markRead(tid); else msgAlert(tid,c); }
+  chatRefresh(tid);
+}
+function lxGone(uid){
+  if(!RX_UID.test(uid)) return;
+  onLx(uid, {}); delete M.lx[uid];
+}
+/* 🟢 «برنامج المختبر مفتوح» — يُكتب عند كل اتصال ويُحذف تلقائياً عند الإغلاق/الانقطاع، ويتجدّد كل 30 دقيقة */
+function lxPresence(on){
+  if(!M.db || !M.sid || !M.uid) return;
+  var me=M.db.ref('lon/'+M.sid+'/'+M.uid);
+  if(on){ me.onDisconnect().remove().then(function(){ return me.set(TS()); }).catch(function(e){ console.warn('[mlstore] lon', e&&e.code); }); }
+  else{ try{ me.onDisconnect().cancel(); }catch(e){} me.remove().catch(function(){}); }
+}
+function lxHydrate(){
+  var r=root(); if(!r) return;
+  Array.prototype.forEach.call(r.querySelectorAll('img[data-lim]:not([src])'), function(el){
+    LXI.get(el.getAttribute('data-lim')).then(function(d){ if(d) el.src=d; else { var w=el.closest('.mls-bimg'); if(w) w.classList.add('miss'); } });
+  });
+}
+function lxView(id){
+  LXI.get(id).then(function(d){
+    if(!d) return notif('الصورة غير موجودة','لم تُحفظ على هذه الحاسبة','info');
+    var ov=document.createElement('div'); ov.className='mls-imgov'; ov.title='اضغط للإغلاق';
+    var im=document.createElement('img'); im.src=d; im.alt='صورة من المراجع'; ov.appendChild(im);
+    var a=document.createElement('a'); a.href=d; a.download='khalik-'+id+'.jpg'; a.textContent='⬇️ حفظ الصورة'; a.className='btn btn-p btn-sm'; a.onclick=function(e){ e.stopPropagation(); }; ov.appendChild(a);
+    ov.onclick=function(){ ov.remove(); }; document.body.appendChild(ov);
+  });
+}
 function schedRm(path, abs){
   var full=abs?path:'stores/'+M.sid+'/'+path;
   M._rm=M._rm||{}; if(M._rm[full]) return;
@@ -71409,15 +71516,23 @@ function ping(){
 }
 function msgAlert(tid,c){
   var cf=cfg(), last=c.ms.filter(function(x){return x.f!=='l';}).pop(), cap=tSplit(tid).cap;
-  var ttl=cap?'🛵 رسالة من موظف السحب '+(c.nm||''):'💬 رسالة من '+(c.nm||'مراجع');
+  var ttl=cap?'🛵 رسالة من موظف السحب '+(c.nm||''):'💬 رسالة من '+(c.nm||'مراجع')+(tSplit(tid).gen?' (مراسلة عامة)':'');
+  var lt=last?(last.im?'📷 صورة'+(last.t?' · '+last.t:''):last.t):'';
   if(!cf || cf.sound!==false) ping();
-  notif(ttl, last?last.t.slice(0,90):'', 'info');
-  try{ if((document.hidden || !document.hasFocus()) && 'Notification' in window && Notification.permission!=='denied'){ var _cn=new Notification(ttl, {body:last?last.t.slice(0,120):''}); _cn.onclick=function(){ M.chatOid=tid; mlsOpenFromNotif('chat'); try{_cn.close();}catch(e){} }; } }catch(e){}
+  notif(ttl, lt.slice(0,90), 'info');
+  try{ if((document.hidden || !document.hasFocus()) && 'Notification' in window && Notification.permission!=='denied'){ var _cn=new Notification(ttl, {body:lt.slice(0,120)}); _cn.onclick=function(){ M.chatOid=tid; mlsOpenFromNotif('chat'); try{_cn.close();}catch(e){} }; } }catch(e){}
   updBadge();
 }
 function markRead(tid){
   var C=getChats(), c=C[tid]; if(c && c.un){ c.un=0; putChats(C); updBadge(); }
   var p=tSplit(tid), oid=p.oid;
+  if(p.gen){   // «قرأها المختبر» للمراسلة العامة: تُكتب مرة لكل رسالة جديدة (الرسائل نفسها حُذفت من الخادم)
+    var lp=c && (c.ms||[]).filter(function(x){return x.f==='p';}).pop();
+    if(!M.conn || !lp || !RX_UID.test(p.uid) || (c.rlSent||0)>=(lp.sts||lp.ts)) return;
+    c.rlSent=lp.sts||lp.ts; putChats(C);
+    M.db.ref('lx/'+M.sid+'/'+p.uid+'/rl').set(TS()).catch(function(){});
+    return;
+  }
   if(!M.conn || !(p.cap?M.lc[oid]:M.cx[oid])) return;
   M._rl=M._rl||{}; if(Date.now()-(M._rl[tid]||0)<3000) return; M._rl[tid]=Date.now();
   M.db.ref((p.cap?'lc/'+M.sid+'/':'stores/'+M.sid+'/cx/')+oid+'/rl').set(TS()).catch(function(){});
@@ -71425,7 +71540,9 @@ function markRead(tid){
 function chatSend(tid, text){
   if(!sp('store_chat')) return spDeny('مراسلة مراجعي المتجر');
   var p=tSplit(tid), oid=p.oid;
-  text=String(text||'').trim().slice(0,1000); if(!text || !RX_OID.test(oid)) return;
+  text=String(text||'').trim().slice(0,1000); if(!text) return;
+  if(p.gen) return lxSend(tid, p.uid, text);
+  if(!RX_OID.test(oid)) return;
   if(!M.conn) return notif('غير متصل','تحقّق من الإنترنت','error');
   var o=ordInfo(oid);
   if(p.cap && !capLive(M.orders[oid])) return notif('انتهت الرحلة','لا يمكن مراسلة موظف السحب بعد انتهاء رحلته','info');
@@ -71439,6 +71556,20 @@ function chatSend(tid, text){
   }).catch(function(e){
     var C2=getChats(), x=C2[tid] && C2[tid].ms.find(function(y){return y.id===id;}); if(x){ x.st='fail'; putChats(C2); chatPaint(tid,false); }
     notif('تعذّر الإرسال', (e&&e.code==='PERMISSION_DENIED')?'تحقّق من تحديث قواعد Firebase للمتجر':'تحقّق من الاتصال', 'error');
+  });
+}
+function lxSend(tid, uid, text){
+  if(!RX_UID.test(uid)) return;
+  if(!M.conn) return notif('غير متصل','تحقّق من الإنترنت','error');
+  var ref=M.db.ref('lx/'+M.sid+'/'+uid+'/m').push(), id=ref.key;
+  var C=getChats(), c=C[tid]||(C[tid]={ms:[],un:0,lt:0,gen:1});
+  c.ms.push({id:id, f:'l', t:text, ts:sNow(), st:'sending'}); c.lt=Date.now(); putChats(C); chatPaint(tid,true);
+  ref.set({f:'l', t:text, ts:TS()}).then(function(){
+    var C2=getChats(), x=C2[tid] && C2[tid].ms.find(function(y){return y.id===id;}); if(x && x.st==='sending'){ x.st='sent'; putChats(C2); chatPaint(tid,false); }
+    pushApi('msg',{c:'lx', sid:M.sid, u:uid, mid:id});   // 🔔 تصل للمراجع كإشعار يحمل الرسالة (تُحذف من الخادم فور استلامها)
+  }).catch(function(e){
+    var C2=getChats(), x=C2[tid] && C2[tid].ms.find(function(y){return y.id===id;}); if(x){ x.st='fail'; putChats(C2); chatPaint(tid,false); }
+    notif('تعذّر الإرسال', (e&&e.code==='PERMISSION_DENIED')?'حدّث قواعد Firebase (المراسلة العامة lx)':'تحقّق من الاتصال', 'error');
   });
 }
 function chatTyping(oid){
@@ -71490,13 +71621,13 @@ function dayL(ts){ var d=new Date(ts), t=new Date(), y=new Date(); y.setDate(t.g
   try{ return d.toLocaleDateString('ar-IQ',{day:'numeric',month:'long'}); }catch(e){ return d.toDateString(); } }
 function chatThreads(){
   var C=getChats(), ids={}, out=[];
-  Object.keys(C).forEach(function(k){ if(RX_OID.test(tSplit(k).oid) && (C[k].ms||[]).length) ids[k]=1; });
+  Object.keys(C).forEach(function(k){ var q0=tSplit(k); if((q0.gen?RX_UID.test(q0.uid):RX_OID.test(q0.oid)) && (C[k].ms||[]).length) ids[k]=1; });
   Object.keys(M.orders).forEach(function(k){ var o=M.orders[k]; if(['rejected','cancelled'].indexOf(o.st)<0) ids[k]=1; if(capLive(o)) ids[CAPK+k]=1; });
   if(M.chatOid) ids[M.chatOid]=1;
   Object.keys(ids).forEach(function(k){ var p=tSplit(k), c=C[k]||{ms:[],un:0}, o=ordInfo(p.oid), last=(c.ms||[])[(c.ms||[]).length-1];
-    out.push({tid:k, oid:p.oid, cap:p.cap, c:c, o:o, nm:p.cap?(c.nm||o.cn||'موظف السحب'):(c.nm||o.nm||'مراجع'), last:last, t:(last&&last.ts)||c.lt||o.upd||o.ts||0}); });
+    out.push({tid:k, oid:p.oid, cap:p.cap, gen:p.gen, uid:p.uid, c:c, o:o, nm:p.cap?(c.nm||o.cn||'موظف السحب'):(c.nm||o.nm||'مراجع'), last:last, t:(last&&last.ts)||c.lt||o.upd||o.ts||0}); });
   var q=(M.cq||'').trim().toLowerCase();
-  if(q) out=out.filter(function(r){ return (r.nm+' '+(r.cap?(r.o.cph||r.c.ph||'')+' '+(r.o.nm||'')+' موظف السحب':(r.o.ph||r.c.ph||''))+' '+shortNo(r.oid)).toLowerCase().indexOf(q)>=0; });
+  if(q) out=out.filter(function(r){ return (r.nm+' '+(r.cap?(r.o.cph||r.c.ph||'')+' '+(r.o.nm||'')+' موظف السحب':(r.o.ph||r.c.ph||''))+' '+(r.gen?'مراسلة عامة استفسار':shortNo(r.oid))).toLowerCase().indexOf(q)>=0; });
   out.sort(function(a,b){ return ((b.c.un?1:0)-(a.c.un?1:0)) || (b.t-a.t); });
   return out;
 }
@@ -71505,10 +71636,10 @@ function chatListHtml(){
   if(!rows.length) return '<div class="mls-empty" style="padding:30px 10px"><b>لا توجد محادثات</b>تظهر هنا رسائل المراجعين فور وصولها، ويمكنك بدء محادثة من بطاقة أي طلب.</div>';
   return rows.slice(0,150).map(function(r){
     var o=r.o, st=ST[o.st]||null;
-    return '<button class="mls-cli'+(M.chatOid===r.tid?' on':'')+(r.c.un?' un':'')+'" data-x="copen" data-o="'+r.oid+'"'+(r.cap?' data-k="c"':'')+'>'+
+    return '<button class="mls-cli'+(M.chatOid===r.tid?' on':'')+(r.c.un?' un':'')+'" data-x="copen"'+tAttr(r)+'>'+
       (r.cap?capAvHtml(capProf(o.cap||r.c.cap), r.nm):'<span class="mls-cav">'+esc(String(r.nm).trim().charAt(0)||'م')+'</span>')+
-      '<span class="mls-cmain"><span class="mls-ctop"><b>'+esc(r.nm)+(r.cap?'<i class="mls-ctag">موظف سحب</i>':'')+'</b><small>'+(r.t?ago(r.t):'')+'</small></span>'+
-      '<span class="mls-clast">'+(r.last?(r.last.f==='l'?tickHtml(r.last.st, r.cap?'موظف السحب':'')+' ':'')+esc(r.last.t.slice(0,60)):'<i class="mls-muted">#'+shortNo(r.oid)+(r.cap&&o.nm?' · المراجع '+esc(o.nm):'')+(st?' · '+st[0]:'')+'</i>')+'</span></span>'+
+      '<span class="mls-cmain"><span class="mls-ctop"><b>'+esc(r.nm)+(r.cap?'<i class="mls-ctag">موظف سحب</i>':r.gen?'<i class="mls-ctag gen">مراسلة عامة</i>':'')+'</b><small>'+(r.t?ago(r.t):'')+'</small></span>'+
+      '<span class="mls-clast">'+(r.last?(r.last.f==='l'?tickHtml(r.last.st, r.cap?'موظف السحب':'')+' ':'')+esc((r.last.im?'📷 صورة'+(r.last.t?' · ':''):'')+r.last.t.slice(0,60)):'<i class="mls-muted">#'+shortNo(r.oid)+(r.cap&&o.nm?' · المراجع '+esc(o.nm):'')+(st?' · '+st[0]:'')+'</i>')+'</span></span>'+
       (r.c.un?'<span class="mls-cbadge">'+r.c.un+'</span>':'')+'</button>';
   }).join('');
 }
@@ -71518,12 +71649,20 @@ function chatMsgsHtml(tid){
   var out='', lastDay='';
   c.ms.forEach(function(x){
     var dl=dayL(x.ts); if(dl!==lastDay){ out+='<div class="mls-cday"><span>'+esc(dl)+'</span></div>'; lastDay=dl; }
-    out+='<div class="mls-bub '+(x.f==='l'?'me':'them')+(x.st==='fail'?' fail':'')+'"'+(x.st==='fail'?' data-x="cretry" data-o="'+p.oid+'"'+(p.cap?' data-k="c"':'')+' data-m="'+esc(x.id)+'" title="اضغط لإعادة الإرسال"':'')+'><span class="bt">'+esc(x.t)+'</span><span class="bm">'+hmL(x.ts)+(x.f==='l'?' '+tickHtml(x.st, who):'')+'</span></div>';
+    var im=x.im?'<span class="mls-bimg" data-x="cimg" data-m="'+esc(x.id)+'" title="اضغط للتكبير"><img data-lim="'+esc(x.id)+'" alt="صورة"></span>':'';
+    out+='<div class="mls-bub '+(x.f==='l'?'me':'them')+(x.st==='fail'?' fail':'')+(x.im?' hasimg':'')+'"'+(x.st==='fail'?' data-x="cretry"'+tAttr(p)+' data-m="'+esc(x.id)+'" title="اضغط لإعادة الإرسال"':'')+'>'+im+(x.t?'<span class="bt">'+esc(x.t)+'</span>':'')+'<span class="bm">'+hmL(x.ts)+(x.f==='l'?' '+tickHtml(x.st, who):'')+'</span></div>';
   });
   return out;
 }
 function chatHeadHtml(tid){
   var p=tSplit(tid);
+  if(p.gen){
+    var gc=getChats()[tid]||{};
+    return '<button class="btn btn-s btn-sm mls-cback" data-x="cback">→</button>'+
+      '<span class="mls-cav">'+esc(String(gc.nm||'م').trim().charAt(0)||'م')+'</span>'+
+      '<div class="mls-chtt"><b>'+esc(gc.nm||'مراجع')+' <i class="mls-ctag gen">مراسلة عامة</i></b><small>استفسار من تطبيق خليك (بدون طلب)'+(gc.ph?' · <span dir="ltr">'+esc(gc.ph)+'</span>':'')+'</small></div>'+
+      (gc.ph?'<a class="btn btn-s btn-sm" href="tel:'+esc(gc.ph)+'" title="اتصال">📞</a>':'');
+  }
   if(p.cap){
     var cc=getChats()[tid]||{}, co=ordInfo(p.oid), cst=ST[co.st], P=capProf(co.cap||cc.cap), cnm=cc.nm||co.cn||'موظف السحب', cph=co.cph||cc.ph||'';
     return '<button class="btn btn-s btn-sm mls-cback" data-x="cback">→</button>'+capAvHtml(P, cnm)+
@@ -71542,9 +71681,9 @@ function chatHeadHtml(tid){
     (live?'<button class="btn btn-s btn-sm" data-x="cgo" data-o="'+oid+'" title="عرض الطلب">🧾 الطلب</button>':'');
 }
 var LQUICK_C=['المراجع بانتظارك — يرجى الإسراع 🙏','العينة جاهزة للاستلام؟','اتصل بالمختبر رجاءً 📞','شكراً لك 🌷'];
-function chatQuick(tid){ return tSplit(tid).cap?LQUICK_C:LQUICK; }
+function chatQuick(tid){ var p=tSplit(tid); return p.cap?LQUICK_C:p.gen?LQUICK_G:LQUICK; }
 function chatHtml(){
-  var oid=M.chatOid, cp=tSplit(oid), live=oid && (cp.cap?capLive(M.orders[cp.oid]):!!M.orders[oid]);
+  var oid=M.chatOid, cp=tSplit(oid), live=oid && (cp.gen?RX_UID.test(cp.uid):cp.cap?capLive(M.orders[cp.oid]):!!M.orders[oid]);
   return '<div class="mls-chat'+(oid?' has-open':'')+'">'+
     '<div class="mls-clistw"><input class="fc" data-x="cq" placeholder="🔍 اسم، هاتف، أو رقم الطلب" value="'+esc(M.cq||'')+'"><div class="mls-clist" id="mls-clist">'+chatListHtml()+'</div></div>'+
     '<div class="mls-cpane">'+(oid?
@@ -71565,6 +71704,7 @@ function chatPaint(oid, toEnd){
   var near=el.scrollHeight-el.scrollTop-el.clientHeight<140;
   el.innerHTML=chatMsgsHtml(oid);
   var h=document.getElementById('mls-chead'); if(h) h.innerHTML=chatHeadHtml(oid);
+  lxHydrate();
   if(near||toEnd) chatScrollEnd();
 }
 function chatRefresh(oid){
@@ -71663,7 +71803,7 @@ function render(){
   if(M.tab==='catalog') bindSecBar(r, barL);
   if(M.tab==='settings') drawQR();
   if(M.tab==='dues') drawDuesChart();
-  if(M.tab==='chat'){ var ci=document.getElementById('mls-cin'); if(ci && cinV){ ci.value=cinV; } if(ci && cinF) ci.focus(); chatScrollEnd(); }
+  if(M.tab==='chat'){ var ci=document.getElementById('mls-cin'); if(ci && cinV){ ci.value=cinV; } if(ci && cinF) ci.focus(); lxHydrate(); chatScrollEnd(); }
 }
 function setupHtml(){
   return '<div class="mls-top"><div class="mls-title">🛵 طلبات المتجر — خليك</div></div>'+
@@ -72666,12 +72806,13 @@ function onClick(e){
   switch(x){
     case 'enable': enableStore(); break;
     case 'tab': M.tab=el.getAttribute('data-v'); if(M.tab==='dues') loadDues(); if(M.tab==='offers') M.bimg=null; if(M.tab==='rates') M.rtNew=0; render(); if(M.tab==='chat' && M.chatOid) markRead(M.chatOid); break;
-    case 'copen': chatOpenOid((el.getAttribute('data-k')==='c'?CAPK:'')+oid); break;
+    case 'copen': { var u0=el.getAttribute('data-u'); if(u0){ if(RX_UID.test(u0)) chatOpenOid(LXP+u0); break; } chatOpenOid((el.getAttribute('data-k')==='c'?CAPK:'')+oid); break; }
+    case 'cimg': lxView(el.getAttribute('data-m')); break;
     case 'cback': M.chatOid=null; render(); break;
     case 'cgo': M.tab='orders'; M.filter=(FILTERS.find(function(f){ return f[2].indexOf((M.orders[oid]||{}).st)>=0; })||FILTERS[0])[0]; M.q=shortNo(oid); render(); break;
     case 'csend': chatSendUI(); break;
     case 'cq1': { var tq=document.getElementById('mls-cin'); if(tq){ tq.value=chatQuick(M.chatOid)[i]||''; chatSendUI(); } break; }
-    case 'cretry': { var tid0=(el.getAttribute('data-k')==='c'?CAPK:'')+oid, mid=el.getAttribute('data-m'), C0=getChats(), c0=C0[tid0], x0=c0&&c0.ms.find(function(y){return y.id===mid;}); if(x0){ c0.ms=c0.ms.filter(function(y){return y.id!==mid;}); putChats(C0); chatSend(tid0,x0.t); } break; }
+    case 'cretry': { var u1=el.getAttribute('data-u'); if(u1 && !RX_UID.test(u1)) break; var tid0=u1?LXP+u1:(el.getAttribute('data-k')==='c'?CAPK:'')+oid, mid=el.getAttribute('data-m'), C0=getChats(), c0=C0[tid0], x0=c0&&c0.ms.find(function(y){return y.id===mid;}); if(x0){ c0.ms=c0.ms.filter(function(y){return y.id!==mid;}); putChats(C0); chatSend(tid0,x0.t); } break; }
     case 'rf': M.rf=el.getAttribute('data-v'); render(); break;
     case 'rdel': if(confirm('حذف هذا التقييم من سجل هذه الحاسبة؟')){ var R0=getRates(); delete R0[oid]; putRates(R0); render(); } break;
     case 'bimgdel': if(!confirm('حذف هذه الصورة من التطبيق؟')) break; M.bimg.splice(i,1); saveBimg().then(function(){ notif('تم','حُذفت الصورة من تطبيق المراجعين','success'); render(); }).catch(function(){ notif('خطأ','تعذّر الحذف','error'); }); break;
