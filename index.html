@@ -72549,16 +72549,21 @@ var CAP_MIN_IQD=5000;
 function capMin(){ return cvt(CAP_MIN_IQD); }
 function settleTxt(o){ var d=rnd((+o.tot||0)-capFee(o)); return d>=0?'استلم منه '+fmt(d)+' '+cur():'ادفع له '+fmt(-d)+' '+cur()+' — فرق أجرة السحب'; }
 function capFee(o){ return Math.max(capMin(), rnd(+(o&&o.fee)||0)); }
-/* 📍 أجور السحب حسب المسافة بين المختبر والمراجع (ثابتة — لا يغيّرها المختبر، يقدر فقط يجعلها مجانية على حسابه) */
-var DIST_TIERS_IQD=[[4,5000],[10,10000],[15,15000],[30,20000]];   // حتى X كم ← أجرة (د.ع)
+/* 📍 أجور السحب حسب المسافة بين المختبر والمراجع — الأسعار الأساسية هي الحد الأدنى؛
+   صاحب المختبر يقدر يرفع سعر كل مسافة (info.tf) ولا يقدر يُنزله تحتها (أو يجعلها مجانية على حسابه) */
+var DIST_TIERS_IQD=[[4,5000],[10,10000],[15,15000],[30,20000]];   // حتى X كم ← أقل أجرة (د.ع)
 function feeMode(I){ return (I && I.fm==='free')?'free':'dist'; }
-function distTiers(){ return DIST_TIERS_IQD.map(function(t){ return {m:t[0], f:cvt(t[1])}; }); }
+function distTiers(){ var c=cfg(), I=(c&&c.info)||{}, tf=Array.isArray(I.tf)?I.tf:[];
+  return DIST_TIERS_IQD.map(function(t,i){ var mn=cvt(t[1]); return {m:t[0], f:Math.max(mn, rnd(+tf[i]||0))}; }); }
 function kmBetween(a,b){ var R=6371, r=Math.PI/180, dl=(b.la-a.la)*r, dn=(b.lo-a.lo)*r,
   x=Math.sin(dl/2)*Math.sin(dl/2)+Math.cos(a.la*r)*Math.cos(b.la*r)*Math.sin(dn/2)*Math.sin(dn/2); return 2*R*Math.asin(Math.min(1,Math.sqrt(x))); }
 function distFee(km){ var t=distTiers(); for(var i=0;i<t.length;i++){ if(km<=t[i].m) return t[i].f; } return t[t.length-1].f; }
 function distTableHtml(I){
-  var t=distTiers(), prev=0, rows=t.map(function(x){ var r='<div class="mls-li"><span class="t"><b>'+(prev?('أكثر من '+prev+' إلى '+x.m):('من 1 متر إلى '+x.m))+' كم</b> — '+fmt(x.f)+' '+esc(cur())+'</span></div>'; prev=x.m; return r; }).join('');
-  return '<div class="mls-info" style="margin-top:8px;font-size:12px">📍 تُحسب أجور السحب تلقائياً حسب المسافة بين المختبر والمراجع، وهي ثابتة ولا يمكن تغييرها. يمكنك فقط جعلها «مجانية» للمراجع على حسابك.'+
+  var t=distTiers(), prev=0, ed=sp('store_settings') && feeMode(I)==='dist', rows=t.map(function(x,i){ var mn=cvt(DIST_TIERS_IQD[i][1]);
+    var r='<div class="mls-li"><span class="t"><b>'+(prev?('أكثر من '+prev+' إلى '+x.m):('من 1 متر إلى '+x.m))+' كم</b>'+
+      (ed?' <input class="fc" type="number" data-x="tf" data-i="'+i+'" min="'+mn+'" step="any" dir="ltr" value="'+x.f+'" style="width:120px;display:inline-block;margin:0 6px"> '+esc(cur())+' <span class="mls-muted" style="font-size:11px">(الأقل '+fmt(mn)+')</span>'
+         :' — '+fmt(x.f)+' '+esc(cur()))+'</span></div>'; prev=x.m; return r; }).join('');
+  return '<div class="mls-info" style="margin-top:8px;font-size:12px">📍 تُحسب أجور السحب تلقائياً حسب المسافة بين المختبر والمراجع. يمكنك <b>رفع</b> سعر أي مسافة، ولا يمكن أن يقل عن السعر الأساسي. ويمكنك جعلها «مجانية» للمراجع على حسابك. اضغط «نشر» بعد التعديل.'+
     (labLoc()?'':' <b>حدّد موقع المختبر على الخريطة</b> ليُحسب السعر.')+'</div><div class="mls-list">'+rows+'</div>';
 }
 function fixOrderFee(o, prev){
@@ -72865,7 +72870,7 @@ function onClick(e){
   var el=e.target.closest('[data-x]'); if(!el || !root().contains(el)) return;
   var x=el.getAttribute('data-x'), c=cfg(), oid=el.getAttribute('data-o'), i=+el.getAttribute('data-i');
   if(oid && !RX_OID.test(oid)) return;
-  if(['tvis','sh','cpon','bnon','pkon','sound','logo','inf','url','tp','tdp','tpr','td','sn','sic','sdp','so','dg','q','catq','pkq','bimgadd','bimgto','dfrom','dto','cq','cin','cpton','cptrad','smsel','secrenin'].indexOf(x)>=0) return; // تُعالج في change/input
+  if(['tvis','sh','cpon','bnon','pkon','sound','logo','inf','url','tp','tdp','tpr','td','sn','sic','sdp','so','dg','q','catq','pkq','bimgadd','bimgto','dfrom','dto','cq','cin','cpton','cptrad','tf','smsel','secrenin'].indexOf(x)>=0) return; // تُعالج في change/input
   e.preventDefault();
   var _need=ACT_PERM[x];
   if(_need && !sp(_need)) return spDeny('هذا الإجراء');
@@ -73009,6 +73014,10 @@ function onInput(e){
     case 'pkon': c.pks[+el.getAttribute('data-i')].on=val; break;
     case 'sound': c.sound=!!val; saveCfg(); return;
     case 'cpton': cpt().on=!!val; saveCfg(); return;
+    case 'tf': { if(e.type!=='change' || !sp('store_settings')) return; var ti=+el.getAttribute('data-i'), tb=DIST_TIERS_IQD[ti]; if(!tb) return;
+      var tmn=cvt(tb[1]), tv=rnd(+val||0);
+      if(tv<tmn){ tv=tmn; el.value=tmn; notif('لا يمكن أقل من السعر الأساسي', 'حتى '+tb[0]+' كم: '+fmt(tmn)+' '+cur()+' على الأقل','warning'); }
+      var tf=(Array.isArray(c.info.tf)?c.info.tf:[]).slice(0,DIST_TIERS_IQD.length); while(tf.length<DIST_TIERS_IQD.length) tf.push(0); tf[ti]=tv; c.info.tf=tf; break; }
     case 'cptrad': cpt().rad=Math.max(1,Math.min(50,+val||10)); saveCfg(); return;
     case 'url': c.url=String(val).trim().slice(0,200); saveCfg(); if(e.type==='change') render(); return;
     case 'inf': { var k=el.getAttribute('data-k'); if(['fv','fa','mn','ret'].indexOf(k)>=0) c.info[k]=Math.max(0,+val||0); else c.info[k]=String(val).slice(0,200);
