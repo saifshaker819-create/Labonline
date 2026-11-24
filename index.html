@@ -70472,6 +70472,13 @@ body.light-mode #mls-root .mls-bub.me .tk.rd{color:#9BE7FF}
 #mls-root .mls-cav img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 #mls-root .mls-cav.cap{background:linear-gradient(135deg,#F28C1B,#C2570C);font-size:17px}
 #mls-root .mls-ctag{font-size:9.5px;font-weight:800;color:#C2570C;background:color-mix(in srgb,#F28C1B 16%,transparent);border-radius:99px;padding:1px 7px;margin-inline-start:5px;vertical-align:1px}
+#mls-root .mls-cpl{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;max-height:420px;overflow:auto}
+#mls-root .mls-cpi{display:flex;align-items:center;gap:10px;text-align:start;padding:9px 10px;border-radius:12px;border:1.5px solid rgba(127,127,127,.25);background:transparent;color:inherit;cursor:pointer;font:inherit}
+#mls-root .mls-cpi.on{border-color:#14B8A6;background:color-mix(in srgb,#14B8A6 10%,transparent)}
+#mls-root .mls-cpi .ck{width:22px;height:22px;flex:none;border-radius:6px;border:2px solid rgba(127,127,127,.5);display:grid;place-items:center;font-weight:900;color:#fff}
+#mls-root .mls-cpi.on .ck{background:#14B8A6;border-color:#14B8A6}
+#mls-root .mls-cpi .mls-cmain{display:flex;flex-direction:column;gap:2px;min-width:0}
+#mls-root .mls-cpi small{font-size:11.5px}
 #mls-root .mls-ctag.gen{color:#0F7C74;background:color-mix(in srgb,#14B8A6 16%,transparent)}
 #mls-root .mls-bub.hasimg{padding:4px 4px 4px}
 #mls-root .mls-bub.hasimg .bt{padding:4px 7px 0}
@@ -71759,8 +71766,9 @@ function chatSendUI(){
 function sp(k){ try{ return typeof hasPermission!=='function' || hasPermission(k); }catch(e){ return true; } }
 var TAB_PERM={orders:'store',chat:'store_chat',rates:'store_chat',catalog:'store_catalog',offers:'store_catalog',dues:'store_dues',caps:'store_caps',settings:'store_settings'};
 var ACT_PERM={};
-['acceptonly','accept','convert','reject','onway','collected','inlab','send','msg','del','adel','block','unblock','cptsend','cptstop','cptun','cptwa'].forEach(function(k){ ACT_PERM[k]='store_orders'; });
+['acceptonly','accept','convert','reject','onway','collected','inlab','send','msg','del','adel','block','unblock','cptsend','cptall','cptstop','cptun','cptwa'].forEach(function(k){ ACT_PERM[k]='store_orders'; });
 ['csend','cretry','rdel'].forEach(function(k){ ACT_PERM[k]='store_chat'; });
+['cpsel','cpload','cpclr'].forEach(function(k){ ACT_PERM[k]='store_caps'; });
 ['allvis','cpadd','cpdel','bnadd','bndel','pkadd','pkrm','pkdel','bimgdel','publish','secren','smergego','sunm','tunm'].forEach(function(k){ ACT_PERM[k]='store_catalog'; });
 ['duesre','dprint','paydlg','paytog'].forEach(function(k){ ACT_PERM[k]='store_dues'; });
 ['open','code','enable','logodel','aradd','ardel','fm','fxreset','locpick','locme','locpaste','poster'].forEach(function(k){ ACT_PERM[k]='store_settings'; });
@@ -72579,10 +72587,13 @@ function dlog(oid, patch){ var L=getLog(), o=L[oid]||{}; o.dp=Object.assign({}, 
 function dlogEv(oid, ev){ var L=getLog(), o=L[oid]||{}, d=Object.assign({}, o.dp||{}); d.ev=(d.ev||[]).concat([Object.assign({t:Date.now()}, ev)]).slice(-30); dlog(oid, d); }
 
 M.dsp={};   // الإرسال الجاري: oid → {r, timer, near, sent, state}
-async function startDispatch(oid, manual){
+/* 🎯 موظفو السحب المحدَّدون (من تبويب «موظفو السحب») — إن وُجدوا يصلهم الطلب وحدهم */
+function capSel(){ var k=cpt(); if(!k) return []; var S0=k.sel&&typeof k.sel==='object'?k.sel:{}; return Object.keys(S0).filter(function(u){ return /^[A-Za-z0-9_-]{1,128}$/.test(u); }).slice(0,20); }
+async function startDispatch(oid, manual, all){
   var o=M.orders[oid], c=cfg(), k=cpt(), loc=labLoc();
   if(!o || !c || !M.conn) return;
-  if(!manual && (!k || k.on===false)) return;
+  var sel=all?[]:capSel();
+  if(!manual && (!k || (k.on===false && !sel.length))) return;   // التحديد وحده يكفي للإرسال التلقائي بعد القبول
   if(!pushReady()){ if(manual) notif('غير مضبوط','مُرسِل الإشعارات غير مضبوط بعد — راجع دليل الإعداد','warning'); return; }
   if(!loc){ notif('حدّد موقع المختبر','لن يصل الطلب لموظفي السحب قبل تحديد موقع المختبر في «إعدادات المتجر»','warning'); M.tab='settings'; render(); return; }
   if(o.st!=='accepted' || o.cap) return;
@@ -72596,12 +72607,13 @@ async function startDispatch(oid, manual){
   if(o.ar) job.ar=String(o.ar).slice(0,60);
   var fn=String(o.nm||'').trim().split(/\s+/)[0]; if(fn) job.pn=fn.slice(0,40);
   if(o.wh) job.wh=String(o.wh).slice(0,60);
+  if(sel.length){ job.o={}; sel.forEach(function(u){ job.o[u]=true; }); }
   try{ await M.db.ref('jobs/'+oid).set(job); }
   catch(e){ console.warn('[mlstore] job',e); notif('تعذّر الإرسال لموظفي السحب','تحقّق من الاتصال ثم اضغط «إرسال لموظفي السحب»','error'); return; }
-  M.dsp[oid]={r:0, state:'run', near:0, sent:0, at:Date.now()};
+  M.dsp[oid]={r:0, state:'run', near:0, sent:0, at:Date.now(), only:sel.length};
   // تابع البحث مباشرة: انتقل إلى «قيد العمل» إن لم تبقَ طلبات جديدة بانتظارك
   if(M.filter==='new' && !Object.keys(M.orders).some(function(k){ return M.orders[k].st==='new'; })) M.filter='work';
-  dlog(oid,{at:Date.now(), r:0, res:'run'}); dlogEv(oid,{e:'start'});
+  dlog(oid,{at:Date.now(), r:0, res:'run', only:sel.length}); dlogEv(oid,{e:'start', only:sel.length||undefined});
   render(); dispatchRound(oid);
 }
 async function dispatchRound(oid){
@@ -72611,7 +72623,7 @@ async function dispatchRound(oid){
   var r=await pushApi('dispatch',{oid:oid});
   D=M.dsp[oid]; if(!D || D.state!=='run') return;
   if(r && r.ok){ D.r=r.r; D.near=r.near; D.sent=r.sent; dlog(oid,{r:r.r}); dlogEv(oid,{e:'round', r:r.r, near:r.near, sent:r.sent});
-    if(r.r===1 && !r.near) notif('لا يوجد موظفو سحب قريبون الآن','سنعيد المحاولة '+(CAP_ROUNDS-1)+' مرات خلال دقيقتين — يمكنك أيضاً إرسال ساحبك الخاص','info'); }
+    if(r.r===1 && !r.near && !D.only) notif('لا يوجد موظفو سحب قريبون الآن','سنعيد المحاولة '+(CAP_ROUNDS-1)+' مرات خلال دقيقتين — يمكنك أيضاً إرسال ساحبك الخاص','info'); }
   else if(r && r.taken) return stopDispatch(oid,'acc');
   else if(r && r.gone) return stopDispatch(oid,'stop');
   else if(r && r.wait){ D.timer=setTimeout(function(){ dispatchRound(oid); }, Math.min(CAP_ROUND_MS, r.wait+300)); return; }
@@ -72626,7 +72638,8 @@ function stopDispatch(oid, why){
   if(why==='none'){
     pushApi('cancel',{oid:oid}).then(function(r){ if(!r || !r.ok) M.db.ref('jobs/'+oid).remove().catch(function(){}); });
     dlog(oid,{res:'none', end:Date.now()}); dlogEv(oid,{e:'none'});
-    chime(); notif('لم يقبل أي موظف سحب الطلب','#'+shortNo(oid)+' — أعد الإرسال لموظفي السحب أو أرسل ساحبك الخاص','warning');
+    chime(); if(D && D.only) notif('لم يقبل أي من موظفي السحب المحدَّدين','#'+shortNo(oid)+' — يمكنك الإرسال لكل موظفي السحب القريبين من بطاقة الطلب','warning');
+    else notif('لم يقبل أي موظف سحب الطلب','#'+shortNo(oid)+' — أعد الإرسال لموظفي السحب أو أرسل ساحبك الخاص','warning');
   } else if(why==='stop'){ M.db.ref('jobs/'+oid).remove().catch(function(){}); dlog(oid,{res:'stop', end:Date.now()}); }
   render();
 }
@@ -72757,21 +72770,75 @@ function capOrderHtml(o){
         (ph && CAP_LIVE.indexOf(o.st)>=0?'<button class="btn btn-s btn-sm" data-x="cptwa" data-o="'+oid+'">واتساب</button>':'')+'</div>'+
     '</div>';
   } else if(D && D.state==='run'){
-    out+='<div class="mls-info" style="margin-top:6px">📡 جاري البحث عن موظف سحب — جولة <b>'+(D.r||1)+'/'+CAP_ROUNDS+'</b>'+(D.near!=null?' · '+(+D.near||0)+' موظف سحب قريب':'')+'</div>';
+    out+='<div class="mls-info" style="margin-top:6px">📡 جاري البحث عن موظف سحب — جولة <b>'+(D.r||1)+'/'+CAP_ROUNDS+'</b>'+(D.only?' · 🎯 مُرسل إلى '+D.only+' موظف سحب محدَّد فقط':(D.near!=null?' · '+(+D.near||0)+' موظف سحب قريب':''))+'</div>';
   } else if(o.st==='accepted' && (L.res==='none' || L.res==='timeout')){
-    out+='<div class="mls-warn" style="margin-top:6px">'+(L.res==='none'?'لم يقبل أي موظف سحب هذا الطلب.':'سُحب الطلب من موظف السحب لتأخره أكثر من ساعة.')+' أعد الإرسال أو أرسل ساحبك الخاص.</div>';
+    out+='<div class="mls-warn" style="margin-top:6px">'+(L.res==='none'?(L.only?'لم يقبل أي من موظفي السحب المحدَّدين هذا الطلب.':'لم يقبل أي موظف سحب هذا الطلب.'):'سُحب الطلب من موظف السحب لتأخره أكثر من ساعة.')+' أعد الإرسال أو أرسل ساحبك الخاص.</div>';
   }
   return out;
 }
 function capActs(o){
   var D=' data-o="'+o.oid+'"', a=[], run=M.dsp[o.oid] && M.dsp[o.oid].state==='run';
-  if(o.st==='accepted' && !o.cap){ a.push(run?'<button class="btn btn-s btn-sm" data-x="cptstop"'+D+'>⏹ إيقاف البحث</button>':'<button class="btn btn-p btn-sm" data-x="cptsend"'+D+'>📡 إرسال لموظفي السحب</button>'); }
+  if(o.st==='accepted' && !o.cap){
+    var ns=capSel().length;
+    if(run) a.push('<button class="btn btn-s btn-sm" data-x="cptstop"'+D+'>⏹ إيقاف البحث</button>');
+    else if(ns){ a.push('<button class="btn btn-p btn-sm" data-x="cptsend"'+D+'>🎯 إرسال للمحدَّدين ('+ns+')</button>'); a.push('<button class="btn btn-s btn-sm" data-x="cptall"'+D+'>📡 إرسال لكل القريبين</button>'); }
+    else a.push('<button class="btn btn-p btn-sm" data-x="cptsend"'+D+'>📡 إرسال لموظفي السحب</button>');
+  }
   if(o.cap && ['onway','collected'].indexOf(o.st)>=0){
     if(o.st==='onway') a.push('<button class="btn btn-d btn-sm" data-x="cptun"'+D+'>↩️ سحب الطلب من موظف السحب</button>');
   }
   return a;
 }
 /* ── تبويب تقرير موظفي السحب ── */
+/* 🎯 اختيار موظفي السحب: قائمة القريبين من المختبر (من مُرسِل الإشعارات) + المحدَّدون محفوظون في إعدادات المتجر */
+function capNearLoad(force){
+  var loc=labLoc(), k=cpt(), N=M.capNear||(M.capNear={list:[], at:0});
+  if(!loc || !k || N.busy || (!force && Date.now()-N.at<5*60e3)) return;
+  N.busy=true; N.err='';
+  pushApi('caps',{sid:M.sid, la:loc.la, lo:loc.lo, rad:Math.max(1,Math.min(30,+k.rad||10))}).then(function(r){
+    N.busy=false; N.at=Date.now();
+    if(r && r.ok && Array.isArray(r.caps)){ N.list=r.caps.filter(function(x){ return x && /^[A-Za-z0-9_-]{1,128}$/.test(x.u||''); }); N.rad=r.rad;
+      var S0=k.sel||{}, ch=false; N.list.forEach(function(x){ if(S0[x.u] && (S0[x.u].nm!==x.nm || S0[x.u].ph!==x.ph)){ S0[x.u]={nm:String(x.nm||'').slice(0,60), ph:String(x.ph||'').slice(0,16)}; ch=true; } }); if(ch) saveCfg(); }
+    else N.err=(r&&r.off)?'مُرسِل الإشعارات غير مضبوط':(r&&r.net)?'تحقّق من الاتصال':'تعذّر جلب القائمة — تأكّد من تحديث مُرسِل الإشعارات';
+    if(isShown() && M.tab==='caps') render();
+  });
+  if(isShown() && M.tab==='caps') render();
+}
+function capSelToggle(u){
+  if(!/^[A-Za-z0-9_-]{1,128}$/.test(u||'')) return;
+  var k=cpt(); if(!k) return; k.sel=k.sel&&typeof k.sel==='object'?k.sel:{};
+  if(k.sel[u]) delete k.sel[u];
+  else{
+    if(Object.keys(k.sel).length>=20) return notif('الحد الأقصى 20','يمكن تحديد 20 موظف سحب كحد أقصى','info');
+    var x=((M.capNear&&M.capNear.list)||[]).find(function(y){ return y.u===u; })||{};
+    k.sel[u]={nm:String(x.nm||'').slice(0,60), ph:String(x.ph||'').slice(0,16)};
+  }
+  saveCfg(); render();
+}
+function capPickHtml(){
+  var k=cpt()||{}, loc=labLoc(), N=M.capNear||{list:[]}, S0=k.sel||{}, sel=capSel();
+  if(loc && !N.at && !N.busy) setTimeout(function(){ capNearLoad(false); },0);
+  var rows=(N.list||[]).slice(), have={}; rows.forEach(function(x){ have[x.u]=1; });
+  sel.forEach(function(u){ if(!have[u]) rows.push({u:u, nm:(S0[u]||{}).nm||'', ph:(S0[u]||{}).ph||'', away:true}); });   // محدَّد لكنه ليس قريباً الآن
+  rows.sort(function(a,b){ return ((S0[b.u]?1:0)-(S0[a.u]?1:0)) || ((a.d==null?1e9:a.d)-(b.d==null?1e9:b.d)); });
+  return '<div class="mls-card"><h4>🎯 موظفو السحب المحدَّدون لمختبرك</h4>'+
+    '<div class="mls-info" style="margin-bottom:10px">'+(sel.length
+      ?'بعد قبول أي طلب يصل الإشعار <b>فقط</b> لموظفي السحب المحدَّدين ('+sel.length+') مهما كانت المسافة. إن لم يقبل أحد منهم يظهر لك تنبيه، ويمكنك الإرسال لكل القريبين من بطاقة الطلب.'
+      :'لم تحدّد أحداً ⇒ يُرسل الطلب لكل موظفي السحب القريبين حسب «إعدادات المتجر». حدّد موظف سحب أو أكثر ليصلهم الطلب وحدهم.')+'</div>'+
+    (!loc?'<div class="mls-warn">حدّد موقع المختبر في «إعدادات المتجر» لعرض موظفي السحب القريبين.</div>':'')+
+    '<div class="mls-acts" style="margin-bottom:8px"><button class="btn btn-s btn-sm" data-x="cpload"'+(N.busy||!loc?' disabled':'')+'>'+(N.busy?'⏳ جاري التحميل…':'🔄 تحديث القائمة')+'</button>'+
+      (sel.length?'<button class="btn btn-s btn-sm" data-x="cpclr">✖ إلغاء كل التحديد</button>':'')+
+      (N.at?'<span class="mls-muted" style="font-size:12px">'+(N.list||[]).length+' موظف سحب ضمن '+(N.rad||k.rad||10)+' كم — '+ago(N.at)+'</span>':'')+'</div>'+
+    (N.err?'<div class="mls-warn">'+esc(N.err)+'</div>':'')+
+    (rows.length?'<div class="mls-cpl">'+rows.map(function(x){
+      var on=!!S0[x.u], P=capProf(x.u), nm=x.nm||(P&&P.nm)||'موظف سحب';
+      return '<button class="mls-cpi'+(on?' on':'')+'" data-x="cpsel" data-u="'+esc(x.u)+'" title="'+(on?'إلغاء التحديد':'تحديد')+'">'+
+        '<span class="ck">'+(on?'✓':'')+'</span>'+capAvHtml(P, nm)+
+        '<span class="mls-cmain"><b>'+esc(nm)+'</b><small>'+capStarsHtml(P)+(P&&P.t?' · '+P.t+' رحلة':'')+'</small>'+
+        '<small>'+(x.away?'<span class="mls-muted">ليس قريباً الآن</span>':(x.d!=null?'📍 '+x.d+' كم':''))+(x.ph?' · <span dir="ltr">'+esc(x.ph)+'</span>':'')+'</small></span></button>';
+    }).join('')+'</div>':(N.at && !N.busy?'<div class="mls-muted">لا يوجد موظفو سحب متاحون قرب مختبرك الآن.</div>':''))+
+  '</div>';
+}
 function capsHtml(){
   var pre=M.cpr||'month', now=Date.now(), from=pre==='day'?dayStart(now):pre==='week'?dayStart(now)-6*864e5:pre==='month'?new Date(new Date().getFullYear(),new Date().getMonth(),1).getTime():0;
   var L=getLog(), rows=Object.keys(L).map(function(k){ return Object.assign({oid:k}, L[k]); }).filter(function(o){ return o.dp && (o.dp.at||0)>=from; });
@@ -72783,7 +72850,7 @@ function capsHtml(){
   var caps=Object.keys(by).map(function(k){ return by[k]; }).sort(function(a,b){ return b.done-a.done; });
   var tot=caps.reduce(function(s,g){ return s+g.done; },0), fees=caps.reduce(function(s,g){ return s+g.fee; },0);
   var evName={start:'بدء الإرسال', round:'جولة', acc:'قبول', none:'لم يقبل أحد', timeout:'سحب لتأخر ساعة', unassign:'سحب يدوي', err:'خطأ إرسال', pcancel:'ألغاه المراجع', deleted:'حذفه المختبر'};
-  return '<div class="mls-chips">'+[['day','اليوم'],['week','7 أيام'],['month','هذا الشهر'],['all','الكل']].map(function(x){ return '<button class="mls-chip '+(pre===x[0]?'on':'')+'" data-x="cpr" data-v="'+x[0]+'">'+x[1]+'</button>'; }).join('')+'</div>'+
+  return capPickHtml()+'<div class="mls-chips">'+[['day','اليوم'],['week','7 أيام'],['month','هذا الشهر'],['all','الكل']].map(function(x){ return '<button class="mls-chip '+(pre===x[0]?'on':'')+'" data-x="cpr" data-v="'+x[0]+'">'+x[1]+'</button>'; }).join('')+'</div>'+
     '<div class="mls-card"><h4>📊 الملخص</h4><div class="mls-kv"><span>طلبات أُرسلت لموظفي السحب</span><b>'+rows.length+'</b><span>سحبات مكتملة (سُلّمت للمختبر)</span><b>'+tot+'</b><span>مجموع أجور موظفي السحب</span><b>'+money(fees)+'</b><span>لم يقبلها أحد</span><b>'+none+'</b><span>سُحبت لتأخر أكثر من ساعة</span><b>'+tmo+'</b></div></div>'+
     '<div class="mls-card"><h4>🛵 حسب موظف السحب</h4>'+(caps.length?'<div class="mls-scroll"><table class="mls-t"><thead><tr><th>موظف السحب</th><th>الهاتف</th><th>قبِل</th><th>أكمل</th><th>الأجور</th><th>سرعة القبول</th><th>حتى السحب</th><th>حتى التسليم</th></tr></thead><tbody>'+
       caps.map(function(g){ return '<tr><td>'+esc(g.nm)+'</td><td dir="ltr">'+esc(g.ph)+'</td><td>'+g.n+'</td><td>'+g.done+'</td><td>'+money(g.fee)+'</td><td>'+avg(g.tAcc)+'</td><td>'+avg(g.tCol)+'</td><td>'+avg(g.tDel)+'</td></tr>'; }).join('')+'</tbody></table></div>':'<div class="mls-muted">لا يوجد بعد في هذه الفترة.</div>')+'</div>'+
@@ -72887,6 +72954,10 @@ function onClick(e){
     case 'poster': printPoster(); break;
     case 'code': changeCode(); break;
     case 'cptsend': startDispatch(oid, true); break;
+    case 'cptall': startDispatch(oid, true, true); break;
+    case 'cpsel': capSelToggle(el.getAttribute('data-u')); break;
+    case 'cpload': capNearLoad(true); break;
+    case 'cpclr': { var kk=cpt(); if(kk){ kk.sel={}; saveCfg(); render(); } break; }
     case 'cptstop': stopDispatch(oid,'stop'); break;
     case 'cptun': { var ou=M.orders[oid]; if(ou && confirm('سحب الطلب من موظف السحب '+(ou.cn||'')+'؟ سيعود الطلب إلى «مقبول» ويمكنك إرساله لموظف سحب آخر.')) unassign(oid,false).catch(function(){ notif('خطأ','تعذّر سحب الطلب','error'); }); break; }
     case 'cptwa': { var ow=M.orders[oid]; if(ow && ow.cph) openExt('https://wa.me/'+String(ow.cph).replace(/[^0-9]/g,'')+'?text='+encodeURIComponent('مرحباً '+(ow.cn||'')+'، بخصوص طلب السحب #'+shortNo(oid)+' — '+(ow.nm||''))); break; }
