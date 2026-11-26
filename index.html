@@ -7282,6 +7282,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                 <span style="font-size:10px;color:var(--text2)">الحد الأقصى ~500 MB</span>
                 <span style="font-size:10px;color:var(--text2)" id="storage-idb-cap"></span>
               </div>
+              <div id="store-engine-box" style="display:none;background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.25);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:11px;line-height:1.9;color:var(--text2)"></div>
               <!-- D: Drive indicator -->
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
                 <span style="font-size:12px;font-weight:700;color:var(--text2)">💿 D:\MedLabPro (دائم)</span>
@@ -7341,6 +7342,26 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
               </button>
               <div style="font-size:11px;color:var(--text2);background:rgba(255,255,255,0.04);border-radius:8px;padding:10px 14px;line-height:2">
                 بعد الضغط على الزر أعلاه، انسخ ملف <b style="color:var(--text)">medlab_backup.json</b> من مجلد <b style="color:#00ff9d">D:\MedLabPro</b> وأرسله عبر واتساب أو تيليجرام أو فلاشة إلى الجهاز الجديد.
+              </div>
+            </div>
+
+            <!-- 💾 نسخة قاعدة SQLite (الطريقة الحالية) -->
+            <div id="sqlbk-card" style="background:rgba(0,245,147,0.05);border:1.5px solid rgba(0,245,147,0.3);border-radius:14px;padding:22px;margin-bottom:16px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                <span style="font-size:30px">💾</span>
+                <div>
+                  <div style="font-size:15px;font-weight:800;color:var(--success)">نسخة قاعدة البيانات SQLite — ملف واحد كامل</div>
+                  <div style="font-size:11px;color:var(--text2);margin-top:2px">كل البيانات + كل الإعدادات في ملف واحد · لنفس الحساب أو لحاسبة أخرى</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <button class="btn btn-ok btn-lg" style="flex:1;min-width:180px" onclick="sqlBackupDownload()">📥 تنزيل نسخة SQLite</button>
+                <button class="btn btn-p btn-lg" style="flex:1;min-width:180px" onclick="sqlBackupImport()">📤 استيراد نسخة SQLite</button>
+              </div>
+              <div style="font-size:11px;color:var(--text2);background:rgba(255,255,255,0.04);border-radius:8px;padding:10px 14px;line-height:2;margin-top:10px">
+                • التنزيل لا يوقف العمل — تُنسخ القاعدة كما هي لحظة الضغط.<br>
+                • الاستيراد يستبدل كل بيانات هذا الحساب بمحتوى النسخة، وتُحفظ نسخة أمان من القاعدة الحالية تلقائياً قبل الاستبدال (مجلد البيانات ⇐ backups).<br>
+                • نسخة من حساب آخر تُنقل تلقائياً إلى الحساب المفتوح الآن.
               </div>
             </div>
 
@@ -9849,7 +9870,8 @@ const LZS=(()=>{
 // ══════════════════════════════════════════════════════════════
 // IDB — قاعدة بيانات IndexedDB للأرشيف (500MB+)
 // ══════════════════════════════════════════════════════════════
-const IDB=(()=>{
+/* 🗄️ IndexedDB — المحرّك السابق: يبقى مصدراً لترحيل البيانات مرة واحدة، ومحرّكاً احتياطياً خارج Electron */
+const IDB_LEGACY=(()=>{
   const DB_NAME='medlab_idb';
   const DB_VER=1;
   const STORE='kv';
@@ -10243,8 +10265,598 @@ const IDB=(()=>{
 
   return{get,set,del,getAllKeys,getAll,usedMB,quotaMB,
          snapshotLegacy,isRecordMode,countRecords,collOf,
-         lastError,forceMigrate};
+         lastError,forceMigrate,
+         rawGet:_rawGet, rawSet:_rawSet};
 })();
+
+// ══════════════════════════════════════════════════════════════════════
+// 💾 IDB — نفس الواجهة تماماً (get / set / del / …) — والمحرّك الآن SQLite
+// ──────────────────────────────────────────────────────────────────────
+// • كل البرنامج (الحفظ، التحميل، المزامنة، الأجهزة، النسخ الاحتياطي) يبقى
+//   ينادي IDB.get / IDB.set كما كان ⇒ لا يتغيّر منطقه إطلاقاً.
+// • القاعدة: ملف SQLite في عملية مستقلة (medlab-sqlite.js) ⇒ الحفظ لا
+//   يُثقل الشاشة، والسجلات المعدّلة فقط تُكتب.
+// • أول تشغيل: نقل كل بيانات IndexedDB إلى SQLite مرة واحدة مع تحقق من
+//   العدد — ونسخة IndexedDB تبقى كما هي (لا تُحذف) كشبكة أمان.
+// • القيم التي لا تُنقل عبر القناة (مقابض مجلدات النسخ الاحتياطي) تبقى في
+//   IndexedDB ويُسجَّل مكانها في SQLite — بلا أي فقدان.
+// • خارج Electron (متصفح) أو إن لم يعمل المحرّك قبل أول ترحيل ⇒ يعمل
+//   البرنامج على IndexedDB كما كان تماماً. بعد الترحيل لا رجوع صامت إلى
+//   نسخة IndexedDB القديمة أبداً (قد تكون قديمة) ⇒ رسالة واضحة بدلها.
+// ══════════════════════════════════════════════════════════════════════
+const IDB=(()=>{
+  const L=IDB_LEGACY;
+  const API=(typeof window!=='undefined' && window.electronAPI && typeof window.electronAPI.sqliteConnect==='function') ? window.electronAPI : null;
+  const FLAG='medlab_store_engine';
+  const MARK='__medlab_store_engine';
+  let mode=API ? 'pending' : 'idb';      // pending | sqlite | idb | blocked
+  let port=null, seq=0, info=null, err='', migStats=null;
+  const waits=new Map();
+  const _lastErr={};
+  const _badGet=new Set();               // مجموعة فشلت قراءتها ⇒ تُمنع كتابتها الكاملة (حماية من محوها)
+  let _readyRes; const ready=new Promise(function(r){ _readyRes=r; });
+  if(!API) _readyRes();
+
+  /* ───────── القناة ───────── */
+  function onMsg(ev){
+    const d=ev.data; if(!d || d.id==null) return;
+    const w=waits.get(d.id); if(!w) return;
+    waits.delete(d.id);
+    if(d.ok===false){ const e=new Error(d.err||'sqlite'); w.rej(e); }
+    else w.res(d);
+  }
+  function call(op, args){
+    return new Promise(function(res,rej){
+      const id=++seq;
+      const msg=Object.assign({id:id, op:op}, args||{});
+      if(port){
+        try{ port.postMessage(msg); }
+        catch(e){ rej(e); return; }          // DataCloneError — يُعالَج عند المستدعي
+      }
+      waits.set(id,{msg:msg,res:res,rej:rej});  // بلا قناة (إعادة تشغيل المحرّك) ⇒ تُرسل عند عودتها
+    });
+  }
+  function connect(ms){
+    return new Promise(function(res){
+      let done=false, t=null;
+      function h(e){
+        const d=e.data;
+        if(e.source!==window || !d || d.__mlSqlPort!==1) return;
+        window.removeEventListener('message',h);
+        if(done) return; done=true; clearTimeout(t);
+        const p=e.ports && e.ports[0], i=d.info||{};
+        if(i.ok && p) res({port:p, info:i.info||{}}); else res({error:i.error||'no-port'});
+      }
+      window.addEventListener('message',h);
+      const _to=function(){ if(done) return; done=true; window.removeEventListener('message',h); res({error:'timeout'}); };
+      t=setTimeout(_to, ms);
+      /* المحرّك يحدّث مخطط القاعدة (مرة واحدة) ⇒ نعرض التقدّم ونمدّد الانتظار ما دام التقدّم يصل */
+      if(API.onSqliteProgress) API.onSqliteProgress(function(p){
+        if(done) return;
+        clearTimeout(t); t=setTimeout(_to, 60000);
+        const pct=(p&&p.pct)||0;
+        if(pct<100) _progress('تحديث قاعدة البيانات إلى الصيغة الجديدة — مرة واحدة فقط', 2+pct*0.96, 'لا تغلق البرنامج');
+        else _overlay(null);
+      });
+      try{ API.sqliteConnect(); }catch(e){ if(!done){ done=true; clearTimeout(t); window.removeEventListener('message',h); res({error:'connect: '+(e&&e.message)}); } }
+    });
+  }
+  function attach(p){
+    port=p;
+    port.onmessage=onMsg;
+    try{ port.start(); }catch(e){}
+    /* أعد إرسال ما كان معلّقاً بنفس الترتيب (عمليات الكتابة متطابقة النتيجة عند تكرارها).
+       العمليات الثقيلة (استيراد/تصدير/نسخ/بدء ترحيل) لا تُعاد تلقائياً — تُرفض ليُعيدها المستخدم بوعي. */
+    const NO_RESEND={restore:1, 'export':1, backup:1, migBegin:1};
+    Array.from(waits.keys()).sort(function(a,b){ return a-b; }).forEach(function(id){
+      const w=waits.get(id);
+      if(NO_RESEND[w.msg.op]){ waits.delete(id); w.rej(new Error('توقف المحرّك أثناء العملية — أعد المحاولة')); return; }
+      try{ port.postMessage(w.msg); }catch(e){ waits.delete(id); w.rej(e); }
+    });
+  }
+  if(API && typeof API.onSqliteRestarted==='function'){
+    API.onSqliteRestarted(function(){
+      port=null;
+      connect(20000).then(function(r){
+        if(r.port){ attach(r.port); console.warn('[Store] engine restarted — reconnected'); }
+        else { err='reconnect: '+r.error; _showBlocked(); }
+      });
+    });
+  }
+
+  /* ───────── واجهة الرسائل ───────── */
+  function _whenBody(fn){ if(document.body) fn(); else document.addEventListener('DOMContentLoaded', fn, {once:true}); }
+  function _overlay(html){
+    let o=document.getElementById('ml-store-ov');
+    if(!html){ if(o) o.remove(); return; }
+    if(!o){
+      o=document.createElement('div'); o.id='ml-store-ov';
+      o.style.cssText='position:fixed;inset:0;z-index:2147483600;background:rgba(4,8,15,0.94);display:flex;align-items:center;justify-content:center;direction:rtl;font-family:Cairo,Tahoma,sans-serif';
+      document.body.appendChild(o);
+    }
+    o.innerHTML='<div style="background:#0d1526;border:1.5px solid #1e3a5f;border-radius:16px;padding:26px 30px;width:min(560px,92vw);text-align:center;color:#e2e8f0">'+html+'</div>';
+  }
+  function _progress(title, pct, sub){
+    _whenBody(function(){
+      _overlay('<div style="font-size:38px;margin-bottom:6px">💾</div>'+
+        '<div style="font-size:15px;font-weight:800;color:#00d4ff;margin-bottom:6px">'+title+'</div>'+
+        '<div style="font-size:12px;color:#94a3b8;margin-bottom:14px;line-height:1.9">'+(sub||'')+'</div>'+
+        '<div style="height:10px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden"><div style="height:100%;width:'+Math.max(2,Math.min(100,pct))+'%;background:linear-gradient(90deg,#00d4ff,#00f593)"></div></div>'+
+        '<div style="font-size:12px;color:#94a3b8;margin-top:8px">'+Math.round(pct)+'%</div>');
+    });
+  }
+  function _showBlocked(){
+    mode='blocked';
+    _whenBody(function(){
+      _overlay('<div style="font-size:40px;margin-bottom:8px">⛔</div>'+
+        '<div style="font-size:16px;font-weight:900;color:#ff4d6d;margin-bottom:10px">قاعدة البيانات (SQLite) لم تعمل</div>'+
+        '<div style="font-size:12.5px;color:#cbd5e1;line-height:2;margin-bottom:14px">بياناتك محفوظة في قاعدة SQLite ولم تُمسّ.<br>البرنامج لن يعمل على نسخة قديمة من البيانات حتى لا يحدث أي تعارض أو فقدان.<br>أعد تشغيل البرنامج — وإن تكررت الرسالة تواصل مع الدعم الفني.</div>'+
+        '<div style="font-size:11px;color:#64748b;direction:ltr;margin-bottom:14px;word-break:break-all">'+String(err||'').replace(/[<>&]/g,'')+'</div>'+
+        '<button onclick="location.reload()" style="background:#00d4ff;color:#04080f;border:0;border-radius:10px;padding:10px 26px;font-weight:800;font-family:inherit;cursor:pointer">🔄 إعادة المحاولة</button>');
+    });
+  }
+  function _flagSqlite(){
+    try{ localStorage.setItem(FLAG,'sqlite'); }catch(e){}
+    try{ L.rawSet(MARK,'sqlite'); }catch(e){}
+  }
+  async function _wasSqlite(){
+    try{ if(localStorage.getItem(FLAG)==='sqlite') return true; }catch(e){}
+    try{ return (await L.rawGet(MARK))==='sqlite'; }catch(e){ return false; }
+  }
+
+  /* ───────── الترحيل لمرة واحدة: IndexedDB ⇒ SQLite ───────── */
+  function _sanitize(v){ return JSON.parse(JSON.stringify(v===undefined?null:v)); }
+  function _hasIds(arr){ for(let i=0;i<arr.length;i++){ const r=arr[i]; if(r && typeof r==='object' && r.id!=null) return true; } return false; }
+  async function _sendRows(key, arr, expect){
+    /* قائمة لا تحمل سجلات بمعرّف (مثل قوائم الأرقام) ⇒ قيمة واحدة كما كان IndexedDB يحفظها */
+    if(arr.length && !_hasIds(arr)){ await call('migKv',{key:key, value:arr}); expect.kv.push(key); expect.done++; return; }
+    /* دفعات صغيرة — مع تنظيف أي سجل لا يُنقل عبر القناة (كما كان IndexedDB يفعل) */
+    const valid=[], seen=new Set();
+    for(let i=0;i<arr.length;i++){ const r=arr[i]; if(r && typeof r==='object' && r.id!=null){ valid.push(r); seen.add(String(r.id)); } }
+    const CH=1000;
+    if(!valid.length){ await call('migRecs',{key:key, rows:[], start:0}); }
+    for(let i=0;i<valid.length;i+=CH){
+      let part=valid.slice(i,i+CH);
+      try{ await call('migRecs',{key:key, rows:part, start:i}); }
+      catch(e){
+        if(!(e && e.name==='DataCloneError')) throw e;
+        part=part.map(function(r){ try{ structuredClone(r); return r; }catch(_){ return _sanitize(r); } });
+        await call('migRecs',{key:key, rows:part, start:i});
+      }
+      expect.done+=part.length;
+      _progress('نقل البيانات إلى قاعدة SQLite — مرة واحدة فقط', 3+expect.done/Math.max(1,expect.total)*94,
+        'لا تغلق البرنامج — '+expect.done.toLocaleString('en-US')+' / '+expect.total.toLocaleString('en-US')+' سجل');
+    }
+    expect.colls[key]=seen.size;
+  }
+  async function migrate(){
+    const t0=Date.now();
+    const keys=await L.getAllKeys();
+    const RS='\u0001', MS='\u0002recmode';
+    const metaKeys=[], plain=[], rows={};
+    for(let i=0;i<keys.length;i++){
+      const k=keys[i]; if(typeof k!=='string') continue;
+      if(k.slice(-MS.length)===MS){ metaKeys.push(k.slice(0,-MS.length)); continue; }
+      const j=k.indexOf(RS); if(j>0){ const c=k.slice(0,j); rows[c]=(rows[c]||0)+1; continue; }
+      if(k===MARK) continue;
+      plain.push(k);
+    }
+    const recMode=new Set();
+    for(let i=0;i<metaKeys.length;i++){ const m=await L.rawGet(metaKeys[i]+MS); if(m===1||m===true) recMode.add(metaKeys[i]); }
+    let total=0; recMode.forEach(function(c){ total+=rows[c]||0; }); total+=plain.length;
+    const expect={colls:{}, kv:[], done:0, total:total};
+    const big=total>2000;
+    if(big) _progress('نقل البيانات إلى قاعدة SQLite — مرة واحدة فقط', 1, 'تجهيز…');
+    const b=await call('migBegin');
+    if(!b.ok) throw new Error('migBegin: '+(b.err||''));
+    /* ① المجموعات المخزّنة سجلاً بسجل */
+    for(const c of recMode){
+      const arr=await L.get(c);
+      if(!Array.isArray(arr)) throw new Error('read '+c);
+      await _sendRows(c, arr, expect);
+    }
+    /* ② بقية المفاتيح */
+    for(let i=0;i<plain.length;i++){
+      const k=plain[i];
+      if(recMode.has(k)){ expect.done++; continue; }                 // نسخة قديمة (blob) لمجموعة مخزّنة سجلاً بسجل — تُتجاهل كما كان IndexedDB يفعل
+      const v=await L.rawGet(k);
+      if(L.collOf(k) && Array.isArray(v)){ await _sendRows(k, v, expect); continue; }
+      try{ await call('migKv',{key:k, value:v}); }
+      catch(e){
+        if(!(e && e.name==='DataCloneError')) throw e;
+        await call('migKv',{key:k, stub:true});                        // تبقى في IndexedDB (مثل مقبض مجلد)
+      }
+      expect.kv.push(k);
+      expect.done++;
+      if(big && i%50===0) _progress('نقل البيانات إلى قاعدة SQLite — مرة واحدة فقط', 3+expect.done/Math.max(1,total)*94, 'الإعدادات والسجلات…');
+    }
+    if(big) _progress('التحقق من البيانات المنقولة…', 98, 'مقارنة العدد في كل قسم');
+    const end=await call('migEnd',{expect:{colls:expect.colls, kv:expect.kv}});
+    if(!end.ok) throw new Error('تحقّق فاشل: '+(end.bad||[]).join(' · '));
+    try{ await call('setMeta',{k:'legacyRepaired2', v:String(Date.now())}); }catch(e){}   // ترحيل مباشر ⇒ لا حاجة لإصلاح v1
+    migStats={secs:Math.round((Date.now()-t0)/100)/10, colls:expect.colls, kv:expect.kv.length};
+    try{ localStorage.setItem('medlab_store_migration', JSON.stringify({at:new Date().toISOString(), secs:migStats.secs, colls:expect.colls, kv:expect.kv.length})); }catch(e){}
+    console.log('[Store] ✓ migrated IndexedDB → SQLite in '+migStats.secs+'s', expect.colls);
+    return true;
+  }
+
+  /* ───────── إعدادات البرنامج (localStorage) داخل SQLite ─────────
+     كل تغيير في الإعدادات يُكتب في جدول settings لحظياً (دفعات كل 400ms) ⇒
+     النسخة الاحتياطية والاستيراد يحملان الإعدادات مع البيانات. */
+  const _lsQ={set:{}, del:{}, clear:false}; let _lsT=null, _lsOn=false, _frozen=false;
+  function _lsQueue(k, v){
+    if(!_lsOn || _frozen) return;
+    if(v===null){ delete _lsQ.set[k]; _lsQ.del[k]=1; } else { _lsQ.set[k]=v; delete _lsQ.del[k]; }
+    if(!_lsT) _lsT=setTimeout(_lsFlush, 400);
+  }
+  async function _lsFlush(){
+    if(_lsT){ clearTimeout(_lsT); _lsT=null; }
+    if(!_lsOn || mode!=='sqlite') return;
+    const clr=_lsQ.clear, set=_lsQ.set, del=Object.keys(_lsQ.del);
+    _lsQ.clear=false; _lsQ.set={}; _lsQ.del={};
+    try{
+      if(clr) await call('lsReplace',{data:{}});
+      if(Object.keys(set).length || del.length) await call('lsPut',{set:set, del:del});
+    }catch(e){ console.warn('[Store] settings mirror',e); }
+  }
+  function _lsSnapshot(){ const o={}; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k!=null) o[k]=localStorage.getItem(k); } return o; }
+  function _lsHook(){
+    if(_lsOn) return;
+    const P=Storage.prototype, oSet=P.setItem, oRem=P.removeItem, oClr=P.clear;
+    P.setItem=function(k,v){ const r=oSet.call(this,k,v); try{ if(this===window.localStorage) _lsQueue(String(k), String(v)); }catch(e){} return r; };
+    P.removeItem=function(k){ const r=oRem.call(this,k); try{ if(this===window.localStorage) _lsQueue(String(k), null); }catch(e){} return r; };
+    P.clear=function(){ const r=oClr.call(this); try{ if(this===window.localStorage && _lsOn && !_frozen){ _lsQ.clear=true; _lsQ.set={}; _lsQ.del={}; if(!_lsT) _lsT=setTimeout(_lsFlush,400); } }catch(e){} return r; };
+    _lsOn=true;
+  }
+  /* بعد استيراد نسخة: الإعدادات تعود من SQLite إلى localStorage ثم يُعاد فتح البرنامج مرة واحدة */
+  const _KEEP_LS=['medlab_session_bk','medlab_admin_users','medlab_device_id','medlab_session'];
+  async function _hydrate(h){
+    const all=(await call('lsAll')).v||{};
+    const pfx=String(h.restorePrefix||'');
+    const keep={}; _KEEP_LS.forEach(function(k){ const v=localStorage.getItem(k); if(v!==null) keep[k]=v; });
+    /* مثل الاستيراد السابق: تُمسح إعدادات هذا الحساب ثم تُكتب إعدادات النسخة كلها (عدا الجلسة) */
+    if(pfx){ const del=[]; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.indexOf(pfx)===0 && !(k in keep)) del.push(k); } del.forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} }); }
+    Object.keys(all).forEach(function(k){ if(_KEEP_LS.indexOf(k)>-1) return; try{ localStorage.setItem(k, all[k]); }catch(e){} });
+    Object.keys(keep).forEach(function(k){ try{ localStorage.setItem(k, keep[k]); }catch(e){} });
+    await call('lsReplace',{data:_lsSnapshot()});
+    await call('hydrateDone');
+  }
+  /* قوائم بلا معرّفات فقدتها النسخة الأولى من المحرّك (v1) ⇒ تُستعاد من IndexedDB إن كانت هناك */
+  async function _repairIdlessLists(){
+    try{
+      const keys=await L.getAllKeys();
+      for(let i=0;i<keys.length;i++){
+        const k=keys[i];
+        if(typeof k!=='string' || k.indexOf('\u0001')>-1 || k.indexOf('\u0002')>-1 || !L.collOf(k)) continue;
+        const v=await L.rawGet(k);
+        if(!Array.isArray(v) || !v.length || _hasIds(v)) continue;
+        const cur=await call('get',{key:k});
+        if(Array.isArray(cur.v) && cur.v.length) continue;
+        await call('migKv',{key:k, value:v});
+      }
+    }catch(e){ console.warn('[Store] repair',e); }
+    try{ await call('setMeta',{k:'legacyRepaired2', v:String(Date.now())}); }catch(e){}
+  }
+  async function _afterSqlite(h){
+    if(!h.legacyRepaired) await _repairIdlessLists();
+    if(h.lsHydrate){
+      _progress('استعادة إعدادات النسخة…', 90, 'سيُعاد فتح البرنامج تلقائياً');
+      await _hydrate(h);
+      location.reload();
+      return false;
+    }
+    /* كل تشغيل: فعّل المرآة أولاً ثم طابق الجدول مع localStorage كاملاً
+       (ما كُتب في بداية الفتح قبل تفعيل المرآة لا يفوت) */
+    _lsHook();
+    await call('lsReplace',{data:_lsSnapshot()});
+    return true;
+  }
+
+  async function boot(){
+    const r=await connect(20000);
+    if(!r.port){ err=r.error; return _fallback(); }
+    attach(r.port);
+    let h;
+    try{ h=await call('hello'); }catch(e){ err='hello: '+(e&&e.message); return _fallback(); }
+    info=h;
+    if(h.migrated){
+      mode='sqlite'; _flagSqlite();
+      try{ if(!(await _afterSqlite(h))) return; }catch(e){ console.warn('[Store] after',e); }
+      _readyRes(); return;
+    }
+    try{
+      await migrate();
+      mode='sqlite'; _flagSqlite();
+      try{ await _afterSqlite({legacyRepaired:1}); }catch(e){ console.warn('[Store] after',e); }
+      _overlay(null);
+    }catch(e){
+      err='migrate: '+(e&&e.message||e);
+      console.error('[Store] migration failed — staying on IndexedDB this session', e);
+      try{ localStorage.setItem('medlab_store_migration_error', JSON.stringify({at:new Date().toISOString(), err:err})); }catch(_){}
+      _overlay(null);
+      if(await _wasSqlite()){ _showBlocked(); return; }
+      mode='idb';
+    }
+    _readyRes();
+  }
+  async function _fallback(){
+    if(await _wasSqlite()){ _showBlocked(); return; }                 // لا عودة صامتة لنسخة قديمة
+    mode='idb'; _readyRes();
+    console.warn('[Store] SQLite unavailable — IndexedDB this session:', err);
+  }
+  if(API){
+    boot().catch(function(e){ err='boot: '+(e&&e.message||e); _fallback(); });
+  }
+
+  /* ───────── الواجهة العامة — نفس التوقيعات القديمة ───────── */
+  function isColl(k){ return !!L.collOf(k); }
+
+  async function get(key){
+    await ready;
+    if(mode!=='sqlite') return L.get(key);
+    try{
+      const r=await call('get',{key:key, coll:isColl(key)});
+      if(r.stub) return L.rawGet(key);
+      _badGet.delete(key);
+      return r.v===undefined ? null : r.v;
+    }catch(e){
+      _lastErr[key]='get: '+(e&&e.message);
+      if(isColl(key)) _badGet.add(key);
+      console.error('[Store] get failed',key,e);
+      return null;
+    }
+  }
+
+  async function _postKv(key, value){
+    try{ await call('setKv',{key:key, value:value}); return true; }
+    catch(e){
+      if(!(e && e.name==='DataCloneError')) throw e;
+      /* قيمة لا تُنقل (مثل مقبض مجلد): تبقى في IndexedDB كما كانت + علامة في SQLite */
+      const ok=await L.rawSet(key,value);
+      if(ok) await call('stub',{key:key});
+      return ok;
+    }
+  }
+  async function _postAll(key, arr){
+    try{ await call('setAll',{key:key, arr:arr}); }
+    catch(e){
+      if(!(e && e.name==='DataCloneError')) throw e;
+      await call('setAll',{key:key, arr:arr.map(function(r){ try{ structuredClone(r); return r; }catch(_){ return _sanitize(r); } })});
+    }
+  }
+
+  // dirtyIds: Set من المعرّفات المُعدَّلة — إن غابت تُكتب المجموعة كلها (السجلات المتغيّرة فقط تُكتب فعلياً)
+  async function set(key,value,dirtyIds){
+    await ready;
+    if(_frozen) return true;
+    if(mode!=='sqlite') return L.set(key,value,dirtyIds);
+    try{
+      if(isColl(key) && Array.isArray(value)){
+        if(_badGet.has(key) && !(dirtyIds && dirtyIds.size)){
+          _lastErr[key]='منع كتابة كاملة: فشلت قراءة المجموعة عند التحميل (حماية من المحو)';
+          console.error('[Store] full write blocked for',key,'— its load failed');
+          return false;
+        }
+        if(dirtyIds && dirtyIds.size){
+          const need=new Set(); dirtyIds.forEach(function(x){ need.add(String(x)); });
+          const recs=[];
+          for(let i=value.length-1;i>=0 && need.size;i--){         // من الآخر: المكرر الأحدث يفوز (كما في IndexedDB)
+            const r=value[i];
+            if(r && r.id!=null){ const id=String(r.id); if(need.has(id)){ recs.push(r); need.delete(id); } }
+          }
+          const del=Array.from(need);                               // لم تعد في المصفوفة ⇒ حُذفت
+          try{ await call('put',{key:key, recs:recs, del:del}); }
+          catch(e){
+            if(!(e && e.name==='DataCloneError')) throw e;
+            await call('put',{key:key, recs:recs.map(function(r){ try{ structuredClone(r); return r; }catch(_){ return _sanitize(r); } }), del:del});
+          }
+          return true;
+        }
+        await _postAll(key, value);
+        return true;
+      }
+      return await _postKv(key, value);
+    }catch(e){
+      _lastErr[key]='set: '+(e&&e.message||e);
+      console.error('[Store] set failed',key,e);
+      return false;
+    }
+  }
+
+  async function del(key){
+    await ready;
+    if(_frozen) return true;
+    if(mode!=='sqlite') return L.del(key);
+    let ok=true;
+    try{ await call('del',{key:key}); }catch(e){ ok=false; _lastErr[key]='del: '+(e&&e.message); }
+    if(!isColl(key)){ try{ await L.del(key); }catch(e){} }   // إن كانت محفوظة في IndexedDB (مقبض مجلد)
+    return ok;
+  }
+
+  async function isRecordMode(key){
+    await ready;
+    if(mode!=='sqlite') return L.isRecordMode(key);
+    try{ return !!(await call('isRec',{key:key})).v; }catch(e){ return false; }
+  }
+  async function countRecords(key){
+    await ready;
+    if(mode!=='sqlite') return L.countRecords(key);
+    try{ return (await call('count',{key:key})).v; }catch(e){ return -1; }
+  }
+  async function forceMigrate(key,arr){
+    await ready;
+    if(mode!=='sqlite') return L.forceMigrate(key,arr);
+    if(await isRecordMode(key)) return true;
+    if(!Array.isArray(arr) || !arr.length) return false;
+    return set(key, arr);
+  }
+  /* اللقطة القديمة (blob) كانت لدعم الرجوع لنسخة أقدم على IndexedDB — مع SQLite لا داعي لها
+     (كانت تعيد كتابة المجموعة كاملة كل ٣ دقائق) */
+  async function snapshotLegacy(key,value){
+    await ready;
+    if(mode!=='sqlite') return L.snapshotLegacy(key,value);
+    return true;
+  }
+  async function getAllKeys(){
+    await ready;
+    if(mode!=='sqlite') return L.getAllKeys();
+    try{ return (await call('keys')).v||[]; }catch(e){ return []; }
+  }
+  async function getAll(){
+    await ready;
+    if(mode!=='sqlite') return L.getAll();
+    return [];
+  }
+  async function _size(){ try{ return await call('size'); }catch(e){ return null; } }
+  async function usedMB(){
+    await ready;
+    if(mode!=='sqlite') return L.usedMB();
+    const s=await _size(); return s ? (s.used/1048576).toFixed(2) : '0';
+  }
+  async function quotaMB(){
+    await ready;
+    if(mode!=='sqlite') return L.quotaMB();
+    const s=await _size(); if(!s || s.free<0) return '500';
+    return ((s.used+s.free)/1048576).toFixed(0);
+  }
+  function lastError(key){ return _lastErr[key] || (mode!=='sqlite' ? L.lastError(key) : ''); }
+  function collOf(key){ return L.collOf(key); }
+
+  /* انتظار انتهاء كل ما أُرسل للمحرّك (ترتيب القناة ثابت ⇒ ping = حاجز) */
+  async function flush(){
+    if(mode!=='sqlite' || !port) return true;
+    try{ await _lsFlush(); await call('ping'); return true; }catch(e){ return false; }
+  }
+  /* ───── نسخة SQLite كاملة إلى ملف (تنزيل) ───── */
+  async function exportTo(filePath){
+    await ready;
+    if(mode!=='sqlite') return {ok:false, err:'not-sqlite'};
+    await flush();
+    let pfx=''; try{ pfx=DB._pfx(); }catch(e){}
+    try{ return await call('export',{path:filePath, userPrefix:pfx}); }catch(e){ return {ok:false, err:e.message}; }
+  }
+  /* ───── استبدال القاعدة بنسخة SQLite (ملف أو Google Drive) ───── */
+  async function restoreFrom(filePath){
+    await ready;
+    if(mode!=='sqlite') return {ok:false, err:'not-sqlite'};
+    await flush();
+    let pfx=''; try{ pfx=DB._pfx(); }catch(e){}
+    _frozen=true;                                   // لا كتابة من الذاكرة الحالية بعد الآن — سيُعاد فتح البرنامج
+    let r;
+    try{ r=await call('restore',{path:filePath, currentPrefix:pfx}); }catch(e){ r={ok:false, err:e.message}; }
+    if(!r || !r.ok) _frozen=false;                  // فشل ⇒ القاعدة الحالية كما هي ويستمر العمل
+    return r;
+  }
+  function isFrozen(){ return _frozen; }
+  async function kvRange(prefix){ await ready; if(mode!=='sqlite') return null; try{ return (await call('kvRange',{prefix:prefix})).v||[]; }catch(e){ return null; } }
+  async function kvPutMany(items){ await ready; if(_frozen) return true; if(mode!=='sqlite') return false; try{ await call('kvPutMany',{items:items}); return true; }catch(e){ return false; } }
+  async function backupNow(){
+    await ready;
+    if(mode!=='sqlite') return {ok:false, err:'not-sqlite'};
+    try{ return (await call('backup',{force:true})).v; }catch(e){ return {ok:false, err:e.message}; }
+  }
+  async function engineInfo(){ if(mode!=='sqlite') return null; try{ return await call('info'); }catch(e){ return null; } }
+  function engine(){ return {mode:mode, err:err, info:info, migration:migStats, pending:waits.size}; }
+  function whenReady(){ return ready; }
+
+  return{get,set,del,getAllKeys,getAll,usedMB,quotaMB,
+         snapshotLegacy,isRecordMode,countRecords,collOf,
+         lastError,forceMigrate,
+         flush,backupNow,engine,whenReady, info:engineInfo,
+         exportTo,restoreFrom,isFrozen,kvRange,kvPutMany};
+})();
+window.IDB_ENGINE=function(){ return IDB.engine(); };
+/* 💾 لوحة محرّك الحفظ في صفحة قاعدة البيانات */
+window._renderStoreEngineBox=async function(){
+  const el=document.getElementById('store-engine-box'); if(!el) return;
+  const e=IDB.engine();
+  if(!(window.electronAPI && window.electronAPI.sqliteConnect)){ el.style.display='none'; return; }
+  let info=null; try{ if(e.mode==='sqlite') info=await IDB.info(); }catch(_){}
+  const esc=function(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
+  const fmtT=function(ms){ ms=+ms; if(!ms) return '—'; try{ return new Date(ms).toLocaleString('ar-IQ'); }catch(_){ return new Date(ms).toISOString(); } };
+  let h;
+  if(e.mode==='sqlite'){
+    h='<div style="font-weight:800;color:var(--success)">💾 محرّك الحفظ: SQLite ✓ <span style="font-weight:400;color:var(--text2)">(عملية مستقلة — الحفظ لا يُثقل الشاشة)</span></div>'+
+      '<div style="direction:ltr;text-align:right;word-break:break-all">'+esc(info&&info.file||'')+'</div>'+
+      '<div>آخر نسخة احتياطية تلقائية: <b>'+esc(fmtT(info&&info.lastBackup))+'</b> · المحفوظ: '+((info&&info.backups)||[]).length+' نسخ (آخر 3 أيام)</div>'+
+      '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">'+
+        '<button class="btn btn-sm" onclick="window.electronAPI.sqliteOpenFolder()">📂 فتح مجلد البيانات</button>'+
+        '<button class="btn btn-sm" id="store-bk-btn" onclick="_storeBackupNow()">💾 نسخة احتياطية الآن</button></div>';
+  } else if(e.mode==='blocked'){
+    h='<div style="font-weight:800;color:var(--danger)">⛔ قاعدة SQLite لم تعمل — '+esc(e.err)+'</div>';
+  } else {
+    h='<div style="font-weight:800;color:var(--warning)">🗄️ محرّك الحفظ: IndexedDB (السابق)</div>'+(e.err?'<div style="direction:ltr;text-align:right">'+esc(e.err)+'</div>':'')+
+      '<div>سيُعاد محاولة النقل إلى SQLite تلقائياً عند التشغيل القادم.</div>';
+  }
+  el.innerHTML=h; el.style.display='block';
+};
+/* 💾 تنزيل / استيراد نسخة SQLite */
+function _sqlBkReady(){
+  if(!(window.electronAPI && window.electronAPI.saveFile && window.electronAPI.openFile)){ try{ showNotif('غير متاح','يعمل في نسخة سطح المكتب فقط','warning'); }catch(_){} return false; }
+  if(IDB.engine().mode!=='sqlite'){ try{ showNotif('غير متاح','محرّك SQLite غير مفعّل على هذه الحاسبة','warning'); }catch(_){} return false; }
+  return true;
+}
+window.sqlBackupDownload=function(){
+  if(!_sqlBkReady()) return;
+  const run=async function(){
+    const d=new Date(), p2=function(n){ return String(n).padStart(2,'0'); };
+    let lab=''; try{ lab=String((settings&&settings.name)||'').replace(/[\\/:*?"<>|]+/g,' ').trim().slice(0,40); }catch(_){}
+    const name='MedLab'+(lab?'_'+lab:'')+'_'+d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())+'_'+p2(d.getHours())+p2(d.getMinutes())+'.sqlite';
+    const fp=await window.electronAPI.saveFile({title:'حفظ نسخة قاعدة البيانات', defaultPath:name, filters:[{name:'MedLab SQLite', extensions:['sqlite']}]});
+    if(!fp) return;
+    try{ showNotif('جارٍ النسخ','⏳ يتم إنشاء نسخة قاعدة البيانات…','info'); }catch(_){}
+    const r=await IDB.exportTo(fp);
+    if(r && r.ok) showNotif('تم','✅ حُفظت النسخة ('+((r.size||0)/1048576).toFixed(1)+' MB)\n'+fp,'success');
+    else showNotif('خطأ','❌ تعذّر إنشاء النسخة: '+((r&&r.err)||''),'error');
+  };
+  if(typeof promptDbPinThen==='function') promptDbPinThen(run); else run();
+};
+window.sqlBackupImport=function(){
+  if(!_sqlBkReady()) return;
+  const run=async function(){
+    const fp=await window.electronAPI.openFile({title:'اختر نسخة قاعدة البيانات', filters:[{name:'MedLab SQLite', extensions:['sqlite','db']}]});
+    if(!fp) return;
+    if(!confirm('⚠️ سيتم استبدال كل بيانات هذا الحساب (المرضى، الطلبات، الحسابات، الإعدادات…) بمحتوى النسخة:\n'+fp+'\n\nتُحفظ نسخة أمان من القاعدة الحالية تلقائياً قبل الاستبدال.\n\nمتابعة؟')) return;
+    try{ showNotif('جارٍ الاستيراد','⏳ فحص النسخة واستبدال القاعدة…','info'); }catch(_){}
+    const r=await IDB.restoreFrom(fp);
+    if(!r || !r.ok){ showNotif('فشل الاستيراد','❌ '+((r&&r.err)||'خطأ')+' — لم يتغيّر شيء','error'); return; }
+    try{ Object.keys(_idbPending).forEach(_idbCancelPending); }catch(_){}
+    showNotif('تم الاستيراد','✅ استُوردت النسخة'+(r.remapped?' ونُقلت إلى هذا الحساب':'')+' — سيُعاد فتح البرنامج','success');
+    setTimeout(function(){ location.reload(); }, 1500);
+  };
+  if(typeof promptDbPinThen==='function') promptDbPinThen(run); else run();
+};
+/* 💾 نسخة أمان قبل الاستيراد: نسخة SQLite كاملة في مجلد التنزيلات (بلا بناء JSON ضخم في الشاشة).
+   تُرجع اسم الملف، أو null إن لم يكن محرّك SQLite متاحاً ⇒ يكمل المستدعي بالطريقة السابقة. */
+window._sqlBackupBefore=async function(tag){
+  try{
+    if(!(typeof IDB!=='undefined' && IDB.engine && IDB.engine().mode==='sqlite')) return null;
+    if(!(window.electronAPI && window.electronAPI.getDefaultPath)) return null;
+    var dp=await window.electronAPI.getDefaultPath(), dir=(dp&&dp.downloads)||''; if(!dir) return null;
+    var sep=dir.indexOf('\\')>-1?'\\':'/', d=new Date();
+    var name='MedLab_Backup_BEFORE_'+tag+'_'+d.toISOString().slice(0,10)+'_'+String(d.getHours()).padStart(2,'0')+'-'+String(d.getMinutes()).padStart(2,'0')+'.sqlite';
+    var r=await IDB.exportTo(dir.replace(/[\\\/]+$/,'')+sep+name);
+    if(!r || !r.ok) throw new Error((r&&r.err)||'export');
+    return name;
+  }catch(e){ throw new Error('تعذّرت نسخة SQLite: '+(e&&e.message||e)); }
+};
+window._storeBackupNow=async function(){
+  const b=document.getElementById('store-bk-btn'); if(b){ b.disabled=true; b.textContent='⏳ جارٍ النسخ…'; }
+  const r=await IDB.backupNow();
+  try{ showNotif(r&&r.ok?'تم':'خطأ', r&&r.ok?('نسخة احتياطية: '+(r.file||'')):('تعذّرت النسخة: '+((r&&r.err)||'')), r&&r.ok?'success':'error'); }catch(_){}
+  window._renderStoreEngineBox();
+};
+/* ⚡ هل تحوي القاعدة سجلات أكثر مما في الذاكرة؟ (عدّ سريع بلا قراءة سجلات)
+   البرنامج يحمّل المجموعة كاملة عند الفتح، فالقراءة الكاملة الإضافية (بحث، اقتراح
+   أسماء، ربط يدوي) كانت تكراراً بلا فائدة — تبقى فقط إن ظهر فرق فعلي في العدد. */
+window._storeHasMore=async function(key, memArr){
+  try{
+    if(!Array.isArray(memArr) || !memArr.length) return true;
+    if(!(await IDB.isRecordMode(key))) return true;
+    const n=await IDB.countRecords(key);
+    return !(n>=0 && n<=memArr.length);
+  }catch(e){ return true; }
+};
 
 // ══════════════════════════════════════════════════════════════
 // DB — IDB-First: البيانات الكبيرة تُحفظ على IDB مباشرة
@@ -10305,6 +10917,14 @@ function _idbWriteLater(pk,v,ids){
 function _idbFlushAll(){ Object.keys(_idbPending).forEach(_idbWriteNow); }
 window._idbFlushAll=_idbFlushAll;
 window._idbCancelPending=_idbCancelPending;
+/* 💾 الحفظ النهائي قبل إغلاق البرنامج (تستدعيه العملية الرئيسية وتنتظره):
+   يكتب كل ما ينتظر في المؤقّت ثم ينتظر تأكيد المحرّك أن كل شيء صار على القرص */
+window.__mlStoreFlush=async function(){
+  try{ _idbFlushAll(); }catch(e){}
+  await new Promise(function(r){ setTimeout(r,0); });
+  try{ await IDB.flush(); }catch(e){}
+  return true;
+};
 
 // ضمانات عدم فقدان البيانات
 window.addEventListener('beforeunload',function(){ try{ _idbFlushAll(); }catch(e){} });
@@ -10442,7 +11062,7 @@ function save(k,v){
   /* 🆔 رقم المزامنة المخفي: يُختم على السجلات الجديدة قبل الكتابة (ويُضاف للمعدَّلة فتُكتب معها) */
   try{
     if(typeof window._sidOnSave==='function'){
-      var _sidSt=window._sidOnSave(k,v);
+      var _sidSt=window._sidOnSave(k,v,(!_touchedBad[k] && _touched[k] && _touched[k].size) ? _touched[k] : null);
       if(_sidSt && _sidSt.length && !_touchedBad[k] && _touched[k] && _touched[k].size){ for(var _si=0;_si<_sidSt.length;_si++) _touchRec(k,_sidSt[_si]); }
     }
   }catch(e){}
@@ -14611,6 +15231,7 @@ function suggestPatients(v){
   (async()=>{
     try{
       const pfx=DB._pfx();
+      if(!(await window._storeHasMore(pfx+'patients', patients))) return;   // ⚡ كل المرضى في الذاكرة — لا قراءة مع كل حرف
       const idbPts=await IDB.get(pfx+'patients');
       if(!idbPts||!Array.isArray(idbPts)) return;
       const lsIds=new Set(patients.map(p=>p.id));
@@ -15377,18 +15998,16 @@ function _wizSaveEditedPatient(){
         _wizEditOrigPatientId=null; _wizEditOrigReqId=null;
       }
       // ── تحديث اسم المريض في جميع طلباته ──────────────────────────
+      /* ⚡ كل طلبات هذا المريض تُعلن للحفظ (لا كل طلبات المختبر) */
+      const _ptReqs=requests.filter(function(r){ return r.patientId===pt.id; });
       if(pt.name && pt.name!==oldName){
-        requests.forEach(function(r){
-          if(r.patientId===pt.id) r.patientName=pt.name;
-        });
-        save('requests',requests);
+        _ptReqs.forEach(function(r){ r.patientName=pt.name; });
       } else {
         // حتى لو لم يتغير الاسم، حدّث الطبيب المحول إن تغيّر
-        requests.forEach(function(r){
-          if(r.patientId===pt.id && pt.doctorName) r.doctorName=pt.doctorName;
-        });
-        save('requests',requests);
+        _ptReqs.forEach(function(r){ if(pt.doctorName) r.doctorName=pt.doctorName; });
       }
+      if(_ptReqs.length) saveOne.apply(null, ['requests', requests].concat(_ptReqs));
+      else save('requests',requests);
       renderRequests(); updateDashboard();
       // بعد الدمج: أعِد بناء القوائم كي تعكس رقم الملف الجديد للطلب
       if(_mergedN){
@@ -15511,7 +16130,7 @@ function _wizFinishEditReq(){
     };
     invoices.push(inv);
   }
-  save('invoices',invoices);
+  saveOne('invoices',invoices,inv);   // ⚡ فاتورة هذا الطلب فقط
 
   // ④ إنهاء وضع التعديل والعودة لنفس الطلب في واجهة إدخال النتائج
   _wizEditPatientOnly=false; _wizEditOrigPatientId=null; _wizEditOrigReqId=null; _wizEditResetState();
@@ -15632,7 +16251,7 @@ function wizFinish(){
     status:payStatus, date:today,
     paidAmt, payments: paidAmt>0?[{amt:paidAmt, date:today, ts:Date.now(), by:_payUser, note:'عند التسجيل', method:(_wizElec?'electronic':'cash')}]:[]
   });
-  save('invoices',invoices);
+  saveOne('invoices',invoices,invoices[invoices.length-1]);   // ⚡ الفاتورة الجديدة فقط (لا كل الفواتير مع كل تسجيل)
 
   closeModal('m-wizard');
   showNotif('تم الإنشاء',`${rqid} — ${pt.name} | ${total} ${settings.currency||''} — ${payStatus==='جزئية'?('مطلوب: دفع '+paidAmt+' والمتبقي '+(Math.round((total-paidAmt)*100)/100)):payStatus}${(_wizElec&&paidAmt>0)?' — 💳 دفع إلكتروني':''} ✅`,'success');
@@ -15870,6 +16489,7 @@ function searchPatients(v){
       const pfx=DB._pfx();
       // كاش نتيجة IDB لمدة 60 ثانية بدل قراءته في كل بحث
       if(!window._idbPtsCache||Date.now()-window._idbPtsCacheTime>60000){
+        if(!(await window._storeHasMore(pfx+'patients', patients))){ window._idbSearchTemp=null; return; }   // ⚡ كل المرضى في الذاكرة
         window._idbPtsCache=await IDB.get(pfx+'patients')||[];
         window._idbPtsCacheTime=Date.now();
       }
@@ -28557,10 +29177,44 @@ var AuditLog=(function(){
     var p=_pend[k]; delete _pend[k]; if(!p) return;
     try{ diff(k,p); }catch(e){ console.warn('[AuditLog] diff',k,e); }
   }
-  function diff(k,p){
-    var W=WATCH[k], sh=_sh[k], arr=p.arr, seen=new Map();
-    for(var i=0;i<arr.length;i++){ var o=arr[i]; if(o&&o.id!=null) seen.set(String(o.id),o); }
+  /* ⚡ حفظ سجلات معلنة (saveOne): قارن هذه السجلات فقط بدل بناء خريطة لكل المجموعة
+     (~150ms بعد كل حفظ عند 138 ألف طلب). عدّ بسيط يضمن عدم وجود إضافة/حذف غير معلن،
+     وإلا ⇒ المقارنة الكاملة كما كانت. نتيجة السجل نفسها في الحالتين. */
+  function _diffDelta(k,p,W,sh,arr){
+    if(p.full || !p.ids || !p.ids.size || p.ids.size>BULK) return null;
+    var need=new Map(), n=0, i, o, id;
+    p.ids.forEach(function(x){ need.set(String(x),null); n++; });
+    for(i=arr.length-1;i>=0 && n>0;i--){
+      o=arr[i]; if(!o || o.id==null) continue;
+      id=String(o.id);
+      if(need.has(id) && need.get(id)===null){ need.set(id,o); n--; }
+    }
     var adds=[], dels=[], edits=[];
+    need.forEach(function(o,id){
+      var s=sh.get(id);
+      if(o && !s) adds.push(o);
+      else if(!o && s) dels.push(s.ref);
+      else if(o && s){
+        var np=proj(k,o);
+        if(np!==s.p){
+          var a=np.split('\u0001'), b=s.p.split('\u0001'), chg=[];
+          W.f.forEach(function(f,fi){ if((a[fi]||'')!==(b[fi]||'')) chg.push({f:f[0],l:f[1],b:b[fi]||'',a:a[fi]||''}); });
+          if(chg.length) edits.push({o:o,chg:chg});
+        }
+        if(s.ref!==o) s.ref=o;
+      }
+    });
+    if(arr.length - sh.size !== adds.length - dels.length) return null;   // تغيير غير معلن ⇒ المقارنة الكاملة
+    return {adds:adds, dels:dels, edits:edits};
+  }
+  function diff(k,p){
+    var W=WATCH[k], sh=_sh[k], arr=p.arr, seen=null;
+    var adds=[], dels=[], edits=[];
+    var _q=_diffDelta(k,p,W,sh,arr);
+    if(_q){ adds=_q.adds; dels=_q.dels; edits=_q.edits; }
+    else {
+    seen=new Map();
+    for(var i=0;i<arr.length;i++){ var o=arr[i]; if(o&&o.id!=null) seen.set(String(o.id),o); }
     seen.forEach(function(o,id){ if(!sh.has(id)) adds.push(o); });
     sh.forEach(function(s,id){ if(!seen.has(id)) dels.push(s.ref); });
     var checkAll=p.full && arr.length<=20000;
@@ -28575,11 +29229,12 @@ var AuditLog=(function(){
         }
       }
     });
+    }
     /* تحديث الظل */
     adds.forEach(function(o){ sh.set(String(o.id),{ref:o,p:proj(k,o)}); });
     dels.forEach(function(o){ sh.delete(String(o.id)); });
     edits.forEach(function(x){ sh.set(String(x.o.id),{ref:x.o,p:proj(k,x.o)}); });
-    seen.forEach(function(o,id){ var s=sh.get(id); if(s && s.ref!==o){ s.ref=o; } });
+    if(seen) seen.forEach(function(o,id){ var s=sh.get(id); if(s && s.ref!==o){ s.ref=o; } });
     var src=p.src;
     function one(act,o,extra){
       var e={act:act, coll:k, rid:String(o.id), title:W.title(o), src:src, snap:snap(o)};
@@ -29050,7 +29705,7 @@ function _invAdjustForTest(req, tid, sign){
     // 💳 فاتورة «مطلوب»: إن صار المدفوع يغطي الصافي الجديد ⇒ مدفوعة
     if(!_invIsPaid(inv) && parseFloat(inv.paidAmt)>0 && parseFloat(inv.paidAmt)>=inv.total){ inv.status='مدفوعة'; inv.paidAmt=inv.total; }
     _invLogPaidDelta(inv,_prevPaid,_bd0);
-    save('invoices',invoices);
+    saveOne('invoices',invoices,inv);   // ⚡ فاتورة هذا الطلب فقط
     try{ if(typeof updateDashboard==='function') updateDashboard(); }catch(e){}
   }catch(e){ console.warn('[invoice adjust]', e); }
 }
@@ -29156,11 +29811,11 @@ function saveBillFinal(){
   inv.rawTotal=sub; inv.discountAmt=discAmt; inv.discount=discPct; inv.total=afterDisc;
   if(invPrev && afterDisc!==parseFloat(invPrev.total)) inv.manualTotal=false;   // عُدّل من واجهة الحساب ⇒ لم يعد يدوياً
   inv._updatedAt=Date.now();
-  save('invoices',invoices);
+  saveOne('invoices',invoices,inv);   // ⚡ فاتورة هذا الطلب فقط
 
   billingRecords.push({id:(function(){ var _dp=(typeof _devNo==='function'&&_devNo()>1)?_devNo()+'-':''; var n=1000+billingRecords.length+1, c='BL-'+_dp+n; while(billingRecords.some(function(x){return x.id===c;})){ n++; c='BL-'+_dp+n; } return c; })(),patientId:pid,patientName:pt?pt.name:'-',reqId:rid,subtotal:sub,discount:discAmt,discountAmt:discAmt,discountMode:'amt',insAmt,drComm:drCommPct,drAmt,final:finalAmt,date:new Date().toISOString().split('T')[0],currency:settings.currency,
     invId:inv.id, invCreated:invCreated, invPrev:invPrev});
-  save('billing',billingRecords);
+  saveOne('billing',billingRecords,billingRecords[billingRecords.length-1]);   // ⚡ السجل الجديد فقط
   try{ if(typeof renderInvoices==='function') renderInvoices(); }catch(e){}
   try{ if(typeof updateDashboard==='function') updateDashboard(); }catch(e){}
   try{ if(typeof renderReports==='function' && document.getElementById('sec-reports') && document.getElementById('sec-reports').classList.contains('active')) renderReports(); }catch(e){}
@@ -34181,9 +34836,11 @@ async function _updateStorageMeterIDB(){
     // تقدير عدد المرضى في IDB
     if(cap){
       const pfx=DB._pfx();
-      const idbPts=await IDB.get(pfx+'patients');
-      const cnt=Array.isArray(idbPts)?idbPts.length:0;
+      let cnt=-1;
+      try{ if(await IDB.isRecordMode(pfx+'patients')) cnt=await IDB.countRecords(pfx+'patients'); }catch(e){}   // ⚡ عدّ بلا قراءة
+      if(cnt<0){ const idbPts=await IDB.get(pfx+'patients'); cnt=Array.isArray(idbPts)?idbPts.length:0; }
       cap.textContent=cnt>0?cnt.toLocaleString()+' مريض في الأرشيف':'الأرشيف فارغ';
+      try{ if(typeof window._renderStoreEngineBox==='function') window._renderStoreEngineBox(); }catch(e){}
     }
   }catch(e){}
 }
@@ -34398,6 +35055,20 @@ function initAutoBackup(){
 
 // ── اختيار مجلد التنزيل التلقائي ───────────────────────────
 async function selectAutoBackupFolder(){
+  /* 💾 Electron: اختيار المجلد بنافذة النظام ⇒ مسار حقيقي يكتب فيه المحرّك مباشرة */
+  if(window.electronAPI && window.electronAPI.openDirectory){
+    try{
+      var p=await window.electronAPI.openDirectory({title:'اختر مجلد النسخ الاحتياطية'});
+      if(!p) return;
+      var nm=String(p).split(/[\\\/]/).filter(Boolean).pop()||p;
+      localStorage.setItem('medlab_backup_folder_path', p);
+      localStorage.setItem('medlab_backup_folder_name', nm);
+      var nameEl0=document.getElementById('auto-backup-folder-name');
+      if(nameEl0) nameEl0.textContent=nm;
+      showNotif('تم','✅ سيتم حفظ النسخ الاحتياطية في مجلد: '+nm,'success');
+      return;
+    }catch(e){ console.warn('[Backup] openDirectory', e); }
+  }
   if(!('showDirectoryPicker' in window)){
     showNotif('تنبيه','تعذّر اختيار المجلد','warning');
     return;
@@ -52256,8 +52927,10 @@ async function lisManualLink(resId){
   let idbReqs=null, idbPts=null;
   try{
     if(typeof IDB!=='undefined'){
-      idbReqs=await IDB.get(_idbReqKey);
-      idbPts =await IDB.get(_idbPtKey);
+      const _mR=(typeof requests!=='undefined'&&Array.isArray(requests))?requests:null;
+      const _mP=(typeof patients!=='undefined'&&Array.isArray(patients))?patients:null;
+      if(await window._storeHasMore(_idbReqKey,_mR)) idbReqs=await IDB.get(_idbReqKey);   // ⚡ فقط إن كانت القاعدة أكبر من الذاكرة
+      if(await window._storeHasMore(_idbPtKey,_mP))  idbPts =await IDB.get(_idbPtKey);
     }
   }catch(e){ console.warn('[LIS] manual link IDB read',e); }
   let reqsAll=(typeof requests!=='undefined'&&Array.isArray(requests)&&requests.length)?requests:
@@ -52755,11 +53428,24 @@ function _lisStrictSid(){
   catch(_){ return true; }
 }
 // تطبيع معرّف للمقارنة: أرقام عربية-هندية → لاتينية + حذف الفواصل + حروف كبيرة
-function _lisIdKey(v){
+function _lisIdKeyRaw(v){
   var s=String(v==null?'':v).trim();
   if(!s) return '';
   try{ if(typeof _bcCleanCode==='function'){ var c=_bcCleanCode(s); if(c) s=c; } }catch(_){}
   return s.toUpperCase().replace(/[\s\-_.]+/g,'');
+}
+/* ⚡ كل نتيجة جهاز تُطابَق مع كل الطلبات، وكل رقم طلب كان يُطبَّع من جديد في كل مرة
+   (~600ms لكل نتيجة عند 138 ألف طلب). التطبيع دالة نقية ⇒ نحفظ ناتجها:
+   نفس المدخل ⇒ نفس الناتج تماماً، بلا أي تغيير في منطق المطابقة. */
+var _lisIdKeyMemo=new Map();
+function _lisIdKey(v){
+  var k=(v==null)?'':String(v);
+  var r=_lisIdKeyMemo.get(k);
+  if(r!==undefined) return r;
+  r=_lisIdKeyRaw(k);
+  if(_lisIdKeyMemo.size>=300000) _lisIdKeyMemo.clear();
+  _lisIdKeyMemo.set(k,r);
+  return r;
 }
 function _lisIdDigits(v){ return _lisIdKey(v).replace(/[^0-9]/g,''); }
 // تطابق تام: نفس النص بالكامل، أو نفس الأرقام بالكامل
@@ -55359,6 +56045,18 @@ async function _gdBackupNowInner(silent){
   if(!silent) _gdProgUI({phase:'build'});
 
   try{
+    var _gdSql = !!(typeof IDB!=='undefined' && IDB.engine && IDB.engine().mode==='sqlite');
+    var res;
+    if(_gdSql){
+      /* 💾 نسخة قاعدة SQLite كاملة (بيانات + إعدادات) — تُنسخ وتُضغط وتُشفَّر وتُرفع خارج الشاشة */
+      try{ await IDB.flush(); }catch(e){}
+      res = await Promise.race([window.electronAPI.gdriveBackup({
+        sqlite:   true,
+        password: pw,
+        fileName: _gdFileName(),
+        meta:     { version:'5.0-sqlite', userPrefix: DB._pfx() },
+      }), new Promise(function(r){ setTimeout(function(){ r({ok:false, error:'timeout'}); }, 30*60*1000); })]);
+    } else {
     // ابنِ النسخة الكاملة عبر دالة تطبيقك الموجودة
     var backupObj = await _fsaBuildFullBackup();
     var _gdLastBuilt = backupObj;
@@ -55381,6 +56079,7 @@ async function _gdBackupNowInner(silent){
       fileName: _gdFileName(),
     }), _gdTO]);
     _gdLastBuilt = null;
+    }
 
     if(res && res.ok){
       localStorage.setItem(_gdLastKey(), new Date().toISOString());
@@ -55458,6 +56157,18 @@ async function _gdDoRestore(pw){
 
     // نجح فكّ التشفير → كلمة المرور صحيحة، احفظها لهذا الجهاز
     _gdSavePassword(pw);
+
+    if(res.kind==='sqlite'){
+      /* 💾 نسخة SQLite ⇒ استبدال القاعدة عبر المحرّك (مع نسخة أمان تلقائية) */
+      if(!(typeof IDB!=='undefined' && IDB.engine && IDB.engine().mode==='sqlite')){ showNotif('غير متاح','هذه نسخة SQLite — محرّك SQLite غير مفعّل على هذه الحاسبة','error'); return; }
+      showNotif('جارٍ الاسترجاع','⏳ يتم استبدال قاعدة البيانات بالنسخة…','info');
+      var rr = await IDB.restoreFrom(res.path);
+      if(!rr || !rr.ok){ showNotif('فشل الاسترجاع','❌ '+((rr&&rr.err)||'خطأ')+' — لم يتغيّر شيء','error'); return; }
+      try{ Object.keys(_idbPending).forEach(_idbCancelPending); }catch(e){}
+      showNotif('تم الاسترجاع','✅ استُرجعت النسخة'+(rr.remapped?' ونُقلت إلى هذا الحساب':'')+' — سيُعاد فتح البرنامج','success');
+      setTimeout(function(){ location.reload(); }, 1500);
+      return;
+    }
 
     var parsed = JSON.parse(res.payload);
     if(!parsed || !parsed._medlab_backup){
@@ -56132,6 +56843,39 @@ function _fsaScheduleBiweekly(){
 }
 
 // ── النسخ الاحتياطي التلقائي (تنزيل ملف في مجلد المستخدم أو Downloads) ──
+async function _autoBackupSqlite(cfg, lastEl, statEl){
+  try{
+    if(!(typeof IDB!=='undefined' && IDB.engine && IDB.engine().mode==='sqlite')) return false;
+    if(!(window.electronAPI && window.electronAPI.getDefaultPath)) return false;
+    var dir=localStorage.getItem('medlab_backup_folder_path')||'', folderName=localStorage.getItem('medlab_backup_folder_name')||'';
+    if(!dir){
+      if(localStorage.getItem('medlab_backup_folder_name')) return false;      // مجلد اختير بالطريقة السابقة (بلا مسار) ⇒ السلوك السابق كما هو
+      var dp=await window.electronAPI.getDefaultPath(); dir=(dp&&dp.downloads)||''; folderName='Downloads';
+    }
+    if(!dir) return false;
+    var sep=dir.indexOf('\\')>-1?'\\':'/', base=dir.replace(/[\\\/]+$/,'');
+    var d=new Date(), dateStr=d.toISOString().split('T')[0];
+    var timeStr=d.toLocaleTimeString('en',{hour:'2-digit',minute:'2-digit',hour12:false}).replace(':','-');
+    var fp=base+sep+'MedLab_Backup_'+dateStr+'_'+timeStr+'.sqlite';
+    var r=await IDB.exportTo(fp);
+    if(!r || !r.ok){ console.warn('[Backup] sqlite auto failed', r); return false; }
+    /* آخر 7 نسخ تلقائية فقط (لا تُمسّ أي ملفات أخرى في المجلد) */
+    try{
+      var ls=await window.electronAPI.readDir(base);
+      var mine=((ls&&ls.files)||[]).filter(function(f){ return f.isFile && /^MedLab_Backup_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.sqlite$/.test(f.name); })
+        .sort(function(a,b){ return (a.mtime||0)-(b.mtime||0); });
+      while(mine.length>7){ var old=mine.shift(); try{ await window.electronAPI.deleteFile(old.path); }catch(_){} }
+    }catch(_){}
+    var now=new Date().toLocaleString('ar-IQ');
+    cfg.lastRun=now; cfg.lastDate=new Date().toLocaleDateString('ar-IQ');
+    localStorage.setItem(_autoBackupKey(), JSON.stringify(cfg));
+    if(lastEl) lastEl.textContent='آخر نسخة: '+now+' ← '+folderName;
+    if(statEl) statEl.innerHTML='<span style="color:var(--success)">🟢 نسخة SQLite محفوظة في ['+folderName+'] — '+now+' ('+((r.size||0)/1048576).toFixed(1)+' MB)</span>';
+    showNotif('تم النسخ','✅ حُفظت نسخة قاعدة البيانات في: '+folderName,'success');
+    try{ loadAutoBackupUI(); }catch(_){}
+    return true;
+  }catch(e){ console.warn('[Backup] sqlite auto', e); return false; }
+}
 async function runAutoBackupNow(skipPinCheck){
   // ── حماية بالرمز السري عند الاستدعاء اليدوي ──
   if(!skipPinCheck){
@@ -56144,6 +56888,9 @@ async function runAutoBackupNow(skipPinCheck){
   var cfg = JSON.parse(localStorage.getItem(_autoBackupKey())||'{}');
   var lastEl = document.getElementById('auto-backup-last');
   var statEl = document.getElementById('auto-backup-status');
+  /* 💾 SQLite: نسخة كاملة من القاعدة (بيانات + إعدادات) يكتبها المحرّك مباشرة في المجلد —
+     بلا بناء JSON ضخم في الشاشة. يُحتفظ بآخر 7 نسخ تلقائية فقط في المجلد (ملفات MedLab_Backup_….sqlite). */
+  if(await _autoBackupSqlite(cfg, lastEl, statEl)) return;
   try{
     // بناء بيانات النسخة الاحتياطية
     const backupJson = await _fsa_buildDownloadBackup();
@@ -70407,6 +71154,7 @@ if(typeof module!=='undefined') module.exports=GLC;
   function _pushAll(arr, items){ for(var i=0;i<items.length;i++) arr.push(items[i]); }
 
   async function _downloadBackup(){
+    var _sq=await window._sqlBackupBefore('GreenLab_Import'); if(_sq) return _sq;   // 💾 SQLite
     if(typeof _fsa_buildDownloadBackup!=='function') throw new Error('دالة النسخ الاحتياطي غير متاحة');
     var json=await _fsa_buildDownloadBackup();
     var d=new Date(), name='MedLab_Backup_BEFORE_GreenLab_Import_'+d.toISOString().slice(0,10)+'_'+String(d.getHours()).padStart(2,'0')+'-'+String(d.getMinutes()).padStart(2,'0')+'.json';
@@ -71582,6 +72330,7 @@ if(typeof module!=='undefined') module.exports=ABI;
   };
 
   async function _downloadBackup(){
+    var _sq=await window._sqlBackupBefore('SQL_Import'); if(_sq) return _sq;   // 💾 SQLite
     if(typeof _fsa_buildDownloadBackup!=='function') throw new Error('دالة النسخ الاحتياطي غير متاحة');
     var json=await _fsa_buildDownloadBackup();
     var d=new Date(), name='MedLab_Backup_BEFORE_SQL_Import_'+d.toISOString().slice(0,10)+'_'+String(d.getHours()).padStart(2,'0')+'-'+String(d.getMinutes()).padStart(2,'0')+'.json';
@@ -74037,7 +74786,7 @@ function createMedlabRecords(o, oid, existing){
   var sub=+o.sub||0, fee=+o.fee||0, raw=sub+fee, dAmt=Math.min(Math.max(0,+o.dsc||0), raw), tot=raw-dAmt;
   invoices.push({ id:newInvId(), patientId:pt.id, patientName:pt.name, reqId:rqid, rawTotal:raw, discount:raw?Math.round(dAmt/raw*1000)/10:0, discountAmt:dAmt, total:tot,
     insType:'', insAmt:0, status:'معلقة', date:today, paidAmt:0, payments:[], src:'store', storeOid:oid, homeFee:fee });
-  save('invoices',invoices);
+  saveOne('invoices',invoices,invoices[invoices.length-1]);   // ⚡ الفاتورة الجديدة فقط
   putLog(oid, Object.assign({}, getLog()[oid]||{}, o, {cv:rqid}));
   return req;
 }
@@ -79247,7 +79996,45 @@ function stOpen(){
   }).then(function(db){ ST.opening=null; return db; }, function(e){ ST.opening=null; throw e; });
   return ST.opening;
 }
+/* 💾 بصمات الوجه في SQLite (مفاتيح «<الحساب>fid|<رقم المريض>») — مع نقل لمرة واحدة من IndexedDB.
+   خارج Electron أو قبل تفعيل SQLite ⇒ IndexedDB كما كان تماماً. */
+var _fidMigP=null;
+function _fidSql(){ try{ return !!(typeof IDB!=='undefined' && IDB.engine && IDB.engine().mode==='sqlite'); }catch(e){ return false; } }
+function _fidKey(r){ var k=String(r.k||''), i=k.indexOf('|'); return i<0 ? null : k.slice(0,i)+'fid|'+k.slice(i+1); }
+function _fidReady(){ return Promise.resolve((typeof IDB!=='undefined' && IDB.whenReady) ? IDB.whenReady() : null); }
+function _fidMigrate(){
+  if(_fidMigP) return _fidMigP;
+  _fidMigP=(async function(){
+    if(localStorage.getItem('medlab_fid_sqlite')==='1') return true;
+    var all=[];
+    try{ var db=await stOpen(); all=await new Promise(function(res){ try{ var rq=db.transaction('recs','readonly').objectStore('recs').getAll(); rq.onsuccess=function(){ res(rq.result||[]); }; rq.onerror=function(){ res([]); }; }catch(e){ res([]); } }); }catch(e){ all=[]; }
+    var items=all.filter(function(r){ return r && _fidKey(r); }).map(function(r){ return {k:_fidKey(r), v:r}; });
+    if(items.length && !(await IDB.kvPutMany(items))){ _fidMigP=null; return false; }
+    localStorage.setItem('medlab_fid_sqlite','1');
+    return true;
+  })();
+  return _fidMigP;
+}
 function stAll(p){
+  return _fidReady().then(function(){
+    if(!_fidSql()) return stAllIdb(p);
+    return _fidMigrate().then(function(ok){
+      if(!ok) return stAllIdb(p);
+      return IDB.kvRange(p+'fid|').then(function(v){ return Array.isArray(v) ? v : stAllIdb(p); });
+    });
+  });
+}
+function stPutMany(recs){
+  if(!recs.length) return Promise.resolve(true);
+  return _fidReady().then(function(){
+    if(!_fidSql()) return stPutManyIdb(recs);
+    return _fidMigrate().then(function(ok){
+      if(!ok) return stPutManyIdb(recs);
+      return IDB.kvPutMany(recs.filter(function(r){ return r && _fidKey(r); }).map(function(r){ return {k:_fidKey(r), v:r}; }));
+    });
+  });
+}
+function stAllIdb(p){
   return stOpen().then(function(db){ return new Promise(function(res){
     try{
       var tx=db.transaction('recs','readonly'), rq=tx.objectStore('recs').getAll(IDBKeyRange.bound(p+'|', p+'|￿'));
@@ -79255,7 +80042,7 @@ function stAll(p){
     }catch(e){ res([]); }
   }); });
 }
-function stPutMany(recs){
+function stPutManyIdb(recs){
   if(!recs.length) return Promise.resolve(true);
   return stOpen().then(function(db){ return new Promise(function(res){
     try{
@@ -80604,9 +81391,61 @@ function linkFix(col, rec){
   return ch;
 }
 
-/* ═════ الخطّاف: يُستدعى من save() قبل الكتابة — يُرجع السجلات التي خُتمت ═════ */
-window._sidOnSave = function(k, arr){
+/* ═════ الخطّاف: يُستدعى من save() قبل الكتابة — يُرجع السجلات التي خُتمت ═════
+   ⚡ حفظ سجل واحد (saveOne) كان يمرّ على كل المجموعة مرتين (~90ms عند 138 ألف طلب
+   في كل إدخال نتيجة). الآن: السجلات المعلنة فقط وبنفس المنطق تماماً لكل سجل؛
+   والحالة النادرة (سجل فقد رقمه ويحتاج استعادة) أو الحفظ الكامل ⇒ المسح الكامل كما كان. */
+window._sidOnSave = function(k, arr, touched){
   if(!COLS[k] || !Array.isArray(arr)) return null;
+  if(touched && touched.size && touched.size <= BULK && S.ready && S.pfx === pfx() && S.sidById[k]){
+    var r = _sidDelta(k, arr, touched);
+    if(r) return r;                               // null ⇒ حالة تحتاج المسح الكامل
+  }
+  return _sidFull(k, arr);
+};
+function _sidDelta(k, arr, touched){
+  var L = S.legacy[k] || (S.legacy[k] = new Set());
+  var map = S.sidById[k], stamped = [], recs = [], need = {}, n = 0, i, o, id;
+  touched.forEach(function(x){ need[String(x)] = 1; n++; });
+  for(i=arr.length-1; i>=0 && n>0; i--){            // من الآخر: التعديلات غالباً على أحدث السجلات
+    o = arr[i];
+    if(!o || typeof o !== 'object' || o.id == null) continue;
+    id = String(o.id);
+    if(need[id] === 1){ need[id] = 2; n--; recs.push(o); }
+  }
+  for(i=0;i<recs.length;i++){                       // سجل فقد رقمه ⇒ الاستعادة تحتاج المسح الكامل
+    o = recs[i];
+    if(!o._sid && o.id != null && o.id !== '' && map[String(o.id)]) return null;
+  }
+  SX.touch(k);
+  Object.keys(need).forEach(function(x){ if(need[x] === 1) delete map[x]; });   // حُذف من المجموعة
+  for(i=0;i<recs.length;i++){
+    o = recs[i]; id = String(o.id);
+    if(o._sid){
+      map[id] = o._sid;
+      if(k === 'patients' && o._vfp === undefined && o._sid.charAt(0) === 'L'){
+        try{ o._vfp = localVfps(o.id).slice(-60); stamped.push(o); }catch(e){}
+      }
+      if((LINK_P[k] && o._pidAt !== o.patientId && o.patientId != null) || (LINK_R[k] && o._ridAt !== o.reqId && o.reqId != null)){
+        if(linkFix(k, o)) stamped.push(o);
+      }
+      continue;
+    }
+    if(o.id === '') continue;
+    if(L.has(id)) continue;
+    var org = orgOf(o);
+    if(org && org < S.T0 - OLD_MS){ L.add(id); S.legacyDirty[k] = 1; continue; }  // سجل قديم ⇒ أرشيف
+    o._sid = sidFor(o);
+    map[id] = o._sid;
+    linkFix(k, o);
+    /* نفس قاعدة المرور الأول في المسح الكامل (كانت تُطبَّق عند الحفظ التالي) */
+    if(k === 'patients' && o._vfp === undefined && o._sid.charAt(0) === 'L'){ try{ o._vfp = localVfps(o.id).slice(-60); }catch(e){} }
+    stamped.push(o);
+  }
+  if(Object.keys(S.legacyDirty).length) scheduleLegacySave();
+  return stamped;
+}
+function _sidFull(k, arr){
   SX.touch(k);
   if(!S.ready || S.pfx !== pfx()) return null;
   var L = S.legacy[k] || (S.legacy[k] = new Set());
@@ -80656,7 +81495,7 @@ window._sidOnSave = function(k, arr){
   S.sidById[k] = map;
   if(Object.keys(S.legacyDirty).length) scheduleLegacySave();
   return stamped;
-};
+}
 
 /* ═════ الاستلام: تحويل سجل وارد إلى تمثيله المحلي ═════ */
 var _fixQ = {}, _fixT = null;
@@ -81005,9 +81844,9 @@ window._syncWatch = function(k, v, touched){
     if(touched && touched.size){
       /* مسار سريع: السجلات المعلَنة فقط (saveOne) — تُختم قبل الكتابة والبثّ */
       var need={}, n=0; touched.forEach(function(id){ need[String(id)]=1; n++; });
-      for(var i=0;i<v.length && n>0;i++){
+      for(var i=v.length-1;i>=0 && n>0;i--){           /* ⚡ من الآخر: التعديلات غالباً على أحدث السجلات */
         var o=v[i], id=idOf(o);
-        if(id && need[id]){ check(k, o, map, true); n--; }
+        if(id && need[id]===1){ need[id]=2; check(k, o, map, true); n--; }
       }
       return;
     }
@@ -89958,7 +90797,7 @@ function createRequest(cid, o){
     var dp=(typeof _devNo==='function'&&_devNo()>1)?(_devNo()+'-'):'', iid; do{ nI++; iid='INV-'+dp+nI; }while(invoices.find(function(i){return i.id===iid;}));
     localStorage.setItem(key,String(nI));
     invoices.push({ id:iid, patientId:pt.id, patientName:pt.name, reqId:rqid, rawTotal:raw, discount:0, discountAmt:0, total:raw, insType:'', insAmt:0, status:'معلقة', date:t0, paidAmt:0, payments:[], src:'clinic' });
-    save('invoices',invoices);
+    saveOne('invoices',invoices,invoices[invoices.length-1]);   // ⚡ الفاتورة الجديدة فقط
   }catch(e){ console.warn('[dpl] invoice',e); }
   return req;
 }
