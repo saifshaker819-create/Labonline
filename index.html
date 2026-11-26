@@ -7210,7 +7210,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
             <div class="db-acc" id="db-acc-glimport">
               <div class="db-acc-hdr" onclick="dbAccToggle(this)">
                 <span class="db-acc-ico">📥</span>
-                <div class="db-acc-ttl">استيراد من برنامج آخر (Green Lab System)<div class="db-acc-sub">ملف Access ‏accdb أو مضغوط zip · مرضى · زيارات · نتائج · CBC · إدرار · خروج · منوي · زرع</div></div>
+                <div class="db-acc-ttl">استيراد من برامج أخرى (Green Lab System · قاعدة MySQL)<div class="db-acc-sub">Green Lab: ملف Access ‏accdb أو zip · MySQL: ملف sql أو sql.gz · مرضى · زيارات · نتائج · أطباء · تحاليل</div></div>
                 <span class="db-acc-arrow">▼</span>
               </div>
               <div class="db-acc-body"><div class="db-acc-body-inner">
@@ -7231,6 +7231,24 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
                   </div>
                 </div>
                 <div id="gl-preview"></div>
+                <!-- 📥 استيراد من برنامج آخر — قاعدة MySQL (sql / sql.gz) -->
+                <div style="background:rgba(167,139,250,0.06);border:1.5px solid rgba(167,139,250,0.3);border-radius:14px;padding:18px;margin:14px 0 12px">
+                  <div style="font-size:14px;font-weight:900;color:#a78bfa;margin-bottom:8px">🗄️ استيراد من برنامج آخر — قاعدة بيانات MySQL</div>
+                  <div style="font-size:12px;color:var(--text2);line-height:2;margin-bottom:12px">
+                    • اختر نسخة قاعدة البيانات <b style="color:var(--text)">sql</b> أو المضغوطة <b style="color:var(--text)">sql.gz</b> (مثل albeetarlab_….sql.gz) — تُقرأ مباشرة بلا أي برنامج إضافي.<br>
+                    • يُستورد: <b>المرضى</b> بملفات تجمع كل زياراتهم (الاسم · العمر · الجنس · الهاتف) · <b>الزيارات بنتائجها</b> · <b>كل الأطباء</b> · <b>قاعدة التحاليل</b> (الاسم · السعر · الوحدة · القيم الطبيعية بكل أنواعها · المجموعة الرئيسية والفرعية).<br>
+                    • التحليل المطابق في ميدلاب يُستبدل بتحليل القاعدة · غير المطابق يُضاف · تحاليل ميدلاب الأخرى تبقى.<br>
+                    • 🧪 كل مريض بلا لقب أو بلا اسم ثلاثي يُعلَّم <b>سايد لاب</b> تلقائياً (يمكن للموظف تغييره).<br>
+                    • القراءة والمعاينة لا تغيّر أي شيء — الحفظ يبدأ فقط عند ضغط «بدء الاستيراد»، وتُنزَّل نسخة احتياطية قبله.
+                  </div>
+                  <input type="file" id="sqli-file" accept=".sql,.gz" style="display:none" onchange="sqlImportFileChosen(this)">
+                  <button class="btn btn-p btn-lg" style="width:100%;background:linear-gradient(135deg,#7c3aed,#a78bfa);border-color:#a78bfa" onclick="sqlImportPick()">📂 استيراد من برنامج آخر (sql / sql.gz)</button>
+                  <div id="sqli-prog" style="display:none;margin-top:12px">
+                    <div style="height:8px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden"><div id="sqli-prog-bar" style="height:100%;width:0;background:linear-gradient(90deg,#a78bfa,#00f593);transition:width .2s"></div></div>
+                    <div id="sqli-prog-text" style="font-size:11.5px;color:var(--text2);margin-top:6px"></div>
+                  </div>
+                </div>
+                <div id="sqli-preview"></div>
               </div></div>
             </div><!-- /db-acc-glimport -->
 
@@ -12476,8 +12494,21 @@ async function _mergeIDBInBackground(){
       const currentIds=new Set(current.map(x=>x.id).filter(Boolean));
       const toAdd=idbVal.filter(x=>x.id&&!currentIds.has(x.id));
       if(toAdd.length>0){
-        current.push(...toAdd);
+        for(let _ai=0;_ai<toAdd.length;_ai++) current.push(toAdd[_ai]);
         changed=true;
+      }
+      if(toAdd.length>0 && (k==='patients'||k==='requests'||k==='invoices')){
+        try{
+          /* ترتيب طبيعي للمعرّف (البادئة ثم التسلسل كرقم) = ترتيب الإدخال — ثابت للمتساوي */
+          const _nk=function(id){ const m=/^(.*?)(\d+)$/.exec(String(id)); return m?[m[1],+m[2]]:[String(id),-1]; };
+          const _keys=new Map(); current.forEach(function(x,i){ _keys.set(x,[_nk(x&&x.id),i]); });
+          let _ord=true;
+          for(let _i=1;_i<current.length && _ord;_i++){ const a=_keys.get(current[_i-1]), b=_keys.get(current[_i]); if(a[0][0]===b[0][0] && a[0][1]>b[0][1]) _ord=false; }
+          if(!_ord) current.sort(function(x,y){ const a=_keys.get(x), b=_keys.get(y);
+            if(a[0][0]!==b[0][0]) return a[0][0]<b[0][0]?-1:1;
+            if(a[0][1]!==b[0][1]) return a[0][1]-b[0][1];
+            return a[1]-b[1]; });
+        }catch(e){ console.warn('[MedLab] order',e); }
       }
       _MC[pfx+k]=current;
       switch(k){
@@ -12519,7 +12550,7 @@ async function _mergeIDBInBackground(){
       const currentIds=new Set(current.map(x=>x.id).filter(Boolean));
       const toAdd=idbVal.filter(x=>x.id&&!currentIds.has(x.id));
       if(toAdd.length>0){
-        current.push(...toAdd);
+        for(let _ai=0;_ai<toAdd.length;_ai++) current.push(toAdd[_ai]);
         changed=true;
       }
       _MC[pfx+k]=current;
@@ -70571,6 +70602,9 @@ if(typeof module!=='undefined') module.exports=GLC;
     }
   };
 
+  /* 📥 مسار الحفظ نفسه يُستعمل أيضاً في «استيراد من برنامج آخر — قاعدة MySQL» */
+  window._glImportApi={persist:_persist, verify:_verify, askMode:_askMode};
+
   function _renderResult(out, checks, failed, secs, backupName){
     var res=$('gl-result'); if(!res) return;
     var R=out.report, row=function(l,v,c){ return '<tr><td style="padding:5px 8px;color:var(--text2)">'+l+'</td><td style="padding:5px 8px;font-weight:800;color:'+(c||'var(--text)')+'">'+v+'</td></tr>'; };
@@ -70612,6 +70646,1138 @@ if(typeof module!=='undefined') module.exports=GLC;
     h+='</div>';
     res.innerHTML=h;
     var sb=$('gl-start-btn'); if(sb){ sb.disabled=true; sb.textContent='✅ تم الاستيراد'; }
+  }
+})();
+
+</script>
+
+<script>
+/* ═══════════ 📥 SQL Import v1 — استيراد من برنامج آخر بقاعدة MySQL (ملف sql / sql.gz) ═══════════
+   الصيغة المدعومة: نسخة mysqldump لبرنامج مختبر (Laravel) بالجداول:
+     patients · dlms (الزيارات) · dlm_test · results · doctors · tests · values · references · category_tests
+   ما يُستورد:
+     ① المرضى — ملف لكل مريض (دمج السجلات المكررة: الاسم الثلاثي + الجنس + عمر متوافق) مع كل زياراته
+        الاسم · العمر · الجنس · الهاتف (الأرقام الوهمية 9647800000000 تُترك فارغة)
+        بلا اسم ثلاثي أو بلا لقب ⇒ سايد لاب تلقائياً (يمكن للموظف تغييره)
+        اللقب المكتوب داخل الاسم (ست · د. · الاستاذ · الحاج) يُستخرج إلى حقل اللقب
+     ② الزيارات ← طلبات بكل تحاليلها ونتائجها (الإدرار/الخروج ← سجلاتهما الخاصة · PT ← النتيجة + Control/INR)
+     ③ الأطباء — كل الأطباء (الطبيب الموجود بنفس الاسم في ميدلاب يُستعمل ويُكمَّل)
+     ④ قاعدة التحاليل — التحليل المطابق في ميدلاب يُستبدل بالكامل ببيانات الملف (الاسم · المختصر · السعر ·
+        الوحدة · القيم الطبيعية بكل أنواعها · المجموعة الرئيسية والفرعية) مع بقاء معرّفه وكوده
+        (فلا ينقطع ربط الأجهزة ولا النتائج السابقة). غير المطابق يُضاف. تحاليل ميدلاب الأخرى تبقى.
+        CBC والإدرار والخروج والمنوي والزرع والتحاليل المحسوبة محمية (السعر فقط).
+   دوال خالصة: القراءة والتحليل والبناء بلا أي كتابة — الكتابة في طبقة الواجهة بعد موافقة المستخدم.
+   ═══════════════════════════════════════════════════════════════════════════════════════ */
+var ABI = (function(){
+  'use strict';
+
+  /* ───────── أدوات ───────── */
+  function s(v){ return (v===null||v===undefined)?'':String(v); }
+  function tr(v){ return s(v).replace(/[‎‏‪-‮﻿]/g,'').replace(/\s+/g,' ').trim(); }
+  function txt(v){ return s(v).replace(/\r\n?/g,'\n').split('\n').map(function(x){ return x.replace(/[ \t]+/g,' ').trim(); }).filter(Boolean).join('\n'); }
+  function num(v){ if(v===null||v===undefined||v==='') return null; var n=Number(v); return isFinite(n)?n:null; }
+  function fix(n){ return n===null?null:Number(Number(n).toPrecision(10)); }
+  function fmtN(n){ return n===null?'':String(fix(n)); }
+  function pad(n){ return (n<10?'0':'')+n; }
+  function h32(str){ var h=5381,i=String(str).length; while(i) h=((h*33)^String(str).charCodeAt(--i))>>>0; return h>>>0; }
+  /* 'YYYY-MM-DD HH:MM:SS' ⇒ {y,m,d,H,M,S} */
+  function dt(v){
+    var m=/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s(v));
+    if(!m) return null;
+    var o={y:+m[1],m:+m[2],d:+m[3],H:+(m[4]||0),M:+(m[5]||0),S:+(m[6]||0)};
+    return (o.y>=2000 && o.y<=2100 && o.m>=1 && o.m<=12 && o.d>=1 && o.d<=31) ? o : null;
+  }
+  function dateStr(d){ return d? d.y+'-'+pad(d.m)+'-'+pad(d.d) : ''; }
+  function msOf(d){ return new Date(d.y,d.m-1,d.d,d.H||0,d.M||0,d.S||0).getTime(); }
+  function decYear(d){ return d.y+((Date.UTC(d.y,d.m-1,d.d)-Date.UTC(d.y,0,1))/86400000)/365.25; }
+
+  /* ═════════════ ① قارئ mysqldump (تدفّقي — سطراً بسطر) ═════════════ */
+  var KEEP={patients:1,dlms:1,dlm_test:1,results:1,doctors:1,tests:1,values:1,references:1,category_tests:1,lab_branding:1};
+  function Parser(){
+    this.rest=''; this.cur=null; this.create=null; this.cols={}; this.lines=0; this.rows=0;
+    this.raw={patients:{}, dlms:{}, dlmTest:{}, results:{}, doctors:[], tests:[], values:[], refs:[], cats:{}, lab:'',
+              counts:{}, resCount:{}, resDev:{}};
+  }
+  /* يقرأ القيم من نص صفّ أو عدة صفوف «(…),(…);» — يدعم الصيغتين (صفّ بسطر · كل الصفوف بسطر واحد) */
+  Parser.prototype._tuples=function(str, cb){
+    var n=str.length, i=0;
+    while(i<n){
+      while(i<n && str.charCodeAt(i)!==40) i++;          // '('
+      if(i>=n) break;
+      i++;
+      var out=[], cur=null;
+      while(i<n){
+        var c=str.charCodeAt(i);
+        if(c===39){                                          // '...'
+          var buf='', j=i+1, st=j;
+          while(j<n){
+            var cj=str.charCodeAt(j);
+            if(cj===92){                                     // \
+              buf+=str.slice(st,j);
+              var nx=str.charAt(j+1);
+              buf+= nx==='n'?'\n':nx==='r'?'\r':nx==='t'?'\t':nx==='0'?'':nx==='Z'?'\x1a':nx;
+              j+=2; st=j; continue;
+            }
+            if(cj===39){
+              if(str.charCodeAt(j+1)===39){ buf+=str.slice(st,j)+"'"; j+=2; st=j; continue; }
+              break;
+            }
+            j++;
+          }
+          buf+=str.slice(st,j); cur=buf; i=j+1;
+        } else if(c===44){ out.push(cur); cur=null; i++; }     // ,
+        else if(c===41){ out.push(cur); i++; break; }          // )
+        else if(c===32||c===9||c===13||c===10){ i++; }
+        else {
+          var k=i; while(k<n){ var ck=str.charCodeAt(k); if(ck===44||ck===41) break; k++; }
+          var v=str.slice(i,k).trim(); cur=(v==='NULL')?null:v; i=k;
+        }
+      }
+      cb(out);
+    }
+  };
+  Parser.prototype._line=function(line){
+    this.lines++;
+    var c0=line.charCodeAt(0);
+    if(this.create){
+      var mc=/^\s+`([^`]+)`/.exec(line);
+      if(mc){ this.cols[this.create].push(mc[1]); return; }
+      if(c0===41){ this.create=null; }   // ") ENGINE…"
+      return;
+    }
+    if(c0===67 && line.lastIndexOf('CREATE TABLE `',0)===0){
+      var t0=line.slice(14,line.indexOf('`',14));
+      this.create=t0; this.cols[t0]=[]; return;
+    }
+    if(c0===73 && line.lastIndexOf('INSERT INTO `',0)===0){
+      var t=line.slice(13,line.indexOf('`',13));
+      this.cur=KEEP[t]?t:null;
+      if(this.cur){
+        var vi=line.indexOf(' VALUES');
+        var rest=vi>-1?line.slice(vi+7):'';
+        if(rest.indexOf('(')>-1) this._rows(rest);
+      }
+      return;
+    }
+    if(this.cur && c0===40){ this._rows(line); return; }
+    if(line.length) this.cur=null;
+  };
+  Parser.prototype._rows=function(str){
+    var self=this, t=this.cur, cols=this.cols[t]||[], ix={};
+    for(var i=0;i<cols.length;i++) ix[cols[i]]=i;
+    this._tuples(str, function(r){ self.rows++; self._row(t, r, ix); });
+  };
+  Parser.prototype._row=function(t, r, ix){
+    var R=this.raw, g=function(name){ var k=ix[name]; return k===undefined?null:r[k]; };
+    R.counts[t]=(R.counts[t]||0)+1;
+    switch(t){
+      case 'patients':
+        R.patients[g('id')]=[g('fullName'), g('phone'), g('genderName'), g('age'), g('rangeTypeName'), g('created_at'), g('address')];
+        break;
+      case 'dlms':
+        R.dlms[g('id')]=[g('patient_id'), g('doctor_id'), g('doctorName'), g('created_at'), g('totalCost'), g('discount'),
+                         g('amountPaid'), g('reqId'), g('patientName'), g('gender_id')];
+        break;
+      case 'dlm_test':
+        var d=g('dlms_id'); (R.dlmTest[d]||(R.dlmTest[d]=[])).push(g('test_id'));
+        break;
+      case 'results':
+        var dd=g('dlms_id'), tid=g('test_id');
+        (R.results[dd]||(R.results[dd]=[])).push([tid, g('result'), g('operatorName'), g('created_at'), g('note')]);
+        R.resCount[tid]=(R.resCount[tid]||0)+1;
+        var dev=tr(g('devicename')); if(dev){ var o=R.resDev[tid]||(R.resDev[tid]={}); o[dev]=(o[dev]||0)+1; }
+        break;
+      case 'doctors':
+        R.doctors.push({id:g('id'), name:g('doctorName'), spec:g('speciality'), addr:g('address'), phone:g('phone'), hide:g('hide')});
+        break;
+      case 'tests':
+        R.tests.push({id:g('id'), cat:g('category_test_id'), type:g('test_type_id'), name:g('testName'), short:g('shortName'),
+                      price:g('testPrice'), show:g('show'), extra:g('extraField')});
+        break;
+      case 'values':
+        R.values.push({test:g('test_id'), sex:g('genderName'), min:g('minVal'), max:g('maxVal'), aMin:g('ageMin'), aMax:g('ageMax'),
+                       aUnit:g('rangeTypeName'), unit:g('unitValueName'), dev:g('deviceName')});
+        break;
+      case 'references':
+        R.refs.push({test:g('test_id'), title:g('title'), desc:g('desc')});
+        break;
+      case 'category_tests':
+        R.cats[g('id')]=g('TestCategory');
+        break;
+      case 'lab_branding':
+        if(!R.lab) R.lab=tr(g('lab_name'));
+        break;
+    }
+  };
+  Parser.prototype.feed=function(chunk){
+    var str=this.rest+chunk, p=0, n;
+    while((n=str.indexOf('\n',p))>-1){ var ln=str.slice(p, (n>p && str.charCodeAt(n-1)===13)?n-1:n); this._line(ln); p=n+1; }
+    this.rest=str.slice(p);
+  };
+  Parser.prototype.end=function(){
+    if(this.rest){ this._line(this.rest); this.rest=''; }
+    var R=this.raw;
+    if(!this.cols.patients || !this.cols.dlms || !this.cols.tests)
+      throw new Error('هذا الملف ليس نسخة قاعدة بيانات مدعومة (لا توجد جداول المرضى patients والزيارات dlms والتحاليل tests)');
+    R._cols=this.cols; R._lines=this.lines;
+    return R;
+  };
+
+  /* ═════════════ ② قاعدة التحاليل ═════════════ */
+  /* مطابقة مُراجَعة يدوياً لقاعدة هذا البرنامج (312 تحليل): id المصدر ⇒ معرّف التحليل في ميدلاب
+     '' ⇒ يُضاف كتحليل جديد. تُستعمل فقط إن كان اسم التحليل في الملف يطابق الاسم المتوقَّع. */
+  var CUR = {1:['treponema palidum antibody igg','add002'],2:['anti hepatitis a virus antibody igm','vr037'],3:['hepatitis b surface antigen','inf001'],
+    4:['anti hepatitis c virus antibody','inf004'],5:['anti h . i . v antibody','inf005'],6:['17 (oh) hydroxyprogesterone','hx004'],
+    7:['anti- hepatitis b surface antibody','inf002'],8:['hepatitis b envelope antigen','inf_hbe_ag'],9:['copper in urine',''],
+    10:['anti- hepatitis b envelope antibody','inf_hbe_ab'],11:['anti - hepatitis b core antibody ( igm )','inf003b'],12:['albumin in urine',''],
+    13:['anti - hepatitis b core antibody ( igg )','inf003'],14:['protein in urine','u002'],15:['anti - hepatitis e virus antibody igm','vr035'],
+    16:['calicium in urine',''],17:['sodium in urine','ur008'],18:['potassium in urine','ur009'],19:['uric acid in urine',''],
+    20:['creatinine in urine','u003'],21:['chloride in urine',''],22:['α 1- fetoprotein assay (afp)','tm004'],23:['ca 15-3','tm007'],
+    24:['ca 19-9','tm006'],25:['ca – 125','tm005'],26:['carcinoembryonic antigen (cea)','tm003'],27:['stone analysis','l2l089'],
+    28:['urea ( c13 ) breath test','l2l077'],29:['s .g. g. t','c019'],30:['s. amylase','c034'],31:['s. lipase','c035'],32:['f.b. sugar','c001'],
+    33:['r.b. sugar','c002'],34:['blood urea','c012'],35:['s. creatinine','c013'],36:['s. cholesterol','c006'],37:['s. triglyceride','c007'],
+    38:['ceruloplasmin assay','c049'],39:['haptoglobin assay','h028'],40:['tota s. protein','c023'],41:['s. albumin','c024'],42:['s. globulin','c025'],
+    43:['general stool examination','gse001'],44:['serum insulin – like growth factor -1','hr011'],45:['glucose',''],46:['insulin auto-antibodies assay','gls157'],
+    47:['s. phosphate','c031'],48:['ldh','c036'],49:['protein',''],50:['albumin',''],51:['serum or plasma procalcitonin level','c043'],52:['ldh','c036'],
+    53:['gram stain','mb004'],54:['parathyroid hormone ( pth ) assay','hr021'],55:['a.f.b','mb005'],56:['parathyroid hormone ( pth )','hr021'],
+    57:['anti - brucella antibody igm','inf048'],58:['anti - brucella antibody igg','inf047'],59:['stool for h. pylori antigen','inf016'],
+    60:['anti h. pylori antibody',''],61:['stool for occult blood','s002'],62:['stool for calprotectin','l2l092'],63:['stool for clostridium difficile toxin a',''],
+    64:['stool for clostridium difficile toxin b',''],65:['anti - mullerian hormone (amh)','hr025'],66:['anti-nuclear antibody igg (ana)','im001'],
+    67:['anti-double strand antibody (dna) igg','im013'],68:['anti- smith antibody','im014'],69:['anti neutrophil cytoplasmic antibody (c-anca)','im207'],
+    70:['anti neutrophil cytoplasmic antibody (p-anca)','im206'],71:['deamidated gliadin protein anti – dgp iga','gls141'],
+    72:['anti - ribonucleoprotein ( r n p) antibody','gls167'],73:['anti- cyclic citrullinated peptide antibody','im004'],74:['anti - centromere b antibody','gls166'],
+    75:['anticorpi anti jo -1 antibodies','im018'],76:['anti- ( r o- antigen / ss - a ) antibody','im015'],77:['anti- ( l a- antigen / ss - b ) antibody','im016'],
+    78:['anti - ( scl - 70 ) antibody','im017'],79:['anti - sperm antibody igm','gls164'],80:['anti- smooth muscle antibodies (asma)','l2l029'],
+    81:['anti- mitochondrial antibodies (ama)','gls130'],82:['( l k m ) anti- liver- kidney microsomes antibody ( igg )','l2l027'],
+    83:['anti –gliadin antibody ( iga )','imx013'],84:['anti – gliadin antibody ( igg )','imx014'],85:['anti –tissue transglutaminase antibody ( iga )','im019'],
+    86:['anti – tissue transglutaminase antibody ( igg )','im019g'],87:['anti- parietal cells antibody igg','l2l023'],88:['intrinsic factor antibodies (ifab)','gls135'],
+    89:['anti-saccharomyces cerevisiae antibody iga (asca)','gls136'],90:['anti-saccharomyces cerevisiae antibody igg (asca)','gls137'],
+    91:['c 3 protein','im005'],92:['c 3 protein','im005'],93:['c 4 protein','im006'],94:['immunoglobulin a ( iga )','im008'],95:['immunoglobulin g ( igg)','im007'],
+    96:['immunoglobulin e ( ige)','im010'],97:['immunoglobulin m ( igm )','im009'],98:['epsten- barr virus early antigen igm (ebv)',''],
+    99:['epsten- barr virus early antigen igg (ebv)',''],100:['free prostatic specific antigen assay','tm002'],101:['free p.s.a / total p.s.a','gls110'],
+    102:['prostatic specific antigen assay ( p.s.a )','tm001'],103:['rheumatoid factor igm','im003'],104:['crp quantitative test','c032'],105:['e. s. r','h016'],
+    106:['hb gm/dl','h002'],107:['dehydroepiandrosterone sulfate (dhea-s)','hr019'],108:['total t3','hr005'],109:['total t4','hr004'],110:['tsh','hr001'],
+    111:['free t3','hr003'],112:['free t4','hr002'],113:['anti-thyroglobulin antibody (anti tg)','hr007'],114:['thyroglobulin (tg)','tm018'],
+    115:['s.a.s.t (g.o.t)','c017'],116:['s.a.l.t (g.p.t)','c016'],117:['s. ldh','c036'],118:['pregnancy test in blood','sp007b'],119:['plasma fibrinogen','h021'],
+    120:['hb','h002'],121:['esr','h016'],122:['blood group and rh','h037'],123:['bleeding time','h030'],124:['clotting time','h031'],125:['urine osmolality','c054'],
+    126:['serum alkaline phosphate assay','c018'],127:['plasma ammonia level assay','sp008'],128:['cpk (m.m) type','c037'],129:['cpk (m.b) type','c038'],
+    130:['serum phosphate assay','c031'],131:['serum / calcium assay (ca + )','c029'],132:['serum phosphate assay','c031'],133:['serum ferritin assay','h023'],
+    134:['serum folic acid assay','v003'],135:['homeostatic model assessment of insulin resistance',''],136:['growth horomon basal','hr010'],
+    137:['growth horomon stimulation',''],138:['fsh','hr014'],139:['stool for h.pylori antigen','inf016'],140:['factor viii','h050'],141:['factor ix','h051'],
+    142:['factor viii','h050'],143:['vitamin 25 – (oh) d3','v001'],144:['vitamin b 12 assay','v002'],145:['troponin i assay','c039'],
+    146:['troponin t high sensitivity','new005'],147:['rose bengal test','l2l080'],148:['serology for typhoid fever igm','im012'],
+    149:['serology for typhoid fever igg','im012b'],150:['serum testosterone level assay','hr015'],151:['12- hrs tacrolimus level','tdm007'],
+    152:['sex hormone binding globulin assay ( shbg )','hr026'],153:['serum zinc assay','v010'],154:['serum iron','h025'],155:['total iron binding capacity','h024'],
+    156:['tina-quant transferrin','c051'],157:['deamidated gliadin protein anti – dgp igg',''],158:['plasma rennin level','hr023'],159:['serum prolactin assay','hr012'],
+    160:['progesterone assay','hr018'],161:['anti- phospholipid antibody igm','imx011'],162:['anti- phospholipid antibody igg','imx012'],
+    163:['total protein s assay','h048'],164:['total protein c assay','h047'],165:['anti- β2 – glycoprotein igm antibody','l2l019'],
+    166:['anti- β2 – glycoprotein igg antibody','l2l018'],167:['lupus anti –coagulant assay','h054'],168:['serum osteocalcin assay','gls092'],
+    169:['serum of nt – pro b n p','c045'],170:['metanephrine level assay','hr041'],171:['ionized calcium','bc080'],172:['s. magnesium (mg +)','c030'],
+    173:['serum ( interleukin- 6 ) assay level','new002'],174:['interferon gamma rlease assay (igra)','l2l076'],175:['test for hb a1c','c003'],
+    176:['test for insulin assay','c005'],177:['c – peptide for insulin','hr024'],178:['human chorionic gonadotropin hormone titer level (hcg)','sp007'],
+    179:['serum glutamic acid decarboxylase antibody ( gad65)',''],180:['test for g 6 p d enzyme','h036'],181:['serum free testosterone level assay','hr016'],
+    182:['estradiol ( e 2) assay','hr017'],183:['bilirubin total','c020'],184:['bilirubin direct','c021'],185:['bilirubin indirect','c022'],186:['hdl','c008'],
+    187:['ldl','c009'],188:['vldl','c010'],189:['s.uric acid','c015'],190:['test for adrenocortico- trophic hormone corticotropin ( acth )','hr028'],
+    191:['serum cortisol assay ( p.m )','sp004'],192:['serum cortisol assay ( a.m )','sp003'],193:['test for insulin assay','c005'],194:['c – peptide for insulin','hr024'],
+    195:['d – dimmer assay','h022'],196:['test for serum assay of nt – pro b n p','c045'],197:['lh','hr013'],198:['retic count','h017'],199:['s. potassium','c027'],
+    200:['s.sodium','c026'],201:['s. chloride','c028'],202:['test for c.p.k ( m.m ) type','c037'],203:['test for c.p.k ( m.b ) type','c038'],
+    204:['anti-cardiolipin antibody igm','imx016'],205:['anti-cardiolipin antibody igg','imx015'],206:['test for serum & plasma homocysteine assay','sp001'],
+    207:['test for g 6 p d enzyme','h036'],208:['anti – streptolycin o (a.s.o)','im011'],209:['gamma. g. t (s.g g t)','c019'],210:['blood urea nitrogen (bun)','c011'],
+    211:['serum aldosterone level','hr022'],212:['anti - (soluble liver antigen) igg','l2l030'],213:['hepatitis b surface by strip',''],
+    214:['anti hepatitis c virus antibody by strip',''],215:['anti h . i . v antibody by strip',''],216:['test fer v d r l by strip','inf006'],
+    217:['anti-toxoplasmosis antibody igm','add010'],218:['anti-toxoplasmosis antibody igg','add009'],219:['anti-cytomegalovirus antibody igm','add012'],
+    220:['anti-cytomegalovirus antibody igg','add011'],221:['anti - rubella antibody igm','add014'],222:['anti - rubella antibody igg','add013'],
+    223:['anti- herpes simplex i & ii antibody igm','add016'],224:['anti- herpes simplex i & ii antibody igg','add015'],225:['high sensitivity crp','c033'],
+    226:['monospot test','inf023'],227:['dipstick for kalazar','inf032'],228:['pleural fluid \\ glucose','l2l040'],229:['pleural fluid / protein','l2l041'],
+    230:['pleural fluid / albumin','l2l037'],231:['pleural fluid / cholestrol',''],232:['pleural fluid / triglyceride',''],233:['pleural fluid / ldh',''],
+    234:['pleural fluid \\ afb',''],235:['pleural fluid / gram stain',''],236:['acid fast bacilli (afb)','mb005'],237:['total wbc','h005'],238:['neutrophil','h011'],
+    239:['lymphocyte','h012'],240:['appearance',''],241:['coombs test (direct)','h040'],242:['coombs test (indirect)','h041'],243:['urine for bence jonce protein','l2l012'],
+    244:['transferrin saturation','h027'],245:['appearance',''],246:['anti – chlamydia trachomatis iga',''],247:['anti – chlamydia trachomatis igg','inf034'],
+    248:['p t t','h019'],249:['anti-soluble nuclear protein antibodies ( sp100 )',''],250:['parvovirus b19 igm','vr019'],251:['parvovirus b19 igg','vr018'],
+    252:['serum copper level','v011'],253:['test for ena screen',''],254:['gue','gue001'],255:['test for anti - intrinsic factor antibody','gls135'],
+    256:['test for covid-19 igm','vr004'],257:['test for covid-19 igg','vr003'],258:['anti-thyroid peroxidase, antibodies (anti-tpo)','hr006'],
+    259:['anti-tshr (antibodies to tsh receptor)','add005'],260:['anti - hepatitis d virus antibody igm',''],261:['test for anti-islet cells antibody (i c a)','gls143'],
+    262:['test for cyclosporine level assay ( c 0 )','tdm006'],263:['test for cyclosporine level assay ( c 2 )',''],264:['urine for keton bodies','gls002'],
+    265:['sickling test assay','h034'],266:['stool for reducing substance','l2l094'],267:['sputum for afb','mb005'],268:['stool for p.h','l2l093'],
+    269:['prothrombine time (pt)','h018'],270:['anti-varicella zoster antibody igm','vr017'],271:['anti-varicella zoster antibody igg','vr016'],
+    272:['urine for albumin',''],273:['test for serum proinsulin assay',''],274:['serum calcitonin','hr029'],275:['pcr',''],
+    276:['anti-glomerular basement membrane (gbm) antibody igg','im020'],277:['urine for spcific gravity',''],278:['anti - hepatitis e virus antibody igg','vr036'],
+    279:['anti- mutated citrullinated vimentin cells antibody igg','gls144'],280:['anti-glomerular basement membrane, antibodies (anti-gbm)','im020'],
+    281:['anti- liver cytosol protein (type 1) antibody igg ( lc )','gls150'],282:['urine for sugar','u004'],283:['test for free androgen index',''],
+    284:['test for h . i . v antigen',''],285:['hepatitis c virus antigen','mic105'],286:['spot urine for albumin – creatinin ratio (acr)',''],
+    287:['spot urine for protein – creatinin ratio (pcr)','u005'],288:['24 hr urine collection for albumin – creatinin ratio',''],
+    289:['24 hr urine collection for protien – creatinin ratio',''],290:['anti-prothrombin igg',''],291:['anti-prothrombin igm',''],
+    292:['24 hrs urine collection for albumin','l2l003'],293:['24 hrs urine collection for protien','u007'],294:['serum gastrin - 17 hormone assay','hr032'],
+    295:['anti - histone antibody','gls142'],296:['anti - glycoprotein (gp210) antibody (igg)',''],297:['serum cystatin - c','bc065'],298:['anti - ribosomal antibody','gls147'],
+    299:['anti - lactoferrin',''],300:['anti-endomysial antibody iga','l2l025'],301:['anti-endomysial antibody igg','l2l026'],302:['aldosterone renin ratio','gls063'],
+    303:['lh / fsh ratio',''],304:['anti h. pylori antibody igg','inf020'],305:['dysmorphic r.b.c','gls069'],306:['serum or plasma procalcitonin level (brahms )','c043'],
+    307:['pregnancy test in urine','sp007c'],308:['serum for lipoprotein (a) lp(a)','c046'],309:['anti - mi - 2 antibody','gls173'],
+    310:['test for plasma normetanephrine assay','hr042'],311:['anti - sperm antibody igg','gls163'],312:['test for bile acids','bc074']};
+
+  /* المجموعة الرئيسية في ميدلاب لكل قسم في البرنامج القديم (القسم نفسه = المجموعة الفرعية) */
+  var MAIN={'hematology':'Hematology','biochemistry':'Biochemistry','serology':'Immunology','microbiology':'Microbiology',
+    'immunology':'Immunology','histapathology':'Special','histopathology':'Special','virology':'Infections','hormon':'Hormones',
+    'hormones':'Hormones','bacteriology':'Microbiology','aminogram':'Biochemistry','body fluids':'Biochemistry','coagulation':'Hematology',
+    'immunology-serology':'Immunology','pregnancy':'Hormones','semen':'Semen','pathology':'Special','separate tests':'Special',
+    'tumor markers':'Tumor Markers','collection':'Urinalysis','stone analysis':'Special','drug monitoring':'Biochemistry',
+    'cardiac markers':'Biochemistry','glyco metabolism':'Biochemistry','bone metabolism':'Biochemistry'};
+  var MAIN_OK={'Hematology':1,'Blood Gases':1,'Biochemistry':1,'Hormones':1,'Immunology':1,'Vitamins & Minerals':1,'Tumor Markers':1,
+    'Infections':1,'Urinalysis':1,'Microbiology':1,'Stool':1,'Semen':1,'Special':1,'Calculated':1};
+  function catOf(raw, t){
+    var sub=tr(raw.cats[t.cat]||'')||'Other';
+    var k=sub.toLowerCase(), main=MAIN[k];
+    if(!main){
+      if(/hormon/.test(k)) main='Hormones'; else if(/immun|serolog/.test(k)) main='Immunology'; else if(/hemat|haemat|coag/.test(k)) main='Hematology';
+      else if(/micro|bacter|cultur/.test(k)) main='Microbiology'; else if(/virus|viral|infect/.test(k)) main='Infections';
+      else if(/tumou?r/.test(k)) main='Tumor Markers'; else if(/urine/.test(k)) main='Urinalysis'; else if(/stool/.test(k)) main='Stool';
+      else main='Biochemistry';
+    }
+    return {cat:MAIN_OK[main]?main:'Special', sub:sub};
+  }
+  function isCBC(t){
+    try{ if(typeof _cbcIsCbcTest==='function') return !!_cbcIsCbcTest(t); }catch(e){}
+    return !!(t && (t.id==='h001' || String(t.code||'').trim().toUpperCase()==='CBC'));
+  }
+  function isProtected(t){ return !!(t && (isCBC(t) || t.isSpecialExam || t.isCalc || t.calcFormula)); }
+  function cleanUnit(u){
+    var x=tr(s(u).replace(/[\r\n]+/g,' ')); if(!x) return '';
+    return x.replace(/\b([µμu]?)lU\//g,'$1IU/').replace(/^Ul\//,'IU/').replace(/μ/g,'µ');
+  }
+  function ageUnit(u){
+    var k=s(u).toLowerCase().trim();
+    if(/^month/.test(k)) return {u:'month',f:1}; if(/^day/.test(k)) return {u:'day',f:1};
+    if(/^hour/.test(k)) return {u:'day',f:1/24}; if(/^minute/.test(k)) return {u:'day',f:1/1440}; if(/^second/.test(k)) return {u:'day',f:1/86400};
+    return {u:'year',f:1};
+  }
+  var NEG_RE=/^(negative|non[- ]?reactive|not detected|absent|nil|normal|-ve)$/i;
+  /* القيم الطبيعية لتحليل من الملف ⇐ حقول ميدلاب (كل الأنواع: رقمي · حسب الجنس · حسب العمر والجنس · Positive/Negative · نصي) */
+  function rangeOf(raw, t, valsByTest, refsByTest){
+    var rows=(valsByTest[t.id]||[]).slice(), refs=(refsByTest[t.id]||[]);
+    /* أكثر من جهاز للتحليل نفسه ⇐ قيم الجهاز الأكثر استعمالاً في النتائج */
+    /* (الصفوف بلا جهاز تبقى دائماً — تُصفّى فقط صفوف الأجهزة المختلفة) */
+    var devs={}; rows.forEach(function(r){ if(tr(r.dev)) devs[tr(r.dev)]=1; });
+    if(Object.keys(devs).length>1){
+      var use=raw.resDev[t.id]||{}, best=null, bc=-1;
+      Object.keys(devs).forEach(function(d){ var c=(use[d]||0); if(c>bc){ bc=c; best=d; } });
+      rows=rows.filter(function(r){ return !tr(r.dev) || tr(r.dev)===best; });
+    }
+    var unitCnt={}; rows.forEach(function(r){ var u=cleanUnit(r.unit); if(u) unitCnt[u]=(unitCnt[u]||0)+1; });
+    var unit=Object.keys(unitCnt).sort(function(a,b){ return unitCnt[b]-unitCnt[a]; })[0]||'';
+    var refLines=refs.map(function(r){
+      var a=tr(r.title), b=tr(s(r.desc).replace(/[\r\n]+/g,' '));
+      return a&&b ? a+' - '+b : (a||b);
+    }).filter(Boolean);
+    /* ① Positive / Negative */
+    if(String(t.type)==='1'){
+      var opts=refLines.filter(function(x){ return x.length<=30 && !/ - /.test(x); });
+      if(opts.length<2) opts=['Negative','Positive'];
+      var def=opts.filter(function(o){ return NEG_RE.test(o); })[0]||opts[0];
+      var extra=refLines.filter(function(x){ return opts.indexOf(x)<0; });
+      return {unit:'qualitative', refType:'pos-neg', qualOptions:opts, qualDefault:def,
+              minVal:null, maxVal:null, minF:null, maxF:null, ageRanges:[], refM:'', refF:'',
+              ref: extra.length ? [def].concat(extra).join('\n') : def, hasRange:true};
+    }
+    /* ② رقمي */
+    var V=rows.map(function(r){
+      var mn=fix(num(r.min)), mx=fix(num(r.max));
+      if(mn!==null && mx!==null && mx<=mn) { mn=null; mx=null; }
+      if(mx!==null && mx>=100000) mx=null;                       /* «بلا حد» */
+      if(mn===0 && mx===null) mn=null;
+      var au=ageUnit(r.aUnit), from=num(r.aMin)||0, to=num(r.aMax);
+      if(to===null || to>=500) to=999;
+      var sex=/^m/i.test(s(r.sex))?'male':(/^f/i.test(s(r.sex))?'female':'both');
+      return {sex:sex, from:fix(from*au.f), to:to===999?999:fix(to*au.f), unit:au.u, min:mn, max:mx,
+              full:(from===0 && (to>=99) && au.u==='year'), num:(mn!==null||mx!==null)};
+    });
+    var withNum=V.filter(function(v){ return v.num; });
+    var rangeTxt=function(v){
+      if(v.min!==null && v.max!==null) return fmtN(v.min)+' – '+fmtN(v.max);
+      if(v.max!==null) return '< '+fmtN(v.max);
+      if(v.min!==null) return '> '+fmtN(v.min);
+      return '';
+    };
+    var out={unit:unit, refType:'simple', minVal:null, maxVal:null, minF:null, maxF:null, ageRanges:[], ref:'', refM:'', refF:'', hasRange:false};
+    var refJoin=refLines.join('\n');
+    if(!V.length || (!withNum.length && !refLines.length)){ out.ref=refJoin; out.hasRange=!!refJoin; return out; }
+    var allFull=V.every(function(v){ return v.full; });
+    var both=V.filter(function(v){ return v.sex==='both'; }), M=V.filter(function(v){ return v.sex==='male'; }), F=V.filter(function(v){ return v.sex==='female'; });
+    out.hasRange=true;
+    if(allFull && V.length===1 && both.length===1){
+      var a=V[0]; out.minVal=a.min; out.maxVal=a.max; out.minF=a.min; out.maxF=a.max;
+      out.ref = refLines.length ? [rangeTxt(a)].filter(Boolean).concat(refLines).join('\n') : '';
+      return out;
+    }
+    if(allFull && M.length===1 && F.length===1 && !both.length){
+      var m=M[0], f=F[0];
+      out.refType='gender'; out.minVal=m.min; out.maxVal=m.max; out.minF=f.min; out.maxF=f.max;
+      out.refM=(m.num?rangeTxt(m):refJoin)||''; out.refF=(f.num?rangeTxt(f):refJoin)||'';
+      if(refLines.length){ if(m.num) out.refM=[out.refM].concat(refLines).join('\n'); if(f.num) out.refF=[out.refF].concat(refLines).join('\n'); }
+      out.ref=(out.refM===out.refF)?out.refM:('M: '+out.refM+' | F: '+out.refF);
+      return out;
+    }
+    /* ③ حسب العمر والجنس */
+    out.refType='gender-age';
+    out.ageRanges=V.map(function(v){
+      return {from:v.from, fromUnit:v.unit, to:v.to, toUnit:v.unit, sex:v.sex, min:v.min, max:v.max, ref: v.num ? '' : refJoin};
+    }).sort(function(x,y){
+      var dx=x.from*(x.fromUnit==='year'?365.25:x.fromUnit==='month'?30.4375:1), dy=y.from*(y.fromUnit==='year'?365.25:y.fromUnit==='month'?30.4375:1);
+      return (x.sex<y.sex?-1:x.sex>y.sex?1:0) || (dx-dy);
+    });
+    var first=withNum[0]||V[0];
+    out.minVal=first.min; out.maxVal=first.max; out.minF=first.min; out.maxF=first.max;
+    out.ref=refJoin;
+    return out;
+  }
+  function genCode(name, short, used){
+    var base=tr(short).replace(/[()]/g,' ').trim()||name;
+    var c=base.toUpperCase().replace(/[^A-Z0-9]+/g,'-').replace(/^-+|-+$/g,'');
+    if(c.length>16){ var w=c.split('-'), o=''; for(var i=0;i<w.length;i++){ if((o?o.length+1:0)+w[i].length>16) break; o+=(o?'-':'')+w[i]; } c=o||c.slice(0,16); }
+    c=c||'SQL'; var cc=c, n=2;
+    while(used[cc]){ cc=c.slice(0,13)+'-'+n; n++; }
+    used[cc]=1; return cc;
+  }
+  function lc(x){ return tr(x).toLowerCase(); }
+
+  /* مطابقة التحاليل وتجهيز المعاينة (بلا كتابة) */
+  function analyze(raw, ctx){
+    var catalog=ctx.tests||[], byId={}; catalog.forEach(function(t){ if(t&&t.id) byId[t.id]=t; });
+    var lab=raw.lab||'', labTag=h32(tr(lab)||'sqlimport').toString(36).slice(0,5);
+    var idx=null;
+    var items=raw.tests.map(function(t){
+      var name=tr(t.name), cnt=raw.resCount[t.id]||0, cur=CUR[t.id], target='', how='', score=0;
+      var prevId='custom-sql-'+labTag+'-'+t.id;
+      if(byId[prevId]){ target=prevId; how='prev'; score=100; }
+      else if(cur && lc(name).indexOf(cur[0])===0){
+        if(cur[1]==='' ){ target='__new__'; how='curated'; }
+        else if(byId[cur[1]]){ target=cur[1]; how='curated'; score=100; }
+      }
+      if(!target){
+        if(typeof GLM!=='undefined'){
+          if(!idx) idx=GLM.indexCatalog(catalog);
+          var b=GLM.best(name, idx);
+          if(b.test && b.score>=0.6){ target=b.test.id; how='auto'; score=Math.round(b.score*100); }
+          else { target='__new__'; how='auto'; score=Math.round((b.score||0)*100); }
+        } else { target='__new__'; how='auto'; }
+      }
+      var c=catOf(raw,t);
+      return {srcId:t.id, name:name, short:tr(t.short), cat:c.cat, sub:c.sub, count:cnt, target:target, how:how, score:score,
+              protectedT: target!=='__new__' && isProtected(byId[target]), hidden:String(t.show)==='0'};
+    });
+    var nPt=Object.keys(raw.patients).length, nV=Object.keys(raw.dlms).length, nR=0;
+    Object.keys(raw.results).forEach(function(k){ nR+=raw.results[k].length; });
+    var existingKeys=new Set(); (ctx.requests||[]).forEach(function(r){ if(r && r.glKey) existingKeys.add(r.glKey); });
+    var already=0; Object.keys(raw.dlms).forEach(function(id){ if(existingKeys.has('SQL'+labTag+'-'+id)) already++; });
+    return {labName:lab, labTag:labTag, mapping:items,
+      stats:{patientRecords:nPt, visits:nV, results:nR, doctors:raw.doctors.length, tests:raw.tests.length,
+        matched:items.filter(function(x){ return x.target!=='__new__'; }).length,
+        newTests:items.filter(function(x){ return x.target==='__new__'; }).length, alreadyImported:already}};
+  }
+
+  /* ③ تطبيق قاعدة التحاليل على دليل ميدلاب (يُعدِّل catalog في مكانه) — يُرجع خريطة المصدر ⇐ معرّف ميدلاب */
+  function applyTests(raw, plan, catalog, overrides){
+    overrides=overrides||{};
+    var byId={}; catalog.forEach(function(t,i){ if(t&&t.id) byId[t.id]=t; });
+    var vals={}, refs={};
+    raw.values.forEach(function(v){ (vals[v.test]||(vals[v.test]=[])).push(v); });
+    raw.refs.forEach(function(r){ (refs[r.test]||(refs[r.test]=[])).push(r); });
+    var src={}; raw.tests.forEach(function(t){ src[t.id]=t; });
+    var map={}, rep={replaced:0, added:0, priceOnly:0, merged:0, list:[]}, now=Date.now();
+    var usedCodes={}; catalog.forEach(function(t){ if(t&&t.code) usedCodes[String(t.code).toUpperCase()]=1; });
+    /* عدة تحاليل في الملف لنفس تحليل ميدلاب ⇐ يُعتمد الأكثر استعمالاً والبقية تُدمج فيه */
+    var groups={};
+    plan.mapping.forEach(function(m){
+      var tg=overrides.hasOwnProperty(m.srcId)?overrides[m.srcId]:m.target;
+      if(tg!=='__new__' && !byId[tg]) tg='__new__';
+      m._tg=tg;
+      if(tg!=='__new__') (groups[tg]||(groups[tg]=[])).push(m);
+    });
+    Object.keys(groups).forEach(function(tg){
+      var g=groups[tg].sort(function(a,b){ return (b.count-a.count) || (a.hidden?1:0)-(b.hidden?1:0) || (a.srcId-b.srcId); });
+      g.forEach(function(m,i){ m._primary=(i===0); if(i) rep.merged++; });
+    });
+    plan.mapping.forEach(function(m){
+      var t=src[m.srcId]; if(!t) return;
+      var R=rangeOf(raw, t, vals, refs), price=num(t.price);
+      var fields={nameEn:m.name, nameShort:m.short, cat:m.cat, subCat:m.sub, unit:R.unit,
+        refType:R.refType, minVal:R.minVal, maxVal:R.maxVal, minF:R.minF, maxF:R.maxF, ageRanges:R.ageRanges,
+        ref:R.ref, refM:R.refM, refF:R.refF, price:(price!==null&&price>0)?price:0};
+      if(m._tg==='__new__'){
+        var id='custom-sql-'+plan.labTag+'-'+m.srcId;
+        var nt=Object.assign({id:id, code:genCode(m.name, m.short, usedCodes), time:'', notes:'', sqlImported:true, _updatedAt:now}, fields);
+        if(R.refType==='pos-neg'){ nt.qualOptions=R.qualOptions; nt.qualDefault=R.qualDefault; }
+        if(!nt.ageRanges.length) delete nt.ageRanges;
+        if(m.hidden) nt.notes='غير مفعّل في البرنامج القديم';
+        catalog.push(nt); byId[id]=nt; map[m.srcId]=id; rep.added++;
+        rep.list.push({src:m.name, to:nt.nameEn, act:'add'});
+        return;
+      }
+      var cur=byId[m._tg]; map[m.srcId]=cur.id;
+      if(!m._primary){ rep.list.push({src:m.name, to:cur.nameEn, act:'merge'}); return; }
+      if(isProtected(cur)){
+        if(fields.price) cur.price=fields.price;
+        cur._updatedAt=now; rep.priceOnly++; rep.list.push({src:m.name, to:cur.nameEn, act:'price'}); return;
+      }
+      /* استبدال كامل لبيانات التحليل (يبقى المعرّف والكود ⇒ ربط الأجهزة والنتائج السابقة سليم) */
+      var keep={id:cur.id, code:cur.code, time:cur.time, notes:cur.notes};
+      ['qualOptions','qualDefault','ageRanges','refM','refF','ref','minVal','maxVal','minF','maxF','refType','unit','nameShort'].forEach(function(k){ delete cur[k]; });
+      Object.assign(cur, fields, keep);
+      if(R.refType==='pos-neg'){ cur.qualOptions=R.qualOptions; cur.qualDefault=R.qualDefault; }
+      if(!cur.ageRanges || !cur.ageRanges.length) delete cur.ageRanges;
+      cur.sqlImported=true; cur._updatedAt=now;
+      rep.replaced++; rep.list.push({src:m.name, to:cur.nameEn, act:'replace'});
+    });
+    return {map:map, report:rep};
+  }
+
+  /* ═════════════ ④ المرضى والزيارات والنتائج ═════════════ */
+  var UA_MAP={albumin:'protein',Appearance:'appearance',Bile_pigment:'bilirubin',Casts:'casts',Color:'color',Crystals:'crystals',
+    Epith_Cells:'epithelial',Keton_bodies:'ketones',Pus_Cells:'wbc_ua',Reaction:'ph',sugar:'glucose',Urobilinogen:'urobilinogen','R.B.Cs':'rbc_ua'};
+  var ST_MAP={Color:'s_color',Pus_Cells:'s_wbc',R_B_Cs:'s_rbc',Stool_PH:'s_ph',Consistency:'s_consistency'};
+  var ST_PARA={Giardia_Lambilia:'Giardia lamblia',Entamaeba_Histolytica:'Entamoeba histolytica',Ova_of:'Ova',Monilia:'Monilia'};
+  var ABSENT_RE=/^(absent|nil|none|none seen|not seen|not detected|negative|-ve|no|-)$/i;
+  function eqNormal(val, normal){
+    if(val && normal && ABSENT_RE.test(String(val).trim()) && ABSENT_RE.test(String(normal).trim())) return normal;
+    return val;
+  }
+  function decodeResult(v){
+    var x=s(v).trim(); if(!x) return '';
+    var c=x.charAt(0);
+    if(c==='"' || c==='{' || c==='['){ try{ return JSON.parse(x); }catch(e){} }
+    return x;
+  }
+  var KEY_LBL={Control_Prothrombine_time:'Control',I_N_R:'INR',P_T_T:'PTT',Prothrombine_time:'PT'};
+  function keyLabel(k){ return KEY_LBL[k]||String(k).replace(/_+/g,' ').replace(/\s+/g,' ').trim(); }
+  /* الهاتف: 9647xxxxxxxxx ⇐ 07xxxxxxxxx · الأرقام الوهمية (أصفار) ⇐ فارغ */
+  function phoneOf(p){
+    var d=s(p).replace(/[^\d]/g,'');
+    if(!d) return '';
+    if(/^964/.test(d)) d='0'+d.slice(3);
+    if(/^0?\d{0,3}0{6,}$/.test(d) || /^0+$/.test(d)) return '';
+    if(d.length<7) return '';
+    return d;
+  }
+  /* اللقب المكتوب داخل الاسم ⇐ حقل اللقب */
+  function splitTitle(name, gender){
+    var n=tr(name), f=(gender==='female'), m, t='';
+    if((m=/^(?:الست|ست)\s+/.exec(n))){ t='السيدة'; }
+    else if((m=/^(?:ال)?(?:دكتور[ةه]?)\s*[\/.]?\s*|^د\s*[.\/]\s*/.exec(n))){ t=f?'الدكتورة':'الدكتور'; }
+    else if((m=/^(?:ال)?[اأ]ستاذ[ةه]?\s+/.exec(n))){ t=f?'الاستاذة':'الاستاذ'; }
+    else if((m=/^(?:ال)?حاج[ةه]?\s+|^حج(?:ي|يه|ية)\s+/.exec(n))){ t=f?'الحاجة':'الحاج'; }
+    if(m && m[0]) n=tr(n.slice(m[0].length));
+    return {title:t, name:n};
+  }
+  function ageOf(age, unit){
+    var a=parseInt(age,10)||0, u=s(unit).toLowerCase(), Y=0, M=0, D=0;
+    if(/^mon/.test(u)) M=a; else if(/^day/.test(u)) D=a; else Y=a;
+    var val=Y+M/12+D/365, parts=[];
+    if(Y>0) parts.push(Y+' سنة'); if(M>0) parts.push(M+' شهر'); if(D>0) parts.push(D+' يوم');
+    return {Y:Y, M:M, D:D, val:val, display:parts.join(' و '), known: val>0};
+  }
+
+  async function build(raw, plan, testMap, ctx, opts, tick){
+    opts=opts||{}; tick=tick||function(){ return null; };
+    var now=ctx.now||Date.now(), dev=0, lanId='sql';
+    var key3=(typeof GLC!=='undefined'&&GLC.key3)?GLC.key3:function(n){ return tr(n).split(' ').slice(0,3).join(' '); };
+    var normAr=(typeof GLC!=='undefined'&&GLC.normAr)?GLC.normAr:function(n){ return tr(n).toLowerCase(); };
+    var catalog=ctx.tests||[], catIndex={}, byId={};
+    catalog.forEach(function(t,i){ if(t&&t.id){ catIndex[t.id]=i; byId[t.id]=t; } });
+    var rep={patientsNew:0, sideLab:0, titled:0, visits:0, requests:0, results:0, emptyResults:0, dupResults:0, notes:0,
+      ua:0, stool:0, invoices:0, doctorsNew:0, doctorsMatched:0, phones:0, noPatient:0, badVisits:0, warnings:[]};
+
+    /* ── أرقام ثابتة: الملفات من 100001 والطلبات RQ0-1001 بترتيب الزيارات (الملف نفسه = الأرقام نفسها على أي حاسبة) ── */
+    var ptC=0, rqC=1000, invC=1000, ptStart=opts.ptStart||100001;
+    function newPtId(){ ptC++; return String(ptStart-1+ptC); }
+    function newRqId(v){ return 'RQ0-'+(rqC+1+v.seq); }
+    function newInvId(v){ return 'INV-0-'+(invC+1+v.seq); }
+
+    /* ── الأطباء ── */
+    var drIndex={}, drById={}, newDoctors=[], updDoctors=[], countedEx=new Set();
+    function normDoctor(n){ return normAr(String(n||'').replace(/المحترم[ةه]?|الدكتور[ةه]?|دكتور[ةه]?|^\s*د\s*[\/.]?\s*/g,' ')); }
+    var NODOC=/^(out|outpatient|himself|herself|self|نفسه|نفسها|بدون|لا يوجد|-+|\.+)$/i;
+    (ctx.doctors||[]).forEach(function(d){ if(d&&d.name){ var k=normDoctor(d.name); if(k&&!drIndex[k]) drIndex[k]=d; } });
+    raw.doctors.forEach(function(d){
+      var n=tr(d.name); if(!n || NODOC.test(n)) return;
+      var k=normDoctor(n); if(!k) return;
+      var ex=drIndex[k];
+      if(ex){
+        var ch=false;
+        if(!ex.spec && tr(d.spec)){ ex.spec=tr(d.spec); ch=true; }
+        if(!ex.phone && phoneOf(d.phone)){ ex.phone=phoneOf(d.phone); ch=true; }
+        if(!ex.hosp && tr(d.addr)){ ex.hosp=tr(d.addr); ch=true; }
+        if(ch && updDoctors.indexOf(ex)<0){ ex._updatedAt=now; updDoctors.push(ex); }
+        if(newDoctors.indexOf(ex)>-1) rep.doctorsMerged=(rep.doctorsMerged||0)+1; else if(!countedEx.has(ex)){ countedEx.add(ex); rep.doctorsMatched++; }
+        drById[d.id]=ex;
+        return;
+      }
+      var nd={id:'dr-sql-'+plan.labTag+'-'+d.id, name:n, spec:tr(d.spec), phone:phoneOf(d.phone), hosp:tr(d.addr), comm:0, email:'', _updatedAt:now};
+      drIndex[k]=nd; drById[d.id]=nd; newDoctors.push(nd); rep.doctorsNew++;
+    });
+    function doctorOf(dl){
+      var d=drById[dl[1]];
+      if(d) return {id:d.id, name:d.name};
+      var n=tr(dl[2]); if(!n || NODOC.test(n)) return {id:'',name:''};
+      var k=normDoctor(n); if(!k) return {id:'',name:''};
+      if(!drIndex[k]){ var nd={id:'dr-sql-'+plan.labTag+'-n'+h32(k).toString(36), name:n, spec:'', phone:'', hosp:'', comm:0, email:'', _updatedAt:now}; drIndex[k]=nd; newDoctors.push(nd); rep.doctorsNew++; }
+      return {id:drIndex[k].id, name:drIndex[k].name};
+    }
+
+    /* ── الزيارات مرتّبة زمنياً ── */
+    var V=[];
+    Object.keys(raw.dlms).forEach(function(id){
+      var dl=raw.dlms[id], p=raw.patients[dl[0]], d=dt(dl[3]);
+      if(!p){ rep.noPatient++; return; }
+      if(!d){ rep.badVisits++; return; }
+      V.push({id:id, dl:dl, p:p, d:d, ms:msOf(d)});
+    });
+    V.sort(function(a,b){ return (a.ms-b.ms) || (a.id-b.id); });
+    for(var si0=0;si0<V.length;si0++) V[si0].seq=si0;   /* رقم الطلب = ترتيب الزيارة الزمني في كل المختبر */
+
+    /* ── تجميع المرضى: الاسم الثلاثي + الجنس + عمر متوافق (±1.5 سنة) ── */
+    var groups={}, TOL=1.5;
+    for(var vi=0;vi<V.length;vi++){
+      var v=V[vi], g=/^f/i.test(s(v.p[2]))?'female':'male';
+      var st=splitTitle(v.p[0], g); v.g=g; v.title=st.title; v.name=st.name||tr(v.p[0]);
+      var k=key3(v.name)+'|'+g;
+      if(!key3(v.name)) k='noname:'+v.id;
+      var age=ageOf(v.p[3], v.p[4]); v.age=age;
+      var birth=age.known? decYear(v.d)-age.val : null;
+      var cands=groups[k]||(groups[k]=[]), pick=null;
+      if(birth!==null){
+        var bestD=1e9;
+        cands.forEach(function(c){ if(c.birth!==null){ var dd=Math.abs(c.birth-birth); if(dd<=TOL && dd<bestD){ bestD=dd; pick=c; } } });
+        if(!pick && cands.length===1 && cands[0].birth===null) pick=cands[0];
+      } else if(cands.length===1){ pick=cands[0]; }
+      if(!pick){ pick={birth:birth, visits:[]}; cands.push(pick); }
+      if(pick.birth===null && birth!==null) pick.birth=birth;
+      pick.visits.push(v);
+      if(vi%5000===0) await tick('patients', vi, V.length);
+    }
+    var allGroups=[]; Object.keys(groups).forEach(function(k){ groups[k].forEach(function(c){ if(c.visits.length) allGroups.push(c); }); });
+    allGroups.sort(function(a,b){ return (a.visits[0].ms-b.visits[0].ms) || (a.visits[0].id-b.visits[0].id); });
+
+    /* ── البناء ── */
+    var outPatients=[], outReqs=[], outInv=[], outUA=[], outStool=[], built=0;
+    var uaN=ctx.uaNormals||{}, stN=ctx.stoolNormals||{};
+    for(var gi=0;gi<allGroups.length;gi++){
+      var G=allGroups[gi], first=G.visits[0], last=G.visits[G.visits.length-1];
+      var title=''; for(var q=G.visits.length-1;!title&&q>=0;q--) title=G.visits[q].title;
+      var phone=''; for(var q2=G.visits.length-1;!phone&&q2>=0;q2--) phone=phoneOf(G.visits[q2].p[1]);
+      var addr=''; for(var q3=G.visits.length-1;!addr&&q3>=0;q3--) addr=tr(G.visits[q3].p[6]);
+      var lastDr=doctorOf(last.dl), name=last.name;
+      var triple=name.split(/\s+/).filter(Boolean).length>=3;
+      var side=!title || !triple;
+      var pid=newPtId();
+      var pt={id:pid, barcode:pid, name:name, nameEn:'', title:title, gender:last.g,
+        dob:'', birthYear:'', ageVal:Number(last.age.val.toFixed(4)), ageY:last.age.Y, ageM:last.age.M, ageD:last.age.D,
+        ageDisplay:last.age.display, ageUnit:'year', sideLab:side,
+        phone:phone, phoneCC:'964', addr:addr, doctorId:lastDr.id, doctorName:lastDr.name, insurance:'', chronic:[], notes:'',
+        registered:dateStr(first.d), regTime:first.ms, visits:G.visits.length, lastVisit:dateStr(last.d), status:'active',
+        _dev:lanId, _org:first.ms, _updatedAt:now, sqlImport:plan.labTag};
+      outPatients.push(pt); rep.patientsNew++;
+      if(side) rep.sideLab++; if(title) rep.titled++; if(phone) rep.phones++;
+      for(var vj=0;vj<G.visits.length;vj++){
+        var visit=G.visits[vj], vid=visit.id, vdate=dateStr(visit.d), dr=doctorOf(visit.dl);
+        var req={_seq:visit.seq, id:newRqId(visit), orderNo:'', patientId:pt.id, patientName:pt.name, tests:[], testNames:[], sample:'',
+          priority:'Routine', note:'', doctorId:dr.id, doctorName:dr.name, date:vdate,
+          time:ctx.fmtTime?ctx.fmtTime(visit.ms):'', status:'pending', results:{}, tech:'', resultDate:vdate,
+          resultNotes:'', resultNotesPer:{}, sideLab:side, printed:true, wsPrinted:true, createdAt:visit.ms,
+          _dev:lanId, _org:visit.ms, _updatedAt:now, glKey:'SQL'+plan.labTag+'-'+vid, sqlNo:tr(visit.dl[7])};
+        var present={}, tlist=[], spKinds=[], ops={}, lastRes='';
+        var addTest=function(t){ if(!present[t.id]){ present[t.id]=1; tlist.push({t:t, order:catIndex[t.id]!==undefined?catIndex[t.id]:1e9}); } };
+        var addNote=function(tid,txt){ if(!txt) return; req.resultNotesPer[tid]=req.resultNotesPer[tid]?(req.resultNotesPer[tid]+' | '+txt):txt; rep.notes++; };
+        (raw.dlmTest[vid]||[]).forEach(function(sid){ var t=byId[testMap[sid]]; if(t) addTest(t); });
+        var RS=raw.results[vid]||[];
+        for(var ri=0;ri<RS.length;ri++){
+          var row=RS[ri], t=byId[testMap[row[0]]];
+          if(!t){ continue; }
+          addTest(t);
+          var val=decodeResult(row[1]), got=false;
+          if(row[2]) ops[row[2]]=(ops[row[2]]||0)+1;
+          var rd=dt(row[3]); if(rd){ var ds=dateStr(rd); if(ds>lastRes) lastRes=ds; }
+          if(val && typeof val==='object' && !Array.isArray(val)){
+            if(t.isSpecialExam==='ua'){
+              if(spKinds.indexOf('ua')<0){
+                var ur={id:'ua-sql-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name, patientAge:pt.ageDisplay,
+                  patientGender:pt.gender, doctorId:dr.id, doctorName:dr.name, date:vdate, createdAt:visit.ms, _updatedAt:now,
+                  _dev:lanId, _org:visit.ms, sqlImport:plan.labTag};
+                Object.keys(UA_MAP).forEach(function(kk){ var x=tr(val[kk]); if(x) ur[UA_MAP[kk]]=eqNormal(x,uaN[UA_MAP[kk]]); });
+                if(tr(val.Other)) ur.ua_note='Other: '+tr(val.Other);
+                outUA.push(ur); spKinds.push('ua'); rep.ua++;
+              }
+              got=true;
+            } else if(t.isSpecialExam==='stool'){
+              if(spKinds.indexOf('stool')<0){
+                var sr={id:'stl-sql-'+plan.labTag+'-'+vid, reqId:req.id, patientId:pt.id, patientName:pt.name, patientAge:pt.ageDisplay,
+                  patientGender:pt.gender, doctorId:dr.id, doctorName:dr.name, date:vdate, createdAt:visit.ms, _updatedAt:now,
+                  _dev:lanId, _org:visit.ms, sqlImport:plan.labTag};
+                Object.keys(ST_MAP).forEach(function(kk){ var x=tr(val[kk]); if(x) sr[ST_MAP[kk]]=eqNormal(x,stN[ST_MAP[kk]]); });
+                var para=[]; Object.keys(ST_PARA).forEach(function(kk){ var x=tr(val[kk]); if(x && !ABSENT_RE.test(x)) para.push(x+' — '+ST_PARA[kk]); });
+                sr.s_para_multi=para.length?para.join('||'):(stN.s_para_multi||'');
+                outStool.push(sr); spKinds.push('stool'); rep.stool++;
+              }
+              got=true;
+            } else {
+              var keys=Object.keys(val).filter(function(kk){ return tr(val[kk]); });
+              var mk=keys.indexOf('Prothrombine_time')>-1?'Prothrombine_time':(keys.indexOf('Result')>-1?'Result':(keys.length===1?keys[0]:null));
+              var pv=mk?tr(val[mk]):null;
+              var rest=keys.filter(function(kk){ return kk!==mk; }).map(function(kk){ return keyLabel(kk)+': '+tr(val[kk]); });
+              if(!pv && rest.length){ pv=rest.join(' · '); rest=[]; }
+              if(pv){
+                if(req.results[t.id]===undefined){ req.results[t.id]=pv; rep.results++; } else { addNote(t.id, pv); rep.dupResults++; }
+                got=true;
+              }
+              if(rest.length) addNote(t.id, rest.join(' · '));
+            }
+          } else {
+            var sv=tr(Array.isArray(val)?val.join(', '):val);
+            if(sv){
+              if(req.results[t.id]===undefined){ req.results[t.id]=sv; rep.results++; }
+              else if(req.results[t.id]!==sv){ addNote(t.id, (t.nameShort||t.nameEn)+': '+sv); rep.dupResults++; }
+              got=true;
+            }
+          }
+          if(tr(row[4])) addNote(t.id, txt(row[4]).replace(/\n/g,' / '));
+          if(!got) rep.emptyResults++;
+        }
+        tlist.sort(function(a,b){ return a.order-b.order; });
+        req.tests=tlist.map(function(x){ return x.t.id; });
+        req.testNames=tlist.map(function(x){ return x.t.nameEn; });
+        if(lastRes && lastRes>=vdate) req.resultDate=lastRes;
+        var opN=Object.keys(ops).sort(function(a,b){ return ops[b]-ops[a]; })[0]; if(opN) req.tech=tr(opN);
+        if(spKinds.length) req.spPrinted=spKinds.slice();
+        if(!Object.keys(req.resultNotesPer).length) delete req.resultNotesPer;
+        var nRes=Object.keys(req.results).length+spKinds.length;
+        req.status = !req.tests.length ? 'pending' : (nRes>=req.tests.length ? 'done' : (nRes ? 'inprogress' : 'pending'));
+        outReqs.push(req); rep.requests++; rep.visits++;
+        if(opts.invoices){
+          var raw0=num(visit.dl[4])||0, dis=Math.max(0,num(visit.dl[5])||0), paid=Math.max(0,num(visit.dl[6])||0);
+          if(dis>raw0) dis=0;
+          var total=Math.round((raw0-dis)*100)/100;
+          var status=(total<=0||paid>=total-0.5)?'مدفوعة':(paid>0?'جزئية':'معلقة');
+          var pAmt=status==='مدفوعة'?total:(status==='جزئية'?Math.round(paid*100)/100:0);
+          outInv.push({id:newInvId(visit), patientId:pt.id, patientName:pt.name, reqId:req.id, rawTotal:raw0,
+            discount:raw0?Math.round(dis/raw0*1000)/10:0, discountAmt:dis, total:total, manualTotal:false, insType:'', insAmt:0,
+            status:status, date:vdate, paidAmt:pAmt, payments:pAmt>0?[{amt:pAmt, date:vdate, ts:visit.ms, by:'', note:'مستورد', method:'cash'}]:[],
+            sqlImport:plan.labTag, _updatedAt:now, createdAt:visit.ms, _dev:lanId, _org:visit.ms});
+          rep.invoices++;
+        }
+        if(++built%3000===0) await tick('build', built, V.length);
+      }
+    }
+    /* ترتيب الطلبات والفواتير زمنياً (لا حسب المريض) */
+    outReqs.sort(function(a,b){ return a._seq-b._seq; });
+    var invSeq={}; outReqs.forEach(function(r){ invSeq[r.id]=r._seq; delete r._seq; });
+    outInv.sort(function(a,b){ return invSeq[a.reqId]-invSeq[b.reqId]; });
+    return {patientsNew:outPatients, requests:outReqs, invoices:outInv, ua:outUA, stool:outStool,
+      doctorsNew:newDoctors, doctorsUpd:updDoctors, lastPtId:ptStart-1+ptC, report:rep};
+  }
+
+  return {Parser:Parser, analyze:analyze, applyTests:applyTests, build:build, rangeOf:rangeOf, phoneOf:phoneOf,
+          splitTitle:splitTitle, decodeResult:decodeResult, CUR:CUR};
+})();
+if(typeof module!=='undefined') module.exports=ABI;
+
+
+/* ══════════════════════════════════════════════════════════════════
+   📥 استيراد من برنامج آخر — قاعدة MySQL (sql / sql.gz) — الواجهة والحفظ
+   المراحل: ① اختيار الملف وقراءته تدفّقياً  ② معاينة ومراجعة مطابقة التحاليل
+            ③ سؤال (حذف الحالي / إبقاؤه) + نسخة احتياطية  ④ استبدال قاعدة التحاليل
+            ⑤ بناء المرضى والطلبات والنتائج  ⑥ حفظ مُنتظَر + تحقق من العدد  ⑦ تحديث الواجهة
+   يعتمد على مسار الحفظ نفسه في استيراد Green Lab (window._glImportApi).
+   لا يُكتب أي شيء قبل ضغط «بدء الاستيراد».
+   ══════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var ST={raw:null, plan:null, fileName:'', overrides:{}, filter:'all', busy:false};
+  window._sqlImportState=ST;
+  function $(id){ return document.getElementById(id); }
+  function esc(x){ return String(x==null?'':x).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function fmt(n){ try{ return Number(n||0).toLocaleString('en-US'); }catch(e){ return String(n); } }
+  function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms||0); }); }
+  function notif(t,m,k){ try{ showNotif(t,m,k||'info'); }catch(e){ console.log(t,m); } }
+  function api(){ return window._glImportApi||null; }
+
+  function setProg(pct, text){
+    var box=$('sqli-prog'); if(!box) return;
+    box.style.display='block';
+    var bar=$('sqli-prog-bar'), tx=$('sqli-prog-text');
+    if(bar) bar.style.width=Math.max(0,Math.min(100,pct))+'%';
+    if(tx) tx.textContent=text||'';
+    var ov=$('sqli-overlay-text'); if(ov && ST.busy) ov.textContent=(text||'')+' — '+Math.round(pct)+'%';
+    var ob=$('sqli-overlay-bar'); if(ob) ob.style.width=Math.max(0,Math.min(100,pct))+'%';
+  }
+  function overlay(on){
+    var o=$('sqli-overlay');
+    if(on && !o){
+      o=document.createElement('div'); o.id='sqli-overlay';
+      o.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(5,10,25,0.82);display:flex;align-items:center;justify-content:center;direction:rtl';
+      o.innerHTML='<div style="background:var(--bg2,#101a2e);border:1.5px solid var(--border,#234);border-radius:16px;padding:26px 30px;width:min(520px,92vw);text-align:center">'+
+        '<div style="font-size:40px;margin-bottom:8px">📥</div>'+
+        '<div style="font-size:15px;font-weight:800;color:var(--primary,#00d4ff);margin-bottom:6px">جارٍ الاستيراد — لا تغلق البرنامج</div>'+
+        '<div id="sqli-overlay-text" style="font-size:12px;color:var(--text2,#9ab);margin-bottom:14px;min-height:18px"></div>'+
+        '<div style="height:10px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden"><div id="sqli-overlay-bar" style="height:100%;width:0;background:linear-gradient(90deg,#00d4ff,#00f593);transition:width .2s"></div></div></div>';
+      document.body.appendChild(o);
+    } else if(!on && o){ o.remove(); }
+  }
+
+  function _ctx(){
+    var normalsOf=function(F){ var o={}; try{ if(F) Object.keys(F).forEach(function(k){ ((F[k]||{}).fields||[]).forEach(function(f){ if(f && f.id && f.normal) o[f.id]=f.normal; }); }); }catch(e){} return o; };
+    return {
+      tests:(typeof tests!=='undefined' && Array.isArray(tests))?tests:[],
+      requests:(typeof requests!=='undefined')?requests:[],
+      doctors:(typeof doctors!=='undefined')?doctors:[],
+      fmtTime:function(ms){ try{ return new Date(ms).toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } },
+      uaNormals:normalsOf(typeof UA_FIELDS!=='undefined'?UA_FIELDS:null),
+      stoolNormals:normalsOf(typeof STOOL_FIELDS!=='undefined'?STOOL_FIELDS:null)
+    };
+  }
+
+  /* ─────────── ① اختيار الملف وقراءته تدفّقياً ─────────── */
+  window.sqlImportPick=function(){
+    if(ST.busy) return;
+    var inp=$('sqli-file'); if(!inp) return;
+    inp.value=''; inp.click();
+  };
+  async function _readFile(f, onProg){
+    var P=new ABI.Parser(), total=f.size||1, read=0;
+    var head=new Uint8Array(await f.slice(0,2).arrayBuffer());
+    var gz=head.length===2 && head[0]===0x1f && head[1]===0x8b;
+    if(gz && typeof DecompressionStream==='undefined') throw new Error('هذه النسخة من البرنامج لا تدعم فك ملفات gz — فك الضغط أولاً واختر ملف sql');
+    var counter=new TransformStream({transform:function(chunk,ctl){ read+=chunk.byteLength; ctl.enqueue(chunk); }});
+    var stream=f.stream().pipeThrough(counter);
+    if(gz) stream=stream.pipeThrough(new DecompressionStream('gzip'));
+    stream=stream.pipeThrough(new TextDecoderStream('utf-8'));
+    var reader=stream.getReader(), last=0;
+    for(;;){
+      var r=await reader.read();
+      if(r.done) break;
+      P.feed(r.value);
+      var now=Date.now();
+      if(now-last>150){ last=now; onProg(read/total); await sleep(0); }
+    }
+    return P.end();
+  }
+  window.sqlImportFileChosen=async function(inp){
+    var f=inp && inp.files && inp.files[0]; if(!f) return;
+    if(ST.busy) return;
+    if(typeof ABI==='undefined'){ notif('خطأ','وحدة الاستيراد غير محمّلة','error'); return; }
+    ST.busy=true; ST.raw=null; ST.plan=null; ST.overrides={}; ST.fileName=f.name; ST.filter='all';
+    var pv=$('sqli-preview'); if(pv) pv.innerHTML='';
+    var t0=Date.now();
+    try{
+      setProg(1,'قراءة الملف ('+(f.size/1048576).toFixed(1)+' MB)…'); await sleep(30);
+      var raw=await _readFile(f, function(p){ setProg(1+Math.round(p*85),'قراءة الجداول… '+Math.round(p*100)+'%'); });
+      setProg(88,'تحليل البيانات ومطابقة التحاليل…'); await sleep(30);
+      ST.raw=raw; ST.plan=ABI.analyze(raw, _ctx());
+      setProg(100,'اكتملت القراءة خلال '+Math.round((Date.now()-t0)/1000)+' ثانية ✅');
+      _renderPreview();
+    }catch(e){
+      console.error('[SQL import] read error',e);
+      setProg(0,'');
+      if(pv) pv.innerHTML='<div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:10px;padding:14px;color:var(--danger);font-size:13px;line-height:1.9">❌ '+esc(e && e.message || e)+'</div>';
+    }finally{ ST.busy=false; }
+  };
+
+  /* ─────────── ② المعاينة ─────────── */
+  function _statBox(v,l,c){
+    return '<div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:10px;padding:10px 6px;text-align:center">'+
+      '<div style="font-size:18px;font-weight:900;color:'+(c||'var(--primary)')+'">'+fmt(v)+'</div><div style="font-size:10.5px;color:var(--text2)">'+l+'</div></div>';
+  }
+  function _tg(m){ return ST.overrides.hasOwnProperty(m.srcId) ? ST.overrides[m.srcId] : m.target; }
+  function _tName(id){
+    if(id==='__new__') return null;
+    var t=(tests||[]).find(function(x){ return x && x.id===id; });
+    return t ? t.nameEn : id;
+  }
+  function _renderPreview(){
+    var pv=$('sqli-preview'), P=ST.plan; if(!pv||!P) return;
+    var s=P.stats, h='';
+    h+='<div style="font-size:12px;color:var(--text2);margin:6px 0 10px">📄 '+esc(ST.fileName)+(P.labName?' · 🏥 '+esc(P.labName):'')+'</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;margin-bottom:12px">'+
+      _statBox(s.patientRecords,'سجل مريض')+_statBox(s.visits,'زيارة','var(--success)')+_statBox(s.results,'نتيجة تحليل','#a78bfa')+
+      _statBox(s.doctors,'طبيب','#38bdf8')+_statBox(s.tests,'تحليل في القاعدة','#fbbf24')+
+      _statBox(s.matched,'يستبدل تحليلاً في ميدلاب','var(--success)')+_statBox(s.newTests,'يُضاف كتحليل جديد','#f97316')+'</div>';
+    h+='<div style="background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.25);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12px;line-height:1.9;color:var(--text2)">'+
+      '• المرضى: السجلات المكررة لنفس الشخص (الاسم الثلاثي + الجنس + عمر متوافق) تُجمع في ملف واحد بكل زياراته.<br>'+
+      '• 🧪 <b>سايد لاب تلقائياً</b> لكل مريض بلا لقب أو بلا اسم ثلاثي (يمكن للموظف تغييره من ملف المريض). اللقب المكتوب داخل الاسم (ست · د. · الاستاذ · الحاج) يُنقل لحقل اللقب.<br>'+
+      '• أرقام الهواتف الوهمية (مثل 9647800000000) تُترك فارغة.<br>'+
+      '• التحليل المطابق في ميدلاب <b>يُستبدل بالكامل</b> ببيانات القاعدة (الاسم · المختصر · السعر · الوحدة · القيم الطبيعية بكل أنواعها · المجموعة الرئيسية والفرعية) ويبقى معرّفه وكوده فلا ينقطع ربط الأجهزة. تحاليل ميدلاب الأخرى تبقى كما هي. CBC والإدرار والخروج والمنوي والزرع والتحاليل المحسوبة: السعر فقط.</div>';
+    if(s.alreadyImported){
+      h+='<div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.35);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:12px;line-height:1.9">'+
+        '♻️ <b>'+fmt(s.alreadyImported)+'</b> زيارة من هذا الملف مستوردة سابقاً في هذه الحاسبة — اختر «حذف البيانات الحالية» عند البدء لإعادة استيراد نظيفة.</div>';
+    }
+    h+='<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 8px">'+
+      '<div style="font-size:13px;font-weight:800;color:var(--text);flex:1">🔗 قاعدة التحاليل ('+fmt(P.mapping.length)+' تحليل)</div>'+
+      ['all:الكل','rep:يُستبدل','new:جديد','prot:محمي (السعر فقط)'].map(function(x){
+        var p=x.split(':'); return '<button class="btn btn-sm '+(ST.filter===p[0]?'btn-p':'')+'" style="padding:4px 10px;font-size:11px" onclick="sqlImportFilter(\''+p[0]+'\')">'+p[1]+'</button>';
+      }).join('')+'</div>';
+    h+='<div style="font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.8">مطابقة مُراجَعة يدوياً لكل تحاليل هذه القاعدة. يمكنك تغيير أي مطابقة بالضغط على ✏️ (أو اختيار «إضافة كتحليل جديد»).</div>';
+    h+='<div id="sqli-map-wrap" style="max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:10px"></div>';
+    h+='<div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;font-size:12.5px">'+
+      '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sqli-opt-backup" checked style="margin-top:3px"> <span>💾 تنزيل نسخة احتياطية كاملة من ميدلاب قبل الاستيراد <span style="color:var(--text2)">(موصى به بشدة)</span></span></label>'+
+      '<label style="display:flex;gap:8px;align-items:flex-start;cursor:pointer"><input type="checkbox" id="sqli-opt-inv" style="margin-top:3px"> <span>🧾 استيراد مبالغ الزيارات كفواتير بتواريخها <span style="color:var(--text2)">(المبلغ · الخصم · المدفوع — مدفوعة / جزئية / معلقة كما في البرنامج القديم)</span></span></label>'+
+      '</div>';
+    h+='<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">'+
+      '<button class="btn btn-ok btn-lg" style="flex:1;min-width:200px" id="sqli-start-btn" onclick="sqlImportStart()"'+(s.visits?'':' disabled')+'>🚀 بدء الاستيراد ('+fmt(s.visits)+' زيارة)</button>'+
+      '<button class="btn btn-lg" onclick="sqlImportReset()">إلغاء</button></div>';
+    h+='<div id="sqli-result" style="margin-top:14px"></div>';
+    pv.innerHTML=h;
+    _renderMap();
+  }
+  window.sqlImportFilter=function(f){ ST.filter=f; _renderPreview(); };
+  window.sqlImportReset=function(){
+    if(ST.busy) return;
+    ST.raw=null; ST.plan=null; ST.overrides={};
+    var pv=$('sqli-preview'); if(pv) pv.innerHTML='';
+    var pg=$('sqli-prog'); if(pg) pg.style.display='none';
+  };
+  function _isProt(id){
+    var t=(tests||[]).find(function(x){ return x && x.id===id; });
+    if(!t) return false;
+    try{ if(typeof _cbcIsCbcTest==='function' && _cbcIsCbcTest(t)) return true; }catch(e){}
+    return !!(t.id==='h001' || t.isSpecialExam || t.isCalc || t.calcFormula);
+  }
+  function _renderMap(){
+    var wrap=$('sqli-map-wrap'), P=ST.plan; if(!wrap||!P) return;
+    var rows=P.mapping.filter(function(m){
+      var tg=_tg(m);
+      if(ST.filter==='new') return tg==='__new__';
+      if(ST.filter==='rep') return tg!=='__new__' && !_isProt(tg);
+      if(ST.filter==='prot') return tg!=='__new__' && _isProt(tg);
+      return true;
+    });
+    var th='padding:7px;border-bottom:1px solid var(--border)';
+    var h='<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr style="position:sticky;top:0;background:var(--bg2,#0d1526)">'+
+      '<th style="'+th+';text-align:left">التحليل في القاعدة</th><th style="'+th+'">المجموعة</th><th style="'+th+'">النتائج</th>'+
+      '<th style="'+th+';text-align:left">← في ميدلاب</th><th style="'+th+'">الإجراء</th><th style="border-bottom:1px solid var(--border)"></th></tr></thead><tbody>';
+    rows.forEach(function(m){
+      var tg=_tg(m), nm=_tName(tg), ov=ST.overrides.hasOwnProperty(m.srcId), prot=tg!=='__new__' && _isProt(tg);
+      var badge = tg==='__new__' ? '<span style="color:#f97316">➕ جديد</span>'
+        : (prot ? '<span style="color:#a78bfa">🔒 السعر فقط</span>' : '<span style="color:var(--success)">♻️ استبدال</span>');
+      if(ov) badge+=' <span style="color:#38bdf8">(يدوي)</span>';
+      h+='<tr data-sqli="'+esc(m.srcId)+'" style="border-bottom:1px solid rgba(255,255,255,0.05)">'+
+        '<td style="padding:6px 7px;direction:ltr;text-align:left">'+esc(m.name)+(m.short?' <span style="color:var(--text2)">/ '+esc(m.short)+'</span>':'')+(m.hidden?' <span style="color:var(--text2)">(غير مفعّل)</span>':'')+'</td>'+
+        '<td style="padding:6px;text-align:center;font-size:11px;color:var(--text2);direction:ltr">'+esc(m.cat)+' › '+esc(m.sub)+'</td>'+
+        '<td style="padding:6px;text-align:center;color:var(--text2)">'+fmt(m.count)+'</td>'+
+        '<td class="sqli-tgt" style="padding:6px 7px;direction:ltr;text-align:left">'+(nm?esc(nm):'<span style="color:#f97316">➕ يُضاف كتحليل جديد</span>')+'</td>'+
+        '<td style="padding:6px;text-align:center;white-space:nowrap">'+badge+'</td>'+
+        '<td style="padding:6px;text-align:center"><button class="btn btn-sm" style="padding:2px 8px" title="تغيير المطابقة" onclick="sqlImportEditRow(this)">✏️</button></td></tr>';
+    });
+    if(!rows.length) h+='<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--text2)">لا توجد عناصر</td></tr>';
+    h+='</tbody></table>';
+    wrap.innerHTML=h;
+  }
+  window.sqlImportEditRow=function(btn){
+    var trEl=btn.closest('tr'); if(!trEl) return;
+    var id=trEl.getAttribute('data-sqli');
+    var m=ST.plan.mapping.find(function(x){ return String(x.srcId)===String(id); }); if(!m) return;
+    var cell=trEl.querySelector('.sqli-tgt'); if(!cell || cell.querySelector('select')) return;
+    var cur=_tg(m);
+    var list=(tests||[]).filter(function(t){ return t && t.id; }).slice().sort(function(a,b){ return String(a.nameEn).localeCompare(String(b.nameEn)); });
+    cell.innerHTML='<select class="fc" style="padding:4px 6px;font-size:12px;direction:ltr"><option value="__new__"'+(cur==='__new__'?' selected':'')+'>➕ إضافة كتحليل جديد</option>'+
+      list.map(function(t){ return '<option value="'+esc(t.id)+'"'+(t.id===cur?' selected':'')+'>'+esc(t.nameEn)+(t.code&&t.code!=='N/A'?' ['+esc(t.code)+']':'')+'</option>'; }).join('')+'</select>';
+    var sel=cell.querySelector('select'); sel.focus();
+    sel.onchange=function(){ if(sel.value===m.target) delete ST.overrides[m.srcId]; else ST.overrides[m.srcId]=sel.value; _renderMap(); };
+    sel.onblur=function(){ setTimeout(_renderMap,150); };
+  };
+
+  async function _downloadBackup(){
+    if(typeof _fsa_buildDownloadBackup!=='function') throw new Error('دالة النسخ الاحتياطي غير متاحة');
+    var json=await _fsa_buildDownloadBackup();
+    var d=new Date(), name='MedLab_Backup_BEFORE_SQL_Import_'+d.toISOString().slice(0,10)+'_'+String(d.getHours()).padStart(2,'0')+'-'+String(d.getMinutes()).padStart(2,'0')+'.json';
+    var blob=new Blob([json],{type:'application/json'});
+    var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ try{ URL.revokeObjectURL(a.href); a.remove(); }catch(e){} }, 4000);
+    return name;
+  }
+  function _pushAll(arr, items){ for(var i=0;i<items.length;i++) arr.push(items[i]); }
+  function _addOld(rec, v){ if(v==null||v==='') return; var t=' '+String(v); var c=rec._oldIds||''; if((c+' ').indexOf(t+' ')<0) rec._oldIds=(c+t).slice(-600); }
+
+  /* ─────────── ③ التنفيذ ─────────── */
+  window.sqlImportStart=async function(){
+    if(ST.busy || !ST.plan || !ST.raw) return;
+    var A=api();
+    if(!A || !A.persist || !A.verify || !A.askMode){ notif('خطأ','مسار الحفظ غير متاح','error'); return; }
+    var P=ST.plan;
+    var withInv=!!($('sqli-opt-inv')||{}).checked, withBackup=!!($('sqli-opt-backup')||{}).checked;
+    try{ if(typeof loadUARecords==='function') loadUARecords(); }catch(e){}
+    try{ if(typeof loadStoolExamRecords==='function') loadStoolExamRecords(); }catch(e){}
+    try{ if(typeof loadSemenRecords==='function') loadSemenRecords(); }catch(e){}
+    try{ if(typeof loadCultureRecordsFromIDB==='function') await loadCultureRecordsFromIDB(); else if(typeof loadCultureRecords==='function') loadCultureRecords(); }catch(e){}
+    var counts={p:patients.length, r:requests.length, i:invoices.length+billingRecords.length};
+    var hasData=!!(patients.length||requests.length||invoices.length||billingRecords.length||uaRecords.length||stoolExamRecords.length||semenRecords.length||cultureRecords.length);
+    var prevSame=requests.some(function(r){ return r && r.glKey && String(r.glKey).indexOf('SQL'+P.labTag+'-')===0; });
+    var mode='wipe';
+    if(hasData){
+      mode=await A.askMode(counts, prevSame);
+      if(!mode) return;
+      if(mode==='wipe' && !confirm('تأكيد نهائي:\n\nسيُحذف من هذه الحاسبة كل المرضى ('+fmt(counts.p)+') والطلبات ('+fmt(counts.r)+') والنتائج والفواتير والحسابات وسجلات الزرع والإدرار والخروج والمنوي ودفتر الهواتف، ثم يُستورد الملف.\nقاعدة التحاليل تُحدَّث من الملف، والأطباء الحاليون يبقون.\n\nمتابعة؟')) return;
+    } else if(!confirm('سيتم استيراد '+fmt(P.stats.visits)+' زيارة وتحديث قاعدة التحاليل من الملف.\n\nلا تغلق البرنامج حتى تظهر رسالة الانتهاء. متابعة؟')) return;
+    ST.busy=true; overlay(true);
+    var res=$('sqli-result'); if(res) res.innerHTML='';
+    var btn=$('sqli-start-btn'); if(btn) btn.disabled=true;
+    var t0=Date.now(), backupName='';
+    try{
+      if(withBackup || (mode==='wipe' && hasData)){
+        setProg(2,'إنشاء نسخة احتياطية قبل الاستيراد…'); await sleep(50);
+        try{ backupName=await _downloadBackup(); }
+        catch(e){
+          overlay(false);
+          if(!confirm('تعذّر إنشاء النسخة الاحتياطية: '+(e&&e.message||e)+'\n\nهل تريد المتابعة بدون نسخة احتياطية؟')){ ST.busy=false; if(btn) btn.disabled=false; return; }
+          overlay(true);
+        }
+      }
+      setProg(5,'تجهيز…'); await sleep(20);
+      if(typeof _idbFlushAll==='function'){ try{ _idbFlushAll(); }catch(e){} await sleep(400); }
+
+      /* ④ قاعدة التحاليل — استبدال المطابق وإضافة الجديد (في مصفوفة tests نفسها) */
+      setProg(7,'تحديث قاعدة التحاليل…'); await sleep(20);
+      var AT=ABI.applyTests(ST.raw, P, tests, ST.overrides);
+
+      /* ⑤ المرضى والطلبات والنتائج */
+      var ctx=_ctx(); ctx.tests=tests;
+      var out=await ABI.build(ST.raw, P, AT.map, ctx, {invoices:withInv, ptStart:100001}, async function(stage,i,n){
+        setProg(stage==='patients' ? 9+Math.round(i/Math.max(1,n)*12) : 21+Math.round(i/Math.max(1,n)*44),
+          stage==='patients' ? 'تجميع المرضى وملفاتهم…' : 'بناء الطلبات والنتائج… '+fmt(i)+' / '+fmt(n));
+        await sleep(0);
+      });
+      var R=out.report;
+
+      setProg(66,'تجهيز السجلات…'); await sleep(20);
+      if(out.doctorsNew.length) _pushAll(doctors, out.doctorsNew);
+      var renumbered=0, keptSynced=0;
+      if(mode==='wipe'){
+        patients=out.patientsNew; requests=out.requests; invoices=out.invoices.slice(); billingRecords=[];
+        uaRecords=out.ua; stoolExamRecords=out.stool; semenRecords=[]; cultureRecords=[];
+        if(typeof spxRecords!=='undefined') spxRecords=[];
+        try{ save('phoneBook', []); }catch(e){}
+      } else {
+        var used=new Set(out.patientsNew.map(function(p){ return String(p.id); }));
+        var next=(out.lastPtId||100000)+1, map={};
+        var ex=patients.filter(function(p){ return p && p.id!=null; }).slice().sort(function(a,b){
+          var ta=+a.regTime||0, tb=+b.regTime||0; if(ta!==tb) return ta-tb; return String(a.id)<String(b.id)?-1:1; });
+        ex.forEach(function(p){
+          var id=String(p.id), devPref=/^\d{7,}$/.test(id) && +id>=1000000;
+          if(p._sid && devPref && !used.has(id)){ keptSynced++; used.add(id); return; }
+          while(used.has(String(next))) next++;
+          var nid=String(next++); used.add(nid);
+          if(nid!==id){ _addOld(p, id); map[id]=nid; p.id=nid; p.barcode=nid; renumbered++; }
+        });
+        var remap=function(list){ list.forEach(function(o){ if(o && o.patientId!=null && map[String(o.patientId)]!==undefined){ o.patientId=map[String(o.patientId)]; } }); };
+        [requests, invoices, billingRecords, uaRecords, stoolExamRecords, semenRecords, cultureRecords, (typeof spxRecords!=='undefined'?spxRecords:[])].forEach(remap);
+        _pushAll(patients, out.patientsNew); _pushAll(requests, out.requests);
+        if(out.invoices.length) _pushAll(invoices, out.invoices);
+        _pushAll(uaRecords, out.ua); _pushAll(stoolExamRecords, out.stool);
+      }
+      try{
+        if(window.SIDX){
+          if(mode==='wipe' && SIDX.resetArchive) SIDX.resetArchive();
+          else if(SIDX.markLegacy){
+            [['patients',patients],['requests',requests],['invoices',invoices],['billing',billingRecords],['uaRecords',uaRecords],['stoolExamRecords',stoolExamRecords],['semenRecords',semenRecords],['cultureRecords',cultureRecords],['spxRecords',(typeof spxRecords!=='undefined'?spxRecords:[])]]
+              .forEach(function(x){ SIDX.markLegacy(x[0], x[1].filter(function(o){ return o && !o._sid && o.id!=null; }).map(function(o){ return o.id; })); });
+          }
+        }
+      }catch(e){ console.warn('[SQL import] archive mark', e); }
+
+      /* ⑥ الحفظ الكامل المُنتظَر */
+      var steps=[['tests',tests],['doctors',doctors],['patients',patients],['requests',requests],['invoices',invoices],['billing',billingRecords],
+        ['uaRecords',uaRecords],['stoolExamRecords',stoolExamRecords],['semenRecords',semenRecords],['cultureRecords',cultureRecords],
+        ['spxRecords',(typeof spxRecords!=='undefined'?spxRecords:[])]];
+      var failed=[];
+      for(var si=0;si<steps.length;si++){
+        var st=steps[si];
+        setProg(68+Math.round(si/steps.length*24),'حفظ '+st[0]+' في قاعدة البيانات…'); await sleep(10);
+        if(st[0]==='cultureRecords') window._cultIdbBusy=(window._cultIdbBusy||0)+1;
+        var ok=false;
+        try{ ok=await A.persist(st[0], st[1], null); }
+        finally{ if(st[0]==='cultureRecords') window._cultIdbBusy=Math.max(0,(window._cultIdbBusy||1)-1); }
+        if(!ok) failed.push(st[0]);
+      }
+      try{
+        if(mode==='wipe'){
+          if(window.MSync && MSync._resetSidState) MSync._resetSidState();
+          try{ localStorage.setItem('lis_lan_cursors','{}'); }catch(e){}
+        } else if(typeof window._msOnSave==='function'){
+          ['patients','requests','invoices','billing','uaRecords','stoolExamRecords','semenRecords','cultureRecords'].forEach(function(k){ try{ window._msOnSave(k, null, null); }catch(e){} });
+        }
+        if(typeof window._msOnSave==='function'){ ['tests','doctors'].forEach(function(k){ try{ window._msOnSave(k, null, null); }catch(e){} }); }
+      }catch(e){ console.warn('[SQL import] sync', e); }
+
+      setProg(93,'التحقق من الحفظ…'); await sleep(10);
+      var checks=[];
+      for(var vi=0;vi<steps.length;vi++){
+        if(['patients','requests','invoices','uaRecords','stoolExamRecords'].indexOf(steps[vi][0])>-1) checks.push(await A.verify(steps[vi][0], steps[vi][1]));
+      }
+      var badChecks=checks.filter(function(c){ return !c.ok; });
+
+      ['updateDbStats','updateBadges','buildTestCatTabs','renderTestsDB','renderDoctors'].forEach(function(fn){ try{ if(typeof window[fn]==='function') window[fn](); }catch(e){} });
+      try{ if(typeof renderPatients==='function') renderPatients(); }catch(e){}
+      try{ if(typeof renderRequests==='function') renderRequests('all'); }catch(e){}
+      try{ if(typeof updateDashboard==='function') updateDashboard(true); }catch(e){}
+
+      var secs=Math.round((Date.now()-t0)/1000);
+      setProg(100,'اكتمل الاستيراد خلال '+secs+' ثانية');
+      try{ localStorage.setItem('medlab_sql_import_last', JSON.stringify({at:new Date().toISOString(), file:ST.fileName, lab:P.labName, labTag:P.labTag, secs:secs, backup:backupName, mode:mode,
+        report:R, tests:{replaced:AT.report.replaced, added:AT.report.added, priceOnly:AT.report.priceOnly, merged:AT.report.merged}, checks:checks, failed:failed})); }catch(e){}
+      overlay(false);
+      _renderResult(out, AT.report, checks, failed, secs, backupName, mode, renumbered, keptSynced);
+      ST.raw=null;
+      if(failed.length || badChecks.length) notif('تنبيه','اكتمل الاستيراد مع تحذيرات — راجع التقرير','warning');
+      else notif('تم','تم استيراد '+fmt(R.requests)+' زيارة بنجاح ✅','success');
+    }catch(e){
+      console.error('[SQL import] commit error',e);
+      overlay(false);
+      if(res) res.innerHTML='<div style="background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:10px;padding:14px;color:var(--danger);font-size:13px;line-height:1.9">❌ توقف الاستيراد: '+esc(e&&e.message||e)+
+        '<br>'+(backupName?'النسخة الاحتياطية المنزّلة: <b>'+esc(backupName)+'</b>':'')+'</div>';
+      notif('خطأ','توقف الاستيراد: '+(e&&e.message||e),'error');
+    }finally{
+      ST.busy=false; overlay(false);
+    }
+  };
+
+  function _renderResult(out, TR, checks, failed, secs, backupName, mode, renumbered, keptSynced){
+    var res=$('sqli-result'); if(!res) return;
+    var R=out.report, row=function(l,v,c){ return '<tr><td style="padding:5px 8px;color:var(--text2)">'+l+'</td><td style="padding:5px 8px;font-weight:800;color:'+(c||'var(--text)')+'">'+v+'</td></tr>'; };
+    var h='<div style="background:rgba(0,245,147,0.06);border:1.5px solid rgba(0,245,147,0.3);border-radius:12px;padding:16px">'+
+      '<div style="font-size:15px;font-weight:900;color:var(--success);margin-bottom:10px">✅ اكتمل الاستيراد ('+secs+' ثانية)</div>'+
+      '<table style="width:100%;font-size:12.5px;border-collapse:collapse">'+
+      row('طريقة الاستيراد', mode==='keep' ? ('إبقاء الموجود — أُعيد ترقيم '+fmt(renumbered)+' ملف بعد المستورد'+(keptSynced?(' · '+fmt(keptSynced)+' ملف مُزامَن بقي برقمه'):'')) : 'استيراد نظيف (حُذفت البيانات السابقة)')+
+      row('أرقام الملفات المستوردة','100001 – '+String(100000+(R.patientsNew||0)),'var(--primary)')+
+      row('ملفات مرضى',fmt(R.patientsNew))+
+      row('🧪 منها سايد لاب (بلا لقب أو بلا اسم ثلاثي)',fmt(R.sideLab),'#fbbf24')+
+      row('لقب مستخرج من الاسم',fmt(R.titled))+row('أرقام هواتف حقيقية',fmt(R.phones))+
+      row('طلبات (زيارات)',fmt(R.requests),'var(--success)')+
+      row('نتائج تحاليل',fmt(R.results))+
+      (R.ua?row('فحوص إدرار',fmt(R.ua)):'')+(R.stool?row('فحوص خروج',fmt(R.stool)):'')+
+      row('ملاحظات نتائج',fmt(R.notes))+
+      (R.invoices?row('فواتير',fmt(R.invoices)):'')+
+      row('أطباء أُضيفوا',fmt(R.doctorsNew)+(R.doctorsMerged?(' (دُمج '+fmt(R.doctorsMerged)+' اسم مكرر)'):''))+
+      (R.doctorsMatched?row('أطباء موجودون في ميدلاب بنفس الاسم',fmt(R.doctorsMatched)):'')+
+      row('تحاليل استُبدلت في ميدلاب',fmt(TR.replaced),'var(--success)')+
+      row('تحاليل جديدة أُضيفت',fmt(TR.added))+
+      (TR.priceOnly?row('تقارير خاصة (السعر فقط)',fmt(TR.priceOnly)):'')+
+      (TR.merged?row('تحاليل مكررة في القاعدة دُمجت',fmt(TR.merged)):'')+
+      '</table>';
+    var info=[];
+    if(R.emptyResults) info.push(fmt(R.emptyResults)+' تحليل بلا نتيجة في البرنامج القديم (أُضيف للطلب فارغاً)');
+    if(R.dupResults) info.push(fmt(R.dupResults)+' نتيجة مكررة لنفس التحليل حُفظت في ملاحظة التحليل');
+    if(R.badVisits) info.push(fmt(R.badVisits)+' زيارة بلا تاريخ صالح لم تُستورد');
+    if(R.noPatient) info.push(fmt(R.noPatient)+' زيارة لمريض محذوف لم تُستورد');
+    if(backupName) info.push('النسخة الاحتياطية قبل الاستيراد: '+backupName);
+    if(info.length) h+='<div style="margin-top:10px;font-size:11.5px;color:var(--text2);line-height:1.9">ℹ️ '+info.map(esc).join('<br>ℹ️ ')+'</div>';
+    var bad=checks.filter(function(c){ return !c.ok; });
+    if(failed.length || bad.length){
+      h+='<div style="margin-top:10px;background:rgba(255,77,109,0.1);border:1px solid rgba(255,77,109,0.35);border-radius:8px;padding:10px;font-size:12px;color:var(--danger)">⚠️ تحقق الحفظ: '+
+        esc(failed.concat(bad.map(function(c){ return c.k+(c.stored!=null?' ('+c.stored+'/'+c.expected+')':''); })).join(' · '))+
+        '<br>لا تغلق البرنامج — أعد تحميل الصفحة ثم تحقق من الأعداد في قاعدة البيانات.</div>';
+    } else {
+      h+='<div style="margin-top:10px;font-size:11.5px;color:var(--success)">🔒 تم التحقق: كل السجلات محفوظة فعلياً في قاعدة البيانات ('+
+        checks.map(function(c){ return c.k+' '+(c.stored!=null?fmt(c.stored):'✓'); }).join(' · ')+')</div>';
+    }
+    h+='</div>';
+    res.innerHTML=h;
+    var sb=$('sqli-start-btn'); if(sb){ sb.disabled=true; sb.textContent='✅ تم الاستيراد'; }
   }
 })();
 
