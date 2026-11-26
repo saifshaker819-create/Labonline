@@ -2,6 +2,78 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8">
+<script id="ml-ls-boot">
+/* ══════════════════════════════════════════════════════════════════════
+   💾 إعدادات البرنامج (localStorage) — مكانها قاعدة SQLite
+   • تُقرأ كاملة من SQLite قبل أي سطر آخر في البرنامج (نداء متزامن واحد).
+   • localStorage في كل البرنامج يصبح واجهة لها: نفس الدوال والسلوك تماماً
+     (getItem/setItem/removeItem/key/length/clear والأقواس) — بلا حدّ ٥MB.
+   • كل تغيير يُرسل بالترتيب إلى البرنامج الرئيسي ⇒ SQLite.
+   • أول مرة فقط: النسخة الحالية في localStorage (الأحدث) تُنقل كما هي،
+     وفي الفتح التالي تُمسح من التخزين القديم (يبقى فيه مؤشّران فقط).
+   • خارج Electron أو قبل نقل البيانات إلى SQLite ⇒ localStorage العادي كما كان.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+  'use strict';
+  var A=window.electronAPI, real=null, MARKS=['medlab_ls_engine','medlab_store_engine'];
+  try{ real=window.localStorage; }catch(e){}
+  function wasVirtual(){ try{ return !!real && real.getItem('medlab_ls_engine')==='sqlite'; }catch(e){ return false; } }
+  window.__mlLs={virtual:false, wasVirtual:false};
+  if(!A || typeof A.lsBoot!=='function' || !real) return;
+  var b=null; try{ b=A.lsBoot(); }catch(e){ b=null; }
+  if(!b || !b.virtual){ window.__mlLs={virtual:false, wasVirtual:wasVirtual(), state:(b&&b.state)||''}; return; }
+
+  var items=b.items||{}, M=new Map(), K=null, frozen=false, first=!!b.first;
+  if(first){
+    /* أول تشغيل: localStorage الحالي هو الأحدث ⇒ يصبح الأصل (إلا إن كان فارغاً تقريباً) */
+    var rs={}, n=0;
+    try{ for(var i=0;i<real.length;i++){ var k=real.key(i); if(k!=null){ rs[k]=real.getItem(k); n++; } } }catch(e){}
+    if(n>=3 || n>=Object.keys(items).length) items=rs;
+  }
+  Object.keys(items).forEach(function(k){ M.set(String(k), String(items[k])); });
+  function keys(){ return K||(K=Array.from(M.keys())); }
+  function send(f){ if(frozen) return; try{ f(); }catch(e){ try{ console.warn('[settings] send',e); }catch(_){} } }
+  var api={
+    getItem:function(k){ k=String(k); return M.has(k)?M.get(k):null; },
+    setItem:function(k,v){ k=String(k); v=String(v); if(M.has(k)){ if(M.get(k)===v) return; } else K=null; M.set(k,v); send(function(){ A.lsSet(k,v); }); },
+    removeItem:function(k){ k=String(k); if(!M.has(k)) return; M.delete(k); K=null; send(function(){ A.lsDel(k); }); },
+    clear:function(){ M.clear(); K=null; send(function(){ A.lsClear(); }); },
+    key:function(i){ i=Number(i); if(!(i>=0)) return null; var a=keys(); return i<a.length ? a[Math.floor(i)] : null; }
+  };
+  var OP=Object.prototype, has=function(o,p){ return OP.hasOwnProperty.call(o,p); };
+  var P=new Proxy({}, {
+    get:function(t,p){
+      if(p==='length') return M.size;
+      if(typeof p==='string' && has(api,p)) return api[p];
+      if(p===Symbol.toStringTag) return 'Storage';
+      if(typeof p==='string' && M.has(p)) return M.get(p);
+      if(p in OP) return OP[p];
+      return undefined;
+    },
+    set:function(t,p,v){ if(typeof p==='string') api.setItem(p,v); return true; },
+    has:function(t,p){ return typeof p==='string' && (M.has(p) || has(api,p) || p==='length' || p in OP); },
+    deleteProperty:function(t,p){ if(typeof p==='string') api.removeItem(p); return true; },
+    ownKeys:function(){ return keys().slice(); },
+    getOwnPropertyDescriptor:function(t,p){ if(typeof p==='string' && M.has(p)) return {value:M.get(p), writable:true, enumerable:true, configurable:true}; return undefined; },
+    defineProperty:function(t,p,d){ if(typeof p==='string' && d && ('value' in d)) api.setItem(p,d.value); return true; },
+    getPrototypeOf:function(){ return Storage.prototype; }
+  });
+  var ok=false;
+  try{ Object.defineProperty(window,'localStorage',{configurable:true, enumerable:true, get:function(){ return P; }}); ok=(window.localStorage===P); }catch(e){ ok=false; }
+  if(!ok){ window.__mlLs={virtual:false, wasVirtual:true, state:'proxy-failed'}; return; }
+  if(first){ try{ A.lsReplace(items, true); }catch(e){} }
+  else {
+    /* النسخة في التخزين القديم لم تعد تُستعمل ⇒ تُمسح (عدا المؤشّرين) */
+    try{ var old=[]; for(var j=0;j<real.length;j++){ var kk=real.key(j); if(kk!=null && MARKS.indexOf(kk)<0) old.push(kk); } old.forEach(function(x){ try{ real.removeItem(x); }catch(e){} }); }catch(e){}
+  }
+  try{ real.setItem('medlab_ls_engine','sqlite'); real.setItem('medlab_store_engine','sqlite'); }catch(e){}
+  window.__mlLs={
+    virtual:true, first:first,
+    freeze:function(){ frozen=true; }, unfreeze:function(){ frozen=false; },
+    stats:function(){ var by=0; M.forEach(function(v,k){ by+=(k.length+v.length)*2; }); var nat=-1; try{ nat=real.length; }catch(e){} return {keys:M.size, bytes:by, native:nat}; }
+  };
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MedLab Pro - نظام إدارة المختبر</title>
 <meta name="description" content="نظام إدارة المختبر الطبي - MedLab Pro">
@@ -7261,18 +7333,18 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
               <div class="db-acc-body"><div class="db-acc-body-inner">
             <div style="background:rgba(255,255,255,0.03);border:1.5px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:20px" id="storage-meter-box">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                <span style="font-size:12px;font-weight:700;color:var(--text2)">💾 localStorage (نشط)</span>
+                <span style="font-size:12px;font-weight:700;color:var(--text2)" id="storage-ls-ttl">💾 localStorage (نشط)</span>
                 <span style="font-size:12px;font-weight:900;color:var(--primary)" id="storage-mb-lbl">0 MB</span>
               </div>
               <div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;overflow:hidden;margin-bottom:4px">
                 <div id="storage-bar" style="height:100%;border-radius:6px;background:linear-gradient(90deg,var(--success),var(--primary));width:0%;transition:width 0.5s"></div>
               </div>
               <div style="display:flex;justify-content:space-between;margin-bottom:10px">
-                <span style="font-size:10px;color:var(--text2)">الحد الأقصى ~5 MB</span>
+                <span style="font-size:10px;color:var(--text2)" id="storage-ls-max">الحد الأقصى ~5 MB</span>
                 <span style="font-size:10px;color:var(--text2)" id="storage-patients-cap"></span>
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                <span style="font-size:12px;font-weight:700;color:var(--text2)">🗄️ IDB أرشيف (500MB+)</span>
+                <span style="font-size:12px;font-weight:700;color:var(--text2)" id="storage-idb-ttl">🗄️ IDB أرشيف (500MB+)</span>
                 <span style="font-size:12px;font-weight:900;color:var(--accent)" id="storage-idb-lbl">0 MB</span>
               </div>
               <div style="background:rgba(255,255,255,0.08);border-radius:6px;height:8px;overflow:hidden;margin-bottom:4px">
@@ -7297,7 +7369,7 @@ body.light-mode .att-cam-ph .btn,body.light-mode .att-cam-ph .btn *{color:#fffff
               </div>
               <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
                 <div style="flex:1;background:rgba(0,245,147,0.07);border:1px solid rgba(0,245,147,0.25);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--text2)">
-                  🔄 <b style="color:var(--accent)">نقل تلقائي يومي إلى IDB</b> — يتم عند فتح البرنامج كل يوم
+                  <span id="storage-auto-note">🔄 <b style="color:var(--accent)">نقل تلقائي يومي إلى IDB</b> — يتم عند فتح البرنامج كل يوم</span>
                 </div>
                 <div style="width:100%;font-size:10px;color:var(--text2);display:flex;align-items:center;justify-content:space-between;margin-top:2px">
                   <span id="storage-next-archive"></span>
@@ -9886,7 +9958,7 @@ const IDB_LEGACY=(()=>{
         if(!db.objectStoreNames.contains(STORE))
           db.createObjectStore(STORE,{keyPath:'k'});
       };
-      req.onsuccess=e=>{_db=e.target.result;res(_db);};
+      req.onsuccess=e=>{_db=e.target.result;_db.onversionchange=()=>{ try{_db.close();}catch(_){ } _db=null; };res(_db);};
       req.onerror=e=>rej(e);
     });
   }
@@ -10266,7 +10338,8 @@ const IDB_LEGACY=(()=>{
   return{get,set,del,getAllKeys,getAll,usedMB,quotaMB,
          snapshotLegacy,isRecordMode,countRecords,collOf,
          lastError,forceMigrate,
-         rawGet:_rawGet, rawSet:_rawSet};
+         rawGet:_rawGet, rawSet:_rawSet,
+         close:()=>{ if(_db){ try{_db.close();}catch(e){} _db=null; } }, dbName:DB_NAME};
 })();
 
 // ══════════════════════════════════════════════════════════════════════
@@ -10277,7 +10350,9 @@ const IDB_LEGACY=(()=>{
 // • القاعدة: ملف SQLite في عملية مستقلة (medlab-sqlite.js) ⇒ الحفظ لا
 //   يُثقل الشاشة، والسجلات المعدّلة فقط تُكتب.
 // • أول تشغيل: نقل كل بيانات IndexedDB إلى SQLite مرة واحدة مع تحقق من
-//   العدد — ونسخة IndexedDB تبقى كما هي (لا تُحذف) كشبكة أمان.
+//   العدد. نسخة IndexedDB القديمة تبقى ٧ أيام كشبكة أمان ثم تُمسح تلقائياً
+//   (بشرط وجود نسخة احتياطية SQLite) — فلا يبقى شيء على القاعدة القديمة.
+// • إعدادات البرنامج (localStorage) أيضاً في SQLite — انظر ml-ls-boot.
 // • القيم التي لا تُنقل عبر القناة (مقابض مجلدات النسخ الاحتياطي) تبقى في
 //   IndexedDB ويُسجَّل مكانها في SQLite — بلا أي فقدان.
 // • خارج Electron (متصفح) أو إن لم يعمل المحرّك قبل أول ترحيل ⇒ يعمل
@@ -10508,6 +10583,7 @@ const IDB=(()=>{
     P.clear=function(){ const r=oClr.call(this); try{ if(this===window.localStorage && _lsOn && !_frozen){ _lsQ.clear=true; _lsQ.set={}; _lsQ.del={}; if(!_lsT) _lsT=setTimeout(_lsFlush,400); } }catch(e){} return r; };
     _lsOn=true;
   }
+  const LSV=!!(window.__mlLs && window.__mlLs.virtual);   // الإعدادات تعيش في SQLite (العملية الرئيسية تكتبها)
   /* بعد استيراد نسخة: الإعدادات تعود من SQLite إلى localStorage ثم يُعاد فتح البرنامج مرة واحدة */
   const _KEEP_LS=['medlab_session_bk','medlab_admin_users','medlab_device_id','medlab_session'];
   async function _hydrate(h){
@@ -10539,6 +10615,23 @@ const IDB=(()=>{
   }
   async function _afterSqlite(h){
     if(!h.legacyRepaired) await _repairIdlessLists();
+    if(LSV){
+      /* الإعدادات في SQLite: لا مرآة ولا نسخ — العملية الرئيسية هي التي تكتبها */
+      if(h.lsHydrate){
+        _progress('استعادة إعدادات النسخة…', 90, 'سيُعاد فتح البرنامج تلقائياً');
+        try{ window.__mlLs.freeze(); }catch(e){}
+        await API.lsAfterRestore(h.restorePrefix||'');
+        location.reload();
+        return false;
+      }
+      return true;
+    }
+    if(window.__mlLs && window.__mlLs.wasVirtual){
+      /* الإعدادات محفوظة في SQLite لكن لم تصل هذه المرة ⇒ لا نعمل على نسخة فارغة ولا نكتب فوقها */
+      err='settings: '+((window.__mlLs && window.__mlLs.state)||'unavailable');
+      _showBlocked();
+      return false;
+    }
     if(h.lsHydrate){
       _progress('استعادة إعدادات النسخة…', 90, 'سيُعاد فتح البرنامج تلقائياً');
       await _hydrate(h);
@@ -10743,11 +10836,29 @@ const IDB=(()=>{
     let pfx=''; try{ pfx=DB._pfx(); }catch(e){}
     _frozen=true;                                   // لا كتابة من الذاكرة الحالية بعد الآن — سيُعاد فتح البرنامج
     let r;
+    if(LSV){ try{ window.__mlLs.freeze(); }catch(e){} }
     try{ r=await call('restore',{path:filePath, currentPrefix:pfx}); }catch(e){ r={ok:false, err:e.message}; }
-    if(!r || !r.ok) _frozen=false;                  // فشل ⇒ القاعدة الحالية كما هي ويستمر العمل
+    if(!r || !r.ok){                                 // فشل ⇒ القاعدة الحالية كما هي ويستمر العمل
+      _frozen=false;
+      if(LSV){ try{ window.__mlLs.unfreeze(); }catch(e){} }
+      return r;
+    }
+    if(LSV){
+      /* إعدادات النسخة تصبح الأصل الآن (قبل إعادة الفتح) */
+      try{ const a=await API.lsAfterRestore(pfx); if(a && a.ok) r.settings=a.n; }catch(e){ console.warn('[Store] settings after restore',e); }
+    }
     return r;
   }
   function isFrozen(){ return _frozen; }
+  /* مخازن الأقسام الصغيرة (المحادثات، صور المتجر، الإعلانات) — جدول kv مباشرة */
+  function sqlOn(){ return mode==='sqlite'; }
+  async function kvGet(key){ await ready; if(mode!=='sqlite') return null; try{ return (await call('kvGetRaw',{key:key})).v; }catch(e){ return null; } }
+  async function kvDelMany(keys){ await ready; if(_frozen) return true; if(mode!=='sqlite') return false; try{ await call('kvDelMany',{keys:keys}); return true; }catch(e){ return false; } }
+  async function kvKeys(prefix){ await ready; if(mode!=='sqlite') return null; try{ return (await call('kvKeys',{prefix:prefix})).v||[]; }catch(e){ return null; } }
+  async function stubKeys(){ await ready; if(mode!=='sqlite') return null; try{ return (await call('stubKeys')).v||[]; }catch(e){ return null; } }
+  async function settingsInfo(){ if(mode!=='sqlite') return null; try{ return (await call('lsCount')).v; }catch(e){ return null; } }
+  function hello(){ return info; }
+  async function setMetaPublic(k,v){ await ready; if(mode!=='sqlite') return false; try{ await call('setMeta',{k:k, v:v}); if(info) info[k]=v; return true; }catch(e){ return false; } }
   async function kvRange(prefix){ await ready; if(mode!=='sqlite') return null; try{ return (await call('kvRange',{prefix:prefix})).v||[]; }catch(e){ return null; } }
   async function kvPutMany(items){ await ready; if(_frozen) return true; if(mode!=='sqlite') return false; try{ await call('kvPutMany',{items:items}); return true; }catch(e){ return false; } }
   async function backupNow(){
@@ -10763,7 +10874,8 @@ const IDB=(()=>{
          snapshotLegacy,isRecordMode,countRecords,collOf,
          lastError,forceMigrate,
          flush,backupNow,engine,whenReady, info:engineInfo,
-         exportTo,restoreFrom,isFrozen,kvRange,kvPutMany};
+         exportTo,restoreFrom,isFrozen,kvRange,kvPutMany,
+         kvGet,kvDelMany,kvKeys,stubKeys,settingsInfo,sqlOn,hello,setMetaPublic};
 })();
 window.IDB_ENGINE=function(){ return IDB.engine(); };
 /* 💾 لوحة محرّك الحفظ في صفحة قاعدة البيانات */
@@ -10779,6 +10891,18 @@ window._renderStoreEngineBox=async function(){
     h='<div style="font-weight:800;color:var(--success)">💾 محرّك الحفظ: SQLite ✓ <span style="font-weight:400;color:var(--text2)">(عملية مستقلة — الحفظ لا يُثقل الشاشة)</span></div>'+
       '<div style="direction:ltr;text-align:right;word-break:break-all">'+esc(info&&info.file||'')+'</div>'+
       '<div>آخر نسخة احتياطية تلقائية: <b>'+esc(fmtT(info&&info.lastBackup))+'</b> · المحفوظ: '+((info&&info.backups)||[]).length+' نسخ (آخر 3 أيام)</div>'+
+      (function(){
+        let x='';
+        try{ if(window.__mlLs && window.__mlLs.virtual){ const st=window.__mlLs.stats(); x+='<div>⚙️ الإعدادات: داخل SQLite ✓ ('+st.keys.toLocaleString('en-US')+' مفتاح · '+(st.bytes/1048576).toFixed(2)+' MB)</div>'; }
+             else x+='<div style="color:var(--warning)">⚙️ الإعدادات: تُنقل إلى SQLite عند التشغيل القادم</div>'; }catch(_){}
+        try{
+          const lg=window._legacyStatus ? window._legacyStatus() : null;
+          if(lg && lg.cleaned) x+='<div>🧹 القاعدة القديمة (IndexedDB): حُذفت ✓ <span style="color:var(--text2)">'+esc(fmtT(lg.cleaned))+'</span></div>';
+          else if(lg) x+='<div>🗄️ القاعدة القديمة (IndexedDB): نسخة أمان غير مستعملة — تُحذف تلقائياً '+(lg.autoAt?('بعد '+esc(fmtT(lg.autoAt))):'بعد ٧ أيام')+
+                       ' <button class="btn btn-sm" id="legacy-clean-btn" style="margin-inline-start:6px" onclick="_legacyCleanBtn()">🧹 حذفها الآن</button></div>';
+        }catch(_){}
+        return x;
+      })()+
       '<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">'+
         '<button class="btn btn-sm" onclick="window.electronAPI.sqliteOpenFolder()">📂 فتح مجلد البيانات</button>'+
         '<button class="btn btn-sm" id="store-bk-btn" onclick="_storeBackupNow()">💾 نسخة احتياطية الآن</button></div>';
@@ -10840,6 +10964,13 @@ window._sqlBackupBefore=async function(tag){
     return name;
   }catch(e){ throw new Error('تعذّرت نسخة SQLite: '+(e&&e.message||e)); }
 };
+window._legacyCleanBtn=async function(){
+  if(!confirm('حذف نسخة القاعدة القديمة (IndexedDB) الآن؟\n\nكل بياناتك في SQLite ولن يتغيّر شيء في عمل البرنامج.\nستؤخذ نسخة احتياطية SQLite أولاً إن لم توجد.')) return;
+  const b=document.getElementById('legacy-clean-btn'); if(b){ b.disabled=true; b.textContent='⏳ جارٍ الحذف…'; }
+  const r=await window._legacyCleanupNow(true);
+  try{ showNotif(r&&r.ok?'تم':'تعذّر', r&&r.ok?'🧹 حُذفت القاعدة القديمة — البرنامج يعمل بالكامل على SQLite':('لم تُحذف: '+((r&&r.err)||'')), r&&r.ok?'success':'warning'); }catch(_){}
+  window._renderStoreEngineBox();
+};
 window._storeBackupNow=async function(){
   const b=document.getElementById('store-bk-btn'); if(b){ b.disabled=true; b.textContent='⏳ جارٍ النسخ…'; }
   const r=await IDB.backupNow();
@@ -10857,6 +10988,74 @@ window._storeHasMore=async function(key, memArr){
     return !(n>=0 && n<=memArr.length);
   }catch(e){ return true; }
 };
+window.__mlStore=IDB;   // للأقسام التي تحجب الاسم IDB بمتغيّر محلي
+
+/* ══════════════════════════════════════════════════════════════════════
+   🧹 إنهاء القاعدة القديمة (IndexedDB) — بعد أن صار كل شيء في SQLite
+   • تلقائياً بعد ٧ أيام من النقل وبشرط وجود نسخة احتياطية SQLite واحدة على الأقل.
+   • أو يدوياً من صفحة قاعدة البيانات (يأخذ نسخة احتياطية أولاً).
+   • يُحذف: نسخة البيانات القديمة، مخزن المحادثات، صور رسائل المراجعين، كاش الإعلانات،
+     بصمات الوجه القديمة — كلٌّ منها فقط إذا تأكّد نقله إلى SQLite.
+   • يبقى في IndexedDB شيئان صغيران فقط إن وُجدا: مؤشّر المحرّك ومقبض مجلد النسخ (لا يُخزَّن في SQLite).
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+  if(!(window.electronAPI && window.electronAPI.sqliteConnect)) return;
+  const WAIT=7*864e5;
+  let cleanedAt=0, busy=false;
+  function delDb(name){
+    return new Promise(function(res){
+      let done=false; const fin=function(v){ if(!done){ done=true; res(v); } };
+      try{ const r=indexedDB.deleteDatabase(name); r.onsuccess=function(){ fin(true); }; r.onerror=function(){ fin(false); }; }catch(e){ fin(false); }
+      setTimeout(function(){ fin(false); }, 20000);
+    });
+  }
+  function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+  async function clean(manual){
+    if(busy) return {ok:false, err:'busy'};
+    if(!IDB.sqlOn()) return {ok:false, err:'not-sqlite'};
+    busy=true;
+    try{
+      let inf=await IDB.info();
+      if(manual && (!inf || !(inf.backups||[]).length)){ const b=await IDB.backupNow(); if(!b || !b.ok) return {ok:false, err:'تعذّرت النسخة الاحتياطية: '+((b&&b.err)||'')}; inf=await IDB.info(); }
+      if(!inf || !(inf.backups||[]).length) return {ok:false, err:'no-backup'};
+      const stubs=await IDB.stubKeys(); if(stubs===null) return {ok:false, err:'stubKeys'};
+      const done=[];
+      /* ① نسخة البيانات القديمة — مع إبقاء ما لا يُخزَّن في SQLite */
+      const keep=[];
+      for(const k of stubs.concat(['__medlab_store_engine'])){ try{ const v=await IDB_LEGACY.rawGet(k); if(v!=null) keep.push([k,v]); }catch(e){} }
+      try{ IDB_LEGACY.close(); }catch(e){}
+      if(!(await delDb(IDB_LEGACY.dbName))) return {ok:false, err:'تعذّر حذف '+IDB_LEGACY.dbName+' (أعد تشغيل البرنامج ثم حاول)'};
+      for(const kv of keep){ try{ await IDB_LEGACY.rawSet(kv[0], kv[1]); }catch(e){} }
+      try{ IDB_LEGACY.close(); }catch(e){}
+      done.push(IDB_LEGACY.dbName);
+      /* ② مخازن الأقسام — فقط ما تأكّد نقله */
+      if(lsGet('medlab_fid_sqlite')==='1' && await delDb('medlab_faceid')) done.push('medlab_faceid');
+      if(lsGet('medlab_chat_sqlite')==='1' && await delDb('medlabchat')) done.push('medlabchat');
+      if(lsGet('medlab_lximg_sqlite')==='1' && await delDb('mls-lximg')) done.push('mls-lximg');
+      if(await delDb('mlp_promos')) done.push('mlp_promos');                  // كاش يُعاد تنزيله
+      cleanedAt=Date.now();
+      try{ await IDB.setMetaPublic('legacyCleaned', String(cleanedAt)); }catch(e){}
+      try{ localStorage.setItem('medlab_legacy_cleaned', JSON.stringify({at:new Date(cleanedAt).toISOString(), dbs:done, kept:keep.length})); }catch(e){}
+      console.log('[Store] 🧹 old IndexedDB removed:', done.join(', '));
+      return {ok:true, dbs:done};
+    }catch(e){ return {ok:false, err:(e&&e.message)||String(e)}; }
+    finally{ busy=false; }
+  }
+  window._legacyStatus=function(){
+    const h=(IDB.hello&&IDB.hello())||{};
+    const at=cleanedAt || +h.legacyCleaned || 0;
+    const mig=+h.migrated||0;
+    return {cleaned:at, migrated:mig, autoAt: mig ? mig+WAIT : 0};
+  };
+  window._legacyCleanupNow=clean;
+  IDB.whenReady().then(function(){
+    setTimeout(function(){
+      const st=window._legacyStatus();
+      if(!IDB.sqlOn() || st.cleaned || !st.migrated || Date.now()<st.autoAt) return;
+      clean(false).then(function(r){ if(!r.ok) console.warn('[Store] legacy cleanup postponed:', r.err); });
+    }, 120000);
+  });
+})();
 
 // ══════════════════════════════════════════════════════════════
 // DB — IDB-First: البيانات الكبيرة تُحفظ على IDB مباشرة
@@ -29135,10 +29334,13 @@ var AuditLog=(function(){
   }
   function nowParts(){ var d=new Date(), iso=d.toISOString(); return {ts:d.getTime(), d:iso.slice(0,10), t:d.toTimeString().slice(0,8)}; }
   function dev(){ try{ return (typeof _lanDeviceId==='string'&&_lanDeviceId)?_lanDeviceId:('d'+(typeof _devNo==='function'?_devNo():'')); }catch(e){ return ''; } }
+  /* 🖥️ الحاسبة التي نفّذت العملية: اسمها (إن سُمّيت) ورقمها */
+  function pcLbl(){ try{ var no=parseInt(localStorage.getItem('lis_device_no')||'0',10)||0, nm=localStorage.getItem('msync_dev_name')||''; if(nm) return nm+(no?' ('+no+')':''); return no?('الحاسبة '+no):''; }catch(e){ return ''; } }
   function add(e){
     var n=nowParts();
     e.id=n.ts.toString(36)+'-'+Math.random().toString(36).slice(2,6);
     e.ts=n.ts; e.d=n.d; e.t=n.t; e.u=_rpUser(); e.dev=dev();
+    if(!e.src || e.src==='local'){ var _pc=pcLbl(); if(_pc) e.pc=_pc; }
     /* دمج التعديلات المتتالية لنفس السجل خلال ٣ دقائق */
     if(e.act==='edit'){
       for(var i=0;i<Math.min(_log.length,30);i++){
@@ -29283,8 +29485,8 @@ var AuditLog=(function(){
       if(!S.has(e.d)) return false;
       if(UI.act && e.act!==UI.act && !(e.act==='bulk' && e.sub===UI.act)) return false;
       if(UI.coll && e.coll!==UI.coll) return false;
-      if(UI.user && e.u!==UI.user) return false;
-      if(q){ var hay=(e.title+' '+e.rid+' '+(e.u||'')+' '+((e.chg||[]).map(function(c){ return c.a+' '+c.b; }).join(' '))).toLowerCase(); if(hay.indexOf(q)<0) return false; }
+      if(UI.user && (e.pc||e.u)!==UI.user) return false;
+      if(q){ var hay=(e.title+' '+e.rid+' '+(e.u||'')+' '+(e.pc||'')+' '+((e.chg||[]).map(function(c){ return c.a+' '+c.b; }).join(' '))).toLowerCase(); if(hay.indexOf(q)<0) return false; }
       return true;
     });
   }
@@ -29322,7 +29524,7 @@ var AuditLog=(function(){
           +'<div style="font-size:12.5px;font-weight:800;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:'+A.c+'">'+aLbl+'</span> · '+W.ic+' '+_rpEsc(W.lbl)+' — '+_rpEsc(e.title)+'</div>'
           +(rowInfo(e)?'<div style="font-size:11px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+rowInfo(e)+'</div>':'')
         +'</div>'
-        +'<div style="font-size:10.5px;color:var(--text2);text-align:left;flex-shrink:0">👤 '+_rpEsc(e.u||'—')+(e.src==='cloud'?'<br>☁️ سحابة':e.src==='lan'?'<br>🌐 LAN':e.src==='tg'?'<br>✈️ Telegram':'')+(e.n>1&&e.act==='edit'?'<br>×'+e.n:'')+'</div>'
+        +'<div style="font-size:10.5px;color:var(--text2);text-align:left;flex-shrink:0">'+(e.pc?('🖥️ '+_rpEsc(e.pc)):('👤 '+_rpEsc(e.u||'—')))+(e.src==='cloud'?'<br>☁️ سحابة':e.src==='lan'?'<br>🌐 LAN':e.src==='tg'?'<br>✈️ Telegram':'')+(e.n>1&&e.act==='edit'?'<br>×'+e.n:'')+'</div>'
         +'</div>';
     });
     if(list.length>part.length) html+='<div style="text-align:center;padding:12px"><button class="btn btn-s" style="font-weight:800" onclick="AuditLog.more()">⬇️ عرض المزيد ('+(list.length-part.length)+' متبقٍ)</button></div>';
@@ -29332,7 +29534,7 @@ var AuditLog=(function(){
     await load();
     UI.shown=200;
     var old=document.getElementById('m-audit-log'); if(old) old.remove();
-    var users={}; (_log||[]).forEach(function(e){ if(e.u) users[e.u]=1; });
+    var users={}; (_log||[]).forEach(function(e){ var w=e.pc||e.u; if(w) users[w]=1; });
     var mod=document.createElement('div');
     mod.id='m-audit-log'; mod.className='moverlay';
     mod.style.cssText='position:fixed;inset:0;z-index:9100;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.7)';
@@ -29345,7 +29547,7 @@ var AuditLog=(function(){
           +'<div class="srch-box" style="flex:1;min-width:180px"><span class="srch-ic">🔍</span><input class="srch-inp" id="al-q" placeholder="بحث: اسم مريض، رقم طلب، فاتورة، تحليل..." value="'+_rpEsc(UI.q)+'" oninput="AuditLog.setQ(this.value)"></div>'
           +'<select '+sel+' onchange="AuditLog.setAct(this.value)" id="al-act"><option value="">كل العمليات</option>'+Object.keys(ACT).map(function(a){ return '<option value="'+a+'"'+(UI.act===a?' selected':'')+'>'+ACT[a].ic+' '+ACT[a].lbl+'</option>'; }).join('')+'</select>'
           +'<select '+sel+' onchange="AuditLog.setColl(this.value)"><option value="">كل الأقسام</option>'+Object.keys(WATCH).map(function(k){ return '<option value="'+k+'"'+(UI.coll===k?' selected':'')+'>'+WATCH[k].ic+' '+WATCH[k].lbl+'</option>'; }).join('')+'</select>'
-          +'<select '+sel+' onchange="AuditLog.setUser(this.value)"><option value="">كل المستخدمين</option>'+Object.keys(users).map(function(u){ return '<option'+(UI.user===u?' selected':'')+'>'+_rpEsc(u)+'</option>'; }).join('')+'</select>'
+          +'<select '+sel+' onchange="AuditLog.setUser(this.value)"><option value="">كل الحاسبات</option>'+Object.keys(users).map(function(u){ return '<option'+(UI.user===u?' selected':'')+'>'+_rpEsc(u)+'</option>'; }).join('')+'</select>'
         +'</div>'
         +'<div id="al-sum" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>'
         +'<div id="al-list" style="flex:1;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:0 8px 8px"></div>'
@@ -29387,7 +29589,7 @@ var AuditLog=(function(){
     var A=ACT[e.act]||ACT.edit, W=WATCH[e.coll]||{lbl:e.coll,ic:''};
     var old=document.getElementById('m-audit-detail'); if(old) old.remove();
     var head='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:14px">'
-      +[['العملية',(e.act==='bulk'?((ACT[e.sub]||A).lbl+' جماعي'):A.lbl)],['القسم',W.ic+' '+W.lbl],['التاريخ',e.d],['الوقت',e.t],['المستخدم',e.u||'—'],['الحاسبة',e.dev||'—'],['المصدر',e.src==='lan'?'مزامنة LAN (حاسبة أخرى)':e.src==='cloud'?'مزامنة سحابية (حاسبة أخرى عبر الإنترنت)':e.src==='tg'?'Telegram':'هذه الحاسبة'],['المعرّف',e.rid||'—']]
+      +[['العملية',(e.act==='bulk'?((ACT[e.sub]||A).lbl+' جماعي'):A.lbl)],['القسم',W.ic+' '+W.lbl],['التاريخ',e.d],['الوقت',e.t],['الحساب',e.u||'—'],['الحاسبة',e.pc||e.dev||'—'],['المصدر',e.src==='lan'?'مزامنة LAN (حاسبة أخرى)':e.src==='cloud'?'مزامنة سحابية (حاسبة أخرى عبر الإنترنت)':e.src==='tg'?'Telegram':'هذه الحاسبة'],['المعرّف',e.rid||'—']]
         .map(function(x){ return '<div style="background:var(--bg-glass);border:1px solid var(--border);border-radius:8px;padding:7px 10px"><div style="font-size:10.5px;color:var(--text2)">'+x[0]+'</div><div style="font-size:12.5px;font-weight:800" dir="auto">'+_rpEsc(x[1])+'</div></div>'; }).join('')+'</div>';
     var chg='';
     if(e.act==='edit' && e.chg && e.chg.length){
@@ -29438,13 +29640,13 @@ var AuditLog=(function(){
       var det=e.act==='edit'?(e.chg||[]).map(function(c){ return c.l+': '+fmtVal(e.coll,c.f,c.b)+' ← '+fmtVal(e.coll,c.f,c.a); }).join(' | ')
         :e.act==='bulk'?(e.items||[]).slice(0,20).map(function(x){ return x.title; }).join('، '):'';
       var al=e.act==='bulk'?((ACT[e.sub]||ACT.edit).lbl+' جماعي'):(ACT[e.act]||{}).lbl;
-      return [i+1, e.d, e.t, al, W.lbl, e.title, det, e.u||'—', e.src==='lan'?'LAN':e.src==='tg'?'Telegram':e.src==='cloud'?'سحابة':'محلي', e.rid||''];
+      return [i+1, e.d, e.t, al, W.lbl, e.title, det, e.pc||e.u||'—', e.src==='lan'?'LAN':e.src==='tg'?'Telegram':e.src==='cloud'?'سحابة':'محلي', e.rid||''];
     });
     var c={add:0,del:0,edit:0,bulk:0}; list.forEach(function(e){ c[e.act]=(c[e.act]||0)+1; });
     MLXlsx.download({title:'سجل العمليات', sheets:[{name:'سجل العمليات', title:'📜 سجل العمليات — '+S.label, subtitle:lab+' — تاريخ التصدير: '+_rpToday(),
       meta:[['الفترة',S.label],['عدد العمليات',list.length],['المستخدم',_rpUser()],['تاريخ التصدير',_rpToday()]],
       summary:[['إضافة',c.add,'num'],['حذف',c.del,'num'],['تعديل',c.edit,'num'],['جماعي',c.bulk,'num']],
-      columns:[{h:'#',type:'num'},{h:'التاريخ',type:'date'},{h:'الوقت',type:'date'},{h:'العملية',type:'status'},{h:'القسم',type:'center'},{h:'السجل',type:'bold'},{h:'التفاصيل',w:60},{h:'المستخدم',type:'center'},{h:'المصدر',type:'center'},{h:'المعرّف',type:'center'}],
+      columns:[{h:'#',type:'num'},{h:'التاريخ',type:'date'},{h:'الوقت',type:'date'},{h:'العملية',type:'status'},{h:'القسم',type:'center'},{h:'السجل',type:'bold'},{h:'التفاصيل',w:60},{h:'الحاسبة',type:'center'},{h:'المصدر',type:'center'},{h:'المعرّف',type:'center'}],
       rows:rows}]}, 'سجل_العمليات_'+S.label.replace(/\s+/g,'_')+'_'+_rpToday()+'.xlsx');
     showNotif('✅ تم','تم تنزيل سجل العمليات (Excel)','success');
   }
@@ -34784,6 +34986,24 @@ function updateDbStats(){
   _fsaUpdateIndicator(!!_fsaDirHandle);
 }
 function _updateStorageMeter(){
+  /* 💾 الإعدادات داخل SQLite ⇒ لا حدّ ٥MB — يُعرض حجمها فقط */
+  try{
+    if(window.__mlLs && window.__mlLs.virtual){
+      const st=window.__mlLs.stats(), mb=(st.bytes/1048576);
+      const set=function(id,t){ const e=document.getElementById(id); if(e) e.textContent=t; };
+      set('storage-ls-ttl','⚙️ إعدادات البرنامج (داخل SQLite)');
+      set('storage-mb-lbl', mb.toFixed(2)+' MB · '+st.keys.toLocaleString('en-US')+' مفتاح');
+      set('storage-ls-max','بلا حدّ — محفوظة في قاعدة SQLite');
+      set('storage-patients-cap','');
+      set('storage-idb-ttl','🗄️ قاعدة SQLite (كل البيانات)');
+      const an=document.getElementById('storage-auto-note'); if(an) an.innerHTML='💾 <b style="color:var(--accent)">كل شيء يُحفظ فوراً في SQLite</b> — مع نسخة احتياطية تلقائية يومية';
+      const bar=document.getElementById('storage-bar');
+      if(bar){ bar.style.width=Math.max(2,Math.min(100,mb/50*100))+'%'; bar.style.background='linear-gradient(90deg,var(--success),var(--primary))'; }
+      _updateStorageMeterIDB();
+      const nextEl=document.getElementById('storage-next-archive'); if(nextEl) nextEl.textContent='';
+      return;
+    }
+  }catch(e){}
   try{
     // ── localStorage ──────────────────────────────────────
     const used=parseFloat(DB.usedMB());
@@ -55771,6 +55991,8 @@ function _gdErrText(err){
   if(m==='link_expired') return 'انتهت صلاحية الربط من جهة Google — أعد ربط الحساب';
   if(/net_timeout|ETIMEDOUT|ECONNRESET|ENOTFOUND|EAI_AGAIN|ENETUNREACH|socket hang up/i.test(m)) return 'تعذّر الاتصال بـ Google (الإنترنت ضعيف أو مقطوع) — أعد المحاولة لاحقاً';
   if(m==='upload_session_lost') return 'انقطع الرفع عدة مرات — أعد المحاولة';
+  if(m==='scope_missing' || /insufficient authentication scopes|insufficientPermissions/i.test(m)) return 'لم تُمنح صلاحية Google Drive عند الربط — اضغط «فصل الحساب» ثم اربط من جديد، وفي صفحة Google أشّر على مربع صلاحية Drive قبل «متابعة»';
+  if(/storage quota has been exceeded|storageQuotaExceeded|quotaExceeded/i.test(m)) return 'مساحة حساب Google ممتلئة — أفرغ مساحة من Gmail أو الصور أو Drive (one.google.com/storage) أو استخدم حساباً آخر';
   return m;
 }
 // شريط تقدّم الرفع (يعمل إن كان preload يدعم gdrive:progress)
@@ -55904,7 +56126,7 @@ async function gdriveLink(){
         refreshGDriveStatus();
       }
     } else {
-      var msg = (res && res.error) || 'خطأ غير معروف';
+      var msg = _gdErrText((res && res.error) || 'خطأ غير معروف');
       if(msg === 'oauth_timeout') msg = 'انتهى الوقت — أعد المحاولة وأكمل تسجيل الدخول أسرع';
       showNotif('فشل الربط','❌ '+msg,'error');
     }
@@ -66178,9 +66400,8 @@ function _allRaw(store){
     catch(e){ j(e); }
   });
 }
-function idbReady(){
-  if(_ready) return _ready;
-  _ready=new Promise(function(res){
+function _idbReadyNative(){
+  return new Promise(function(res){
     var done=false, fin=function(m,e){ if(done) return; done=true; STORE_MODE=m; STORE_ERR=e||''; res(m); };
     var to=setTimeout(function(){ fin('mem','timeout'); }, 6000);
     idbOpen().then(function(){
@@ -66197,9 +66418,61 @@ function idbReady(){
       try{ _notif('تنبيه','تخزين المحادثات المحلي غير متاح — الرسائل لهذه الجلسة فقط','warning'); }catch(x){}
     });
   });
+}
+/* 💾 المحادثات في قاعدة SQLite (مفاتيح «\u0003chat|<المخزن>|<المفتاح>») — مع نقل لمرة واحدة من IndexedDB.
+   خارج Electron ⇒ IndexedDB كما كان تماماً. */
+var _CSP='\u0003chat|', _CFLAG='medlab_chat_sqlite';
+function _cS(){ var s=window.__mlStore; return (s && s.sqlOn && s.sqlOn()) ? s : null; }
+function _ck(store,key){ return _CSP+store+'|'+key; }
+function _cPutChunks(S,items){
+  var i=0;
+  function next(){ if(i>=items.length) return Promise.resolve(true);
+    var part=items.slice(i,i+200); i+=200;
+    return S.kvPutMany(part).then(function(ok){ if(!ok) throw new Error('kvPutMany'); return next(); }); }
+  return next();
+}
+function _cSqlLoad(S){
+  return Promise.all([S.kvRange(_CSP+'msgs|'), S.kvRange(_CSP+'convs|'), S.kvRange(_CSP+'kv|')]).then(function(r){
+    if(!Array.isArray(r[0]) || !Array.isArray(r[1]) || !Array.isArray(r[2])) throw new Error('kvRange');
+    r[0].forEach(function(o){ if(o && o.k!=null) _M.msgs[o.k]=o; });
+    r[1].forEach(function(o){ if(o && o.cid!=null) _M.convs[o.cid]=o; });
+    r[2].forEach(function(o){ if(o && o.k!=null) _M.kv[o.k]=o; });
+    var flag=''; try{ flag=localStorage.getItem(_CFLAG)||''; }catch(e){}
+    if(flag==='1') return;
+    /* نقل لمرة واحدة: ما في IndexedDB ولم يصل SQLite بعد */
+    return idbOpen().then(function(){ return Promise.all([_allRaw('msgs'), _allRaw('convs'), _allRaw('kv')]); })
+      .then(function(old){ return old; }, function(){ return null; })
+      .then(function(old){
+        try{ if(IDB){ IDB.close(); IDB=null; } }catch(e){}
+        if(!old) return;                                   // تعذّر فتحها ⇒ تُعاد المحاولة في الفتح التالي
+        var items=[];
+        old[0].forEach(function(o){ if(o && o.k!=null && !_M.msgs[o.k]){ _M.msgs[o.k]=o; items.push({k:_ck('msgs',o.k), v:o}); } });
+        old[1].forEach(function(o){ if(o && o.cid!=null && !_M.convs[o.cid]){ _M.convs[o.cid]=o; items.push({k:_ck('convs',o.cid), v:o}); } });
+        old[2].forEach(function(o){ if(o && o.k!=null && !_M.kv[o.k]){ _M.kv[o.k]=o; items.push({k:_ck('kv',o.k), v:o}); } });
+        return _cPutChunks(S,items).then(function(){ try{ localStorage.setItem(_CFLAG,'1'); }catch(e){} });
+      });
+  });
+}
+function idbReady(){
+  if(_ready) return _ready;
+  var st=window.__mlStore;
+  if(!st || !st.whenReady){ _ready=_idbReadyNative(); return _ready; }
+  _ready=Promise.race([st.whenReady(), new Promise(function(r){ setTimeout(r,25000); })]).then(function(){
+    var S=_cS(); if(!S) return _idbReadyNative();
+    return _cSqlLoad(S).then(function(){ STORE_MODE='sql'; STORE_ERR=''; return 'sql'; }, function(e){
+      STORE_MODE='mem'; STORE_ERR=(e&&e.message)||'sql';
+      try{ _notif('تنبيه','تعذّر تحميل المحادثات من قاعدة البيانات — الرسائل لهذه الجلسة فقط','warning'); }catch(x){}
+      return 'mem';
+    });
+  });
   return _ready;
 }
 function _persist(store,obj,del){
+  if(STORE_MODE==='sql'){
+    var S=_cS(); if(!S) return;
+    if(del) S.kvDelMany([_ck(store,obj)]); else S.kvPutMany([{k:_ck(store,_keyOf(store,obj)), v:obj}]);
+    return;
+  }
   if(STORE_MODE!=='idb') return;
   try{ var s=_st(store,'readwrite'); if(del) s.delete(obj); else s.put(obj); }catch(e){}
 }
@@ -73437,7 +73710,14 @@ function idb(){
   });
   return _idbP;
 }
-function kvGet(k){
+/* 💾 في Electron: الكاش داخل SQLite (مفاتيح «\u0003promo|…») — خارجه IndexedDB كما كان */
+var PZK='\u0003promo|';
+function _pzS(){ var S=window.__mlStore; if(!S || !S.whenReady) return Promise.resolve(null); return S.whenReady().then(function(){ return S.sqlOn() ? S : null; }); }
+function kvGet(k){ return _pzS().then(function(S){ if(!S) return kvGet_idb(k); return S.kvGet(PZK+k).then(function(v){ return v==null ? undefined : v; }); }); }
+function kvSet(k,v){ _mem[k]=v; return _pzS().then(function(S){ if(!S) return kvSet_idb(k,v); return S.kvPutMany([{k:PZK+k, v:v}]).then(function(){}); }); }
+function kvDel(k){ delete _mem[k]; return _pzS().then(function(S){ if(!S) return kvDel_idb(k); return S.kvDelMany([PZK+k]).then(function(){}); }); }
+function kvKeys(){ return _pzS().then(function(S){ if(!S) return kvKeys_idb(); return S.kvKeys(PZK).then(function(ks){ return (ks||[]).map(function(x){ return String(x).slice(PZK.length); }); }); }); }
+function kvGet_idb(k){
   return idb().then(function(db){
     if(!db) return _mem[k];
     return new Promise(function(res){
@@ -73447,7 +73727,7 @@ function kvGet(k){
     });
   });
 }
-function kvSet(k,v){
+function kvSet_idb(k,v){
   _mem[k]=v;
   return idb().then(function(db){
     if(!db) return;
@@ -73458,7 +73738,7 @@ function kvSet(k,v){
     });
   });
 }
-function kvDel(k){
+function kvDel_idb(k){
   delete _mem[k];
   return idb().then(function(db){
     if(!db) return;
@@ -73469,7 +73749,7 @@ function kvDel(k){
     });
   });
 }
-function kvKeys(){
+function kvKeys_idb(){
   return idb().then(function(db){
     if(!db) return Object.keys(_mem);
     return new Promise(function(res){
@@ -74991,12 +75271,46 @@ var LXP='u_', RX_UID=/^[A-Za-z0-9_-]{1,128}$/, RX_JPG=/^data:image\/jpeg;base64,
 var LQUICK_G=['أهلاً بك، كيف يمكننا مساعدتك؟','نعم، التحليل متوفر لدينا ✅','يمكنك الطلب من التطبيق مباشرة وسيصلك الساحب 🛵','يرجى الصيام 8–12 ساعة قبل التحليل','شكراً لتواصلك معنا 🌷'];
 var LXI={ _db:null, mem:{}, memK:[],
   open:function(){ var s=this; if(s._db) return Promise.resolve(s._db); return new Promise(function(res,rej){ var q=indexedDB.open('mls-lximg',1); q.onupgradeneeded=function(){ q.result.createObjectStore('i',{keyPath:'id'}); }; q.onsuccess=function(){ s._db=q.result; res(s._db); }; q.onerror=function(){ rej(q.error); }; }); },
+  _getIdb:function(id){ var s=this;
+    return s.open().then(function(d){ return new Promise(function(res){ try{ var r=d.transaction('i','readonly').objectStore('i').get(id); r.onsuccess=function(){ res(r.result&&typeof r.result.d==='string'?r.result.d:''); }; r.onerror=function(){ res(''); }; }catch(e){ res(''); } }); }).catch(function(){ return ''; }); },
+  _putIdb:function(id, data){ var s=this;
+    return s.open().then(function(d){ return new Promise(function(res,rej){ var t=d.transaction('i','readwrite'); t.objectStore('i').put({id:id, d:data, sid:M.sid, ts:Date.now()}); t.oncomplete=function(){ res(); }; t.onerror=t.onabort=function(){ rej(t.error); }; }); }); },
+  /* 💾 في Electron: الصور داخل SQLite (مفاتيح «\u0003lximg|<id>») — مع نقل لمرة واحدة من IndexedDB */
+  _mig:null, K:'\u0003lximg|',
+  sql:function(){ var s=this, S=window.__mlStore;
+    if(!S || !S.whenReady) return Promise.resolve(null);
+    return S.whenReady().then(function(){
+      if(!S.sqlOn()) return null;
+      if(!s._mig){
+        var done=false; try{ done=localStorage.getItem('medlab_lximg_sqlite')==='1'; }catch(e){}
+        s._mig = done ? Promise.resolve(true) : s.open().then(function(d){ return new Promise(function(res){ try{ var r=d.transaction('i','readonly').objectStore('i').getAll(); r.onsuccess=function(){ res(r.result||[]); }; r.onerror=function(){ res(null); }; }catch(e){ res(null); } }); }, function(){ return null; })
+          .then(function(all){
+            if(!all) { s._mig=null; return false; }
+            var items=all.filter(function(x){ return x && x.id!=null && typeof x.d==='string'; }).map(function(x){ return {k:s.K+x.id, v:x}; }), i=0;
+            function next(){ if(i>=items.length) return Promise.resolve(true); var part=items.slice(i,i+10); i+=10; return S.kvPutMany(part).then(function(ok){ return ok ? next() : false; }); }
+            return next().then(function(ok){
+              if(ok){ try{ localStorage.setItem('medlab_lximg_sqlite','1'); }catch(e){} try{ if(s._db){ s._db.close(); s._db=null; } }catch(e){} }
+              else s._mig=null;
+              return ok;
+            });
+          });
+      }
+      return s._mig.then(function(ok){ return {S:S, migrated:!!ok}; });
+    });
+  },
   get:function(id){ var s=this; if(s.mem[id]) return Promise.resolve(s.mem[id]);
-    return s.open().then(function(d){ return new Promise(function(res){ try{ var r=d.transaction('i','readonly').objectStore('i').get(id); r.onsuccess=function(){ var v=r.result&&typeof r.result.d==='string'?r.result.d:''; if(v){ s.mem[id]=v; s.memK.push(id); if(s.memK.length>40) delete s.mem[s.memK.shift()]; } res(v); }; r.onerror=function(){ res(''); }; }catch(e){ res(''); } }); }).catch(function(){ return ''; }); },
+    return s.sql().then(function(x){
+      if(!x) return s._getIdb(id);
+      return x.S.kvGet(s.K+id).then(function(r){ var v=r&&typeof r.d==='string'?r.d:''; return (v || x.migrated) ? v : s._getIdb(id); });
+    }).then(function(v){ if(v){ s.mem[id]=v; s.memK.push(id); if(s.memK.length>40) delete s.mem[s.memK.shift()]; } return v||''; }).catch(function(){ return ''; }); },
   put:function(id, data){ var s=this;
-    return s.open().then(function(d){ return new Promise(function(res,rej){ var t=d.transaction('i','readwrite'); t.objectStore('i').put({id:id, d:data, sid:M.sid, ts:Date.now()}); t.oncomplete=function(){ res(); }; t.onerror=t.onabort=function(){ rej(t.error); }; }); })
-      .then(function(){ delete s.mem[id]; return s.get(id); }).then(function(back){ if(back!==data) throw new Error('img not saved'); return true; }); }
+    return s.sql().then(function(x){
+      if(!x) return s._putIdb(id, data);
+      return x.S.kvPutMany([{k:s.K+id, v:{id:id, d:data, sid:M.sid, ts:Date.now()}}]).then(function(ok){ if(!ok) throw new Error('img not saved'); });
+    }).then(function(){ delete s.mem[id]; return s.get(id); }).then(function(back){ if(back!==data) throw new Error('img not saved'); return true; }); }
 };
+/* نقل صور IndexedDB إلى SQLite بعد فتح البرنامج (مرة واحدة) */
+setTimeout(function(){ try{ LXI.sql(); }catch(e){} }, 20000);
 /* تأكيد أن الرسالة محفوظة فعلاً على الحاسبة (المخزن المحلي قد يمتلئ) قبل حذفها من الخادم */
 function lxSaved(tid, id){ var c=getChats()[tid]; return !!(c && (c.ms||[]).some(function(x){ return x.id===id; })); }
 function onLx(uid, th){
@@ -91141,7 +91455,7 @@ body .resize-handle-s{ cursor:s-resize !important; }
 /* ══════════════════════════════════════════════════════════════
    🎬 حركات انتقال الأقسام — خفيفة (Web Animations API · transform/opacity/clip-path فقط)
    • الطلبات / إدخال النتائج  ⇒ «ستارة» تنزل من الأعلى مع خط مضيء عند حافتها.
-   • قائمة المرضى / مريض جديد ⇒ الشاشة تنطلق من نفس الزر المضغوط (وإن فُتحت برمجياً ⇒ ستارة).
+   • قائمة المرضى / مريض جديد ⇒ بلا حركة (تظهر مباشرة).
    • لا تلمس nav() ولا openModal(): تراقب كلاس العنصر فقط (MutationObserver على 4 عناصر).
    • لا شيء يبقى بعد انتهاء الحركة (fill:none) — والحركة تُلغى تلقائياً عند الانتقال السريع.
    • تتوقف تلقائياً مع «تقليل الحركة» في النظام، أو: localStorage.ml_sx_off = '1'
@@ -91231,12 +91545,7 @@ body .resize-handle-s{ cursor:s-resize !important; }
   function init(){
     watch('sec-requests','active', function(el){ play(el,'curtain'); });
     watch('sec-results', 'active', function(el){ play(el,'curtain'); });
-    watch('sec-patients','active', function(el){ play(el,'grow'); });
-    watch('m-wizard','open', function(ov){
-      var m=document.getElementById('m-wizard-inner') || ov.querySelector('.modal');
-      if(!disabled() && typeof ov.animate==='function'){ try{ ov.animate([{opacity:0},{opacity:1}], {duration:LITE?120:220, easing:'ease-out'}); }catch(e){} }
-      play(m,'grow',true);
-    });
+    /* قائمة المرضى ومريض جديد: تظهر مباشرة بلا حركة (أُزيلت حركة الانطلاق من الزر بطلب المستخدم) */
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();
@@ -91439,5 +91748,512 @@ body .resize-handle-s{ cursor:s-resize !important; }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', addBtn); else addBtn();
 
   window.MLSelfReg={ open:open, _perms:perms, _weak:weakPin };
+})();
+</script>
+
+<script id="subusers-module">
+/* ══════════════════════════════════════════════════════════════════════
+   👥 مستخدمو الحساب — تنشئهم الحاسبة رقم 1 فقط وتحدد صلاحيات كل واحد
+   ──────────────────────────────────────────────────────────────────────
+   • الحاسبة رقم 1 = المدير: تدخل مباشرة بكل صلاحيات الحساب، ومنها فقط
+     تُنشأ المستخدمون وتُعدَّل صلاحياتهم وكلمات مرورهم ورمز مسح السجل.
+   • أي حاسبة أخرى (والهاتف): بعد الدخول بحساب المختبر كالمعتاد، إذا كان
+     للحساب مستخدمون ⇒ تُطلب بيانات المستخدم، ويعمل البرنامج بصلاحياته فقط.
+     يبقى مسجّلاً حتى يضغط «تبديل المستخدم» أو يعطّله المدير/يغيّر كلمة مروره.
+   • لا مستخدمين ⇒ كل شيء كما كان تماماً.
+   • الصلاحية الفعلية = صلاحية الحساب (من لوحة الأدمن) و صلاحية المستخدم معاً.
+   • الوصول للحاسبات: سحابة (msync/<الحساب>/subusers — تبقى محفوظة فتصل
+     لحاسبة جديدة حتى لو رقم 1 مطفأة) + الشبكة المحلية LAN من رقم 1 فقط.
+     الأحدث يفوز، ولا تُقبل القائمة إلا من الحاسبة رقم 1.
+   • كلمات المرور لا تُحفظ إطلاقاً — بصمة SHA-256 مملّحة ومكرّرة فقط.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+'use strict';
+var SESS_KEY='medlab_subuser_session', ITER=1000;
+var $=function(id){ return document.getElementById(id); };
+function esc(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function notif(t,m,k){ try{ showNotif(t,m,k||'info'); }catch(e){} }
+function acct(){ try{ var s=getSession(); return (s&&s.username)?String(s.username):''; }catch(e){ return ''; } }
+function devNo(){ try{ var n=parseInt(localStorage.getItem('lis_device_no')||'0',10); return (n>=1&&n<=99)?n:0; }catch(e){ return 0; } }
+function isPC1(){ return devNo()===1; }
+function docKey(){ var a=acct(); return a ? ('mlab2_'+a+'_subusersDoc') : ''; }
+function now(){ return Date.now(); }
+function rid(){ return 'u'+now().toString(36)+Math.random().toString(36).slice(2,7); }
+function salt(){ var a=new Uint8Array(12); try{ crypto.getRandomValues(a); }catch(e){ for(var i=0;i<12;i++) a[i]=Math.floor(Math.random()*256); } return Array.from(a).map(function(b){ return b.toString(16).padStart(2,'0'); }).join(''); }
+/* بصمة كلمة المرور: تعمل بلا crypto.subtle (الهاتف عبر http) */
+function hashPw(pw, s){ var h=String(s)+'|'+String(pw); for(var i=0;i<ITER;i++) h=_sha256hex(s+h); return h; }
+function normName(n){ return String(n||'').trim().replace(/\s+/g,' ').toLowerCase(); }
+
+/* ── الوثيقة (في إعدادات الحساب ⇒ SQLite) ── */
+var _raw=null, _doc=null;
+function loadDoc(){
+  var k=docKey(); if(!k) return null;
+  var r=null; try{ r=localStorage.getItem(k); }catch(e){}
+  if(r===_raw) return _doc;
+  _raw=r; _doc=null;
+  if(r){ try{ var d=JSON.parse(r); if(d && Array.isArray(d.users)) _doc=d; }catch(e){} }
+  return _doc;
+}
+function storeDoc(d){
+  var k=docKey(); if(!k) return false;
+  try{ localStorage.setItem(k, JSON.stringify(d)); }catch(e){ return false; }
+  loadDoc(); return true;
+}
+function liveUsers(d){ return ((d||{}).users||[]).filter(function(u){ return u && !u.deleted; }); }
+function hasUsers(){ return liveUsers(loadDoc()).length>0; }
+function needsGate(){ return !!acct() && !isPC1() && hasUsers(); }
+
+/* ── جلسة المستخدم على هذه الحاسبة ── */
+function getSess(){ try{ var s=JSON.parse(localStorage.getItem(SESS_KEY)||'null'); return (s && s.acct===acct()) ? s : null; }catch(e){ return null; } }
+function setSess(u){ try{ localStorage.setItem(SESS_KEY, JSON.stringify({acct:acct(), id:u.id, pwv:u.pwv||1, at:now()})); }catch(e){} }
+function clearSess(){ try{ localStorage.removeItem(SESS_KEY); }catch(e){} }
+/* المستخدم الحالي الصالح (أو null) — المعطَّل/المحذوف/من تغيّرت كلمة مروره يخرج تلقائياً */
+function curUser(){
+  if(!needsGate()) return null;
+  var s=getSess(); if(!s) return null;
+  var u=liveUsers(loadDoc()).find(function(x){ return x.id===s.id; });
+  if(!u || u.disabled || (u.pwv||1)!==(s.pwv||1)) return null;
+  return u;
+}
+
+/* ═══ الصلاحيات: صلاحية الحساب ∧ صلاحية المستخدم ═══ */
+function installPerm(){
+  if(window.__subPermWrapped || typeof window.hasPermission!=='function') return;
+  var orig=window.hasPermission; window.__subPermWrapped=true;
+  window.hasPermission=function(key){
+    var r=orig.apply(this, arguments);
+    if(!r) return r;
+    if(!needsGate()) return r;
+    var u=curUser(); if(!u) return false;              // بانتظار دخول المستخدم ⇒ لا شيء
+    var p=u.perms||{};
+    try{ return _permValue(p, key); }catch(e){ return p[key]===true; }
+  };
+  /* بعد تطبيق صلاحيات الشريط: إظهار قائمة المستخدمين في رقم 1 */
+  if(typeof window.startApp==='function' && !window.__subStartWrapped){
+    var os=window.startApp; window.__subStartWrapped=true;
+    window.startApp=function(){ var r=os.apply(this, arguments); try{ _sig=''; tick(); }catch(e){} return r; };
+  }
+  if(typeof window.applyPermissionsToSidebar==='function' && !window.__subSbWrapped){
+    var oa=window.applyPermissionsToSidebar; window.__subSbWrapped=true;
+    window.applyPermissionsToSidebar=function(){ var r=oa.apply(this, arguments); try{ menu(); }catch(e){} return r; };
+  }
+}
+
+/* ═══ منع غير المدير من تغيير رقم الحاسبة (حتى لا يصبح «رقم 1») ═══ */
+function blockMsg(){ notif('🔒 للمدير فقط','تغيير رقم الحاسبة يتم من الحاسبة رقم 1 (المدير) فقط','error'); }
+function guardNumbers(){
+  if(window.__subNoGuard) return;
+  var M=window.MSync; if(!M || typeof M.setNumber!=='function') return;
+  window.__subNoGuard=true;
+  ['setNumber','renumber','_renoSave','_uiSetNo'].forEach(function(f){
+    var o=M[f]; if(typeof o!=='function') return;
+    M[f]=function(){ if(curUser()){ blockMsg(); return Promise.resolve({ok:false, msg:'تغيير رقم الحاسبة للمدير فقط'}); } return o.apply(this, arguments); };
+  });
+  ['lisSaveDevNo','_setDevNo'].forEach(function(f){
+    var o=window[f]; if(typeof o!=='function') return;
+    window[f]=function(){ if(curUser()){ blockMsg(); return false; } return o.apply(this, arguments); };
+  });
+}
+
+/* ═══ قفل «مسح سجل العمليات» برمز المدير ═══ */
+function askPin(title, sub){
+  return new Promise(function(res){
+    var old=$('subu-pin'); if(old) old.remove();
+    var m=document.createElement('div'); m.id='subu-pin'; m.className='moverlay';
+    m.style.cssText='position:fixed;inset:0;z-index:2147483100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);direction:rtl';
+    m.innerHTML='<div class="modal" style="max-width:360px;width:92%"><div class="mhdr"><div class="mtitle">'+esc(title)+'</div><button class="mclose" data-x>×</button></div>'
+      +'<div class="mbody"><div style="font-size:12px;color:var(--text2);margin-bottom:10px">'+esc(sub||'')+'</div>'
+      +'<input class="fc" id="subu-pin-inp" type="password" inputmode="numeric" autocomplete="off" style="text-align:center;font-size:20px;letter-spacing:6px" placeholder="••••"></div>'
+      +'<div class="mftr"><button class="btn btn-s" data-x>إلغاء</button><button class="btn btn-p" id="subu-pin-ok">تأكيد</button></div></div>';
+    document.body.appendChild(m);
+    var inp=$('subu-pin-inp'), done=false;
+    function fin(v){ if(done) return; done=true; m.remove(); res(v); }
+    m.querySelectorAll('[data-x]').forEach(function(b){ b.onclick=function(){ fin(null); }; });
+    $('subu-pin-ok').onclick=function(){ fin(inp.value); };
+    inp.onkeydown=function(e){ if(e.key==='Enter') fin(inp.value); if(e.key==='Escape') fin(null); };
+    setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 30);
+  });
+}
+function guardLogClear(){
+  var A=window.AuditLog; if(!A || window.__subLogGuard || typeof A.clearAll!=='function') return;
+  window.__subLogGuard=true;
+  var orig=A.clearAll;
+  A.clearAll=function(){
+    var self=this, args=arguments, d=loadDoc(), pin=d && d.pin;
+    if(pin && pin.h){
+      return askPin('🔒 مسح سجل العمليات','مقفل برمز يضعه المدير — أدخل الرمز').then(function(v){
+        if(v==null) return;
+        if(hashPw(v, pin.s)!==pin.h){ notif('🚫 رمز غير صحيح','لم يُمسح السجل','error'); return; }
+        return orig.apply(self, args);
+      });
+    }
+    if(isPC1()) return orig.apply(self, args);                     // المدير قبل تحديد رمز
+    notif('🔒 مقفل','مسح السجل يحتاج رمزاً يحدده المدير من الحاسبة رقم 1 («مستخدمو الحساب»)','warning');
+  };
+}
+
+/* ═══ شاشة دخول المستخدم ═══ */
+var _gateKeys=null;
+function labName(){ try{ return (settings && (settings.name||settings.labName)) || ''; }catch(e){ return ''; } }
+function showGate(){
+  var g=$('subu-gate');
+  if(!g){
+    g=document.createElement('div'); g.id='subu-gate';
+    g.style.cssText='position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%,#10233f,#060b16 70%);direction:rtl;font-family:Cairo,sans-serif;padding:16px';
+    g.innerHTML='<div style="width:100%;max-width:380px;background:rgba(255,255,255,0.04);border:1px solid rgba(0,212,255,0.25);border-radius:18px;padding:26px 22px;box-shadow:0 10px 40px rgba(0,0,0,0.5)">'
+      +'<div style="text-align:center;font-size:42px;margin-bottom:6px">👤</div>'
+      +'<div style="text-align:center;font-size:18px;font-weight:900;color:#fff" id="subu-g-lab"></div>'
+      +'<div style="text-align:center;font-size:12px;color:rgba(255,255,255,0.6);margin:4px 0 18px" id="subu-g-sub"></div>'
+      +'<label style="font-size:12px;color:rgba(255,255,255,0.75)">اسم المستخدم</label>'
+      +'<input id="subu-g-user" class="fc" autocomplete="off" style="margin:4px 0 12px;width:100%">'
+      +'<label style="font-size:12px;color:rgba(255,255,255,0.75)">كلمة المرور</label>'
+      +'<input id="subu-g-pass" class="fc" type="password" autocomplete="off" style="margin:4px 0 6px;width:100%">'
+      +'<div id="subu-g-err" style="display:none;color:#ff5470;font-size:12px;margin:6px 0"></div>'
+      +'<button id="subu-g-btn" class="btn btn-p" style="width:100%;margin-top:10px;padding:11px;font-size:15px;font-weight:800">🔐 دخول</button>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;font-size:11px;color:rgba(255,255,255,0.5)">'
+      +'<span id="subu-g-pc"></span><a href="#" id="subu-g-out" style="color:rgba(255,255,255,0.6)">خروج من الحساب</a></div></div>';
+    document.body.appendChild(g);
+    $('subu-g-btn').onclick=gateLogin;
+    $('subu-g-pass').onkeydown=function(e){ if(e.key==='Enter') gateLogin(); };
+    $('subu-g-user').onkeydown=function(e){ if(e.key==='Enter') $('subu-g-pass').focus(); };
+    $('subu-g-out').onclick=function(e){ e.preventDefault(); try{ doLogout(); }catch(x){} };
+    /* لا تصل ضربات المفاتيح للبرنامج خلف الشاشة */
+    _gateKeys=function(e){ var g2=$('subu-gate'); if(!g2 || g2.style.display==='none') return; if(g2.contains(e.target)) return; e.stopPropagation(); e.preventDefault(); };
+    window.addEventListener('keydown', _gateKeys, true);
+    window.addEventListener('keypress', _gateKeys, true);
+  }
+  $('subu-g-lab').textContent='🏥 '+(labName()||'MedLab Pro');
+  $('subu-g-sub').textContent='حساب «'+acct()+'» — أدخل بيانات المستخدم';
+  $('subu-g-pc').textContent=devNo()?('🖥️ الحاسبة رقم '+devNo()):'';
+  if(g.style.display==='none' || !g.dataset.shown){
+    g.style.display='flex'; g.dataset.shown='1';
+    $('subu-g-err').style.display='none'; $('subu-g-pass').value='';
+    setTimeout(function(){ try{ ($('subu-g-user').value?$('subu-g-pass'):$('subu-g-user')).focus(); }catch(e){} }, 60);
+  }
+}
+function hideGate(){ var g=$('subu-gate'); if(g){ g.style.display='none'; g.dataset.shown=''; } }
+function gateErr(t){ var e=$('subu-g-err'); if(e){ e.textContent=t; e.style.display='block'; } }
+function gateLogin(){
+  var name=normName($('subu-g-user').value), pw=$('subu-g-pass').value||'';
+  if(!name || !pw){ gateErr('❌ أدخل اسم المستخدم وكلمة المرور'); return; }
+  var u=liveUsers(loadDoc()).find(function(x){ return normName(x.name)===name; });
+  if(!u){ gateErr('❌ اسم المستخدم غير موجود'); return; }
+  if(hashPw(pw, u.s)!==u.h){ gateErr('❌ كلمة المرور غير صحيحة'); return; }
+  if(u.disabled){ gateErr('🚫 هذا المستخدم معطّل — راجع المدير'); return; }
+  setSess(u); $('subu-g-pass').value='';
+  _sig=''; tick();
+  try{ nav('dashboard'); }catch(e){}
+  notif('مرحباً','👤 '+u.name,'success');
+}
+function switchUser(){
+  if(!confirm('تبديل المستخدم على هذه الحاسبة؟')) return;
+  clearSess(); _sig=''; tick();
+}
+
+/* ── اسم المستخدم في الشريط الجانبي ── */
+function label(){
+  var el=$('sb-logged-user'); if(!el) return;
+  var a=acct(); if(!a) return;
+  var u=curUser();
+  if(u){
+    var want='👤 '+esc(a)+' · <b>'+esc(u.name)+'</b> <a href="#" onclick="event.preventDefault();SubUsers.switchUser()" style="color:var(--primary);font-size:10px">(تبديل)</a>';
+    if(el.innerHTML!==want) el.innerHTML=want;
+  }
+  else if(el.dataset.subu){ el.textContent='👤 '+a; }
+  el.dataset.subu=u?'1':'';
+}
+
+/* ── قائمة «مستخدمو الحساب» في الشريط (رقم 1 فقط) ── */
+function menu(){
+  var anchor=document.querySelector('.ni[data-perm="settings"]');
+  var it=$('nav-subusers');
+  if(!it && anchor && anchor.parentNode){
+    it=document.createElement('div'); it.className='ni'; it.id='nav-subusers';
+    it.innerHTML='<span class="ni-ic">👥</span>مستخدمو الحساب';
+    it.onclick=function(){ SubUsers.open(); };
+    anchor.parentNode.insertBefore(it, anchor.nextSibling);
+  }
+  if(!it) return;
+  var show=!!acct() && isPC1();
+  it.style.display=show?'':'none';
+  if(show){ var grp=it.closest('.nav-grp'); if(grp) grp.style.display=''; }
+}
+
+/* ═══ الحلقة: يُعاد التقييم عند أي تغيير (رقم الحاسبة، وصول القائمة، تعطيل…) ═══ */
+var _sig='';
+function loggedIn(){ try{ var ls=$('login-screen'); return !!acct() && !(ls && !ls.classList.contains('hidden')); }catch(e){ return false; } }
+function tick(){
+  installPerm(); guardNumbers(); guardLogClear();
+  if(!loggedIn()){ hideGate(); return; }
+  var d=loadDoc(), u=curUser(), g=needsGate();
+  var sig=[acct(), devNo(), g?1:0, u?u.id:'', d?d.v:0].join('|');
+  if(g && !u) showGate(); else hideGate();
+  if(u){ try{ label(); }catch(e){} }
+  if(sig===_sig) return;
+  _sig=sig;
+  try{ if(typeof applyPermissionsToSidebar==='function') applyPermissionsToSidebar(); }catch(e){}
+  try{ menu(); }catch(e){}
+  try{ label(); }catch(e){}
+  try{ cloudAttach(); }catch(e){}
+  /* القسم الحالي لم يعد مسموحاً ⇒ لوحة التحكم */
+  try{
+    if(g && u){
+      var sec=document.querySelector('[id^="sec-"].active');
+      var p=sec ? sec.id.slice(4) : '';
+      var nv=p && document.querySelector('.ni[data-perm][onclick*="nav(\''+p+'\')"]');
+      if(nv && nv.style.display==='none') nav('dashboard');
+    }
+  }catch(e){}
+}
+setInterval(tick, 1500);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) tick(); });
+
+/* ═══ النقل: سحابة (دائمة) + LAN (من رقم 1) ═══ */
+function bumpAndSave(d){ d.v=Math.max(now(), (d.v||0)+1); d.by=devNo(); storeDoc(d); pushAll(); _sig=''; tick(); }
+function adopt(inc, src){
+  if(!inc || !Array.isArray(inc.users) || !(inc.v>0)) return false;
+  var cur=loadDoc();
+  if(cur && (cur.v||0)>=inc.v) return false;
+  storeDoc(inc); _sig=''; tick();
+  try{ if($('m-subusers')) render(); }catch(e){}
+  console.log('[SubUsers] list updated from', src, 'v', inc.v);
+  return true;
+}
+function pushAll(){ cloudPush(); lanSend(); }
+
+/* سحابة: msync/<الحساب>/subusers */
+var _cRef=null, _cAcct='';
+function encA(a){ return String(a==null?'':a).replace(/[.#$\[\]\/]/g,'_'); }
+function cloudRefFor(a){ try{ if(typeof fbDb==='undefined' || !fbDb) return null; return fbDb.ref('msync/'+encA(a)+'/subusers'); }catch(e){ return null; } }
+function cloudAttach(){
+  var a=acct(); if(!a || _cAcct===a) return;
+  if(typeof loadFirebase!=='function') return;
+  _cAcct=a;
+  loadFirebase().then(function(ok){
+    if(!ok || acct()!==a) { if(acct()===a) _cAcct=''; return; }
+    var r=cloudRefFor(a); if(!r){ _cAcct=''; return; }
+    try{ if(_cRef) _cRef.off(); }catch(e){}
+    _cRef=r;
+    r.on('value', function(snap){
+      var v=snap && snap.val(); var inc=null;
+      if(v && v.doc){ try{ inc=JSON.parse(v.doc); }catch(e){} }
+      if(inc && acct()===a){ adopt(inc,'cloud'); }
+      var cur=loadDoc();
+      if(isPC1() && cur && (!inc || (cur.v||0)>(inc.v||0))) cloudPush();   // رقم 1 يرفع الأحدث
+    }, function(err){ console.warn('[SubUsers] cloud read', err && err.message); _cAcct=''; });
+  }).catch(function(){ _cAcct=''; });
+}
+var _cpT=null;
+function cloudPush(){
+  if(!isPC1()) return;
+  clearTimeout(_cpT);
+  _cpT=setTimeout(function(){
+    var d=loadDoc(), r=cloudRefFor(acct()); if(!d || !r) return;
+    r.set({doc:JSON.stringify(d), v:d.v, at:now()}).then(function(){ _lastCloud=now(); try{ if($('m-subusers')) render(); }catch(e){} })
+      .catch(function(e){ console.warn('[SubUsers] cloud write', e && e.message); });
+  }, 400);
+}
+var _lastCloud=0;
+
+/* LAN */
+function lanOn(){ return (typeof _lanMode!=='undefined') && !!_lanMode && (typeof _lanSendRaw==='function'); }
+function lanDev(){ return (typeof _lanDeviceId==='string') ? _lanDeviceId : ''; }
+function lanSend(){
+  if(!isPC1() || !lanOn()) return;
+  var d=loadDoc(); if(!d) return;
+  try{ _lanSendRaw({type:'subu:doc', from:lanDev(), acct:acct(), dn:1, doc:d, ts:now()}); }catch(e){}
+}
+function lanAsk(){ if(isPC1() || !lanOn() || !acct()) return; try{ _lanSendRaw({type:'subu:ask', from:lanDev(), acct:acct(), ts:now()}); }catch(e){} }
+function onLan(msg){
+  if(!msg || msg.from===lanDev()) return;
+  if(typeof _lanMode!=='undefined' && _lanMode==='server' && !msg._relayed){ msg._relayed=1; try{ _lanSendRaw(msg); }catch(e){} }
+  if(!acct() || msg.acct!==acct()) return;
+  if(msg.type==='subu:doc' && msg.dn===1){
+    if(isPC1() && loadDoc()) return;                 // رقم 1 هو المصدر
+    adopt(msg.doc,'lan');
+  } else if(msg.type==='subu:ask'){ lanSend(); }
+}
+function hookLan(){
+  if(window.__subLanHooked) return;
+  if(typeof window._lanHandleMessage!=='function') return;
+  window.__subLanHooked=true;
+  var prev=window._lanHandleMessage;
+  window._lanHandleMessage=function(raw){
+    try{
+      if(typeof raw==='string' && raw.length<3000000){
+        var head=raw.length>80 ? raw.substring(0,80) : raw;
+        if(head.indexOf('"type":"subu:')!==-1){ onLan(JSON.parse(raw)); return; }
+      }
+    }catch(e){ return; }
+    return prev.apply(this, arguments);
+  };
+  if(typeof window._lanAnnounce==='function'){
+    var pa=window._lanAnnounce;
+    window._lanAnnounce=function(){ var r; try{ r=pa.apply(this, arguments); }catch(e){} setTimeout(function(){ lanSend(); lanAsk(); }, 3000); return r; };
+  }
+  setInterval(function(){ try{ lanSend(); }catch(e){} }, 300000);
+}
+hookLan();
+
+/* ═══ واجهة المدير (الحاسبة رقم 1) ═══ */
+function mgr(){ if(!isPC1()){ notif('🔒 للمدير فقط','إدارة المستخدمين من الحاسبة رقم 1 فقط','error'); return false; } return true; }
+function docOrNew(){ var d=loadDoc(); return d ? JSON.parse(JSON.stringify(d)) : {v:0, users:[], pin:null}; }
+function permCount(u){ var on=0; try{ PERMISSIONS_DEF.forEach(function(p){ if(_permValue(u.perms||{}, p.key)) on++; }); return on+' / '+PERMISSIONS_DEF.length; }catch(e){ return ''; } }
+function fmtT(t){ try{ return t ? new Date(t).toLocaleString('en-GB') : '—'; }catch(e){ return '—'; } }
+function open(){
+  if(!mgr()) return;
+  var old=$('m-subusers'); if(old) old.remove();
+  var m=document.createElement('div'); m.id='m-subusers'; m.className='moverlay';
+  m.style.cssText='position:fixed;inset:0;z-index:9300;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.65);direction:rtl';
+  m.innerHTML='<div class="modal" style="max-width:760px;width:100%;max-height:92vh;display:flex;flex-direction:column">'
+    +'<div class="mhdr" style="flex-shrink:0"><div class="mtitle">👥 مستخدمو الحساب «'+esc(acct())+'»</div><button class="mclose" onclick="document.getElementById(\'m-subusers\').remove()">×</button></div>'
+    +'<div class="mbody" id="subu-body" style="overflow-y:auto;flex:1"></div>'
+    +'<div class="mftr" style="flex-shrink:0"><button class="btn btn-s" onclick="document.getElementById(\'m-subusers\').remove()">إغلاق</button></div></div>';
+  m.addEventListener('click', function(e){ if(e.target===m) m.remove(); });
+  document.body.appendChild(m);
+  render();
+}
+function render(){
+  var b=$('subu-body'); if(!b) return;
+  var d=loadDoc()||{users:[]}, us=liveUsers(d);
+  var h='<div style="background:rgba(0,212,255,0.06);border:1px solid rgba(0,212,255,0.2);border-radius:10px;padding:10px 12px;font-size:11.5px;color:var(--text2);line-height:1.8;margin-bottom:12px">'
+    +'💡 هذه الحاسبة (رقم 1) هي المدير وتدخل مباشرة بكل الصلاحيات. عند وجود مستخدم واحد على الأقل، أي حاسبة أخرى أو هاتف يطلب '
+    +'<b>اسم المستخدم وكلمة المرور</b> بعد دخول الحساب، ويعمل بصلاحيات ذلك المستخدم فقط. بلا مستخدمين ⇒ الدخول كما هو الآن.</div>';
+  /* إضافة */
+  var roles=''; try{ roles=Object.keys(ROLES).map(function(k){ var L={results_only:'🧪 إدخال نتائج',receptionist:'📋 استقبال',lab_tech:'🔬 تقني مختبر',print_only:'🖨️ طباعة فقط',store_manager:'🛵 مدير المتجر',store_staff:'📥 موظف المتجر',accountant:'💼 محاسب',full_admin:'👑 كل الصلاحيات'}; return '<option value="'+k+'">'+(L[k]||k)+'</option>'; }).join(''); }catch(e){}
+  h+='<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:14px">'
+    +'<div style="font-size:13px;font-weight:900;color:var(--primary);margin-bottom:8px">➕ مستخدم جديد</div>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +'<input class="fc" id="subu-n" placeholder="اسم المستخدم" style="flex:1;min-width:140px">'
+    +'<input class="fc" id="subu-p" type="password" placeholder="كلمة المرور (4 أحرف على الأقل)" style="flex:1;min-width:160px">'
+    +'<select class="fc" id="subu-r" style="width:auto;min-width:150px">'+roles+'</select>'
+    +'<button class="btn btn-p" onclick="SubUsers._add()">إضافة</button></div></div>';
+  /* القائمة */
+  h+='<div style="font-size:13px;font-weight:900;margin-bottom:8px">المستخدمون ('+us.length+')</div>';
+  if(!us.length) h+='<div class="empty" style="padding:18px"><p>لا يوجد مستخدمون — الدخول على كل الحاسبات كما هو الآن</p></div>';
+  us.forEach(function(u){
+    h+='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;'+(u.disabled?'opacity:0.6':'')+'">'
+      +'<div style="flex:1;min-width:140px"><div style="font-weight:900">👤 '+esc(u.name)+(u.disabled?' <span class="bdg" style="background:rgba(255,34,68,0.15);color:var(--danger)">معطّل</span>':' <span class="bdg" style="background:rgba(0,245,147,0.12);color:var(--success)">مفعّل</span>')+'</div>'
+      +'<div style="font-size:11px;color:var(--text2)">الصلاحيات: '+permCount(u)+' · أُنشئ: '+esc(fmtT(u.createdAt))+'</div></div>'
+      +'<button class="btn btn-sm" onclick="SubUsers._perms(\''+u.id+'\')">🛡️ الصلاحيات</button>'
+      +'<button class="btn btn-sm" onclick="SubUsers._pw(\''+u.id+'\')">🔑 كلمة المرور</button>'
+      +'<button class="btn btn-sm" onclick="SubUsers._toggle(\''+u.id+'\')">'+(u.disabled?'▶️ تفعيل':'⏸️ تعطيل')+'</button>'
+      +'<button class="btn btn-sm btn-d" onclick="SubUsers._del(\''+u.id+'\')">🗑️ حذف</button></div>';
+  });
+  /* رمز مسح السجل */
+  h+='<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:14px">'
+    +'<div style="font-size:13px;font-weight:900;margin-bottom:6px">🔒 رمز مسح سجل العمليات</div>'
+    +'<div style="font-size:11.5px;color:var(--text2);margin-bottom:8px">'+(d.pin&&d.pin.h?'✅ محدد — مسح السجل في أي حاسبة يحتاج هذا الرمز':'غير محدد — مسح السجل مسموح هنا فقط (الحاسبة رقم 1)')+'</div>'
+    +'<button class="btn btn-sm" onclick="SubUsers._pin()">'+(d.pin&&d.pin.h?'تغيير الرمز':'تحديد رمز')+'</button>'
+    +(d.pin&&d.pin.h?' <button class="btn btn-sm btn-d" onclick="SubUsers._pinOff()">إلغاء الرمز</button>':'')+'</div>';
+  h+='<div style="font-size:11px;color:var(--text2);margin-top:12px">☁️ تصل التغييرات لبقية الحاسبات عبر السحابة والشبكة المحلية'+(_lastCloud?(' — آخر رفع: '+esc(fmtT(_lastCloud))):'')+'</div>';
+  b.innerHTML=h;
+}
+function _add(){
+  if(!mgr()) return;
+  var n=String($('subu-n').value||'').trim().replace(/\s+/g,' '), p=$('subu-p').value||'', r=$('subu-r').value;
+  if(n.length<2){ notif('تنبيه','اكتب اسم المستخدم','warning'); return; }
+  if(p.length<4){ notif('تنبيه','كلمة المرور 4 أحرف على الأقل','warning'); return; }
+  var d=docOrNew();
+  if(liveUsers(d).some(function(u){ return normName(u.name)===normName(n); })){ notif('تنبيه','يوجد مستخدم بهذا الاسم','warning'); return; }
+  var perms={}; try{ perms=_expandRole(ROLES[r]||{}); }catch(e){}
+  var s=salt();
+  d.users.push({id:rid(), name:n, s:s, h:hashPw(p,s), pwv:1, perms:perms, disabled:false, createdAt:now()});
+  bumpAndSave(d); render();
+  notif('✅ تم','أُضيف المستخدم «'+n+'»','success');
+}
+function findU(d,id){ return (d.users||[]).find(function(u){ return u.id===id && !u.deleted; }); }
+function _toggle(id){
+  if(!mgr()) return;
+  var d=docOrNew(), u=findU(d,id); if(!u) return;
+  u.disabled=!u.disabled; bumpAndSave(d); render();
+  notif('تم', u.disabled?'عُطّل «'+u.name+'» — يخرج من أي حاسبة فوراً':'فُعّل «'+u.name+'»', 'success');
+}
+function _del(id){
+  if(!mgr()) return;
+  var d=docOrNew(), u=findU(d,id); if(!u) return;
+  if(!confirm('حذف المستخدم «'+u.name+'»؟')) return;
+  u.deleted=true; u.disabled=true; delete u.h; delete u.s; delete u.perms; u.deletedAt=now();
+  bumpAndSave(d); render();
+  if(!liveUsers(d).length) notif('تم','لا يوجد مستخدمون الآن — الدخول على كل الحاسبات عاد كما كان','info');
+}
+function _pw(id){
+  if(!mgr()) return;
+  var d=docOrNew(), u=findU(d,id); if(!u) return;
+  askPin('🔑 كلمة مرور جديدة — '+u.name, 'يخرج المستخدم من أي حاسبة مسجّل فيها ويدخل بالكلمة الجديدة').then(function(p){
+    if(p==null) return;
+    if(String(p).length<4){ notif('تنبيه','كلمة المرور 4 أحرف على الأقل','warning'); return; }
+    var d2=docOrNew(), u2=findU(d2,id); if(!u2) return;
+    u2.s=salt(); u2.h=hashPw(p,u2.s); u2.pwv=(u2.pwv||1)+1;
+    bumpAndSave(d2); render(); notif('✅ تم','تغيّرت كلمة مرور «'+u2.name+'»','success');
+  });
+}
+function _pin(){
+  if(!mgr()) return;
+  askPin('🔒 رمز مسح سجل العمليات','4 إلى 8 أرقام').then(function(p){
+    if(p==null) return;
+    if(!/^\d{4,8}$/.test(String(p))){ notif('تنبيه','الرمز من 4 إلى 8 أرقام','warning'); return; }
+    var d=docOrNew(), s=salt(); d.pin={s:s, h:hashPw(p,s), at:now()};
+    bumpAndSave(d); render(); notif('✅ تم','حُدّد رمز مسح السجل','success');
+  });
+}
+function _pinOff(){
+  if(!mgr()) return;
+  if(!confirm('إلغاء رمز مسح السجل؟ (يصبح المسح مسموحاً من الحاسبة رقم 1 فقط)')) return;
+  var d=docOrNew(); d.pin=null; bumpAndSave(d); render();
+}
+/* محرّر الصلاحيات */
+var _pe=null;
+function _perms(id){
+  if(!mgr()) return;
+  var d=docOrNew(), u=findU(d,id); if(!u) return;
+  _pe={id:id, p:{}};
+  PERMISSIONS_DEF.forEach(function(x){ _pe.p[x.key]=_permValue(u.perms||{}, x.key); });
+  var old=$('m-subu-perm'); if(old) old.remove();
+  var m=document.createElement('div'); m.id='m-subu-perm'; m.className='moverlay';
+  m.style.cssText='position:fixed;inset:0;z-index:9400;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(0,0,0,0.65);direction:rtl';
+  var roleBtns=Object.keys(ROLES).map(function(k){ var L={results_only:'🧪 إدخال نتائج',receptionist:'📋 استقبال',lab_tech:'🔬 تقني مختبر',print_only:'🖨️ طباعة فقط',store_manager:'🛵 مدير المتجر',store_staff:'📥 موظف المتجر',accountant:'💼 محاسب',full_admin:'👑 كل الصلاحيات'}; return '<button class="btn btn-sm" onclick="SubUsers._role(\''+k+'\')">'+(L[k]||k)+'</button>'; }).join(' ');
+  m.innerHTML='<div class="modal" style="max-width:620px;width:100%;max-height:92vh;display:flex;flex-direction:column">'
+    +'<div class="mhdr" style="flex-shrink:0"><div class="mtitle">🛡️ صلاحيات: <span style="color:var(--primary)">'+esc(u.name)+'</span></div><button class="mclose" onclick="document.getElementById(\'m-subu-perm\').remove()">×</button></div>'
+    +'<div class="mbody" style="overflow-y:auto;flex:1"><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">'+roleBtns+'</div>'
+    +'<div style="display:flex;gap:6px;align-items:center;font-size:11px;color:var(--text2);margin-bottom:8px">المفعّل: <b id="subu-pc" style="color:var(--primary)"></b>'
+    +'<button class="btn btn-sm" onclick="SubUsers._all(true)">تفعيل الكل</button><button class="btn btn-sm" onclick="SubUsers._all(false)">إلغاء الكل</button></div>'
+    +'<div id="subu-pl"></div></div>'
+    +'<div class="mftr" style="flex-shrink:0"><button class="btn btn-s" onclick="document.getElementById(\'m-subu-perm\').remove()">إلغاء</button><button class="btn btn-p" onclick="SubUsers._savePerms()">💾 حفظ الصلاحيات</button></div></div>';
+  document.body.appendChild(m);
+  renderPerms();
+}
+function renderPerms(){
+  var box=$('subu-pl'); if(!box || !_pe) return;
+  var on=0;
+  box.innerHTML=PERM_GROUPS.map(function(g){
+    var items=PERMISSIONS_DEF.filter(function(p){ return p.group===g.id; });
+    if(!items.length) return '';
+    return '<div style="font-size:12.5px;font-weight:900;color:var(--primary);margin:10px 0 6px">'+g.icon+' '+esc(g.label)+'</div>'
+      +items.map(function(p){
+        var v=!!_pe.p[p.key]; if(v) on++;
+        return '<div style="display:flex;align-items:center;justify-content:space-between;border:1px solid var(--border);border-radius:9px;padding:8px 12px;margin-bottom:6px">'
+          +'<div><div style="font-size:12px;font-weight:700">'+p.icon+' '+esc(p.label)+'</div><div style="font-size:10px;color:var(--text2)">'+esc(p.desc||'')+'</div></div>'
+          +'<div class="perm-tog '+(v?'on':'')+'" onclick="SubUsers._tog(\''+p.key+'\')"><div class="perm-tog-t"></div></div></div>';
+      }).join('');
+  }).join('');
+  var c=$('subu-pc'); if(c) c.textContent=on+' / '+PERMISSIONS_DEF.length;
+}
+function _tog(k){ if(_pe){ _pe.p[k]=!_pe.p[k]; renderPerms(); } }
+function _all(v){ if(_pe){ PERMISSIONS_DEF.forEach(function(p){ _pe.p[p.key]=!!v; }); renderPerms(); } }
+function _role(r){ if(_pe){ try{ _pe.p=_expandRole(ROLES[r]||{}); }catch(e){} renderPerms(); } }
+function _savePerms(){
+  if(!mgr() || !_pe) return;
+  var d=docOrNew(), u=findU(d,_pe.id); if(!u) return;
+  var out={}; PERMISSIONS_DEF.forEach(function(p){ out[p.key]=!!_pe.p[p.key]; });
+  u.perms=out; bumpAndSave(d);
+  var m=$('m-subu-perm'); if(m) m.remove();
+  render(); notif('✅ تم','حُفظت صلاحيات «'+u.name+'» — تسري فوراً على الحاسبات المتصلة','success');
+}
+
+window.SubUsers={ open:open, switchUser:switchUser, tick:tick, current:function(){ var u=curUser(); return u?{id:u.id, name:u.name}:null; },
+  isManager:function(){ return isPC1(); }, needsGate:needsGate, _adopt:adopt, _hash:hashPw,
+  _add:_add, _toggle:_toggle, _del:_del, _pw:_pw, _pin:_pin, _pinOff:_pinOff, _perms:_perms, _tog:_tog, _all:_all, _role:_role, _savePerms:_savePerms };
+setTimeout(tick, 500);
 })();
 </script>
